@@ -17,6 +17,7 @@
   <ItemGroup>
     <PackageReference Include="ExcelDna.AddIn" Version="1.*" />
     <PackageReference Include="Taglo.Excel.Common" Version="0.1.*" />
+    <PackageReference Include="YamlDotNet" Version="16.*" />
   </ItemGroup>
 
 </Project>
