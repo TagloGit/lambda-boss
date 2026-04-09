@@ -10,11 +10,23 @@ Excel add-in for accessing GitHub Lambda libraries
 
 ## Tech stack
 
-TODO
+- .NET 6 / C# 10 with ExcelDNA (ExcelDna.AddIn 1.x)
+- WPF for popup UI (floating window on dedicated STA thread)
+- Taglo.Excel.Common shared package (GitHub Packages)
+- xUnit for testing
 
 ## Build & test
 
-TODO
+```bash
+# Restore + build
+dotnet build addin/lambda-boss.slnx
+
+# Unit tests (no Excel required)
+dotnet test addin/lambda-boss.Tests/lambda-boss.Tests.csproj
+
+# AddIn smoke tests (requires Excel installed, run locally)
+dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj
+```
 
 ## Conventions
 

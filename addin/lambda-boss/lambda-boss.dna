@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<DnaLibrary Name="Lambda Boss" RuntimeVersion="v4.0">
+  <ExternalLibrary Path="lambda-boss.dll" ExplicitExports="false" LoadFromBytes="false" Pack="false" ExplicitRegistration="false" />
+</DnaLibrary>

@@ -1,0 +1,36 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- Version — single source of truth for all assemblies -->
+    <Version>0.1.0</Version>
+
+    <!-- Enforce code style during build -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- Analysis settings -->
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!-- Nullable reference types -->
+    <Nullable>enable</Nullable>
+
+    <!-- Warnings -->
+    <WarningLevel>9999</WarningLevel>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Deterministic builds for reproducibility -->
+    <Deterministic>true</Deterministic>
+
+    <!-- Use latest C# language version -->
+    <LangVersion>latest</LangVersion>
+
+    <!-- Enable implicit usings -->
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Add System.IO to implicit usings (required for WPF SDK compatibility) -->
+  <ItemGroup>
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+</Project>

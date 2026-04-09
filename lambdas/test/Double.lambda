@@ -1,0 +1,25 @@
+/*  FUNCTION NAME:      Double
+    DESCRIPTION:*//**Doubles a number.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-09  Tim Jacks   Initial version
+*/
+Double = LAMBDA(
+//  Parameter Declarations
+    x,
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →Double(x)¶" &
+                "DESCRIPTION:   →Doubles a number.¶" &
+                "VERSION:       →Apr 09 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   x              →(Required) The number to double.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=Double(5)¶" &
+                "Result         →10",
+                "→", "¶"
+                ),
+    //  Procedure
+        result, x * 2,
+        IF(Help?, Help, result)
+)
+);
