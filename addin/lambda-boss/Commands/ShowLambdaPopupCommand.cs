@@ -10,25 +10,18 @@ using Taglo.Excel.Common;
 namespace LambdaBoss.Commands;
 
 /// <summary>
-///     Command handler for showing the Lambda popup.
-///     Triggered by Ctrl+Shift+L keyboard shortcut.
+///     Command handler for showing the Lambda popup and settings window.
+///     Triggered by keyboard shortcut or ribbon buttons.
 /// </summary>
 public static class ShowLambdaPopupCommand
 {
     private static LambdaPopup? _window;
+    private static SettingsWindow? _settingsWindow;
     private static Dispatcher? _windowDispatcher;
     private static Thread? _windowThread;
     private static bool _hasBeenPositioned;
     private static LibraryProvider? _provider;
     private static bool _dataLoaded;
-
-    /// <summary>
-    ///     The default repo used until settings persistence is implemented (#6).
-    /// </summary>
-    private static readonly RepoConfig DefaultRepo = new()
-    {
-        Url = "https://github.com/TagloGit/lambda-boss"
-    };
 
     public static void Cleanup()
     {
@@ -42,6 +35,7 @@ public static class ShowLambdaPopupCommand
         _windowDispatcher = null;
         _windowThread = null;
         _window = null;
+        _settingsWindow = null;
         _hasBeenPositioned = false;
         _provider = null;
         _dataLoaded = false;
@@ -92,6 +86,67 @@ public static class ShowLambdaPopupCommand
         }
     }
 
+    /// <summary>
+    ///     Opens the settings window. Called from the ribbon Settings button.
+    /// </summary>
+    public static void ShowSettings()
+    {
+        try
+        {
+            dynamic app = ExcelDnaUtil.Application;
+            var excelHwnd = new IntPtr(app.Hwnd);
+
+            EnsureWindowThread();
+
+            _windowDispatcher?.Invoke(() =>
+            {
+                if (_settingsWindow == null)
+                    return;
+
+                if (_settingsWindow.IsVisible)
+                {
+                    _settingsWindow.Activate();
+                }
+                else
+                {
+                    var wpfHwnd = new WindowInteropHelper(_settingsWindow).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                    _settingsWindow.Show();
+                    _settingsWindow.Activate();
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ShowSettings", ex);
+        }
+    }
+
+    /// <summary>
+    ///     Clears cached data and re-fetches from all repos. Called from the ribbon Refresh button.
+    /// </summary>
+    public static void RefreshData()
+    {
+        _provider = null;
+        _dataLoaded = false;
+
+        try
+        {
+            EnsureWindowThread();
+
+            _windowDispatcher?.Invoke(() =>
+            {
+                _window?.SetStatus("Refreshing libraries...");
+            });
+
+            LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("RefreshData", ex);
+        }
+    }
+
     private static void EnsureWindowThread()
     {
         if (_windowThread != null && _windowThread.IsAlive)
@@ -108,6 +163,10 @@ public static class ShowLambdaPopupCommand
 
             _window = new LambdaPopup();
             _window.LibraryLoadRequested += OnLibraryLoadRequested;
+
+            _settingsWindow = new SettingsWindow();
+            _settingsWindow.SettingsChanged += OnSettingsChanged;
+
             _windowDispatcher = Dispatcher.CurrentDispatcher;
 
             _windowDispatcher.UnhandledException += (_, e) =>
@@ -134,7 +193,7 @@ public static class ShowLambdaPopupCommand
         {
             _windowDispatcher?.Invoke(() => _window?.SetStatus("Loading libraries..."));
 
-            _provider ??= new LibraryProvider(new[] { DefaultRepo });
+            _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
 
             var libraries = await _provider.GetLibrariesAsync();
             var lambdas = await _provider.GetAllLambdasAsync();
@@ -157,6 +216,13 @@ public static class ShowLambdaPopupCommand
         }
     }
 
+    private static void OnSettingsChanged(object? sender, EventArgs e)
+    {
+        // Invalidate cached data so next popup open re-fetches with updated repos
+        _provider = null;
+        _dataLoaded = false;
+    }
+
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
     {
         // Fetch and inject on a background thread, then inject via QueueAsMacro
@@ -167,7 +233,7 @@ public static class ShowLambdaPopupCommand
                 _windowDispatcher?.Invoke(() =>
                     _window?.SetStatus($"Loading {request.DisplayName}..."));
 
-                _provider ??= new LibraryProvider(new[] { DefaultRepo });
+                _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
 
                 var lambdas = await _provider.LoadLibraryAsync(
                     request.RepoConfig, request.LibraryName, request.Prefix);

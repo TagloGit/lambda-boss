@@ -28,7 +28,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         {
             try
             {
-                XlCall.Excel(XlCall.xlcOnKey, "^+L");
+                XlCall.Excel(XlCall.xlcOnKey, Settings.Current.KeyboardShortcut);
             }
             catch
             {
@@ -85,8 +85,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     {
         try
         {
-            // Register keyboard shortcut: Ctrl+Shift+L
-            XlCall.Excel(XlCall.xlcOnKey, "^+L", "ShowLambdaPopup");
+            // Register keyboard shortcut from settings (default: Ctrl+Shift+L)
+            XlCall.Excel(XlCall.xlcOnKey, Settings.Current.KeyboardShortcut, "ShowLambdaPopup");
 
             Logger.Info("Lambda Boss keyboard shortcut registered");
         }

@@ -1,0 +1,131 @@
+<Window x:Class="LambdaBoss.UI.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lambda Boss — Settings"
+        Width="480" Height="340"
+        WindowStyle="ToolWindow"
+        ShowInTaskbar="True"
+        Topmost="True"
+        ResizeMode="CanResizeWithGrip"
+        Background="#1e1e1e">
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <TextBlock Grid.Row="0"
+                   Text="Repository Sources"
+                   FontSize="13"
+                   FontWeight="Bold"
+                   Foreground="#dcdcaa"
+                   Margin="0,0,0,8" />
+
+        <!-- Add repo input -->
+        <Border Grid.Row="1" Margin="0,0,0,6"
+                Padding="6,4"
+                Background="#2d2d2d"
+                BorderBrush="#3e3e3e"
+                BorderThickness="1"
+                CornerRadius="2">
+            <DockPanel>
+                <Button x:Name="AddRepoButton"
+                        DockPanel.Dock="Right"
+                        Content="Add"
+                        Padding="12,2"
+                        Margin="6,0,0,0"
+                        Background="#0e639c"
+                        Foreground="#ffffff"
+                        BorderThickness="0"
+                        Click="AddRepoButton_Click" />
+                <TextBox x:Name="RepoUrlBox"
+                         Padding="4,2"
+                         FontSize="13"
+                         Background="#1e1e1e"
+                         Foreground="#cccccc"
+                         CaretBrush="#cccccc"
+                         BorderThickness="0"
+                         KeyDown="RepoUrlBox_KeyDown">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Style.Resources>
+                                <VisualBrush x:Key="PlaceholderBrush" AlignmentX="Left" AlignmentY="Center" Stretch="None">
+                                    <VisualBrush.Visual>
+                                        <TextBlock Text="https://github.com/owner/repo" FontSize="13"
+                                                   Foreground="#555555" Margin="5,0,0,0" />
+                                    </VisualBrush.Visual>
+                                </VisualBrush>
+                            </Style.Resources>
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Background" Value="{StaticResource PlaceholderBrush}" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Repo list -->
+        <ListBox x:Name="RepoList"
+                 Grid.Row="2"
+                 Background="#252526"
+                 Foreground="#cccccc"
+                 BorderBrush="#3e3e3e"
+                 BorderThickness="1"
+                 FontFamily="Consolas"
+                 FontSize="13"
+                 SelectionMode="Single"
+                 HorizontalContentAlignment="Stretch">
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Padding" Value="0" />
+                </Style>
+            </ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <DockPanel Margin="4,3">
+                        <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                        <Button DockPanel.Dock="Right"
+                                Content="Remove"
+                                Padding="8,2"
+                                Margin="8,0,0,0"
+                                Background="Transparent"
+                                Foreground="#e74856"
+                                BorderBrush="#3e3e3e"
+                                BorderThickness="1"
+                                FontSize="11"
+                                Cursor="Hand"
+                                Click="RemoveRepoButton_Click"
+                                Tag="{Binding Url}" />
+                        <CheckBox DockPanel.Dock="Left"
+                                  IsChecked="{Binding Enabled}"
+                                  Margin="0,0,8,0"
+                                  VerticalAlignment="Center"
+                                  Click="RepoEnabledCheckbox_Click" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding DisplayLabel}" FontWeight="Bold" Foreground="#dcdcaa" />
+                            <TextBlock Text="{Binding LastFetchedLabel}" Foreground="#808080" FontSize="10" />
+                        </StackPanel>
+                        <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
+                    </DockPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Status bar -->
+        <TextBlock x:Name="StatusText"
+                   Grid.Row="3"
+                   Margin="0,4,0,0"
+                   Foreground="#808080"
+                   FontSize="11"
+                   Text="Add, remove, or toggle repository sources" />
+    </Grid>
+</Window>
