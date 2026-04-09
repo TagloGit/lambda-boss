@@ -121,7 +121,7 @@ public partial class LambdaPopup : Window
         if (LambdaList.SelectedItem is LambdaItem item)
         {
             LambdaSelected?.Invoke(this, (item.Name, item.Formula));
-            StatusText.Text = $"Loaded: {item.Name}";
+            Hide();
         }
     }
 }
