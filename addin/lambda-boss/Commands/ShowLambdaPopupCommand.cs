@@ -218,10 +218,9 @@ public static class ShowLambdaPopupCommand
 
     private static void OnSettingsChanged(object? sender, EventArgs e)
     {
-        // Rebuild the provider with the updated repo list and re-fetch
+        // Invalidate cached data so next popup open re-fetches with updated repos
         _provider = null;
         _dataLoaded = false;
-        LoadDataAsync();
     }
 
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
