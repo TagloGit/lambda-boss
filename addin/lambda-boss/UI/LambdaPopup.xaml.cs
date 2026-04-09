@@ -1,13 +1,12 @@
-using System.Windows;
+using System.ComponentModel;
+using System.Windows.Controls;
 using System.Windows.Input;
 
 namespace LambdaBoss.UI;
 
-public partial class LambdaPopup : Window
+public partial class LambdaPopup
 {
     private readonly List<LambdaItem> _allItems;
-
-    public event EventHandler<(string Name, string Formula)>? LambdaSelected;
 
     public LambdaPopup()
     {
@@ -18,29 +17,25 @@ public partial class LambdaPopup : Window
             .ToList();
 
         LambdaList.ItemsSource = _allItems;
-        if (_allItems.Count > 0)
-        {
-            LambdaList.SelectedIndex = 0;
-        }
+        if (_allItems.Count > 0) LambdaList.SelectedIndex = 0;
 
         PreviewKeyDown += OnPreviewKeyDown;
     }
+
+    public event EventHandler<(string Name, string Formula)>? LambdaSelected;
 
     public void ResetAndShow()
     {
         SearchBox.Text = "";
         LambdaList.ItemsSource = _allItems;
-        if (_allItems.Count > 0)
-        {
-            LambdaList.SelectedIndex = 0;
-        }
+        if (_allItems.Count > 0) LambdaList.SelectedIndex = 0;
 
         Show();
         Activate();
         SearchBox.Focus();
     }
 
-    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    protected override void OnClosing(CancelEventArgs e)
     {
         // Hide instead of close for window reuse
         e.Cancel = true;
@@ -65,15 +60,11 @@ public partial class LambdaPopup : Window
                 if (SearchBox.IsFocused && LambdaList.Items.Count > 0)
                 {
                     LambdaList.Focus();
-                    if (LambdaList.SelectedIndex < 0)
-                    {
-                        LambdaList.SelectedIndex = 0;
-                    }
+                    if (LambdaList.SelectedIndex < 0) LambdaList.SelectedIndex = 0;
                 }
                 else if (LambdaList.IsFocused && LambdaList.SelectedIndex < LambdaList.Items.Count - 1)
-                {
                     LambdaList.SelectedIndex++;
-                }
+
                 e.Handled = true;
                 break;
 
@@ -81,27 +72,22 @@ public partial class LambdaPopup : Window
                 if (LambdaList.IsFocused)
                 {
                     if (LambdaList.SelectedIndex > 0)
-                    {
                         LambdaList.SelectedIndex--;
-                    }
                     else
-                    {
                         SearchBox.Focus();
-                    }
                 }
+
                 e.Handled = true;
                 break;
         }
     }
 
-    private void SearchBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
         var query = SearchBox.Text.Trim();
 
         if (string.IsNullOrEmpty(query))
-        {
             LambdaList.ItemsSource = _allItems;
-        }
         else
         {
             var filtered = _allItems
@@ -110,10 +96,7 @@ public partial class LambdaPopup : Window
             LambdaList.ItemsSource = filtered;
         }
 
-        if (LambdaList.Items.Count > 0)
-        {
-            LambdaList.SelectedIndex = 0;
-        }
+        if (LambdaList.Items.Count > 0) LambdaList.SelectedIndex = 0;
     }
 
     private void LoadSelectedLambda()

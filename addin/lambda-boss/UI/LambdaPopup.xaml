@@ -42,9 +42,11 @@
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <StackPanel Orientation="Horizontal" Margin="4,2">
+                        <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
                         <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#dcdcaa" />
                         <TextBlock Text="  " />
                         <TextBlock Text="{Binding Formula}" Foreground="#808080" />
+                        <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
                     </StackPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
