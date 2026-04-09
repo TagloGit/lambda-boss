@@ -19,37 +19,26 @@
         </Grid.RowDefinitions>
 
         <!-- Mode indicator -->
-        <DockPanel Grid.Row="0" Margin="0,0,0,6">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock x:Name="LibraryModeLabel"
-                           Text="Libraries"
-                           FontSize="12"
-                           FontWeight="Bold"
-                           Foreground="#dcdcaa"
-                           Cursor="Hand"
-                           MouseLeftButtonDown="LibraryModeLabel_Click" />
-                <TextBlock Text="  ·  "
-                           FontSize="12"
-                           Foreground="#555555" />
-                <TextBlock x:Name="SearchModeLabel"
-                           Text="Search"
-                           FontSize="12"
-                           Foreground="#808080"
-                           Cursor="Hand"
-                           MouseLeftButtonDown="SearchModeLabel_Click" />
-                <TextBlock Text="  ·  "
-                           FontSize="12"
-                           Foreground="#555555" />
-                <TextBlock x:Name="SettingsModeLabel"
-                           Text="Settings"
-                           FontSize="12"
-                           Foreground="#808080"
-                           Cursor="Hand"
-                           MouseLeftButtonDown="SettingsModeLabel_Click" />
-            </StackPanel>
-        </DockPanel>
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock x:Name="LibraryModeLabel"
+                       Text="Libraries"
+                       FontSize="12"
+                       FontWeight="Bold"
+                       Foreground="#dcdcaa"
+                       Cursor="Hand"
+                       MouseLeftButtonDown="LibraryModeLabel_Click" />
+            <TextBlock Text="  ·  "
+                       FontSize="12"
+                       Foreground="#555555" />
+            <TextBlock x:Name="SearchModeLabel"
+                       Text="Search"
+                       FontSize="12"
+                       Foreground="#808080"
+                       Cursor="Hand"
+                       MouseLeftButtonDown="SearchModeLabel_Click" />
+        </StackPanel>
 
-        <!-- Search box (hidden in settings mode) -->
+        <!-- Search box -->
         <TextBox x:Name="SearchBox"
                  Grid.Row="1"
                  Margin="0,0,0,6"
@@ -116,102 +105,6 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
-
-        <!-- Settings panel -->
-        <Grid x:Name="SettingsPanel"
-              Grid.Row="2"
-              Visibility="Collapsed">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-
-            <!-- Add repo input -->
-            <Border Grid.Row="0" Margin="0,0,0,6"
-                    Padding="6,4"
-                    Background="#2d2d2d"
-                    BorderBrush="#3e3e3e"
-                    BorderThickness="1"
-                    CornerRadius="2">
-                <DockPanel>
-                    <Button x:Name="AddRepoButton"
-                            DockPanel.Dock="Right"
-                            Content="Add"
-                            Padding="12,2"
-                            Margin="6,0,0,0"
-                            Background="#0e639c"
-                            Foreground="#ffffff"
-                            BorderThickness="0"
-                            Click="AddRepoButton_Click" />
-                    <TextBox x:Name="RepoUrlBox"
-                             Padding="4,2"
-                             FontSize="13"
-                             Background="#1e1e1e"
-                             Foreground="#cccccc"
-                             CaretBrush="#cccccc"
-                             BorderThickness="0">
-                        <TextBox.Style>
-                            <Style TargetType="TextBox">
-                                <Style.Resources>
-                                    <VisualBrush x:Key="PlaceholderBrush" AlignmentX="Left" AlignmentY="Center" Stretch="None">
-                                        <VisualBrush.Visual>
-                                            <TextBlock Text="https://github.com/owner/repo" FontSize="13"
-                                                       Foreground="#555555" Margin="5,0,0,0" />
-                                        </VisualBrush.Visual>
-                                    </VisualBrush>
-                                </Style.Resources>
-                                <Style.Triggers>
-                                    <Trigger Property="Text" Value="">
-                                        <Setter Property="Background" Value="{StaticResource PlaceholderBrush}" />
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBox.Style>
-                    </TextBox>
-                </DockPanel>
-            </Border>
-
-            <!-- Repo list -->
-            <ListBox x:Name="RepoList"
-                     Grid.Row="1"
-                     Background="#252526"
-                     Foreground="#cccccc"
-                     BorderBrush="#3e3e3e"
-                     BorderThickness="1"
-                     FontFamily="Consolas"
-                     FontSize="13"
-                     SelectionMode="Single">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <DockPanel Margin="4,3">
-                            <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
-                            <Button DockPanel.Dock="Right"
-                                    Content="X"
-                                    Padding="4,0"
-                                    Margin="4,0,0,0"
-                                    Background="Transparent"
-                                    Foreground="#e74856"
-                                    BorderThickness="0"
-                                    FontWeight="Bold"
-                                    Cursor="Hand"
-                                    Click="RemoveRepoButton_Click"
-                                    Tag="{Binding Url}" />
-                            <CheckBox DockPanel.Dock="Left"
-                                      IsChecked="{Binding Enabled}"
-                                      Margin="0,0,8,0"
-                                      VerticalAlignment="Center"
-                                      Click="RepoEnabledCheckbox_Click" />
-                            <StackPanel>
-                                <TextBlock Text="{Binding DisplayLabel}" FontWeight="Bold" Foreground="#dcdcaa" />
-                                <TextBlock Text="{Binding LastFetchedLabel}" Foreground="#808080" FontSize="10" />
-                            </StackPanel>
-                            <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
-                        </DockPanel>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-        </Grid>
 
         <!-- Prefix prompt (shown when loading) -->
         <Border x:Name="PrefixPanel"

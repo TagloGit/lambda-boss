@@ -10,12 +10,13 @@ using Taglo.Excel.Common;
 namespace LambdaBoss.Commands;
 
 /// <summary>
-///     Command handler for showing the Lambda popup.
-///     Triggered by keyboard shortcut or ribbon button.
+///     Command handler for showing the Lambda popup and settings window.
+///     Triggered by keyboard shortcut or ribbon buttons.
 /// </summary>
 public static class ShowLambdaPopupCommand
 {
     private static LambdaPopup? _window;
+    private static SettingsWindow? _settingsWindow;
     private static Dispatcher? _windowDispatcher;
     private static Thread? _windowThread;
     private static bool _hasBeenPositioned;
@@ -34,6 +35,7 @@ public static class ShowLambdaPopupCommand
         _windowDispatcher = null;
         _windowThread = null;
         _window = null;
+        _settingsWindow = null;
         _hasBeenPositioned = false;
         _provider = null;
         _dataLoaded = false;
@@ -85,7 +87,7 @@ public static class ShowLambdaPopupCommand
     }
 
     /// <summary>
-    ///     Opens the popup directly in settings mode. Called from the ribbon Settings button.
+    ///     Opens the settings window. Called from the ribbon Settings button.
     /// </summary>
     public static void ShowSettings()
     {
@@ -98,17 +100,20 @@ public static class ShowLambdaPopupCommand
 
             _windowDispatcher?.Invoke(() =>
             {
-                if (_window == null)
+                if (_settingsWindow == null)
                     return;
 
-                if (!_hasBeenPositioned)
+                if (_settingsWindow.IsVisible)
                 {
-                    var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
-                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
-                    _hasBeenPositioned = true;
+                    _settingsWindow.Activate();
                 }
-
-                _window.ShowSettingsMode();
+                else
+                {
+                    var wpfHwnd = new WindowInteropHelper(_settingsWindow).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                    _settingsWindow.Show();
+                    _settingsWindow.Activate();
+                }
             });
         }
         catch (Exception ex)
@@ -158,7 +163,10 @@ public static class ShowLambdaPopupCommand
 
             _window = new LambdaPopup();
             _window.LibraryLoadRequested += OnLibraryLoadRequested;
-            _window.SettingsChanged += OnSettingsChanged;
+
+            _settingsWindow = new SettingsWindow();
+            _settingsWindow.SettingsChanged += OnSettingsChanged;
+
             _windowDispatcher = Dispatcher.CurrentDispatcher;
 
             _windowDispatcher.UnhandledException += (_, e) =>
@@ -210,9 +218,10 @@ public static class ShowLambdaPopupCommand
 
     private static void OnSettingsChanged(object? sender, EventArgs e)
     {
-        // Rebuild the provider with the updated repo list
+        // Rebuild the provider with the updated repo list and re-fetch
         _provider = null;
         _dataLoaded = false;
+        LoadDataAsync();
     }
 
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
