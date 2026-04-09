@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0-windows</TargetFramework>
+    <RootNamespace>LambdaBoss</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <ExcelDnaPackCompressResources>false</ExcelDnaPackCompressResources>
+    <ExcelDna64Bit>true</ExcelDna64Bit>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="System.IO" />
+    <InternalsVisibleTo Include="lambda-boss.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ExcelDna.AddIn" Version="1.*" />
+    <PackageReference Include="Taglo.Excel.Common" Version="0.1.*" />
+  </ItemGroup>
+
+</Project>

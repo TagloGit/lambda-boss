@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  packages: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Authenticate GitHub Packages
+        run: dotnet nuget update source TagloGit --username TagloGit --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text --configfile addin/nuget.config
+
+      - name: Restore
+        run: dotnet restore addin/lambda-boss.slnx
+
+      - name: Build
+        run: dotnet build addin/lambda-boss.slnx --no-restore --configuration Release
+
+      - name: Test (unit tests only)
+        run: dotnet test addin/lambda-boss.Tests/lambda-boss.Tests.csproj --no-build --configuration Release --verbosity normal

@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="lambda-boss\lambda-boss.csproj" />
+  <Project Path="lambda-boss.Tests\lambda-boss.Tests.csproj" />
+  <Project Path="lambda-boss.AddinTests\lambda-boss.AddinTests.csproj" />
+</Solution>

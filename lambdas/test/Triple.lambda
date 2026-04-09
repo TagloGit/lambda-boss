@@ -1,0 +1,25 @@
+/*  FUNCTION NAME:      Triple
+    DESCRIPTION:*//**Triples a number.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-09  Tim Jacks   Initial version
+*/
+Triple = LAMBDA(
+//  Parameter Declarations
+    x,
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →Triple(x)¶" &
+                "DESCRIPTION:   →Triples a number.¶" &
+                "VERSION:       →Apr 09 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   x              →(Required) The number to triple.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=Triple(5)¶" &
+                "Result         →15",
+                "→", "¶"
+                ),
+    //  Procedure
+        result, x * 3,
+        IF(Help?, Help, result)
+)
+);
