@@ -1,12 +1,14 @@
 using Xunit;
 
+#pragma warning disable CA1707
+
 namespace LambdaBoss.Tests;
 
 public class SourceCacheTests : IDisposable
 {
-    private readonly string _tempDir;
     private readonly SourceCache _cache;
     private readonly RepoConfig _config;
+    private readonly string _tempDir;
 
     public SourceCacheTests()
     {
@@ -18,7 +20,7 @@ public class SourceCacheTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
-            Directory.Delete(_tempDir, recursive: true);
+            Directory.Delete(_tempDir, true);
     }
 
     private static FetchedLibrary CreateTestLibrary(string name = "test")
@@ -59,7 +61,7 @@ public class SourceCacheTests : IDisposable
         var loaded = _cache.Load(_config, "test");
 
         Assert.NotNull(loaded);
-        Assert.Equal("test", loaded!.Name);
+        Assert.Equal("test", loaded.Name);
         Assert.Equal("test", loaded.Metadata.Name);
         Assert.Equal("tst", loaded.Metadata.DefaultPrefix);
     }
@@ -73,7 +75,7 @@ public class SourceCacheTests : IDisposable
         var loaded = _cache.Load(_config, "test");
 
         Assert.NotNull(loaded);
-        Assert.Equal(2, loaded!.Files.Count);
+        Assert.Equal(2, loaded.Files.Count);
         Assert.Contains("Double.lambda", loaded.Files.Keys);
         Assert.Contains("Triple.lambda", loaded.Files.Keys);
         Assert.Contains("x * 2", loaded.Files["Double.lambda"]);
@@ -135,6 +137,6 @@ public class SourceCacheTests : IDisposable
 
         var loaded = _cache.Load(_config, "test");
         Assert.NotNull(loaded);
-        Assert.Contains("x * 99", loaded!.Files["Double.lambda"]);
+        Assert.Contains("x * 99", loaded.Files["Double.lambda"]);
     }
 }
