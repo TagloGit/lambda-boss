@@ -7,7 +7,7 @@ namespace LambdaBoss.UI;
 
 public partial class LambdaPopup
 {
-    private enum Mode { Library, Search }
+    private enum Mode { Library, Search, Settings }
 
     private Mode _mode = Mode.Library;
     private bool _prefixPromptActive;
@@ -25,6 +25,11 @@ public partial class LambdaPopup
     ///     Fired when the user confirms loading a library with a chosen prefix.
     /// </summary>
     public event EventHandler<LibraryLoadRequest>? LibraryLoadRequested;
+
+    /// <summary>
+    ///     Fired when the user changes settings (add/remove/toggle repos).
+    /// </summary>
+    public event EventHandler? SettingsChanged;
 
     /// <summary>
     ///     Sets the data for the popup to display.
@@ -65,6 +70,19 @@ public partial class LambdaPopup
         SearchBox.Focus();
     }
 
+    /// <summary>
+    ///     Opens the popup directly in settings mode.
+    /// </summary>
+    public void ShowSettingsMode()
+    {
+        SearchBox.Text = "";
+        HidePrefixPrompt();
+        SwitchMode(Mode.Settings);
+
+        Show();
+        Activate();
+    }
+
     public void SetStatus(string text)
     {
         StatusText.Text = text;
@@ -92,22 +110,22 @@ public partial class LambdaPopup
                 e.Handled = true;
                 break;
 
-            case Key.Enter:
+            case Key.Enter when _mode != Mode.Settings:
                 BeginLoad();
                 e.Handled = true;
                 break;
 
-            case Key.Tab:
+            case Key.Tab when _mode != Mode.Settings:
                 SwitchMode(_mode == Mode.Library ? Mode.Search : Mode.Library);
                 e.Handled = true;
                 break;
 
-            case Key.Down:
+            case Key.Down when _mode != Mode.Settings:
                 NavigateDown();
                 e.Handled = true;
                 break;
 
-            case Key.Up:
+            case Key.Up when _mode != Mode.Settings:
                 NavigateUp();
                 e.Handled = true;
                 break;
@@ -132,6 +150,9 @@ public partial class LambdaPopup
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_mode == Mode.Settings)
+            return;
+
         var query = SearchBox.Text.Trim();
 
         // Auto-switch to search mode when typing
@@ -155,32 +176,149 @@ public partial class LambdaPopup
         SwitchMode(Mode.Search);
     }
 
+    private void SettingsModeLabel_Click(object sender, MouseButtonEventArgs e)
+    {
+        SwitchMode(Mode.Settings);
+    }
+
     private void SwitchMode(Mode newMode)
     {
         _mode = newMode;
 
-        if (_mode == Mode.Library)
+        // Reset all mode labels to inactive
+        LibraryModeLabel.FontWeight = FontWeights.Normal;
+        LibraryModeLabel.Foreground = BrushFromHex("#808080");
+        SearchModeLabel.FontWeight = FontWeights.Normal;
+        SearchModeLabel.Foreground = BrushFromHex("#808080");
+        SettingsModeLabel.FontWeight = FontWeights.Normal;
+        SettingsModeLabel.Foreground = BrushFromHex("#808080");
+
+        // Hide all content panels
+        LibraryList.Visibility = Visibility.Collapsed;
+        LambdaList.Visibility = Visibility.Collapsed;
+        SettingsPanel.Visibility = Visibility.Collapsed;
+
+        switch (_mode)
         {
-            LibraryModeLabel.FontWeight = FontWeights.Bold;
-            LibraryModeLabel.Foreground = BrushFromHex("#dcdcaa");
-            SearchModeLabel.FontWeight = FontWeights.Normal;
-            SearchModeLabel.Foreground = BrushFromHex("#808080");
+            case Mode.Library:
+                LibraryModeLabel.FontWeight = FontWeights.Bold;
+                LibraryModeLabel.Foreground = BrushFromHex("#dcdcaa");
+                LibraryList.Visibility = Visibility.Visible;
+                SearchBox.Visibility = Visibility.Visible;
+                ApplyFilter(SearchBox.Text.Trim());
+                break;
 
-            LibraryList.Visibility = Visibility.Visible;
-            LambdaList.Visibility = Visibility.Collapsed;
+            case Mode.Search:
+                SearchModeLabel.FontWeight = FontWeights.Bold;
+                SearchModeLabel.Foreground = BrushFromHex("#dcdcaa");
+                LambdaList.Visibility = Visibility.Visible;
+                SearchBox.Visibility = Visibility.Visible;
+                ApplyFilter(SearchBox.Text.Trim());
+                break;
+
+            case Mode.Settings:
+                SettingsModeLabel.FontWeight = FontWeights.Bold;
+                SettingsModeLabel.Foreground = BrushFromHex("#dcdcaa");
+                SettingsPanel.Visibility = Visibility.Visible;
+                SearchBox.Visibility = Visibility.Collapsed;
+                RefreshRepoList();
+                StatusText.Text = "Add, remove, or toggle repository sources";
+                break;
         }
-        else
+    }
+
+    private void RefreshRepoList()
+    {
+        var settings = Settings.Current;
+        RepoList.ItemsSource = settings.Repos
+            .Select(r => new RepoDisplayItem
+            {
+                Url = r.Url,
+                Enabled = r.Enabled,
+                DisplayLabel = FormatRepoLabel(r),
+                LastFetchedLabel = r.LastFetched.HasValue
+                    ? $"Last fetched: {r.LastFetched.Value:yyyy-MM-dd HH:mm}"
+                    : "Never fetched"
+            })
+            .ToList();
+    }
+
+    private static string FormatRepoLabel(RepoConfig config)
+    {
+        try
         {
-            LibraryModeLabel.FontWeight = FontWeights.Normal;
-            LibraryModeLabel.Foreground = BrushFromHex("#808080");
-            SearchModeLabel.FontWeight = FontWeights.Bold;
-            SearchModeLabel.Foreground = BrushFromHex("#dcdcaa");
+            var (owner, repo) = config.ParseOwnerRepo();
+            return $"{owner}/{repo}";
+        }
+        catch
+        {
+            return config.Url;
+        }
+    }
 
-            LibraryList.Visibility = Visibility.Collapsed;
-            LambdaList.Visibility = Visibility.Visible;
+    private void AddRepoButton_Click(object sender, RoutedEventArgs e)
+    {
+        var url = RepoUrlBox.Text.Trim();
+        if (string.IsNullOrEmpty(url))
+            return;
+
+        // Basic validation
+        if (!url.StartsWith("https://github.com/", StringComparison.OrdinalIgnoreCase))
+        {
+            StatusText.Text = "URL must start with https://github.com/";
+            return;
         }
 
-        ApplyFilter(SearchBox.Text.Trim());
+        var settings = Settings.Current;
+        if (!settings.AddRepo(url))
+        {
+            StatusText.Text = "Repository already exists";
+            return;
+        }
+
+        settings.Save();
+        RepoUrlBox.Text = "";
+        RefreshRepoList();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        StatusText.Text = $"Added {url}";
+    }
+
+    private void RemoveRepoButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string url })
+            return;
+
+        var settings = Settings.Current;
+        if (settings.Repos.Count <= 1)
+        {
+            StatusText.Text = "Cannot remove the last repository";
+            return;
+        }
+
+        if (settings.RemoveRepo(url))
+        {
+            settings.Save();
+            RefreshRepoList();
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+            StatusText.Text = $"Removed {url}";
+        }
+    }
+
+    private void RepoEnabledCheckbox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { DataContext: RepoDisplayItem item })
+            return;
+
+        var settings = Settings.Current;
+        var repo = settings.Repos.FirstOrDefault(r =>
+            string.Equals(r.Url.TrimEnd('/'), item.Url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
+
+        if (repo != null)
+        {
+            repo.Enabled = item.Enabled;
+            settings.Save();
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void ApplyFilter(string query)
@@ -370,4 +508,12 @@ internal class LambdaDisplayItem
     public string Name { get; init; } = "";
     public string LibraryLabel { get; init; } = "";
     public LibraryInfo LibraryInfo { get; init; } = null!;
+}
+
+internal class RepoDisplayItem
+{
+    public string Url { get; init; } = "";
+    public bool Enabled { get; set; }
+    public string DisplayLabel { get; init; } = "";
+    public string LastFetchedLabel { get; init; } = "";
 }

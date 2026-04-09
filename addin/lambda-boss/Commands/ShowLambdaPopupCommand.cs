@@ -11,7 +11,7 @@ namespace LambdaBoss.Commands;
 
 /// <summary>
 ///     Command handler for showing the Lambda popup.
-///     Triggered by Ctrl+Shift+L keyboard shortcut.
+///     Triggered by keyboard shortcut or ribbon button.
 /// </summary>
 public static class ShowLambdaPopupCommand
 {
@@ -21,14 +21,6 @@ public static class ShowLambdaPopupCommand
     private static bool _hasBeenPositioned;
     private static LibraryProvider? _provider;
     private static bool _dataLoaded;
-
-    /// <summary>
-    ///     The default repo used until settings persistence is implemented (#6).
-    /// </summary>
-    private static readonly RepoConfig DefaultRepo = new()
-    {
-        Url = "https://github.com/TagloGit/lambda-boss"
-    };
 
     public static void Cleanup()
     {
@@ -92,6 +84,64 @@ public static class ShowLambdaPopupCommand
         }
     }
 
+    /// <summary>
+    ///     Opens the popup directly in settings mode. Called from the ribbon Settings button.
+    /// </summary>
+    public static void ShowSettings()
+    {
+        try
+        {
+            dynamic app = ExcelDnaUtil.Application;
+            var excelHwnd = new IntPtr(app.Hwnd);
+
+            EnsureWindowThread();
+
+            _windowDispatcher?.Invoke(() =>
+            {
+                if (_window == null)
+                    return;
+
+                if (!_hasBeenPositioned)
+                {
+                    var wpfHwnd = new WindowInteropHelper(_window).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                    _hasBeenPositioned = true;
+                }
+
+                _window.ShowSettingsMode();
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ShowSettings", ex);
+        }
+    }
+
+    /// <summary>
+    ///     Clears cached data and re-fetches from all repos. Called from the ribbon Refresh button.
+    /// </summary>
+    public static void RefreshData()
+    {
+        _provider = null;
+        _dataLoaded = false;
+
+        try
+        {
+            EnsureWindowThread();
+
+            _windowDispatcher?.Invoke(() =>
+            {
+                _window?.SetStatus("Refreshing libraries...");
+            });
+
+            LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("RefreshData", ex);
+        }
+    }
+
     private static void EnsureWindowThread()
     {
         if (_windowThread != null && _windowThread.IsAlive)
@@ -108,6 +158,7 @@ public static class ShowLambdaPopupCommand
 
             _window = new LambdaPopup();
             _window.LibraryLoadRequested += OnLibraryLoadRequested;
+            _window.SettingsChanged += OnSettingsChanged;
             _windowDispatcher = Dispatcher.CurrentDispatcher;
 
             _windowDispatcher.UnhandledException += (_, e) =>
@@ -134,7 +185,7 @@ public static class ShowLambdaPopupCommand
         {
             _windowDispatcher?.Invoke(() => _window?.SetStatus("Loading libraries..."));
 
-            _provider ??= new LibraryProvider(new[] { DefaultRepo });
+            _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
 
             var libraries = await _provider.GetLibrariesAsync();
             var lambdas = await _provider.GetAllLambdasAsync();
@@ -157,6 +208,13 @@ public static class ShowLambdaPopupCommand
         }
     }
 
+    private static void OnSettingsChanged(object? sender, EventArgs e)
+    {
+        // Rebuild the provider with the updated repo list
+        _provider = null;
+        _dataLoaded = false;
+    }
+
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
     {
         // Fetch and inject on a background thread, then inject via QueueAsMacro
@@ -167,7 +225,7 @@ public static class ShowLambdaPopupCommand
                 _windowDispatcher?.Invoke(() =>
                     _window?.SetStatus($"Loading {request.DisplayName}..."));
 
-                _provider ??= new LibraryProvider(new[] { DefaultRepo });
+                _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
 
                 var lambdas = await _provider.LoadLibraryAsync(
                     request.RepoConfig, request.LibraryName, request.Prefix);
