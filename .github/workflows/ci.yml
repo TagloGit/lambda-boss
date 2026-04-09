@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  packages: read
+
 jobs:
   build-and-test:
     runs-on: windows-latest
@@ -17,9 +20,9 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '6.0.x'
-
-      - name: Authenticate GitHub Packages
-        run: dotnet nuget update source TagloGit --username TagloGit --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --configfile addin/nuget.config
+          source-url: https://nuget.pkg.github.com/TagloGit/index.json
+        env:
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Restore
         run: dotnet restore addin/lambda-boss.slnx
