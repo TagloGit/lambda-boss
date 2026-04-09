@@ -78,6 +78,68 @@ AddN = LAMBDA(
     }
 
     [Fact]
+    public void Parse_HelpPattern_TransformsToIsomitted()
+    {
+        var content = @"Double = LAMBDA(
+    x,
+    LET(Help, TEXTSPLIT(""help text"", ""→"", ""¶""),
+        result, x * 2,
+        IF(Help?, Help, result)
+)
+);";
+
+        var (_, formula) = LambdaParser.Parse(content);
+
+        Assert.Contains("ISOMITTED(x)", formula);
+        Assert.DoesNotContain("Help?", formula);
+    }
+
+    [Fact]
+    public void Parse_HelpPattern_MakesParamsOptional()
+    {
+        var content = @"Double = LAMBDA(
+    x,
+    LET(Help, TEXTSPLIT(""help text"", ""→"", ""¶""),
+        result, x * 2,
+        IF(Help?, Help, result)
+)
+);";
+
+        var (_, formula) = LambdaParser.Parse(content);
+
+        Assert.Contains("[x]", formula);
+    }
+
+    [Fact]
+    public void Parse_HelpPattern_MultipleParams_AllOptional()
+    {
+        var content = @"AddN = LAMBDA(
+    x,
+    n,
+    LET(Help, TEXTSPLIT(""help"", ""→"", ""¶""),
+        result, x + n,
+        IF(Help?, Help, result)
+)
+);";
+
+        var (_, formula) = LambdaParser.Parse(content);
+
+        Assert.Contains("[x]", formula);
+        Assert.Contains("[n]", formula);
+        Assert.Contains("ISOMITTED(x)", formula);
+    }
+
+    [Fact]
+    public void Parse_NoHelpPattern_ParamsUnchanged()
+    {
+        var content = "Double = LAMBDA(x, x * 2);";
+        var (_, formula) = LambdaParser.Parse(content);
+
+        Assert.DoesNotContain("[x]", formula);
+        Assert.DoesNotContain("ISOMITTED", formula);
+    }
+
+    [Fact]
     public void Parse_FormulaHasEqualsPrefix()
     {
         var content = "Foo = LAMBDA(x, x + 1);";

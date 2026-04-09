@@ -36,9 +36,13 @@ public static class LambdaParser
         // Extract the formula: everything from LAMBDA( to the matching closing );
         // We need to find the LAMBDA( in the stripped content, then balance parentheses
         var lambdaStart = match.Index + match.Length - 1; // position of the opening (
-        var formula = ExtractBalancedFormula(stripped, lambdaStart);
+        var formula = "=" + ExtractBalancedFormula(stripped, lambdaStart);
 
-        return (name, "=" + formula);
+        // Transform the Help? self-documenting pattern into valid Excel syntax
+        if (formula.Contains("Help?"))
+            formula = TransformHelpPattern(formula);
+
+        return (name, formula);
     }
 
     /// <summary>
@@ -48,6 +52,48 @@ public static class LambdaParser
     {
         var content = File.ReadAllText(filePath);
         return Parse(content);
+    }
+
+    /// <summary>
+    ///     Transforms the Help? self-documenting pattern into valid Excel syntax.
+    ///     The .lambda file convention uses Help? as shorthand. This method:
+    ///     1. Makes all LAMBDA parameters optional (wraps in []) so =Func() triggers help
+    ///     2. Replaces Help? with ISOMITTED(first_param) for valid Excel evaluation
+    /// </summary>
+    private static string TransformHelpPattern(string formula)
+    {
+        // Find the opening paren of LAMBDA(
+        var lambdaMatch = Regex.Match(formula, @"LAMBDA\s*\(", RegexOptions.IgnoreCase);
+        if (!lambdaMatch.Success)
+            return formula;
+
+        var afterOpen = lambdaMatch.Index + lambdaMatch.Length;
+
+        // Find where the body starts — look for LET( which marks end of parameter list
+        var letMatch = Regex.Match(formula[afterOpen..], @"\bLET\s*\(", RegexOptions.IgnoreCase);
+        if (!letMatch.Success)
+            return formula;
+
+        var paramSection = formula[afterOpen..(afterOpen + letMatch.Index)];
+
+        // Parse parameter names, stripping existing [] brackets
+        var paramNames = paramSection.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Trim('[', ']'))
+            .Where(p => p.Length > 0)
+            .ToList();
+
+        if (paramNames.Count == 0)
+            return formula;
+
+        // Rebuild: all params optional, Help? → ISOMITTED(first_param)
+        var newParams = string.Join(", ", paramNames.Select(p => $"[{p}]"));
+        var newFormula = formula[..afterOpen]
+            + newParams + ", "
+            + formula[(afterOpen + letMatch.Index)..];
+
+        newFormula = Regex.Replace(newFormula, @"\bHelp\?", $"ISOMITTED({paramNames[0]})");
+
+        return newFormula;
     }
 
     private static string ExtractBalancedFormula(string text, int openParenIndex)
