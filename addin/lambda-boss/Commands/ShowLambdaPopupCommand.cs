@@ -163,7 +163,6 @@ public static class ShowLambdaPopupCommand
 
             _window = new LambdaPopup();
             _window.LibraryLoadRequested += OnLibraryLoadRequested;
-            _window.LibraryUpdateRequested += OnLibraryUpdateRequested;
 
             _settingsWindow = new SettingsWindow();
             _settingsWindow.SettingsChanged += OnSettingsChanged;
@@ -200,13 +199,22 @@ public static class ShowLambdaPopupCommand
             var lambdas = await _provider.GetAllLambdasAsync();
 
             _dataLoaded = true;
-            var wbName = GetActiveWorkbookName();
+
+            // Scan Name Manager for loaded libraries (runs on any thread — COM calls are marshalled)
+            HashSet<string> loadedKeys;
+            try
+            {
+                loadedKeys = ScanLoadedLibraryKeys();
+            }
+            catch
+            {
+                loadedKeys = new HashSet<string>();
+            }
 
             _windowDispatcher?.Invoke(() =>
             {
-                var loadedKeys = GetLoadedLibraryKeys(wbName);
                 _window?.SetData(libraries, lambdas, loadedKeys);
-                _window?.SetStatus("↑↓ navigate · Enter load · Ctrl+U update · Tab switch · Esc close");
+                _window?.SetStatus("↑↓ navigate · Enter load · Tab switch · Esc close");
                 // Re-apply the view so data shows up
                 _window?.ResetAndShow();
             });
@@ -226,87 +234,22 @@ public static class ShowLambdaPopupCommand
         _dataLoaded = false;
     }
 
-    private static HashSet<string> GetLoadedLibraryKeys(string? workbookName)
+    /// <summary>
+    ///     Scans Name Manager comments to build the set of loaded library keys.
+    ///     Must be called from a context where COM interop is available.
+    /// </summary>
+    private static HashSet<string> ScanLoadedLibraryKeys()
     {
-        if (workbookName == null) return new HashSet<string>();
-
-        var loaded = WorkbookTracker.GetLoaded(workbookName);
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var lib in loaded)
+
+        // ScanLoadedLibraries uses ExcelDnaUtil.Application internally
+        var scanned = LambdaLoader.ScanLoadedLibraries();
+        foreach (var lib in scanned)
         {
-            keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoConfig.Url, lib.LibraryName));
+            keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoUrl, lib.LibraryName));
         }
+
         return keys;
-    }
-
-    private static string? GetActiveWorkbookName()
-    {
-        try
-        {
-            dynamic app = ExcelDnaUtil.Application;
-            return app.ActiveWorkbook?.Name;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static void OnLibraryUpdateRequested(object? sender, LibraryUpdateRequest request)
-    {
-        // Get workbook name early — may be called from WPF thread but WorkbookTracker is thread-safe
-        var workbookName = GetActiveWorkbookName() ?? "Unknown";
-        var loaded = WorkbookTracker.Find(workbookName, request.LibraryName, request.RepoConfig.Url);
-
-        if (loaded == null)
-        {
-            _windowDispatcher?.Invoke(() =>
-                _window?.SetStatus($"{request.DisplayName} is not loaded in this workbook"));
-            return;
-        }
-
-        Task.Run(async () =>
-        {
-            try
-            {
-                _windowDispatcher?.Invoke(() =>
-                    _window?.SetStatus($"Updating {request.DisplayName}..."));
-
-                _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
-
-                var result = await _provider.UpdateLibraryAsync(loaded);
-
-                ExcelAsyncUtil.QueueAsMacro(() =>
-                {
-                    try
-                    {
-                        foreach (var (name, formula) in result.Lambdas)
-                        {
-                            LambdaLoader.InjectLambda(name, formula);
-                        }
-
-                        // Update tracker with fresh data
-                        WorkbookTracker.Record(workbookName, loaded.RepoConfig,
-                            loaded.LibraryName, loaded.Prefix, result.Lambdas);
-
-                        _windowDispatcher?.Invoke(() =>
-                            _window?.SetStatus($"Updated {request.DisplayName}: {result.Summary}"));
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error("OnLibraryUpdateRequested/Inject", ex);
-                        _windowDispatcher?.Invoke(() =>
-                            _window?.SetStatus($"Error updating {request.DisplayName}"));
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("OnLibraryUpdateRequested/Fetch", ex);
-                _windowDispatcher?.Invoke(() =>
-                    _window?.SetStatus($"Error fetching update for {request.DisplayName}"));
-            }
-        });
     }
 
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
@@ -321,37 +264,73 @@ public static class ShowLambdaPopupCommand
 
                 _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
 
+                // Invalidate cache so we always get fresh data
+                _provider.InvalidateCache(request.RepoConfig, request.LibraryName);
+
                 var lambdas = await _provider.LoadLibraryAsync(
                     request.RepoConfig, request.LibraryName, request.Prefix);
+
+                // Scan existing names before injecting (for diff summary)
+                ScannedLibrary? existing = null;
+                ExcelAsyncUtil.QueueAsMacro(() =>
+                {
+                    try
+                    {
+                        // Scan before injecting to get the old state
+                        var allScanned = LambdaLoader.ScanLoadedLibraries();
+                        existing = allScanned.FirstOrDefault(s =>
+                            string.Equals(s.LibraryName, request.LibraryName, StringComparison.OrdinalIgnoreCase)
+                            && request.RepoConfig.Url.TrimEnd('/').Contains(s.RepoUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
+                    }
+                    catch
+                    {
+                        // If scan fails, proceed without diff
+                    }
+                });
+
+                // Small delay to let the QueueAsMacro above execute
+                await Task.Delay(200);
 
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {
                     try
                     {
-                        var count = 0;
+                        var comment = LambdaLoader.BuildComment(
+                            request.RepoConfig.Url, request.LibraryName, request.Prefix);
+
+                        var added = 0;
+                        var updated = 0;
+                        var unchanged = 0;
+
                         foreach (var (name, formula) in lambdas)
                         {
-                            LambdaLoader.InjectLambda(name, formula);
-                            count++;
+                            // Classify change
+                            if (existing != null && existing.Lambdas.TryGetValue(name, out var oldFormula))
+                            {
+                                if (string.Equals(formula, oldFormula, StringComparison.Ordinal))
+                                    unchanged++;
+                                else
+                                    updated++;
+                            }
+                            else
+                            {
+                                added++;
+                            }
+
+                            LambdaLoader.InjectLambda(name, formula, comment);
                         }
 
-                        // Track loaded library
-                        try
-                        {
-                            dynamic app = ExcelDnaUtil.Application;
-                            string workbookName = app.ActiveWorkbook?.Name ?? "Unknown";
-                            WorkbookTracker.Record(workbookName, request.RepoConfig,
-                                request.LibraryName, request.Prefix, lambdas);
-                        }
-                        catch (Exception trackEx)
-                        {
-                            Logger.Error("OnLibraryLoadRequested/Track", trackEx);
-                        }
+                        Logger.Info($"Loaded {lambdas.Count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
 
-                        Logger.Info($"Loaded {count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
+                        // Build summary
+                        var parts = new List<string>();
+                        if (added > 0) parts.Add($"{added} new");
+                        if (updated > 0) parts.Add($"{updated} updated");
+                        if (unchanged > 0) parts.Add($"{unchanged} unchanged");
+                        var summary = parts.Count > 0 ? string.Join(", ", parts) : $"{lambdas.Count} loaded";
 
                         _windowDispatcher?.Invoke(() =>
-                            _window?.SetStatus($"Loaded {count} lambdas from {request.DisplayName}"));
+                            _window?.SetStatus($"{request.DisplayName}: {summary}"));
                     }
                     catch (Exception ex)
                     {

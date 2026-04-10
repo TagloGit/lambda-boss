@@ -105,8 +105,10 @@ public class SmokeTests
         {
             dynamic workbook = _excel.Workbook;
 
-            // Simulate initial load: inject a LAMBDA
+            // Simulate initial load: inject a LAMBDA with comment
             workbook.Names.Add("tst.Double", "=LAMBDA(x, x*2)");
+            dynamic name = workbook.Names.Item("tst.Double");
+            name.Comment = "[LambdaBoss] https://github.com/TestOwner/repo|test|tst";
 
             // Verify initial value
             var cell = ws.Range["A1"];
@@ -121,8 +123,12 @@ public class SmokeTests
                 Marshal.ReleaseComObject(cell);
             }
 
+            // Verify comment was stamped
+            string comment = name.Comment;
+            _output.WriteLine($"Comment: {comment}");
+            Assert.StartsWith("[LambdaBoss]", comment);
+
             // Simulate "update": overwrite with new formula (x*3 instead of x*2)
-            dynamic name = workbook.Names.Item("tst.Double");
             name.RefersTo = "=LAMBDA(x, x*3)";
 
             // Verify updated value propagates

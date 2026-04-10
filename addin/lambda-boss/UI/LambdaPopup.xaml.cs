@@ -27,11 +27,6 @@ public partial class LambdaPopup
     public event EventHandler<LibraryLoadRequest>? LibraryLoadRequested;
 
     /// <summary>
-    ///     Fired when the user requests updating a loaded library.
-    /// </summary>
-    public event EventHandler<LibraryUpdateRequest>? LibraryUpdateRequested;
-
-    /// <summary>
     ///     Sets the data for the popup to display.
     /// </summary>
     public void SetData(IReadOnlyList<LibraryInfo> libraries, IReadOnlyList<LambdaInfo> lambdas,
@@ -108,11 +103,6 @@ public partial class LambdaPopup
 
             case Key.Tab:
                 SwitchMode(_mode == Mode.Library ? Mode.Search : Mode.Library);
-                e.Handled = true;
-                break;
-
-            case Key.U when Keyboard.Modifiers == ModifierKeys.Control:
-                BeginUpdate();
                 e.Handled = true;
                 break;
 
@@ -302,7 +292,7 @@ public partial class LambdaPopup
     {
         _prefixPromptActive = false;
         PrefixPanel.Visibility = Visibility.Collapsed;
-        StatusText.Text = "↑↓ navigate · Enter load · Ctrl+U update · Tab switch · Esc close";
+        StatusText.Text = "↑↓ navigate · Enter load · Tab switch · Esc close";
     }
 
     private void ConfirmLoad()
@@ -340,23 +330,6 @@ public partial class LambdaPopup
             libraryInfo.DisplayName));
 
         Hide();
-    }
-
-    private void BeginUpdate()
-    {
-        if (_mode != Mode.Library || LibraryList.SelectedItem is not LibraryDisplayItem libItem)
-            return;
-
-        if (string.IsNullOrEmpty(libItem.LoadedLabel))
-        {
-            SetStatus("Library not loaded — load it first with Enter");
-            return;
-        }
-
-        LibraryUpdateRequested?.Invoke(this, new LibraryUpdateRequest(
-            libItem.RepoConfig,
-            libItem.FolderName,
-            libItem.DisplayName));
     }
 
     internal static string MakeLoadedKey(string repoUrl, string libraryName) =>
@@ -398,23 +371,6 @@ internal class LibraryDisplayItem
     public string FolderName { get; init; } = "";
     public RepoConfig RepoConfig { get; init; } = null!;
     public string LoadedLabel { get; init; } = "";
-}
-
-/// <summary>
-///     Event args for requesting a library update.
-/// </summary>
-public sealed class LibraryUpdateRequest
-{
-    public RepoConfig RepoConfig { get; }
-    public string LibraryName { get; }
-    public string DisplayName { get; }
-
-    public LibraryUpdateRequest(RepoConfig repoConfig, string libraryName, string displayName)
-    {
-        RepoConfig = repoConfig;
-        LibraryName = libraryName;
-        DisplayName = displayName;
-    }
 }
 
 internal class LambdaDisplayItem

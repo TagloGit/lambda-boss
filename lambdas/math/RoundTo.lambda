@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      RoundTo
+    DESCRIPTION:*//**Rounds a number to a specified number of decimal places.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-10  Tim Jacks   Initial version
+*/
+RoundTo = LAMBDA(
+//  Parameter Declarations
+    value,
+    decimals,
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →RoundTo(value, decimals)¶" &
+                "DESCRIPTION:   →Rounds a number to a specified number of decimal places.¶" &
+                "VERSION:       →Apr 10 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   value          →(Required) The number to round.¶" &
+                "   decimals       →(Required) The number of decimal places.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=RoundTo(3.14159, 2)¶" &
+                "Result         →3.14",
+                "→", "¶"
+                ),
+    //  Procedure
+        result, ROUND(value, decimals),
+        IF(Help?, Help, result)
+)
+);
