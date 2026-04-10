@@ -49,6 +49,9 @@ public static class ShowLambdaPopupCommand
             dynamic app = ExcelDnaUtil.Application;
             var excelHwnd = new IntPtr(app.Hwnd);
 
+            // Scan Name Manager on the Excel main thread (COM-safe)
+            var loadedKeys = ScanLoadedLibraryKeys();
+
             EnsureWindowThread();
 
             _windowDispatcher?.Invoke(() =>
@@ -71,11 +74,13 @@ public static class ShowLambdaPopupCommand
                         _hasBeenPositioned = true;
                     }
 
+                    // Always refresh loaded state from Name Manager
+                    _window.UpdateLoadedKeys(loadedKeys);
                     _window.ResetAndShow();
 
                     if (!_dataLoaded)
                     {
-                        LoadDataAsync();
+                        LoadDataAsync(loadedKeys);
                     }
                 }
             });
@@ -139,7 +144,7 @@ public static class ShowLambdaPopupCommand
                 _window?.SetStatus("Refreshing libraries...");
             });
 
-            LoadDataAsync();
+            LoadDataAsync(null);
         }
         catch (Exception ex)
         {
@@ -187,7 +192,7 @@ public static class ShowLambdaPopupCommand
         readyEvent.Wait();
     }
 
-    private static async void LoadDataAsync()
+    private static async void LoadDataAsync(HashSet<string>? loadedKeys)
     {
         try
         {
@@ -199,17 +204,6 @@ public static class ShowLambdaPopupCommand
             var lambdas = await _provider.GetAllLambdasAsync();
 
             _dataLoaded = true;
-
-            // Scan Name Manager for loaded libraries (runs on any thread — COM calls are marshalled)
-            HashSet<string> loadedKeys;
-            try
-            {
-                loadedKeys = ScanLoadedLibraryKeys();
-            }
-            catch
-            {
-                loadedKeys = new HashSet<string>();
-            }
 
             _windowDispatcher?.Invoke(() =>
             {
@@ -235,18 +229,23 @@ public static class ShowLambdaPopupCommand
     }
 
     /// <summary>
-    ///     Scans Name Manager comments to build the set of loaded library keys.
-    ///     Must be called from a context where COM interop is available.
+    ///     Scans Name Manager comments on the Excel main thread.
     /// </summary>
     private static HashSet<string> ScanLoadedLibraryKeys()
     {
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        // ScanLoadedLibraries uses ExcelDnaUtil.Application internally
-        var scanned = LambdaLoader.ScanLoadedLibraries();
-        foreach (var lib in scanned)
+        try
         {
-            keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoUrl, lib.LibraryName));
+            var scanned = LambdaLoader.ScanLoadedLibraries();
+            foreach (var lib in scanned)
+            {
+                keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoUrl, lib.LibraryName));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ScanLoadedLibraryKeys", ex);
         }
 
         return keys;
@@ -270,31 +269,27 @@ public static class ShowLambdaPopupCommand
                 var lambdas = await _provider.LoadLibraryAsync(
                     request.RepoConfig, request.LibraryName, request.Prefix);
 
-                // Scan existing names before injecting (for diff summary)
-                ScannedLibrary? existing = null;
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {
                     try
                     {
-                        // Scan before injecting to get the old state
-                        var allScanned = LambdaLoader.ScanLoadedLibraries();
-                        existing = allScanned.FirstOrDefault(s =>
-                            string.Equals(s.LibraryName, request.LibraryName, StringComparison.OrdinalIgnoreCase)
-                            && request.RepoConfig.Url.TrimEnd('/').Contains(s.RepoUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
-                    }
-                    catch
-                    {
-                        // If scan fails, proceed without diff
-                    }
-                });
+                        // Scan existing names before injecting (for diff summary)
+                        ScannedLibrary? existing = null;
+                        try
+                        {
+                            var allScanned = LambdaLoader.ScanLoadedLibraries();
+                            existing = allScanned.FirstOrDefault(s =>
+                                string.Equals(s.LibraryName, request.LibraryName, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(
+                                    s.RepoUrl.TrimEnd('/'),
+                                    request.RepoConfig.Url.TrimEnd('/'),
+                                    StringComparison.OrdinalIgnoreCase));
+                        }
+                        catch
+                        {
+                            // If scan fails, proceed without diff
+                        }
 
-                // Small delay to let the QueueAsMacro above execute
-                await Task.Delay(200);
-
-                ExcelAsyncUtil.QueueAsMacro(() =>
-                {
-                    try
-                    {
                         var comment = LambdaLoader.BuildComment(
                             request.RepoConfig.Url, request.LibraryName, request.Prefix);
 

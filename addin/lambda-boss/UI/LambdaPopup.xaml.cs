@@ -58,6 +58,31 @@ public partial class LambdaPopup
             .ToList();
     }
 
+    /// <summary>
+    ///     Refreshes the loaded indicators on existing library items without replacing all data.
+    /// </summary>
+    public void UpdateLoadedKeys(IReadOnlySet<string>? loadedLibraryKeys)
+    {
+        if (_allLibraries.Count == 0)
+            return;
+
+        _allLibraries = _allLibraries
+            .Select(l => new LibraryDisplayItem
+            {
+                DisplayName = l.DisplayName,
+                Description = l.Description,
+                LambdaCountLabel = l.LambdaCountLabel,
+                DefaultPrefix = l.DefaultPrefix,
+                RepoLabel = l.RepoLabel,
+                FolderName = l.FolderName,
+                RepoConfig = l.RepoConfig,
+                LoadedLabel = loadedLibraryKeys != null
+                    && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
+                    ? "✓ loaded" : ""
+            })
+            .ToList();
+    }
+
     public void ResetAndShow()
     {
         SearchBox.Text = "";
