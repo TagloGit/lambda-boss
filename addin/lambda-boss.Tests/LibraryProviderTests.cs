@@ -196,6 +196,89 @@ default_prefix: map";
     }
 
     [Fact]
+    public async Task UpdateLibraryAsync_ReturnsCorrectDiff()
+    {
+        var handler = CreateFullHandler();
+        var provider = CreateProvider(handler);
+
+        // Simulate a previously loaded library with one existing lambda and one outdated formula
+        var loaded = new LoadedLibrary
+        {
+            RepoConfig = TestConfig,
+            LibraryName = "string",
+            Prefix = "str",
+            Lambdas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                // Same as current — should be "unchanged"
+                ["str.Split"] = "=LAMBDA(text, delimiter, TEXTSPLIT(text, delimiter))",
+                // Different formula — should be "updated"
+                ["str.PadLeft"] = "=LAMBDA(text, length, OLD_FORMULA(text, length))"
+            },
+            LoadedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        var result = await provider.UpdateLibraryAsync(loaded);
+
+        Assert.Equal(2, result.Lambdas.Count);
+        Assert.Empty(result.Added);
+        Assert.Single(result.Updated);
+        Assert.Contains("str.PadLeft", result.Updated);
+        Assert.Single(result.Unchanged);
+        Assert.Contains("str.Split", result.Unchanged);
+    }
+
+    [Fact]
+    public async Task UpdateLibraryAsync_DetectsNewLambdas()
+    {
+        var handler = CreateFullHandler();
+        var provider = CreateProvider(handler);
+
+        // Simulate a previously loaded library with only one lambda
+        var loaded = new LoadedLibrary
+        {
+            RepoConfig = TestConfig,
+            LibraryName = "string",
+            Prefix = "str",
+            Lambdas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["str.Split"] = "=LAMBDA(text, delimiter, TEXTSPLIT(text, delimiter))"
+            },
+            LoadedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        var result = await provider.UpdateLibraryAsync(loaded);
+
+        Assert.Equal(2, result.Lambdas.Count);
+        Assert.Single(result.Added);
+        Assert.Contains("str.PadLeft", result.Added);
+    }
+
+    [Fact]
+    public async Task UpdateLibraryAsync_Summary_FormatsCorrectly()
+    {
+        var handler = CreateFullHandler();
+        var provider = CreateProvider(handler);
+
+        var loaded = new LoadedLibrary
+        {
+            RepoConfig = TestConfig,
+            LibraryName = "string",
+            Prefix = "str",
+            Lambdas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["str.Split"] = "=LAMBDA(text, delimiter, TEXTSPLIT(text, delimiter))",
+                ["str.PadLeft"] = "=LAMBDA(text, length, OLD(text, length))"
+            },
+            LoadedAt = DateTime.UtcNow.AddMinutes(-10)
+        };
+
+        var result = await provider.UpdateLibraryAsync(loaded);
+
+        Assert.Contains("updated", result.Summary);
+        Assert.Contains("unchanged", result.Summary);
+    }
+
+    [Fact]
     public async Task RefreshAsync_ClearsAndReloadsData()
     {
         var handler = CreateFullHandler();

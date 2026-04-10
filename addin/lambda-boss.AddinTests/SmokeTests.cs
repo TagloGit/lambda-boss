@@ -96,4 +96,76 @@ public class SmokeTests
         name.Delete();
         Marshal.ReleaseComObject(name);
     }
+
+    [Fact]
+    public void UpdateFlow_OverwriteExistingLambda_ReflectsNewFormula()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            dynamic workbook = _excel.Workbook;
+
+            // Simulate initial load: inject a LAMBDA
+            workbook.Names.Add("tst.Double", "=LAMBDA(x, x*2)");
+
+            // Verify initial value
+            var cell = ws.Range["A1"];
+            try
+            {
+                cell.Formula2 = "=tst.Double(5)";
+                Thread.Sleep(500);
+                Assert.Equal(10.0, Convert.ToDouble(cell.Value));
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(cell);
+            }
+
+            // Simulate "update": overwrite with new formula (x*3 instead of x*2)
+            dynamic name = workbook.Names.Item("tst.Double");
+            name.RefersTo = "=LAMBDA(x, x*3)";
+
+            // Verify updated value propagates
+            var cell2 = ws.Range["A2"];
+            try
+            {
+                cell2.Formula2 = "=tst.Double(5)";
+                Thread.Sleep(500);
+                object? value = cell2.Value;
+                _output.WriteLine($"After update: =tst.Double(5) = {value}");
+                Assert.Equal(15.0, Convert.ToDouble(value));
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(cell2);
+            }
+
+            // Also verify the existing cell A1 recalculated
+            var cell1Again = ws.Range["A1"];
+            try
+            {
+                Thread.Sleep(500);
+                object? updatedValue = cell1Again.Value;
+                _output.WriteLine($"Cell A1 after update: {updatedValue}");
+                Assert.Equal(15.0, Convert.ToDouble(updatedValue));
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(cell1Again);
+            }
+
+            // Cleanup
+            name.Delete();
+            Marshal.ReleaseComObject(name);
+        }
+        finally
+        {
+            try
+            {
+                ws.Delete();
+                Marshal.ReleaseComObject(ws);
+            }
+            catch { }
+        }
+    }
 }

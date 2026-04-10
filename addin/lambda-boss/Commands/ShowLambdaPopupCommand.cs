@@ -163,6 +163,7 @@ public static class ShowLambdaPopupCommand
 
             _window = new LambdaPopup();
             _window.LibraryLoadRequested += OnLibraryLoadRequested;
+            _window.LibraryUpdateRequested += OnLibraryUpdateRequested;
 
             _settingsWindow = new SettingsWindow();
             _settingsWindow.SettingsChanged += OnSettingsChanged;
@@ -199,11 +200,13 @@ public static class ShowLambdaPopupCommand
             var lambdas = await _provider.GetAllLambdasAsync();
 
             _dataLoaded = true;
+            var wbName = GetActiveWorkbookName();
 
             _windowDispatcher?.Invoke(() =>
             {
-                _window?.SetData(libraries, lambdas);
-                _window?.SetStatus("↑↓ navigate · Enter load · Tab switch · Esc close");
+                var loadedKeys = GetLoadedLibraryKeys(wbName);
+                _window?.SetData(libraries, lambdas, loadedKeys);
+                _window?.SetStatus("↑↓ navigate · Enter load · Ctrl+U update · Tab switch · Esc close");
                 // Re-apply the view so data shows up
                 _window?.ResetAndShow();
             });
@@ -221,6 +224,89 @@ public static class ShowLambdaPopupCommand
         // Invalidate cached data so next popup open re-fetches with updated repos
         _provider = null;
         _dataLoaded = false;
+    }
+
+    private static HashSet<string> GetLoadedLibraryKeys(string? workbookName)
+    {
+        if (workbookName == null) return new HashSet<string>();
+
+        var loaded = WorkbookTracker.GetLoaded(workbookName);
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lib in loaded)
+        {
+            keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoConfig.Url, lib.LibraryName));
+        }
+        return keys;
+    }
+
+    private static string? GetActiveWorkbookName()
+    {
+        try
+        {
+            dynamic app = ExcelDnaUtil.Application;
+            return app.ActiveWorkbook?.Name;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void OnLibraryUpdateRequested(object? sender, LibraryUpdateRequest request)
+    {
+        // Get workbook name early — may be called from WPF thread but WorkbookTracker is thread-safe
+        var workbookName = GetActiveWorkbookName() ?? "Unknown";
+        var loaded = WorkbookTracker.Find(workbookName, request.LibraryName, request.RepoConfig.Url);
+
+        if (loaded == null)
+        {
+            _windowDispatcher?.Invoke(() =>
+                _window?.SetStatus($"{request.DisplayName} is not loaded in this workbook"));
+            return;
+        }
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                _windowDispatcher?.Invoke(() =>
+                    _window?.SetStatus($"Updating {request.DisplayName}..."));
+
+                _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
+
+                var result = await _provider.UpdateLibraryAsync(loaded);
+
+                ExcelAsyncUtil.QueueAsMacro(() =>
+                {
+                    try
+                    {
+                        foreach (var (name, formula) in result.Lambdas)
+                        {
+                            LambdaLoader.InjectLambda(name, formula);
+                        }
+
+                        // Update tracker with fresh data
+                        WorkbookTracker.Record(workbookName, loaded.RepoConfig,
+                            loaded.LibraryName, loaded.Prefix, result.Lambdas);
+
+                        _windowDispatcher?.Invoke(() =>
+                            _window?.SetStatus($"Updated {request.DisplayName}: {result.Summary}"));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("OnLibraryUpdateRequested/Inject", ex);
+                        _windowDispatcher?.Invoke(() =>
+                            _window?.SetStatus($"Error updating {request.DisplayName}"));
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("OnLibraryUpdateRequested/Fetch", ex);
+                _windowDispatcher?.Invoke(() =>
+                    _window?.SetStatus($"Error fetching update for {request.DisplayName}"));
+            }
+        });
     }
 
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
@@ -247,6 +333,19 @@ public static class ShowLambdaPopupCommand
                         {
                             LambdaLoader.InjectLambda(name, formula);
                             count++;
+                        }
+
+                        // Track loaded library
+                        try
+                        {
+                            dynamic app = ExcelDnaUtil.Application;
+                            string workbookName = app.ActiveWorkbook?.Name ?? "Unknown";
+                            WorkbookTracker.Record(workbookName, request.RepoConfig,
+                                request.LibraryName, request.Prefix, lambdas);
+                        }
+                        catch (Exception trackEx)
+                        {
+                            Logger.Error("OnLibraryLoadRequested/Track", trackEx);
                         }
 
                         Logger.Info($"Loaded {count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
