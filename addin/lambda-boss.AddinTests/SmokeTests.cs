@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-
 using Xunit;
 using Xunit.Abstractions;
 
@@ -31,11 +30,11 @@ public class SmokeTests
         try
         {
             // Inject a test LAMBDA via Name Manager
-            dynamic workbook = _excel.Workbook;
+            var workbook = _excel.Workbook;
             workbook.Names.Add("TEST_DOUBLE", "=LAMBDA(x, x*2)");
 
             // Verify the name exists
-            dynamic name = workbook.Names.Item("TEST_DOUBLE");
+            var name = workbook.Names.Item("TEST_DOUBLE");
             string refersTo = name.RefersTo;
             _output.WriteLine($"TEST_DOUBLE RefersTo: {refersTo}");
 
@@ -78,13 +77,13 @@ public class SmokeTests
     [Fact]
     public void InjectLambda_UpdatesExistingName()
     {
-        dynamic workbook = _excel.Workbook;
+        var workbook = _excel.Workbook;
 
         // Add initial
         workbook.Names.Add("TEST_UPDATABLE", "=LAMBDA(x, x*2)");
 
         // Update it
-        dynamic name = workbook.Names.Item("TEST_UPDATABLE");
+        var name = workbook.Names.Item("TEST_UPDATABLE");
         name.RefersTo = "=LAMBDA(x, x*3)";
 
         string refersTo = name.RefersTo;
@@ -103,11 +102,11 @@ public class SmokeTests
         var ws = _excel.AddWorksheet();
         try
         {
-            dynamic workbook = _excel.Workbook;
+            var workbook = _excel.Workbook;
 
             // Simulate initial load: inject a LAMBDA with comment
             workbook.Names.Add("tst.Double", "=LAMBDA(x, x*2)");
-            dynamic name = workbook.Names.Item("tst.Double");
+            var name = workbook.Names.Item("tst.Double");
             name.Comment = "[LambdaBoss] https://github.com/TestOwner/repo|test|tst";
 
             // Verify initial value
@@ -171,7 +170,10 @@ public class SmokeTests
                 ws.Delete();
                 Marshal.ReleaseComObject(ws);
             }
-            catch { }
+            catch
+            {
+                // ignored
+            }
         }
     }
 }
