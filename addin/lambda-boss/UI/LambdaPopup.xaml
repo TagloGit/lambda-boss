@@ -70,6 +70,9 @@
                             <TextBlock Text="  " />
                             <TextBlock Text="{Binding LambdaCountLabel}" Foreground="#569cd6" FontSize="11"
                                        VerticalAlignment="Center" />
+                            <TextBlock Text="  " />
+                            <TextBlock Text="{Binding LoadedLabel}" Foreground="#608b4e" FontSize="11"
+                                       VerticalAlignment="Center" />
                             <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
                         </StackPanel>
                         <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->

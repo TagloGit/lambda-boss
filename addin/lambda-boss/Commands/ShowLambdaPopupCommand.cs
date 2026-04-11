@@ -49,6 +49,9 @@ public static class ShowLambdaPopupCommand
             dynamic app = ExcelDnaUtil.Application;
             var excelHwnd = new IntPtr(app.Hwnd);
 
+            // Scan Name Manager on the Excel main thread (COM-safe)
+            var loadedKeys = ScanLoadedLibraryKeys();
+
             EnsureWindowThread();
 
             _windowDispatcher?.Invoke(() =>
@@ -71,11 +74,13 @@ public static class ShowLambdaPopupCommand
                         _hasBeenPositioned = true;
                     }
 
+                    // Always refresh loaded state from Name Manager
+                    _window.UpdateLoadedKeys(loadedKeys);
                     _window.ResetAndShow();
 
                     if (!_dataLoaded)
                     {
-                        LoadDataAsync();
+                        LoadDataAsync(loadedKeys);
                     }
                 }
             });
@@ -139,7 +144,7 @@ public static class ShowLambdaPopupCommand
                 _window?.SetStatus("Refreshing libraries...");
             });
 
-            LoadDataAsync();
+            LoadDataAsync(null);
         }
         catch (Exception ex)
         {
@@ -187,7 +192,7 @@ public static class ShowLambdaPopupCommand
         readyEvent.Wait();
     }
 
-    private static async void LoadDataAsync()
+    private static async void LoadDataAsync(HashSet<string>? loadedKeys)
     {
         try
         {
@@ -202,7 +207,7 @@ public static class ShowLambdaPopupCommand
 
             _windowDispatcher?.Invoke(() =>
             {
-                _window?.SetData(libraries, lambdas);
+                _window?.SetData(libraries, lambdas, loadedKeys);
                 _window?.SetStatus("↑↓ navigate · Enter load · Tab switch · Esc close");
                 // Re-apply the view so data shows up
                 _window?.ResetAndShow();
@@ -223,6 +228,29 @@ public static class ShowLambdaPopupCommand
         _dataLoaded = false;
     }
 
+    /// <summary>
+    ///     Scans Name Manager comments on the Excel main thread.
+    /// </summary>
+    private static HashSet<string> ScanLoadedLibraryKeys()
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var scanned = LambdaLoader.ScanLoadedLibraries();
+            foreach (var lib in scanned)
+            {
+                keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoUrl, lib.LibraryName));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ScanLoadedLibraryKeys", ex);
+        }
+
+        return keys;
+    }
+
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
     {
         // Fetch and inject on a background thread, then inject via QueueAsMacro
@@ -235,6 +263,9 @@ public static class ShowLambdaPopupCommand
 
                 _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
 
+                // Invalidate cache so we always get fresh data
+                _provider.InvalidateCache(request.RepoConfig, request.LibraryName);
+
                 var lambdas = await _provider.LoadLibraryAsync(
                     request.RepoConfig, request.LibraryName, request.Prefix);
 
@@ -242,17 +273,59 @@ public static class ShowLambdaPopupCommand
                 {
                     try
                     {
-                        var count = 0;
-                        foreach (var (name, formula) in lambdas)
+                        // Scan existing names before injecting (for diff summary)
+                        ScannedLibrary? existing = null;
+                        try
                         {
-                            LambdaLoader.InjectLambda(name, formula);
-                            count++;
+                            var allScanned = LambdaLoader.ScanLoadedLibraries();
+                            existing = allScanned.FirstOrDefault(s =>
+                                string.Equals(s.LibraryName, request.LibraryName, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(
+                                    s.RepoUrl.TrimEnd('/'),
+                                    request.RepoConfig.Url.TrimEnd('/'),
+                                    StringComparison.OrdinalIgnoreCase));
+                        }
+                        catch
+                        {
+                            // If scan fails, proceed without diff
                         }
 
-                        Logger.Info($"Loaded {count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
+                        var comment = LambdaLoader.BuildComment(
+                            request.RepoConfig.Url, request.LibraryName, request.Prefix);
+
+                        var added = 0;
+                        var updated = 0;
+                        var unchanged = 0;
+
+                        foreach (var (name, formula) in lambdas)
+                        {
+                            // Classify change
+                            if (existing != null && existing.Lambdas.TryGetValue(name, out var oldFormula))
+                            {
+                                if (string.Equals(formula, oldFormula, StringComparison.Ordinal))
+                                    unchanged++;
+                                else
+                                    updated++;
+                            }
+                            else
+                            {
+                                added++;
+                            }
+
+                            LambdaLoader.InjectLambda(name, formula, comment);
+                        }
+
+                        Logger.Info($"Loaded {lambdas.Count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
+
+                        // Build summary
+                        var parts = new List<string>();
+                        if (added > 0) parts.Add($"{added} new");
+                        if (updated > 0) parts.Add($"{updated} updated");
+                        if (unchanged > 0) parts.Add($"{unchanged} unchanged");
+                        var summary = parts.Count > 0 ? string.Join(", ", parts) : $"{lambdas.Count} loaded";
 
                         _windowDispatcher?.Invoke(() =>
-                            _window?.SetStatus($"Loaded {count} lambdas from {request.DisplayName}"));
+                            _window?.SetStatus($"{request.DisplayName}: {summary}"));
                     }
                     catch (Exception ex)
                     {

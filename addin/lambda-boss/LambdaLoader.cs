@@ -10,11 +10,18 @@ namespace LambdaBoss;
 public static class LambdaLoader
 {
     /// <summary>
+    ///     Marker prefix for Name Manager comments stamped by Lambda Boss.
+    /// </summary>
+    internal const string CommentMarker = "[LambdaBoss]";
+
+    /// <summary>
     ///     Adds or updates a named LAMBDA formula in the active workbook's Name Manager.
+    ///     Optionally stamps a comment with library provenance metadata.
     /// </summary>
     /// <param name="name">The name to register (e.g. "tst.Double").</param>
     /// <param name="formula">The LAMBDA formula including the = prefix (e.g. "=LAMBDA(x, x*2)").</param>
-    public static void InjectLambda(string name, string formula)
+    /// <param name="comment">Optional comment to stamp on the name (for provenance tracking).</param>
+    public static void InjectLambda(string name, string formula, string? comment = null)
     {
         try
         {
@@ -32,12 +39,26 @@ public static class LambdaLoader
             {
                 dynamic existing = workbook.Names.Item(name);
                 existing.RefersTo = formula;
+                if (comment != null)
+                    existing.Comment = comment;
                 Logger.Info($"InjectLambda: Updated '{name}'");
             }
             catch
             {
                 // Name doesn't exist — add it
                 workbook.Names.Add(name, formula);
+                if (comment != null)
+                {
+                    try
+                    {
+                        dynamic added = workbook.Names.Item(name);
+                        added.Comment = comment;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"InjectLambda: Failed to set comment on '{name}'", ex);
+                    }
+                }
                 Logger.Info($"InjectLambda: Added '{name}'");
             }
         }
@@ -45,6 +66,80 @@ public static class LambdaLoader
         {
             Logger.Error("InjectLambda", ex);
             throw;
+        }
+    }
+
+    /// <summary>
+    ///     Builds the comment string stamped on each Name Manager entry.
+    /// </summary>
+    public static string BuildComment(string repoUrl, string libraryName, string prefix)
+    {
+        return $"{CommentMarker} {repoUrl.TrimEnd('/')}|{libraryName}|{prefix}";
+    }
+
+    /// <summary>
+    ///     Scans the active workbook's Name Manager for entries stamped by Lambda Boss.
+    ///     Returns a list of loaded library records grouped by repo+library.
+    /// </summary>
+    public static IReadOnlyList<ScannedLibrary> ScanLoadedLibraries()
+    {
+        try
+        {
+            dynamic app = ExcelDnaUtil.Application;
+            dynamic workbook = app.ActiveWorkbook;
+
+            if (workbook == null)
+                return Array.Empty<ScannedLibrary>();
+
+            var groups = new Dictionary<string, ScannedLibrary>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (dynamic name in workbook.Names)
+            {
+                try
+                {
+                    string comment = name.Comment ?? "";
+                    if (!comment.StartsWith(CommentMarker))
+                        continue;
+
+                    var metadata = comment[CommentMarker.Length..].Trim();
+                    var parts = metadata.Split('|');
+                    if (parts.Length < 3)
+                        continue;
+
+                    var repoUrl = parts[0].Trim();
+                    var libraryName = parts[1].Trim();
+                    var prefix = parts[2].Trim();
+
+                    string nameText = name.Name;
+                    string refersTo = name.RefersTo;
+
+                    var key = $"{repoUrl}|{libraryName}".ToLowerInvariant();
+                    if (!groups.TryGetValue(key, out var scanned))
+                    {
+                        scanned = new ScannedLibrary
+                        {
+                            RepoUrl = repoUrl,
+                            LibraryName = libraryName,
+                            Prefix = prefix
+                        };
+                        groups[key] = scanned;
+                    }
+
+                    scanned.Lambdas[nameText] = refersTo;
+                }
+                catch
+                {
+                    // Skip names that can't be read
+                }
+            }
+
+            Logger.Info($"ScanLoadedLibraries: Found {groups.Count} loaded libraries");
+            return groups.Values.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ScanLoadedLibraries", ex);
+            return Array.Empty<ScannedLibrary>();
         }
     }
 
@@ -113,4 +208,15 @@ public static class LambdaLoader
             ("ADDN", "=LAMBDA(x, n, x+n)")
         };
     }
+}
+
+/// <summary>
+///     A library detected in the workbook's Name Manager via comment scanning.
+/// </summary>
+public sealed class ScannedLibrary
+{
+    public string RepoUrl { get; init; } = "";
+    public string LibraryName { get; init; } = "";
+    public string Prefix { get; init; } = "";
+    public Dictionary<string, string> Lambdas { get; } = new(StringComparer.OrdinalIgnoreCase);
 }

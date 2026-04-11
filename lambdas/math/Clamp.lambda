@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      Clamp
+    DESCRIPTION:*//**Constrains a value between a minimum and maximum.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-10  Tim Jacks   Initial version
+*/
+Clamp = LAMBDA(
+//  Parameter Declarations
+    value,
+    min_val,
+    max_val,
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →Clamp(value, min_val, max_val)¶" &
+                "DESCRIPTION:   →Constrains a value between a minimum and maximum.¶" &
+                "VERSION:       →Apr 10 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   value          →(Required) The number to clamp.¶" &
+                "   min_val        →(Required) The lower bound.¶" &
+                "   max_val        →(Required) The upper bound.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=Clamp(15, 0, 10)¶" &
+                "Result         →10",
+                "→", "¶"
+                ),
+    //  Procedure
+        result, MIN(MAX(value, min_val), max_val),
+        IF(Help?, Help, result)
+)
+);

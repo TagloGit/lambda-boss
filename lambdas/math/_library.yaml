@@ -1,0 +1,3 @@
+name: Math
+description: Common math utility functions
+default_prefix: math

@@ -74,6 +74,14 @@ public class LibraryProvider
     }
 
     /// <summary>
+    ///     Invalidates the disk cache for a specific library so the next LoadLibraryAsync re-fetches.
+    /// </summary>
+    public void InvalidateCache(RepoConfig config, string libraryName)
+    {
+        _cache.Invalidate(config, libraryName);
+    }
+
+    /// <summary>
     ///     Clears in-memory cache and re-fetches all data from GitHub.
     /// </summary>
     public async Task RefreshAsync()
@@ -184,3 +192,4 @@ public sealed class LambdaInfo
     public LibraryInfo LibraryInfo { get; init; } = null!;
     public string FileName { get; init; } = "";
 }
+

@@ -196,6 +196,22 @@ default_prefix: map";
     }
 
     [Fact]
+    public async Task InvalidateCache_ForcesRefetch()
+    {
+        var handler = CreateFullHandler();
+        var provider = CreateProvider(handler);
+
+        // Load once to populate cache
+        await provider.LoadLibraryAsync(TestConfig, "string", "str");
+
+        // Invalidate and load again — should still work (re-fetches)
+        provider.InvalidateCache(TestConfig, "string");
+        var lambdas = await provider.LoadLibraryAsync(TestConfig, "string", "str");
+
+        Assert.Equal(2, lambdas.Count);
+    }
+
+    [Fact]
     public async Task RefreshAsync_ClearsAndReloadsData()
     {
         var handler = CreateFullHandler();

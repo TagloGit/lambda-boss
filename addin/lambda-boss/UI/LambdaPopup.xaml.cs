@@ -29,7 +29,8 @@ public partial class LambdaPopup
     /// <summary>
     ///     Sets the data for the popup to display.
     /// </summary>
-    public void SetData(IReadOnlyList<LibraryInfo> libraries, IReadOnlyList<LambdaInfo> lambdas)
+    public void SetData(IReadOnlyList<LibraryInfo> libraries, IReadOnlyList<LambdaInfo> lambdas,
+        IReadOnlySet<string>? loadedLibraryKeys = null)
     {
         _allLibraries = libraries
             .Select(l => new LibraryDisplayItem
@@ -40,7 +41,10 @@ public partial class LambdaPopup
                 DefaultPrefix = l.DefaultPrefix,
                 RepoLabel = l.RepoLabel,
                 FolderName = l.FolderName,
-                RepoConfig = l.RepoConfig
+                RepoConfig = l.RepoConfig,
+                LoadedLabel = loadedLibraryKeys != null
+                    && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
+                    ? "✓ loaded" : ""
             })
             .ToList();
 
@@ -50,6 +54,31 @@ public partial class LambdaPopup
                 Name = l.Name,
                 LibraryLabel = l.LibraryInfo.DisplayName,
                 LibraryInfo = l.LibraryInfo
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    ///     Refreshes the loaded indicators on existing library items without replacing all data.
+    /// </summary>
+    public void UpdateLoadedKeys(IReadOnlySet<string>? loadedLibraryKeys)
+    {
+        if (_allLibraries.Count == 0)
+            return;
+
+        _allLibraries = _allLibraries
+            .Select(l => new LibraryDisplayItem
+            {
+                DisplayName = l.DisplayName,
+                Description = l.Description,
+                LambdaCountLabel = l.LambdaCountLabel,
+                DefaultPrefix = l.DefaultPrefix,
+                RepoLabel = l.RepoLabel,
+                FolderName = l.FolderName,
+                RepoConfig = l.RepoConfig,
+                LoadedLabel = loadedLibraryKeys != null
+                    && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
+                    ? "✓ loaded" : ""
             })
             .ToList();
     }
@@ -328,6 +357,9 @@ public partial class LambdaPopup
         Hide();
     }
 
+    internal static string MakeLoadedKey(string repoUrl, string libraryName) =>
+        $"{repoUrl.TrimEnd('/').ToLowerInvariant()}|{libraryName.ToLowerInvariant()}";
+
     private static System.Windows.Media.SolidColorBrush BrushFromHex(string hex)
     {
         var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
@@ -363,6 +395,7 @@ internal class LibraryDisplayItem
     public string RepoLabel { get; init; } = "";
     public string FolderName { get; init; } = "";
     public RepoConfig RepoConfig { get; init; } = null!;
+    public string LoadedLabel { get; init; } = "";
 }
 
 internal class LambdaDisplayItem
