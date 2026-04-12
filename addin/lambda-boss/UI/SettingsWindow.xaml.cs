@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
 
+using Ookii.Dialogs.Wpf;
+
 namespace LambdaBoss.UI;
 
 public partial class SettingsWindow
@@ -186,6 +188,20 @@ public partial class SettingsWindow
     private void AddLocalButton_Click(object sender, RoutedEventArgs e)
     {
         AddLocalSource();
+    }
+
+    private void BrowseLocalButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new VistaFolderBrowserDialog
+        {
+            Description = "Select the folder containing library sub-folders (e.g. repo\\lambdas)",
+            UseDescriptionForTitle = true
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            LocalPathBox.Text = dialog.SelectedPath;
+        }
     }
 
     private void LocalPathBox_KeyDown(object sender, KeyEventArgs e)

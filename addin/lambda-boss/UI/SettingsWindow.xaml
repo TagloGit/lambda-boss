@@ -139,6 +139,15 @@
                 BorderThickness="1"
                 CornerRadius="2">
             <DockPanel>
+                <Button x:Name="BrowseLocalButton"
+                        DockPanel.Dock="Right"
+                        Content="Browse"
+                        Padding="12,2"
+                        Margin="6,0,0,0"
+                        Background="#0e639c"
+                        Foreground="#ffffff"
+                        BorderThickness="0"
+                        Click="BrowseLocalButton_Click" />
                 <Button x:Name="AddLocalButton"
                         DockPanel.Dock="Right"
                         Content="Add"
@@ -161,7 +170,7 @@
                             <Style.Resources>
                                 <VisualBrush x:Key="LocalPlaceholderBrush" AlignmentX="Left" AlignmentY="Center" Stretch="None">
                                     <VisualBrush.Visual>
-                                        <TextBlock Text="C:\path\to\lambdas" FontSize="13"
+                                        <TextBlock Text="C:\repo\lambdas (folder containing library sub-folders)" FontSize="13"
                                                    Foreground="#555555" Margin="5,0,0,0" />
                                     </VisualBrush.Visual>
                                 </VisualBrush>
