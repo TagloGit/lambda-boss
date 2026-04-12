@@ -1,0 +1,37 @@
+/*  FUNCTION NAME:      EXPLODE
+    DESCRIPTION:*//**Splits a string into an array of character chunks of a given size.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-12  Tim Jacks   Initial version
+*/
+EXPLODE = LAMBDA(
+//  Parameter Declarations
+    [text],
+    [chunk_size],
+    [horizontal],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →EXPLODE(text, chunk_size, horizontal)¶" &
+                "DESCRIPTION:   →Splits a string into an array of character chunks of a given size.¶" &
+                "VERSION:       →Apr 12 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   text           →(Required) The string to split.¶" &
+                "   chunk_size     →(Optional) Number of characters per chunk. Default: 1.¶" &
+                "   horizontal     →(Optional) If TRUE, returns a horizontal row array. Default: FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=EXPLODE(""abcdefgh"", 3)¶" &
+                "Result         →{""abc"";""def"";""gh""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(text),
+        _size, IF(ISOMITTED(chunk_size), 1, chunk_size),
+        _horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
+    //  Procedure
+        _count, CEILING(LEN(text) / _size, 1),
+        _starts, IF(_horiz,
+                    SEQUENCE(1, _count, 1, _size),
+                    SEQUENCE(_count, 1, 1, _size)),
+        result, MID(text, _starts, _size),
+        IF(Help?, Help, result)
+)
+);
