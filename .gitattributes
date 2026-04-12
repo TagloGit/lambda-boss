@@ -1,0 +1,2 @@
+# Force LF line endings for lambda files (no carriage returns allowed)
+*.lambda text eol=lf
