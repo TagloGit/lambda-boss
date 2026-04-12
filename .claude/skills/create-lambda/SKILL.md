@@ -1,7 +1,7 @@
 ---
 name: create-lambda
-description: "Create a new LAMBDA with self-documenting format and test cases. Usage: /create-lambda <name> <category>"
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
+description: "Create a new LAMBDA with self-documenting format and test cases. Usage: /create-lambda [issue-number]"
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 ---
 
 # Create LAMBDA — lambda-boss
@@ -10,15 +10,15 @@ Guide LAMBDA authoring with the correct self-documenting format, generate Help s
 
 ## Arguments
 
-- `<name>` — The LAMBDA function name (PascalCase, e.g. `SumIf`, `PadLeft`)
-- `<category>` — The subdirectory under `lambdas/` (e.g. `math`, `string`, `test`)
+- `[issue-number]` — (Optional) A GitHub issue number on `TagloGit/lambda-boss` describing the LAMBDA to create. Issues with the `lambda-idea` label contain structured LAMBDA proposals.
 
-If arguments are missing, ask the user for:
-1. The function name
-2. The category (subdirectory)
-3. What the function should do
-4. Parameter names and descriptions
-5. An example with expected result
+If no issue number is provided, list all open `lambda-idea` issues and ask the user to select one:
+
+```bash
+gh issue list -R TagloGit/lambda-boss --label "lambda-idea" --state open
+```
+
+If there are no open `lambda-idea` issues, tell the user and ask them to describe the LAMBDA they want to create instead.
 
 ## File Locations
 
@@ -162,27 +162,43 @@ tests:
 
 ## Workflow
 
-### Step 1 — Gather Requirements
+### Step 1 — Load the Idea
 
-If the user hasn't provided full details, ask for:
-- Function name (PascalCase)
-- Category subdirectory
-- What the function does
-- Parameters (name, required/optional, description)
-- Example usage with expected result
+If an issue number was provided, fetch it:
 
-### Step 2 — Create the Lambda File
+```bash
+gh issue view <number> -R TagloGit/lambda-boss
+```
+
+If no issue number was provided, list open `lambda-idea` issues and use AskUserQuestion to let the user pick one. Then fetch the selected issue.
+
+If there are no `lambda-idea` issues, ask the user to describe the LAMBDA they want.
+
+### Step 2 — Confirm Details with User
+
+Before writing any files, extract the key details from the issue (or user description) and present them for confirmation using AskUserQuestion. The user must approve before you proceed.
+
+Details to confirm:
+- **Function name** (PascalCase, e.g. `WeightedScore`)
+- **Category** (subdirectory under `lambdas/`, e.g. `math`, `string`)
+- **Parameters** — name, required/optional, description for each
+- **Formula approach** — brief description of the implementation
+- **Example** — sample call and expected result
+
+If the issue is missing key details or the approach is ambiguous, ask the user to clarify rather than guessing.
+
+### Step 3 — Create the Lambda File
 
 1. Check if `lambdas/<category>/` exists; if not, create it with `_library.yaml`
 2. Write the `.lambda` file following the template exactly
 3. Use `\n` line endings — write with the Write tool (it preserves line endings)
 
-### Step 3 — Create the Tests File
+### Step 4 — Create the Tests File
 
 1. Write the `.tests.yaml` file with test cases
 2. Include the help text test case
 
-### Step 4 — Validate Format
+### Step 5 — Validate Format
 
 Run the format validation tests to confirm the file is correctly formatted:
 
@@ -198,7 +214,7 @@ dotnet build addin/lambda-boss.slnx
 
 Then re-run the test. If validation fails, read the error output, fix the `.lambda` file, and re-run until all format tests pass.
 
-### Step 5 — Report
+### Step 6 — Report
 
 Tell the user:
 - What files were created
