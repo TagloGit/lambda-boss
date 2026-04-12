@@ -198,7 +198,9 @@ public static class ShowLambdaPopupCommand
         {
             _windowDispatcher?.Invoke(() => _window?.SetStatus("Loading libraries..."));
 
-            _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
+            _provider ??= new LibraryProvider(
+                Settings.Current.EnabledRepos,
+                localSources: Settings.Current.EnabledLocalSources);
 
             var libraries = await _provider.GetLibrariesAsync();
             var lambdas = await _provider.GetAllLambdasAsync();
@@ -261,13 +263,26 @@ public static class ShowLambdaPopupCommand
                 _windowDispatcher?.Invoke(() =>
                     _window?.SetStatus($"Loading {request.DisplayName}..."));
 
-                _provider ??= new LibraryProvider(Settings.Current.EnabledRepos);
+                _provider ??= new LibraryProvider(
+                    Settings.Current.EnabledRepos,
+                    localSources: Settings.Current.EnabledLocalSources);
 
-                // Invalidate cache so we always get fresh data
-                _provider.InvalidateCache(request.RepoConfig, request.LibraryName);
+                IReadOnlyList<(string Name, string Formula)> lambdas;
 
-                var lambdas = await _provider.LoadLibraryAsync(
-                    request.RepoConfig, request.LibraryName, request.Prefix);
+                if (request.IsLocal)
+                {
+                    // Local sources always read fresh from disk — no cache
+                    lambdas = _provider.LoadLocalLibrary(
+                        request.LocalSourceConfig!, request.LibraryName, request.Prefix);
+                }
+                else
+                {
+                    // Invalidate cache so we always get fresh data
+                    _provider.InvalidateCache(request.RepoConfig!, request.LibraryName);
+
+                    lambdas = await _provider.LoadLibraryAsync(
+                        request.RepoConfig!, request.LibraryName, request.Prefix);
+                }
 
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {
@@ -278,11 +293,14 @@ public static class ShowLambdaPopupCommand
                         try
                         {
                             var allScanned = LambdaLoader.ScanLoadedLibraries();
+                            var sourceKey = request.IsLocal
+                                ? request.LocalSourceConfig!.Path
+                                : request.RepoConfig!.Url;
                             existing = allScanned.FirstOrDefault(s =>
                                 string.Equals(s.LibraryName, request.LibraryName, StringComparison.OrdinalIgnoreCase)
                                 && string.Equals(
-                                    s.RepoUrl.TrimEnd('/'),
-                                    request.RepoConfig.Url.TrimEnd('/'),
+                                    s.RepoUrl.TrimEnd('/', '\\'),
+                                    sourceKey.TrimEnd('/', '\\'),
                                     StringComparison.OrdinalIgnoreCase));
                         }
                         catch
@@ -290,8 +308,11 @@ public static class ShowLambdaPopupCommand
                             // If scan fails, proceed without diff
                         }
 
+                        var sourceLabel = request.IsLocal
+                            ? request.LocalSourceConfig!.Path
+                            : request.RepoConfig!.Url;
                         var comment = LambdaLoader.BuildComment(
-                            request.RepoConfig.Url, request.LibraryName, request.Prefix);
+                            sourceLabel, request.LibraryName, request.Prefix);
 
                         var added = 0;
                         var updated = 0;

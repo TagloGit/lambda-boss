@@ -66,6 +66,8 @@
                     <StackPanel Margin="4,3">
                         <StackPanel Orientation="Horizontal">
                             <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                            <TextBlock Text="{Binding SourceIcon}" Foreground="#cccccc" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,0,4,0" />
                             <TextBlock Text="{Binding DisplayName}" FontWeight="Bold" Foreground="#dcdcaa" />
                             <TextBlock Text="  " />
                             <TextBlock Text="{Binding LambdaCountLabel}" Foreground="#569cd6" FontSize="11"
