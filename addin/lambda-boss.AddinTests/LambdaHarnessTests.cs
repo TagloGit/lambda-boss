@@ -125,12 +125,7 @@ public class LambdaHarnessTests
             return;
         }
 
-        var expectedDouble = Convert.ToDouble(expected);
-        var actualDouble = Convert.ToDouble(actual);
-
-        Assert.True(
-            Math.Abs(expectedDouble - actualDouble) < 1e-10,
-            $"[{testName}] Expected {expectedDouble} but got {actualDouble}");
+        AssertValuesEqual(expected, actual, testName, "");
     }
 
     private void AssertType(dynamic cell, string expectedType, string testName)
@@ -178,24 +173,36 @@ public class LambdaHarnessTests
                 {
                     Assert.Equal(cols.Count, actualCols);
                     for (var c = 0; c < cols.Count; c++)
-                    {
-                        var exp = Convert.ToDouble(cols[c]);
-                        var act = Convert.ToDouble(values[r + 1, c + 1]); // COM arrays are 1-based
-                        Assert.True(Math.Abs(exp - act) < 1e-10,
-                            $"[{testName}] [{r},{c}] Expected {exp} but got {act}");
-                    }
+                        AssertValuesEqual(cols[c], values[r + 1, c + 1], testName, $"[{r},{c}]");
                 }
                 else
                 {
-                    var exp = Convert.ToDouble(expectedRows[r]);
-                    var act = Convert.ToDouble(values[r + 1, 1]);
-                    Assert.True(Math.Abs(exp - act) < 1e-10,
-                        $"[{testName}] [{r}] Expected {exp} but got {act}");
+                    AssertValuesEqual(expectedRows[r], values[r + 1, 1], testName, $"[{r}]");
                 }
         }
         finally
         {
             Marshal.ReleaseComObject(spillRange);
+        }
+    }
+
+    private void AssertValuesEqual(object expected, object actual, string testName, string position)
+    {
+        var label = string.IsNullOrEmpty(position) ? $"[{testName}]" : $"[{testName}] {position}";
+
+        if (double.TryParse(Convert.ToString(expected, CultureInfo.InvariantCulture), NumberStyles.Any,
+                CultureInfo.InvariantCulture, out var expectedDouble)
+            && double.TryParse(Convert.ToString(actual, CultureInfo.InvariantCulture), NumberStyles.Any,
+                CultureInfo.InvariantCulture, out var actualDouble))
+        {
+            Assert.True(Math.Abs(expectedDouble - actualDouble) < 1e-10,
+                $"{label} Expected {expectedDouble} but got {actualDouble}");
+        }
+        else
+        {
+            var expectedStr = Convert.ToString(expected, CultureInfo.InvariantCulture) ?? "";
+            var actualStr = Convert.ToString(actual, CultureInfo.InvariantCulture) ?? "";
+            Assert.Equal(expectedStr, actualStr);
         }
     }
 

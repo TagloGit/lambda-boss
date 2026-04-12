@@ -1,19 +1,27 @@
 tests:
   - name: single characters (default chunk_size)
     args: ["abcdef"]
-    expected_type: array
+    expected: [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]
 
   - name: chunk size of 3
     args: ["abcdefgh", 3]
-    expected_type: array
+    expected: [["abc"], ["def"], ["gh"]]
 
   - name: chunk size of 2 horizontal
     args: ["abcdefgh", 2, true]
-    expected_type: array
+    expected: [["ab", "cd", "ef", "gh"]]
 
   - name: chunk size evenly divisible
     args: ["abcdef", 2]
-    expected_type: array
+    expected: [["ab"], ["cd"], ["ef"]]
+
+  - name: chunk size larger than string
+    args: ["hi", 10]
+    expected: "hi"
+
+  - name: single character string
+    args: ["x"]
+    expected: "x"
 
   - name: help text
     args: []
