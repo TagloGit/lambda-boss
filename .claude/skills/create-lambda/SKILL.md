@@ -187,18 +187,40 @@ Details to confirm:
 
 If the issue is missing key details or the approach is ambiguous, ask the user to clarify rather than guessing.
 
-### Step 3 — Create the Lambda File
+### Step 3 — Create a Branch
+
+Create a feature branch from main:
+
+```bash
+git checkout main
+```
+
+```bash
+git pull
+```
+
+```bash
+git checkout -b lambda-<name-lowercase>
+```
+
+If working from an issue, update its status:
+
+```bash
+gh issue edit <number> -R TagloGit/lambda-boss --remove-label "status: backlog" --add-label "status: in-progress"
+```
+
+### Step 4 — Create the Lambda File
 
 1. Check if `lambdas/<category>/` exists; if not, create it with `_library.yaml`
 2. Write the `.lambda` file following the template exactly
 3. Use `\n` line endings — write with the Write tool (it preserves line endings)
 
-### Step 4 — Create the Tests File
+### Step 5 — Create the Tests File
 
 1. Write the `.tests.yaml` file with test cases
 2. Include the help text test case
 
-### Step 5 — Validate Format
+### Step 6 — Validate Format
 
 Run the format validation tests to confirm the file is correctly formatted:
 
@@ -214,7 +236,7 @@ dotnet build addin/lambda-boss.slnx
 
 Then re-run the test. If validation fails, read the error output, fix the `.lambda` file, and re-run until all format tests pass.
 
-### Step 6 — Run Functional Tests
+### Step 7 — Run Functional Tests
 
 Excel is available in this environment. Run the test harness to verify the LAMBDA works end-to-end:
 
@@ -224,11 +246,34 @@ dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj --filter 
 
 If tests fail, read the output, fix the `.lambda` file or `.tests.yaml`, and re-run until all tests pass.
 
-### Step 7 — Report
+### Step 8 — Commit, Push, and Create PR
+
+Commit the new files:
+
+```bash
+git add lambdas/<category>/<Name>.lambda lambdas/<category>/<Name>.tests.yaml
+```
+
+Include `_library.yaml` if a new category was created. Commit with a descriptive message.
+
+Push and create a PR:
+
+```bash
+git push -u origin lambda-<name-lowercase>
+```
+
+Create the PR with `Closes #<number>` in the body (if working from an issue). Update the issue status:
+
+```bash
+gh issue edit <number> -R TagloGit/lambda-boss --remove-label "status: in-progress" --add-label "status: in-review"
+```
+
+### Step 9 — Report
 
 Tell the user:
 - What files were created
 - That format validation and functional tests both passed
+- Link to the PR
 
 ## Common Mistakes to Avoid
 
