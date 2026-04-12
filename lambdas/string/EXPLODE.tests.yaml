@@ -1,0 +1,20 @@
+tests:
+  - name: single characters (default chunk_size)
+    args: ["abcdef"]
+    expected_type: array
+
+  - name: chunk size of 3
+    args: ["abcdefgh", 3]
+    expected_type: array
+
+  - name: chunk size of 2 horizontal
+    args: ["abcdefgh", 2, true]
+    expected_type: array
+
+  - name: chunk size evenly divisible
+    args: ["abcdef", 2]
+    expected_type: array
+
+  - name: help text
+    args: []
+    expected_type: array
