@@ -10,6 +10,7 @@ public partial class SettingsWindow
     {
         InitializeComponent();
         RefreshRepoList();
+        RefreshLocalSourceList();
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
@@ -139,6 +140,95 @@ public partial class SettingsWindow
             SettingsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    // --- Local directory sources ---
+
+    private void RefreshLocalSourceList()
+    {
+        var settings = Settings.Current;
+        LocalSourceList.ItemsSource = settings.LocalSources
+            .Select(s => new LocalSourceDisplayItem
+            {
+                Path = s.Path,
+                Enabled = s.Enabled,
+                DisplayLabel = s.DisplayName,
+                PathLabel = s.Path
+            })
+            .ToList();
+    }
+
+    private void AddLocalSource()
+    {
+        var path = LocalPathBox.Text.Trim();
+        if (string.IsNullOrEmpty(path))
+            return;
+
+        if (!System.IO.Directory.Exists(path))
+        {
+            StatusText.Text = "Directory does not exist";
+            return;
+        }
+
+        var settings = Settings.Current;
+        if (!settings.AddLocalSource(path))
+        {
+            StatusText.Text = "Local source already exists";
+            return;
+        }
+
+        settings.Save();
+        LocalPathBox.Text = "";
+        RefreshLocalSourceList();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        StatusText.Text = $"Added local source: {path}";
+    }
+
+    private void AddLocalButton_Click(object sender, RoutedEventArgs e)
+    {
+        AddLocalSource();
+    }
+
+    private void LocalPathBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            AddLocalSource();
+            e.Handled = true;
+        }
+    }
+
+private void RemoveLocalButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.Button { Tag: string path })
+            return;
+
+        var settings = Settings.Current;
+        if (settings.RemoveLocalSource(path))
+        {
+            settings.Save();
+            RefreshLocalSourceList();
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+            StatusText.Text = $"Removed local source: {path}";
+        }
+    }
+
+    private void LocalEnabledCheckbox_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.CheckBox { DataContext: LocalSourceDisplayItem item })
+            return;
+
+        var settings = Settings.Current;
+        var source = settings.LocalSources.FirstOrDefault(s =>
+            string.Equals(s.Path.TrimEnd('\\', '/'), item.Path.TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase));
+
+        if (source != null)
+        {
+            source.Enabled = item.Enabled;
+            settings.Save();
+            SettingsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 }
 
 internal class RepoDisplayItem
@@ -147,4 +237,12 @@ internal class RepoDisplayItem
     public bool Enabled { get; set; }
     public string DisplayLabel { get; init; } = "";
     public string LastFetchedLabel { get; init; } = "";
+}
+
+internal class LocalSourceDisplayItem
+{
+    public string Path { get; init; } = "";
+    public bool Enabled { get; set; }
+    public string DisplayLabel { get; init; } = "";
+    public string PathLabel { get; init; } = "";
 }

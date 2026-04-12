@@ -13,13 +13,16 @@ public class LibraryProvider
     private readonly HttpClient _httpClient;
     private readonly SourceCache _cache;
     private readonly List<RepoConfig> _repos;
+    private readonly List<LocalSourceConfig> _localSources;
 
     private List<LibraryInfo>? _libraries;
     private List<LambdaInfo>? _lambdas;
 
-    public LibraryProvider(IEnumerable<RepoConfig> repos, HttpClient? httpClient = null, SourceCache? cache = null)
+    public LibraryProvider(IEnumerable<RepoConfig> repos, HttpClient? httpClient = null,
+        SourceCache? cache = null, IEnumerable<LocalSourceConfig>? localSources = null)
     {
         _repos = repos.ToList();
+        _localSources = localSources?.ToList() ?? new List<LocalSourceConfig>();
         _httpClient = httpClient ?? new HttpClient();
         _cache = cache ?? new SourceCache();
     }
@@ -70,6 +73,17 @@ public class LibraryProvider
             }
         }
 
+        return library.LoadWithPrefix(prefix);
+    }
+
+    /// <summary>
+    ///     Loads a library from a local directory source. Always reads fresh from disk.
+    /// </summary>
+    public IReadOnlyList<(string Name, string Formula)> LoadLocalLibrary(
+        LocalSourceConfig config, string libraryName, string prefix)
+    {
+        var source = new LocalDirectorySource(config);
+        var library = source.FetchLibrary(libraryName);
         return library.LoadWithPrefix(prefix);
     }
 
@@ -161,6 +175,66 @@ public class LibraryProvider
             }
         }
 
+        // Load from local directory sources
+        foreach (var localConfig in _localSources.Where(s => s.Enabled))
+        {
+            try
+            {
+                var source = new LocalDirectorySource(localConfig);
+                var libraryNames = source.ListLibraries();
+
+                foreach (var libName in libraryNames)
+                {
+                    FetchedLibrary fetched;
+                    try
+                    {
+                        fetched = source.FetchLibrary(libName);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"LibraryProvider: Failed to read local library '{libName}' from {localConfig.Path}", ex);
+                        continue;
+                    }
+
+                    var info = new LibraryInfo
+                    {
+                        RepoConfig = null!,
+                        LocalSourceConfig = localConfig,
+                        RepoLabel = localConfig.DisplayName,
+                        FolderName = libName,
+                        DisplayName = fetched.Metadata.Name,
+                        Description = fetched.Metadata.Description,
+                        DefaultPrefix = fetched.Metadata.DefaultPrefix,
+                        LambdaCount = fetched.Files.Count
+                    };
+                    libraries.Add(info);
+
+                    foreach (var (fileName, content) in fetched.Files)
+                    {
+                        try
+                        {
+                            var (name, formula) = LambdaParser.Parse(content);
+                            lambdas.Add(new LambdaInfo
+                            {
+                                Name = name,
+                                Formula = formula,
+                                LibraryInfo = info,
+                                FileName = fileName
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error($"LibraryProvider: Failed to parse '{fileName}' in local {libName}", ex);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"LibraryProvider: Failed to list local libraries from {localConfig.Path}", ex);
+            }
+        }
+
         _libraries = libraries;
         _lambdas = lambdas;
 
@@ -174,12 +248,18 @@ public class LibraryProvider
 public sealed class LibraryInfo
 {
     public RepoConfig RepoConfig { get; init; } = null!;
+    public LocalSourceConfig? LocalSourceConfig { get; init; }
     public string RepoLabel { get; init; } = "";
     public string FolderName { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public string Description { get; init; } = "";
     public string DefaultPrefix { get; init; } = "";
     public int LambdaCount { get; init; }
+
+    /// <summary>
+    ///     Whether this library comes from a local directory source.
+    /// </summary>
+    public bool IsLocal => LocalSourceConfig != null;
 }
 
 /// <summary>

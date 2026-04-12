@@ -41,8 +41,9 @@ public partial class LambdaPopup
                 DefaultPrefix = l.DefaultPrefix,
                 RepoLabel = l.RepoLabel,
                 FolderName = l.FolderName,
-                RepoConfig = l.RepoConfig,
-                LoadedLabel = loadedLibraryKeys != null
+                RepoConfig = l.IsLocal ? null : l.RepoConfig,
+                LocalSourceConfig = l.LocalSourceConfig,
+                LoadedLabel = !l.IsLocal && loadedLibraryKeys != null
                     && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
                     ? "✓ loaded" : ""
             })
@@ -76,7 +77,8 @@ public partial class LambdaPopup
                 RepoLabel = l.RepoLabel,
                 FolderName = l.FolderName,
                 RepoConfig = l.RepoConfig,
-                LoadedLabel = loadedLibraryKeys != null
+                LocalSourceConfig = l.LocalSourceConfig,
+                LoadedLabel = !l.IsLocal && l.RepoConfig != null && loadedLibraryKeys != null
                     && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
                     ? "✓ loaded" : ""
             })
@@ -277,30 +279,21 @@ public partial class LambdaPopup
 
     private void BeginLoad()
     {
-        LibraryInfo? libraryInfo = null;
+        string? defaultPrefix = null;
 
         if (_mode == Mode.Library && LibraryList.SelectedItem is LibraryDisplayItem libItem)
         {
-            libraryInfo = new LibraryInfo
-            {
-                RepoConfig = libItem.RepoConfig,
-                RepoLabel = libItem.RepoLabel,
-                FolderName = libItem.FolderName,
-                DisplayName = libItem.DisplayName,
-                Description = libItem.Description,
-                DefaultPrefix = libItem.DefaultPrefix,
-                LambdaCount = 0
-            };
+            defaultPrefix = libItem.DefaultPrefix;
         }
         else if (_mode == Mode.Search && LambdaList.SelectedItem is LambdaDisplayItem lambdaItem)
         {
-            libraryInfo = lambdaItem.LibraryInfo;
+            defaultPrefix = lambdaItem.LibraryInfo.DefaultPrefix;
         }
 
-        if (libraryInfo == null)
+        if (defaultPrefix == null)
             return;
 
-        ShowPrefixPrompt(libraryInfo.DefaultPrefix);
+        ShowPrefixPrompt(defaultPrefix);
     }
 
     private void ShowPrefixPrompt(string defaultPrefix)
@@ -322,38 +315,28 @@ public partial class LambdaPopup
 
     private void ConfirmLoad()
     {
-        LibraryInfo? libraryInfo = null;
+        LibraryLoadRequest? request = null;
+        var prefix = PrefixBox.Text.Trim();
 
         if (_mode == Mode.Library && LibraryList.SelectedItem is LibraryDisplayItem libItem)
         {
-            libraryInfo = new LibraryInfo
-            {
-                RepoConfig = libItem.RepoConfig,
-                RepoLabel = libItem.RepoLabel,
-                FolderName = libItem.FolderName,
-                DisplayName = libItem.DisplayName,
-                Description = libItem.Description,
-                DefaultPrefix = libItem.DefaultPrefix,
-                LambdaCount = 0
-            };
+            request = libItem.IsLocal
+                ? new LibraryLoadRequest(libItem.LocalSourceConfig!, libItem.FolderName, prefix, libItem.DisplayName)
+                : new LibraryLoadRequest(libItem.RepoConfig!, libItem.FolderName, prefix, libItem.DisplayName);
         }
         else if (_mode == Mode.Search && LambdaList.SelectedItem is LambdaDisplayItem lambdaItem)
         {
-            libraryInfo = lambdaItem.LibraryInfo;
+            var info = lambdaItem.LibraryInfo;
+            request = info.IsLocal
+                ? new LibraryLoadRequest(info.LocalSourceConfig!, info.FolderName, prefix, info.DisplayName)
+                : new LibraryLoadRequest(info.RepoConfig, info.FolderName, prefix, info.DisplayName);
         }
 
-        if (libraryInfo == null)
+        if (request == null)
             return;
 
-        var prefix = PrefixBox.Text.Trim();
         HidePrefixPrompt();
-
-        LibraryLoadRequested?.Invoke(this, new LibraryLoadRequest(
-            libraryInfo.RepoConfig,
-            libraryInfo.FolderName,
-            prefix,
-            libraryInfo.DisplayName));
-
+        LibraryLoadRequested?.Invoke(this, request);
         Hide();
     }
 
@@ -372,14 +355,28 @@ public partial class LambdaPopup
 /// </summary>
 public sealed class LibraryLoadRequest
 {
-    public RepoConfig RepoConfig { get; }
+    public RepoConfig? RepoConfig { get; }
+    public LocalSourceConfig? LocalSourceConfig { get; }
     public string LibraryName { get; }
     public string Prefix { get; }
     public string DisplayName { get; }
 
+    /// <summary>
+    ///     Whether this request is for a local directory source.
+    /// </summary>
+    public bool IsLocal => LocalSourceConfig != null;
+
     public LibraryLoadRequest(RepoConfig repoConfig, string libraryName, string prefix, string displayName)
     {
         RepoConfig = repoConfig;
+        LibraryName = libraryName;
+        Prefix = prefix;
+        DisplayName = displayName;
+    }
+
+    public LibraryLoadRequest(LocalSourceConfig localConfig, string libraryName, string prefix, string displayName)
+    {
+        LocalSourceConfig = localConfig;
         LibraryName = libraryName;
         Prefix = prefix;
         DisplayName = displayName;
@@ -394,8 +391,11 @@ internal class LibraryDisplayItem
     public string DefaultPrefix { get; init; } = "";
     public string RepoLabel { get; init; } = "";
     public string FolderName { get; init; } = "";
-    public RepoConfig RepoConfig { get; init; } = null!;
+    public RepoConfig? RepoConfig { get; init; }
+    public LocalSourceConfig? LocalSourceConfig { get; init; }
     public string LoadedLabel { get; init; } = "";
+    public bool IsLocal => LocalSourceConfig != null;
+    public string SourceIcon => IsLocal ? "\U0001F4C1" : "";
 }
 
 internal class LambdaDisplayItem

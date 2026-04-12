@@ -37,6 +37,11 @@ public sealed class Settings
     public List<RepoConfig> Repos { get; set; } = new() { DefaultRepo };
 
     /// <summary>
+    ///     Configured local directory sources.
+    /// </summary>
+    public List<LocalSourceConfig> LocalSources { get; set; } = new();
+
+    /// <summary>
     ///     Excel keyboard shortcut string (ExcelDNA format). Default: Ctrl+Shift+L.
     /// </summary>
     public string KeyboardShortcut { get; set; } = "^+L";
@@ -110,6 +115,12 @@ public sealed class Settings
         Repos.Where(r => r.Enabled).ToList();
 
     /// <summary>
+    ///     Returns only the enabled local sources.
+    /// </summary>
+    public IReadOnlyList<LocalSourceConfig> EnabledLocalSources =>
+        LocalSources.Where(s => s.Enabled).ToList();
+
+    /// <summary>
     ///     Adds a repo by URL if not already present. Returns true if added.
     /// </summary>
     public bool AddRepo(string url)
@@ -131,6 +142,31 @@ public sealed class Settings
         url = url.TrimEnd('/');
         return Repos.RemoveAll(r =>
             string.Equals(r.Url.TrimEnd('/'), url, StringComparison.OrdinalIgnoreCase)) > 0;
+    }
+
+    /// <summary>
+    ///     Adds a local directory source if not already present. Returns true if added.
+    /// </summary>
+    public bool AddLocalSource(string path)
+    {
+        path = path.TrimEnd('\\', '/');
+
+        if (LocalSources.Any(s => string.Equals(
+            s.Path.TrimEnd('\\', '/'), path, StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        LocalSources.Add(new LocalSourceConfig { Path = path });
+        return true;
+    }
+
+    /// <summary>
+    ///     Removes a local directory source by path. Returns true if removed.
+    /// </summary>
+    public bool RemoveLocalSource(string path)
+    {
+        path = path.TrimEnd('\\', '/');
+        return LocalSources.RemoveAll(s =>
+            string.Equals(s.Path.TrimEnd('\\', '/'), path, StringComparison.OrdinalIgnoreCase)) > 0;
     }
 
     /// <summary>
