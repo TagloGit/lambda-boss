@@ -5,9 +5,9 @@
 */
 Lerp = LAMBDA(
 //  Parameter Declarations
-    a,
-    b,
-    t,
+    [a],
+    [b],
+    [t],
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →Lerp(a, b, t)¶" &
@@ -22,6 +22,8 @@ Lerp = LAMBDA(
                 "Result         →25",
                 "→", "¶"
                 ),
+    //  Check inputs
+        Help?, ISOMITTED(a),
     //  Procedure
         result, a + (b - a) * t,
         IF(Help?, Help, result)
