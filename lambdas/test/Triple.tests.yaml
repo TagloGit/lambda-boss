@@ -1,0 +1,16 @@
+tests:
+  - name: triple 5
+    args: [5]
+    expected: 15
+
+  - name: triple 0
+    args: [0]
+    expected: 0
+
+  - name: triple negative
+    args: [-2]
+    expected: -6
+
+  - name: help text
+    args: []
+    expected_type: array

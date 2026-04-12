@@ -1,0 +1,24 @@
+tests:
+  - name: lerp at 0
+    args: [0, 100, 0]
+    expected: 0
+
+  - name: lerp at 1
+    args: [0, 100, 1]
+    expected: 100
+
+  - name: lerp at 0.25
+    args: [0, 100, 0.25]
+    expected: 25
+
+  - name: lerp at 0.5
+    args: [0, 100, 0.5]
+    expected: 50
+
+  - name: lerp negative range
+    args: [-10, 10, 0.5]
+    expected: 0
+
+  - name: help text
+    args: []
+    expected_type: array
