@@ -53,7 +53,9 @@ public partial class LambdaPopup
             .Select(l => new LambdaDisplayItem
             {
                 Name = l.Name,
-                LibraryLabel = l.LibraryInfo.DisplayName,
+                LibraryLabel = l.LibraryInfo.IsLocal
+                    ? $"{l.LibraryInfo.DisplayName} [Local]"
+                    : l.LibraryInfo.DisplayName,
                 LibraryInfo = l.LibraryInfo
             })
             .ToList();
