@@ -275,6 +275,10 @@ Tell the user:
 - That format validation and functional tests both passed
 - Link to the PR
 
+### Step 10 - Update this skill with lessons learned on LAMBDA syntax best, if any
+
+- If the User gives feedback on the LAMBDA, or testing reveals LAMBDA patterns or Excel synatx that doesn't work, update the best practice section of this skill (below)
+
 ## Common Mistakes to Avoid
 
 - **Carriage returns:** The Write tool on Windows may produce `\r\n`. After writing, verify with format tests. If CR errors occur, re-write the file content ensuring `\n`-only line endings.
@@ -282,3 +286,7 @@ Tell the user:
 - **Help string alignment:** Keep the `→` and `¶` delimiters consistent. The last Help string line must NOT end with `¶" &` — it ends with just `",`.
 - **Parameter brackets:** ALL parameters must be `[param]`, not `param`.
 - **Tab characters:** Never use tabs. Use spaces for all indentation.
+
+## LAMBDA syntax best practice
+
+<Enter lessons learned here when appropriate>
