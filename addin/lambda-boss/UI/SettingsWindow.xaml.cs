@@ -1,8 +1,8 @@
+using Ookii.Dialogs.Wpf;
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
-
-using Ookii.Dialogs.Wpf;
 
 namespace LambdaBoss.UI;
 
@@ -107,7 +107,7 @@ public partial class SettingsWindow
 
     private void RemoveRepoButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.Button { Tag: string url })
+        if (sender is not Button { Tag: string url })
             return;
 
         var settings = Settings.Current;
@@ -128,7 +128,7 @@ public partial class SettingsWindow
 
     private void RepoEnabledCheckbox_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.CheckBox { DataContext: RepoDisplayItem item })
+        if (sender is not CheckBox { DataContext: RepoDisplayItem item })
             return;
 
         var settings = Settings.Current;
@@ -165,7 +165,7 @@ public partial class SettingsWindow
         if (string.IsNullOrEmpty(path))
             return;
 
-        if (!System.IO.Directory.Exists(path))
+        if (!Directory.Exists(path))
         {
             StatusText.Text = "Directory does not exist";
             return;
@@ -198,10 +198,7 @@ public partial class SettingsWindow
             UseDescriptionForTitle = true
         };
 
-        if (dialog.ShowDialog() == true)
-        {
-            LocalPathBox.Text = dialog.SelectedPath;
-        }
+        if (dialog.ShowDialog() == true) LocalPathBox.Text = dialog.SelectedPath;
     }
 
     private void LocalPathBox_KeyDown(object sender, KeyEventArgs e)
@@ -213,9 +210,9 @@ public partial class SettingsWindow
         }
     }
 
-private void RemoveLocalButton_Click(object sender, RoutedEventArgs e)
+    private void RemoveLocalButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.Button { Tag: string path })
+        if (sender is not Button { Tag: string path })
             return;
 
         var settings = Settings.Current;
@@ -230,7 +227,7 @@ private void RemoveLocalButton_Click(object sender, RoutedEventArgs e)
 
     private void LocalEnabledCheckbox_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.CheckBox { DataContext: LocalSourceDisplayItem item })
+        if (sender is not CheckBox { DataContext: LocalSourceDisplayItem item })
             return;
 
         var settings = Settings.Current;

@@ -1,8 +1,7 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
-
 using Xunit;
 using Xunit.Abstractions;
-
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -11,7 +10,7 @@ namespace LambdaBoss.AddinTests;
 [Collection("Excel Addin")]
 public class LambdaHarnessTests
 {
-    private static readonly HashSet<string> InjectedNames = new();
+    private static readonly HashSet<string> InjectedNames = [];
     private static readonly object InjectionLock = new();
 
     private readonly ExcelAddinFixture _excel;
@@ -44,16 +43,14 @@ public class LambdaHarnessTests
             var suite = deserializer.Deserialize<TestSuite>(yamlContent);
 
             foreach (var test in suite.Tests)
-            {
-                yield return new object[]
-                {
+                yield return
+                [
                     lambdaPath,
                     test.Name,
-                    test.Args ?? new List<object>(),
-                    test.Expected,
+                    test.Args ?? [],
+                    test.Expected ?? "",
                     test.ExpectedType ?? ""
-                };
-            }
+                ];
         }
     }
 
@@ -79,17 +76,11 @@ public class LambdaHarnessTests
                 Thread.Sleep(500);
 
                 if (!string.IsNullOrEmpty(expectedType))
-                {
                     AssertType(cell, expectedType, testName);
-                }
                 else if (expected is List<object> expectedRows)
-                {
                     AssertArray(cell, expectedRows, testName);
-                }
                 else
-                {
                     AssertScalar(cell, expected, testName);
-                }
             }
             finally
             {
@@ -150,7 +141,7 @@ public class LambdaHarnessTests
             // Check that the spill range has more than one cell.
             try
             {
-                dynamic spillRange = cell.SpillingToRange;
+                var spillRange = cell.SpillingToRange;
                 int cellCount = spillRange.Cells.Count;
                 _output.WriteLine($"[{testName}] Spill range has {cellCount} cells");
                 Assert.True(cellCount > 1,
@@ -166,30 +157,27 @@ public class LambdaHarnessTests
             }
         }
         else
-        {
             throw new NotSupportedException($"Unknown expected_type: {expectedType}");
-        }
     }
 
     private void AssertArray(dynamic cell, List<object> expectedRows, string testName)
     {
-        dynamic spillRange = cell.SpillingToRange;
+        var spillRange = cell.SpillingToRange;
         try
         {
             object[,] values = spillRange.Value;
 
-            int actualRows = values.GetLength(0);
-            int actualCols = values.GetLength(1);
+            var actualRows = values.GetLength(0);
+            var actualCols = values.GetLength(1);
             _output.WriteLine($"[{testName}] Array result: {actualRows}x{actualCols}");
 
             Assert.Equal(expectedRows.Count, actualRows);
 
-            for (int r = 0; r < expectedRows.Count; r++)
-            {
+            for (var r = 0; r < expectedRows.Count; r++)
                 if (expectedRows[r] is List<object> cols)
                 {
                     Assert.Equal(cols.Count, actualCols);
-                    for (int c = 0; c < cols.Count; c++)
+                    for (var c = 0; c < cols.Count; c++)
                     {
                         var exp = Convert.ToDouble(cols[c]);
                         var act = Convert.ToDouble(values[r + 1, c + 1]); // COM arrays are 1-based
@@ -204,7 +192,6 @@ public class LambdaHarnessTests
                     Assert.True(Math.Abs(exp - act) < 1e-10,
                         $"[{testName}] [{r}] Expected {exp} but got {act}");
                 }
-            }
         }
         finally
         {
@@ -218,7 +205,7 @@ public class LambdaHarnessTests
         {
             bool b => b ? "TRUE" : "FALSE",
             string s => $"\"{s}\"",
-            _ => Convert.ToString(arg, System.Globalization.CultureInfo.InvariantCulture) ?? ""
+            _ => Convert.ToString(arg, CultureInfo.InvariantCulture) ?? ""
         };
     }
 
@@ -229,8 +216,10 @@ public class LambdaHarnessTests
         var lambdasDir = Path.Combine(repoRoot, "lambdas");
 
         if (!Directory.Exists(lambdasDir))
+        {
             throw new DirectoryNotFoundException(
                 $"Could not find lambdas directory. Searched: {lambdasDir}");
+        }
 
         return lambdasDir;
     }
@@ -238,7 +227,7 @@ public class LambdaHarnessTests
 
 public class TestSuite
 {
-    public List<TestCase> Tests { get; set; } = new();
+    public List<TestCase> Tests { get; set; } = [];
 }
 
 public class TestCase

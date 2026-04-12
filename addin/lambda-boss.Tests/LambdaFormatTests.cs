@@ -1,13 +1,12 @@
-using System.IO;
-using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using Xunit;
 
 namespace LambdaBoss.Tests;
 
 /// <summary>
-/// Validates that all .lambda files conform to the required format.
-/// Runs in CI — no Excel required.
+///     Validates that all .lambda files conform to the required format.
+///     Runs in CI — no Excel required.
 /// </summary>
 public class LambdaFormatTests
 {
@@ -24,17 +23,17 @@ public class LambdaFormatTests
                 return candidate;
             dir = Directory.GetParent(dir)?.FullName;
         }
-        throw new DirectoryNotFoundException("Could not find 'lambdas' directory from " + Directory.GetCurrentDirectory());
+
+        throw new DirectoryNotFoundException("Could not find 'lambdas' directory from " +
+                                             Directory.GetCurrentDirectory());
     }
 
     public static TheoryData<string> LambdaFiles()
     {
         var data = new TheoryData<string>();
         foreach (var file in Directory.EnumerateFiles(LambdasRoot, "*.lambda", SearchOption.AllDirectories))
-        {
             // Store path relative to the lambdas root for readable test names
             data.Add(Path.GetRelativePath(LambdasRoot, file));
-        }
         return data;
     }
 
@@ -105,7 +104,7 @@ public class LambdaFormatTests
     {
         // Read raw bytes to detect \r before any normalisation
         var bytes = File.ReadAllBytes(Path.Combine(LambdasRoot, relativePath));
-        var raw = System.Text.Encoding.UTF8.GetString(bytes);
+        var raw = Encoding.UTF8.GetString(bytes);
 
         Assert.DoesNotContain("\r", raw);
     }
@@ -135,7 +134,7 @@ public class LambdaFormatTests
     }
 
     /// <summary>
-    /// Extracts the lambda name from the first "Name = LAMBDA(" assignment line.
+    ///     Extracts the lambda name from the first "Name = LAMBDA(" assignment line.
     /// </summary>
     private static string? GetNameAssignment(string content)
     {
@@ -144,12 +143,12 @@ public class LambdaFormatTests
     }
 
     /// <summary>
-    /// Returns the first line that isn't a block comment or inside a block comment.
+    ///     Returns the first line that isn't a block comment or inside a block comment.
     /// </summary>
     private static string? GetFirstNonCommentLine(string content)
     {
         var lines = content.Split('\n');
-        bool inBlock = false;
+        var inBlock = false;
         foreach (var rawLine in lines)
         {
             var line = rawLine.TrimEnd('\r');
@@ -170,12 +169,13 @@ public class LambdaFormatTests
             {
                 if (!line.Contains("*/"))
                     inBlock = true;
-                else if (line.LastIndexOf("*/") < line.Length - 2)
+                else if (line.LastIndexOf("*/", StringComparison.Ordinal) < line.Length - 2)
                 {
                     // There's content after the closing */ on the same line —
                     // but in the header format this is another comment line
                     // Check if there's meaningful non-comment content after last */
                 }
+
                 continue;
             }
 
@@ -185,6 +185,7 @@ public class LambdaFormatTests
 
             return line.Trim();
         }
+
         return null;
     }
 }
