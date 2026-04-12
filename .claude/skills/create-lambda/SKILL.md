@@ -214,12 +214,21 @@ dotnet build addin/lambda-boss.slnx
 
 Then re-run the test. If validation fails, read the error output, fix the `.lambda` file, and re-run until all format tests pass.
 
-### Step 6 — Report
+### Step 6 — Run Functional Tests
+
+Excel is available in this environment. Run the test harness to verify the LAMBDA works end-to-end:
+
+```bash
+dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj --filter "LambdaHarnessTests"
+```
+
+If tests fail, read the output, fix the `.lambda` file or `.tests.yaml`, and re-run until all tests pass.
+
+### Step 7 — Report
 
 Tell the user:
 - What files were created
-- That format validation passed
-- Suggest next steps: run the full test harness in Excel with `dotnet test addin/lambda-boss.AddinTests --filter LambdaHarnessTests` if Excel is available
+- That format validation and functional tests both passed
 
 ## Common Mistakes to Avoid
 
