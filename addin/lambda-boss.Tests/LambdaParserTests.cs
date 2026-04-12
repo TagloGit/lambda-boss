@@ -55,14 +55,16 @@ Double = LAMBDA(x, x * 2);";
 */
 AddN = LAMBDA(
 //  Parameter Declarations
-    x,
-    n,
+    [x],
+    [n],
 //  Help
     LET(Help, TEXTSPLIT(
                 ""FUNCTION:      →AddN(x, n)¶"" &
                 ""DESCRIPTION:   →Adds N to a number.¶"",
                 ""→"", ""¶""
                 ),
+    //  Check inputs
+        Help?, ISOMITTED(x),
     //  Procedure
         result, x + n,
         IF(Help?, Help, result)
@@ -74,15 +76,19 @@ AddN = LAMBDA(
         Assert.Equal("AddN", name);
         Assert.StartsWith("=LAMBDA(", formula);
         Assert.Contains("LET(Help", formula);
+        Assert.Contains("ISOMITTED(x)", formula);
+        Assert.Contains("[x]", formula);
+        Assert.Contains("[n]", formula);
         Assert.EndsWith(")", formula);
     }
 
     [Fact]
-    public void Parse_HelpPattern_TransformsToIsomitted()
+    public void Parse_HelpPattern_PreservesIsomitted()
     {
         var content = @"Double = LAMBDA(
-    x,
+    [x],
     LET(Help, TEXTSPLIT(""help text"", ""→"", ""¶""),
+        Help?, ISOMITTED(x),
         result, x * 2,
         IF(Help?, Help, result)
 )
@@ -91,32 +97,17 @@ AddN = LAMBDA(
         var (_, formula) = LambdaParser.Parse(content);
 
         Assert.Contains("ISOMITTED(x)", formula);
-        Assert.DoesNotContain("Help?", formula);
-    }
-
-    [Fact]
-    public void Parse_HelpPattern_MakesParamsOptional()
-    {
-        var content = @"Double = LAMBDA(
-    x,
-    LET(Help, TEXTSPLIT(""help text"", ""→"", ""¶""),
-        result, x * 2,
-        IF(Help?, Help, result)
-)
-);";
-
-        var (_, formula) = LambdaParser.Parse(content);
-
         Assert.Contains("[x]", formula);
     }
 
     [Fact]
-    public void Parse_HelpPattern_MultipleParams_AllOptional()
+    public void Parse_HelpPattern_PreservesOptionalParams()
     {
         var content = @"AddN = LAMBDA(
-    x,
-    n,
+    [x],
+    [n],
     LET(Help, TEXTSPLIT(""help"", ""→"", ""¶""),
+        Help?, ISOMITTED(x),
         result, x + n,
         IF(Help?, Help, result)
 )
@@ -127,16 +118,6 @@ AddN = LAMBDA(
         Assert.Contains("[x]", formula);
         Assert.Contains("[n]", formula);
         Assert.Contains("ISOMITTED(x)", formula);
-    }
-
-    [Fact]
-    public void Parse_NoHelpPattern_ParamsUnchanged()
-    {
-        var content = "Double = LAMBDA(x, x * 2);";
-        var (_, formula) = LambdaParser.Parse(content);
-
-        Assert.DoesNotContain("[x]", formula);
-        Assert.DoesNotContain("ISOMITTED", formula);
     }
 
     [Fact]

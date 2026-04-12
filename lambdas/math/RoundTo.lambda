@@ -5,8 +5,8 @@
 */
 RoundTo = LAMBDA(
 //  Parameter Declarations
-    value,
-    decimals,
+    [value],
+    [decimals],
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →RoundTo(value, decimals)¶" &
@@ -20,6 +20,8 @@ RoundTo = LAMBDA(
                 "Result         →3.14",
                 "→", "¶"
                 ),
+    //  Check inputs
+        Help?, ISOMITTED(value),
     //  Procedure
         result, ROUND(value, decimals),
         IF(Help?, Help, result)

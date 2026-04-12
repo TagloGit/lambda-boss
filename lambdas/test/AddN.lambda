@@ -5,8 +5,8 @@
 */
 AddN = LAMBDA(
 //  Parameter Declarations
-    x,
-    n,
+    [x],
+    [n],
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →AddN(x, n)¶" &
@@ -20,6 +20,8 @@ AddN = LAMBDA(
                 "Result         →8",
                 "→", "¶"
                 ),
+    //  Check inputs
+        Help?, ISOMITTED(x),
     //  Procedure
         result, x + n,
         IF(Help?, Help, result)

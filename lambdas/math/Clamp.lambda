@@ -5,9 +5,9 @@
 */
 Clamp = LAMBDA(
 //  Parameter Declarations
-    value,
-    min_val,
-    max_val,
+    [value],
+    [min_val],
+    [max_val],
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →Clamp(value, min_val, max_val)¶" &
@@ -22,6 +22,8 @@ Clamp = LAMBDA(
                 "Result         →10",
                 "→", "¶"
                 ),
+    //  Check inputs
+        Help?, ISOMITTED(value),
     //  Procedure
         result, MIN(MAX(value, min_val), max_val),
         IF(Help?, Help, result)
