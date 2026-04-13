@@ -2,19 +2,22 @@
     DESCRIPTION:*//**Counts non-overlapping occurrences of a substring within a string.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
+                        2026-04-13  Claude      Add Regex parameter
 */
 CHARQ = LAMBDA(
 //  Parameter Declarations
     [Text],
     [Char],
+    [Regex],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CHARQ(Text, Char)¶" &
+                "FUNCTION:      →CHARQ(Text, Char, Regex)¶" &
                 "DESCRIPTION:   →Counts non-overlapping occurrences of a substring within a string.¶" &
                 "VERSION:       →Apr 13 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   Text           →(Required) The string to search within.¶" &
-                "   Char           →(Required) The character(s) to count.¶" &
+                "   Char           →(Required) The character(s) to count, or a regex pattern if Regex is TRUE.¶" &
+                "   Regex          →(Optional) If TRUE, treat Char as a regex pattern. Default: FALSE.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=CHARQ(""MASSAGE"",""S"")¶" &
                 "Result         →2",
@@ -22,8 +25,11 @@ CHARQ = LAMBDA(
                 ),
     //  Check inputs
         Help?, ISOMITTED(Text),
+        _regex, IF(ISOMITTED(Regex), FALSE, Regex),
     //  Procedure
-        result, (LEN(Text) - LEN(SUBSTITUTE(Text, Char, ""))) / LEN(Char),
+        result, IF(_regex,
+                    IFERROR(COLUMNS(REGEXEXTRACT(Text, Char, 1)), 0),
+                    (LEN(Text) - LEN(SUBSTITUTE(Text, Char, ""))) / LEN(Char)),
         IF(Help?, Help, result)
 )
 );
