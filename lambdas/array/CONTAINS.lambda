@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      CONTAINS
+    DESCRIPTION:*//**Checks whether a value exists in a list or range.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-13  Claude      Initial version
+*/
+CONTAINS = LAMBDA(
+//  Parameter Declarations
+    [value],
+    [list],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CONTAINS(value, list)¶" &
+                "DESCRIPTION:   →Checks whether a value exists in a list or range.¶" &
+                "VERSION:       →Apr 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   value          →(Required) The value to search for.¶" &
+                "   list           →(Required) A single row or column range to search within.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CONTAINS(""Podcast"", A1:A10)¶" &
+                "Result         →TRUE or FALSE",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(value),
+    //  Procedure
+        result, ISNUMBER(XMATCH(value, list)),
+        IF(Help?, Help, result)
+)
+);
