@@ -289,4 +289,8 @@ Tell the user:
 
 ## LAMBDA syntax best practice
 
-<Enter lessons learned here when appropriate>
+- **XLOOKUP approximate match (match_mode 1) fails on unsorted data.** `XLOOKUP(sentinel, values, labels, , 1)` (next larger) returns #N/A when the lookup_array is not sorted. Use `INDEX(labels, MATCH(MIN(values), values, 0))` instead for finding labels of minimum values. Match_mode -1 (next smaller) works fine unsorted for finding max labels.
+- **Test YAML: array constants need `=` prefix.** Excel array constants like `{1,2,3}` conflict with YAML syntax. Wrap them as strings with `=` prefix: `"={1,2,3}"`. The harness strips the `=` and passes the raw formula fragment.
+- **Test YAML: string array constants need single-quote wrapping.** For string arrays like `{"A","B"}`, use YAML single quotes to avoid double-quote escaping issues: `'={"A","B","C"}'`.
+- **Test YAML: boolean expected values must be capitalized.** Use `True`/`False` (not `true`/`false`) because YamlDotNet deserializes them as strings when the target type is `object`, and Excel COM returns `True`/`False`.
+- **Test YAML: numeric args need `=` prefix to avoid quoting.** The harness wraps string args in quotes via `FormatArg`. A YAML integer like `42` gets deserialized as a string and quoted as `"42"`. Use `"=42"` to pass the raw number to Excel
