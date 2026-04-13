@@ -1,0 +1,20 @@
+tests:
+  - name: value found in list
+    args: ["Podcast", '={"Podcast","Music","News"}']
+    expected: True
+
+  - name: value not found in list
+    args: ["Video", '={"Podcast","Music","News"}']
+    expected: False
+
+  - name: numeric value found
+    args: ["=42", "={10,42,99}"]
+    expected: True
+
+  - name: numeric value not found
+    args: ["=7", "={10,42,99}"]
+    expected: False
+
+  - name: help text
+    args: []
+    expected_type: array
