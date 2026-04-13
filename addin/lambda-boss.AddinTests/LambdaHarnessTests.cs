@@ -211,6 +211,7 @@ public class LambdaHarnessTests
         return arg switch
         {
             bool b => b ? "TRUE" : "FALSE",
+            string s when s.StartsWith("=") => s[1..],
             string s => $"\"{s}\"",
             _ => Convert.ToString(arg, CultureInfo.InvariantCulture) ?? ""
         };
