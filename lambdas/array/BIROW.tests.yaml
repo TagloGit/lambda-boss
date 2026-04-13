@@ -1,0 +1,20 @@
+tests:
+  - name: double each row value
+    args: ["={1,2,3;4,5,6}", "=LAMBDA(r, r*2)"]
+    expected: [[2, 4, 6], [8, 10, 12]]
+
+  - name: single row array
+    args: ["={1,2,3}", "=LAMBDA(r, r+10)"]
+    expected: [[11, 12, 13]]
+
+  - name: single cell array
+    args: ["={5}", "=LAMBDA(r, r*3)"]
+    expected: 15
+
+  - name: single column multi row
+    args: ["={10;20;30}", "=LAMBDA(r, r/10)"]
+    expected: [[1], [2], [3]]
+
+  - name: help text
+    args: []
+    expected_type: array

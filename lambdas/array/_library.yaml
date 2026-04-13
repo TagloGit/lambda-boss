@@ -1,0 +1,3 @@
+name: Array
+description: Array manipulation and transformation utilities
+default_prefix: array

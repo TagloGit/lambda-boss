@@ -1,0 +1,36 @@
+/*  FUNCTION NAME:      BICOL
+    DESCRIPTION:*//**Applies a LAMBDA to each column of an array, preserving the full array shape.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-13  Tim Jacks   Initial version
+*/
+BICOL = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [function],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →BICOL(array, function)¶" &
+                "DESCRIPTION:   →Applies a LAMBDA to each column of an array, preserving the full array shape.¶" &
+                "VERSION:       →Apr 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 2D array.¶" &
+                "   function       →(Required) A LAMBDA that takes a single column and returns an array of the same size.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=BICOL({1,2,3;4,5,6}, LAMBDA(c, c*2))¶" &
+                "Result         →{2,4,6;8,10,12}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        result, IF(
+                    COLUMNS(array) = 1,
+                    IF(ROWS(array) = 1, function(@array), function(array)),
+                    HSTACK(
+                        BICOL(TAKE(array, , COLUMNS(array) / 2), function),
+                        BICOL(DROP(array, , COLUMNS(array) / 2), function)
+                    )
+                ),
+        IF(Help?, Help, result)
+)
+);
