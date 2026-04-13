@@ -23,7 +23,7 @@ MINOF = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(values),
     //  Procedure
-        result, INDEX(labels, MATCH(MIN(values), values, 0)),
+        result, INDEX(labels, XMATCH(MIN(values), values)),
         IF(Help?, Help, result)
 )
 );
