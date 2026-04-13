@@ -1,0 +1,24 @@
+tests:
+  - name: single character match
+    args: ["MASSAGE", "S"]
+    expected: 2
+
+  - name: no matches found
+    args: ["HELLO", "Z"]
+    expected: 0
+
+  - name: multi-character substring
+    args: ["abcabcabc", "abc"]
+    expected: 3
+
+  - name: entire string is the search term
+    args: ["AAA", "AAA"]
+    expected: 1
+
+  - name: single character string
+    args: ["X", "X"]
+    expected: 1
+
+  - name: help text
+    args: []
+    expected_type: array

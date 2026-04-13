@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      CHARQ
+    DESCRIPTION:*//**Counts non-overlapping occurrences of a substring within a string.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-13  Claude      Initial version
+*/
+CHARQ = LAMBDA(
+//  Parameter Declarations
+    [Text],
+    [Char],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CHARQ(Text, Char)¶" &
+                "DESCRIPTION:   →Counts non-overlapping occurrences of a substring within a string.¶" &
+                "VERSION:       →Apr 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Text           →(Required) The string to search within.¶" &
+                "   Char           →(Required) The character(s) to count.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CHARQ(""MASSAGE"",""S"")¶" &
+                "Result         →2",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(Text),
+    //  Procedure
+        result, (LEN(Text) - LEN(SUBSTITUTE(Text, Char, ""))) / LEN(Char),
+        IF(Help?, Help, result)
+)
+);
