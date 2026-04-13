@@ -1,0 +1,32 @@
+/*  FUNCTION NAME:      MAXOF
+    DESCRIPTION:*//**Returns the label corresponding to the largest value in a range.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-13  Claude      Initial version
+*/
+MAXOF = LAMBDA(
+//  Parameter Declarations
+    [values],
+    [labels],
+    [sentinel],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MAXOF(values, labels, sentinel)¶" &
+                "DESCRIPTION:   →Returns the label corresponding to the largest value in a range.¶" &
+                "VERSION:       →Apr 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   values         →(Required) A 1D range of numeric values.¶" &
+                "   labels         →(Required) A 1D range of labels, same size as values.¶" &
+                "   sentinel       →(Optional) Lookup value for approximate match. Default: 10^10.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAXOF({33,6,21,12}, {""Harry"",""Evie"",""Hugh"",""James""})¶" &
+                "Result         →Harry",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(values),
+        _sentinel, IF(ISOMITTED(sentinel), 10^10, sentinel),
+    //  Procedure
+        result, XLOOKUP(_sentinel, values, labels, , -1),
+        IF(Help?, Help, result)
+)
+);

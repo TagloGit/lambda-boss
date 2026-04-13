@@ -1,0 +1,20 @@
+tests:
+  - name: basic max lookup
+    args: ["={33,6,21,12}", '={"Harry","Evie","Hugh","James"}']
+    expected: Harry
+
+  - name: single element
+    args: ["={42}", '={"Solo"}']
+    expected: Solo
+
+  - name: tied values returns first match
+    args: ["={10,10,5}", '={"Alpha","Beta","Gamma"}']
+    expected: Alpha
+
+  - name: negative values
+    args: ["={-3,-1,-7}", '={"A","B","C"}']
+    expected: B
+
+  - name: help text
+    args: []
+    expected_type: array

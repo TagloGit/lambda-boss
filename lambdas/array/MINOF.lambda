@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      MINOF
+    DESCRIPTION:*//**Returns the label corresponding to the smallest value in a range.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-13  Claude      Initial version
+*/
+MINOF = LAMBDA(
+//  Parameter Declarations
+    [values],
+    [labels],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MINOF(values, labels)¶" &
+                "DESCRIPTION:   →Returns the label corresponding to the smallest value in a range.¶" &
+                "VERSION:       →Apr 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   values         →(Required) A 1D range of numeric values.¶" &
+                "   labels         →(Required) A 1D range of labels, same size as values.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MINOF({33,6,21,12}, {""Harry"",""Evie"",""Hugh"",""James""})¶" &
+                "Result         →Evie",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(values),
+    //  Procedure
+        result, INDEX(labels, MATCH(MIN(values), values, 0)),
+        IF(Help?, Help, result)
+)
+);
