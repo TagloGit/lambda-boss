@@ -1,0 +1,20 @@
+tests:
+  - name: two dimensions 2x3 cartesian product
+    args: ['=HSTACK({"Apples";"Oranges"},{"Small";"Medium";"Large"})']
+    expected: [["Apples","Small"],["Apples","Medium"],["Apples","Large"],["Oranges","Small"],["Oranges","Medium"],["Oranges","Large"]]
+
+  - name: two dimensions with CycleFromLeft
+    args: ['=HSTACK({"Apples";"Oranges"},{"Small";"Medium";"Large"})', "=TRUE"]
+    expected: [["Apples","Small"],["Oranges","Small"],["Apples","Medium"],["Oranges","Medium"],["Apples","Large"],["Oranges","Large"]]
+
+  - name: two dimensions with delimiter
+    args: ['=HSTACK({"Apples";"Oranges"},{"Small";"Medium";"Large"})', "=FALSE", " | "]
+    expected: [["Apples | Small"],["Apples | Medium"],["Apples | Large"],["Oranges | Small"],["Oranges | Medium"],["Oranges | Large"]]
+
+  - name: single dimension returns original column
+    args: ['={"A";"B";"C"}']
+    expected: [["A"],["B"],["C"]]
+
+  - name: help text
+    args: []
+    expected_type: array
