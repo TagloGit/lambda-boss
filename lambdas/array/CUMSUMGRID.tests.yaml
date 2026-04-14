@@ -1,0 +1,28 @@
+tests:
+  - name: column-wise cumulative sum (default)
+    args: ["={3,0;2,8;2,6;4,0}"]
+    expected: [[3, 0], [5, 8], [7, 14], [11, 14]]
+
+  - name: row-wise cumulative sum with horizontal TRUE
+    args: ["={3,0;2,8;2,6;4,0}", "=TRUE"]
+    expected: [[3, 3], [2, 10], [2, 8], [4, 4]]
+
+  - name: single column default
+    args: ["={1;2;3;4}"]
+    expected: [[1], [3], [6], [10]]
+
+  - name: single row horizontal
+    args: ["={1,2,3,4}", "=TRUE"]
+    expected: [[1, 3, 6, 10]]
+
+  - name: custom function cumulative product with seed 1
+    args: ["={2,3;4,5}", "=FALSE", "=LAMBDA(a,b,a*b)", "=1"]
+    expected: [[2, 3], [8, 15]]
+
+  - name: custom seed offset
+    args: ["={1,2;3,4}", "=FALSE", "=LAMBDA(a,b,a+b)", "=10"]
+    expected: [[11, 12], [14, 16]]
+
+  - name: help text
+    args: []
+    expected_type: array
