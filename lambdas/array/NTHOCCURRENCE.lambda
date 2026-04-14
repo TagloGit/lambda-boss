@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      NTHOCCURRENCE
+    DESCRIPTION:*//**Returns a running count of each value's occurrences in a 1D array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-14  Claude      Initial version
+*/
+NTHOCCURRENCE = LAMBDA(
+//  Parameter Declarations
+    [arr],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →NTHOCCURRENCE(arr)¶" &
+                "DESCRIPTION:   →Returns a running count of each value's occurrences in a 1D array.¶" &
+                "VERSION:       →Apr 14 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   arr            →(Required) A 1D array (row or column) of values (text, numbers, or mixed).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=NTHOCCURRENCE({""A"";""S"";""S"";""A"";""M"";""A""})¶" &
+                "Result         →{1;1;2;2;1;3}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(arr),
+    //  Procedure
+        col, TOCOL(arr),
+        n, ROWS(col),
+        running, MAP(SEQUENCE(n), LAMBDA(i, SUMPRODUCT((INDEX(col, SEQUENCE(i)) = INDEX(col, i)) * 1))),
+        result, IF(COLUMNS(arr) > 1, TRANSPOSE(running), running),
+        IF(Help?, Help, result)
+)
+);
