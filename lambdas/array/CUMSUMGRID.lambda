@@ -27,7 +27,7 @@ CUMSUMGRID = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(array),
         Horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
-        Fn, IF(ISOMITTED(function), LAMBDA(a, b, a + b), function),
+        Fn, IF(ISOMITTED(function), SUM, function),
         Seed0, IF(ISOMITTED(seed), 0, seed),
     //  Procedure
         result, IF(
