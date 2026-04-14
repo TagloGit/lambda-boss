@@ -1,0 +1,50 @@
+/*  FUNCTION NAME:      EXPANDDIMENSIONS
+    DESCRIPTION:*//**Constructs all possible combinations (Cartesian product) of supplied dimensions.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-14  Tim Jacks   Initial version
+*/
+EXPANDDIMENSIONS = LAMBDA(
+//  Parameter Declarations
+    [Dimensions],
+    [CycleFromLeft],
+    [Delimiter],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →EXPANDDIMENSIONS(Dimensions, CycleFromLeft, Delimiter)¶" &
+                "DESCRIPTION:   →Constructs all possible combinations (Cartesian product) of supplied dimensions.¶" &
+                "VERSION:       →Apr 14 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Dimensions     →(Required) A 2D array where each column is one dimension (combined via HSTACK).¶" &
+                "   CycleFromLeft  →(Optional) If TRUE, the leftmost dimension cycles every row. Default FALSE.¶" &
+                "   Delimiter      →(Optional) Text separator to combine results into a single delimited column.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=EXPANDDIMENSIONS(HSTACK({""Apples"";""Oranges""},{""Small"";""Medium"";""Large""}))¶" &
+                "Result         →6-row x 2-col array of all combinations",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(Dimensions),
+        Delimit?, NOT(ISOMITTED(Delimiter)),
+    //  Procedure
+        usedCycleFromLeft, IF(ISOMITTED(CycleFromLeft), FALSE, N(CycleFromLeft)),
+        cols, COLUMNS(Dimensions),
+        dims, BYCOL(Dimensions, LAMBDA(col, ROWS(TOCOL(col, 2)))),
+        length, PRODUCT(dims),
+        rowIndices, MAKEARRAY(
+            length,
+            cols,
+            LAMBDA(row, col,
+                MOD(
+                    QUOTIENT(
+                        row - 1,
+                        PRODUCT(IFERROR(TAKE(dims, , IF(usedCycleFromLeft, col - 1, -(cols - col))), 1))
+                    ),
+                    INDEX(dims, 1, col)
+                ) + 1
+            )
+        ),
+        resultBeforeDelimiter, INDEX(Dimensions, rowIndices, SEQUENCE(, cols)),
+        result, IF(Delimit?, BYROW(resultBeforeDelimiter, LAMBDA(row, TEXTJOIN(Delimiter, TRUE, row))), resultBeforeDelimiter),
+        IF(Help?, Help, result)
+)
+);
