@@ -1,0 +1,16 @@
+tests:
+  - name: least frequent letter
+    args: ['={"A","A","B","B","B","C"}']
+    expected: C
+
+  - name: least frequent number
+    args: ["={1,1,2,2,2,3}"]
+    expected: 3
+
+  - name: tie resolves to first-seen
+    args: ['={"A","B","A","B"}']
+    expected: A
+
+  - name: help text
+    args: []
+    expected_type: array
