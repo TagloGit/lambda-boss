@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      KNIGHTDELTAS
+    DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for a chess knight's L-shaped moves, ordered clockwise from NNE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+KNIGHTDELTAS = LAMBDA(
+//  Parameter Declarations
+    [ShowHelp],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →KNIGHTDELTAS()¶" &
+                "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for a chess knight's L-shaped moves, ordered clockwise from NNE.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the delta grid.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=KNIGHTDELTAS()¶" &
+                "Result         →8x2 array: NNE, ENE, ESE, SSE, SSW, WSW, WNW, NNW knight moves",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, {-2,1;-1,2;1,2;2,1;2,-1;1,-2;-1,-2;-2,-1},
+        IF(Help?, result, Help)
+)
+);

@@ -1,0 +1,35 @@
+/*  FUNCTION NAME:      MOVECELL
+    DESCRIPTION:*//**Returns the A1 address of the cell offset from cell by the direction dir, using a moves table of {glyph, dRow, dCol}.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+MOVECELL = LAMBDA(
+//  Parameter Declarations
+    [cell],
+    [dir],
+    [moves],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MOVECELL(cell, dir, [moves])¶" &
+                "DESCRIPTION:   →Returns the A1 address of the cell offset from cell by the direction dir, using a moves table of {glyph, dRow, dCol}.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   cell           →(Required) A cell reference (e.g. D8, or INDIRECT(text)).¶" &
+                "   dir            →(Required) Direction glyph matching a value in the first column of moves.¶" &
+                "   moves          →(Optional) 3-column table: {glyph, dRow, dCol}. Defaults to ARROWMOVES(). Use HSTACK(customGlyphs, KNIGHTDELTAS()) for knight moves.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MOVECELL(E5, ""↖"")¶" &
+                "Result         →D4",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(cell),
+    //  Procedure
+        m, IF(ISOMITTED(moves), ARROWMOVES(), moves),
+        idx, XMATCH(dir, CHOOSECOLS(m, 1)),
+        dR, INDEX(m, idx, 2),
+        dC, INDEX(m, idx, 3),
+        result, ADDRESS(ROW(cell) + dR, COLUMN(cell) + dC, 4),
+        IF(Help?, Help, result)
+)
+);

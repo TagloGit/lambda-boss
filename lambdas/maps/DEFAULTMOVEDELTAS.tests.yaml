@@ -1,0 +1,8 @@
+tests:
+  - name: returns 8x2 compass delta grid
+    args: []
+    expected: [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]
+
+  - name: help text
+    args: ["=TRUE"]
+    expected_type: array

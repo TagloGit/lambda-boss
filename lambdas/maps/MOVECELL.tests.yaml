@@ -1,0 +1,36 @@
+tests:
+  - name: up-left from E5
+    args: ["=E5", '="↖"']
+    expected: "D4"
+
+  - name: down from F3
+    args: ["=F3", '="↓"']
+    expected: "F4"
+
+  - name: down-right from G5
+    args: ["=G5", '="↘"']
+    expected: "H6"
+
+  - name: left from B2
+    args: ["=B2", '="←"']
+    expected: "A2"
+
+  - name: right from A1
+    args: ["=A1", '="→"']
+    expected: "B1"
+
+  - name: up from C10
+    args: ["=C10", '="↑"']
+    expected: "C9"
+
+  - name: knight NNE from D4 via custom moves
+    args: ["=D4", '="NNE"', '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    expected: "E2"
+
+  - name: knight SSE from D4 via custom moves
+    args: ["=D4", '="SSE"', '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    expected: "E6"
+
+  - name: help text
+    args: []
+    expected_type: array

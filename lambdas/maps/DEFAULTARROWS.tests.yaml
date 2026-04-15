@@ -1,0 +1,8 @@
+tests:
+  - name: returns 8 arrow characters
+    args: []
+    expected: [["↑"], ["↓"], ["←"], ["→"], ["↖"], ["↗"], ["↙"], ["↘"]]
+
+  - name: help text
+    args: ["=TRUE"]
+    expected_type: array
