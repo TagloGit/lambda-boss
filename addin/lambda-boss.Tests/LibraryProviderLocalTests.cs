@@ -101,6 +101,32 @@ public class LibraryProviderLocalTests : IDisposable
     }
 
     [Fact]
+    public async Task RefreshAsync_PopulatesLambdaDescription()
+    {
+        var libDir = Path.Combine(_tempDir, "math");
+        Directory.CreateDirectory(libDir);
+        File.WriteAllText(Path.Combine(libDir, "_library.yaml"),
+            "name: math\ndescription: Test lib\ndefault_prefix: m");
+        File.WriteAllText(Path.Combine(libDir, "Double.lambda"),
+            "/*  FUNCTION NAME:      Double\r\n    DESCRIPTION:*//**Doubles a number.*/\r\nDouble = LAMBDA(x, x * 2);");
+        File.WriteAllText(Path.Combine(libDir, "NoDesc.lambda"),
+            "NoDesc = LAMBDA(x, x);");
+
+        var localConfig = new LocalSourceConfig { Path = _tempDir };
+        var provider = new LibraryProvider(
+            Array.Empty<RepoConfig>(),
+            localSources: new[] { localConfig });
+
+        var lambdas = await provider.GetAllLambdasAsync();
+
+        var withDesc = lambdas.Single(l => l.Name == "Double");
+        Assert.Equal("Doubles a number.", withDesc.Description);
+
+        var noDesc = lambdas.Single(l => l.Name == "NoDesc");
+        Assert.Equal("", noDesc.Description);
+    }
+
+    [Fact]
     public async Task RefreshAsync_AlwaysReadsFreshFromDisk()
     {
         CreateTestLibrary("math", "m", "Double");

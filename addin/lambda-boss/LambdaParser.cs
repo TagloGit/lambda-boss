@@ -12,6 +12,14 @@ public static class LambdaParser
         @"^\s*(\w+)\s*=\s*LAMBDA\s*\(",
         RegexOptions.Multiline);
 
+    // Matches description text in the header convention:
+    //   DESCRIPTION:*//**<text>*/
+    // i.e. the first block comment closes immediately after "DESCRIPTION:",
+    // then a second /** ... */ block comment contains the description.
+    private static readonly Regex DescriptionPattern = new(
+        @"DESCRIPTION:\s*\*/\s*/\*\*(.*?)\*/",
+        RegexOptions.Singleline);
+
     /// <summary>
     ///     Parses a .lambda file and returns the function name and formula.
     ///     The formula is returned with an = prefix, ready for Name Manager injection.
@@ -48,6 +56,27 @@ public static class LambdaParser
     {
         var content = File.ReadAllText(filePath);
         return Parse(content);
+    }
+
+    /// <summary>
+    ///     Extracts the description text from the header comment block of a .lambda file.
+    ///     Convention: <c>DESCRIPTION:*//**&lt;text&gt;*/</c>.
+    /// </summary>
+    /// <param name="content">The raw text content of a .lambda file.</param>
+    /// <returns>The description text, or null if none was found or the description is empty.</returns>
+    public static string? ExtractDescription(string content)
+    {
+        var match = DescriptionPattern.Match(content);
+        if (!match.Success)
+            return null;
+
+        // Collapse internal whitespace/newlines so a multi-line description renders cleanly.
+        var raw = match.Groups[1].Value.Trim();
+        if (raw.Length == 0)
+            return null;
+
+        var collapsed = Regex.Replace(raw, @"\s+", " ").Trim();
+        return collapsed.Length == 0 ? null : collapsed;
     }
 
     private static string ExtractBalancedFormula(string text, int openParenIndex)

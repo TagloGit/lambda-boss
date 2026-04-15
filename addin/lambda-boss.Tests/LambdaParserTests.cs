@@ -164,4 +164,73 @@ AddN = LAMBDA(
 
         Assert.Equal("MyFunc", name);
     }
+
+    [Fact]
+    public void ExtractDescription_StandardHeader_ReturnsDescription()
+    {
+        var content = @"/*  FUNCTION NAME:      CONSECGROUPS
+    DESCRIPTION:*//**Decomposes a string into an array of consecutive-character run groups.*/
+/*  REVISIONS: ...
+*/
+CONSECGROUPS = LAMBDA(x, x);";
+
+        var description = LambdaParser.ExtractDescription(content);
+
+        Assert.Equal("Decomposes a string into an array of consecutive-character run groups.", description);
+    }
+
+    [Fact]
+    public void ExtractDescription_Missing_ReturnsNull()
+    {
+        var content = @"/*  FUNCTION NAME:      NoDesc
+*/
+NoDesc = LAMBDA(x, x);";
+
+        var description = LambdaParser.ExtractDescription(content);
+
+        Assert.Null(description);
+    }
+
+    [Fact]
+    public void ExtractDescription_EmptyBlock_ReturnsNull()
+    {
+        var content = @"/*  FUNCTION NAME:      Empty
+    DESCRIPTION:*//***/
+*/
+Empty = LAMBDA(x, x);";
+
+        var description = LambdaParser.ExtractDescription(content);
+
+        Assert.Null(description);
+    }
+
+    [Fact]
+    public void ExtractDescription_MultiLine_CollapsesWhitespace()
+    {
+        var content = @"/*  FUNCTION NAME:      Multi
+    DESCRIPTION:*//**Line one
+        and line two.*/
+*/
+Multi = LAMBDA(x, x);";
+
+        var description = LambdaParser.ExtractDescription(content);
+
+        Assert.Equal("Line one and line two.", description);
+    }
+
+    [Fact]
+    public void ExtractDescription_DoesNotBreakParse()
+    {
+        // Sanity check: description extraction and formula parsing work on the same content.
+        var content = @"/*  FUNCTION NAME:      Double
+    DESCRIPTION:*//**Doubles a number.*/
+Double = LAMBDA(x, x * 2);";
+
+        var (name, formula) = LambdaParser.Parse(content);
+        var description = LambdaParser.ExtractDescription(content);
+
+        Assert.Equal("Double", name);
+        Assert.StartsWith("=LAMBDA(", formula);
+        Assert.Equal("Doubles a number.", description);
+    }
 }
