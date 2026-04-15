@@ -1,0 +1,3 @@
+name: Maps
+description: Grid and cell-position utilities for map-like calculations
+default_prefix: maps

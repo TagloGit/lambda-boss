@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      CELLTOPOS
+    DESCRIPTION:*//**Encodes a cell reference as a single integer (ROW * mult + COLUMN) for grid arithmetic.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+CELLTOPOS = LAMBDA(
+//  Parameter Declarations
+    [cell],
+    [mult],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CELLTOPOS(cell, [mult])¶" &
+                "DESCRIPTION:   →Encodes a cell reference as a single integer (ROW * mult + COLUMN) for grid arithmetic.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   cell           →(Required) A cell reference to encode.¶" &
+                "   mult           →(Optional) Multiplier for the row component. Default: 1000. Must exceed the maximum column number used.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CELLTOPOS(E5)¶" &
+                "Result         →5005",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(cell),
+    //  Procedure
+        m, IF(ISOMITTED(mult), 1000, mult),
+        result, ROW(cell) * m + COLUMN(cell),
+        IF(Help?, Help, result)
+)
+);
