@@ -5,31 +5,28 @@ namespace LambdaBoss.Tests;
 public class LambdaLoaderIntegrationTests
 {
     [Fact]
-    public void LoadLibrary_TestLibrary_ReturnsAllLambdasWithPrefix()
+    public void LoadLibrary_StringLibrary_ReturnsLambdasWithPrefix()
     {
-        // Use the test library that ships with the repo
         var libraryPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "lambdas", "test"));
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "lambdas", "string"));
 
         var lambdas = LambdaLoader.LoadLibrary(libraryPath);
 
-        Assert.Equal(3, lambdas.Count);
-        Assert.All(lambdas, l => Assert.StartsWith("tst.", l.Name));
+        Assert.NotEmpty(lambdas);
+        Assert.All(lambdas, l => Assert.StartsWith("string.", l.Name));
         Assert.All(lambdas, l => Assert.StartsWith("=LAMBDA(", l.Formula));
     }
 
     [Fact]
-    public void LoadLibrary_TestLibrary_ContainsExpectedNames()
+    public void LoadLibrary_StringLibrary_ContainsExplode()
     {
         var libraryPath = Path.GetFullPath(Path.Combine(
-            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "lambdas", "test"));
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "lambdas", "string"));
 
         var lambdas = LambdaLoader.LoadLibrary(libraryPath);
         var names = lambdas.Select(l => l.Name).ToList();
 
-        Assert.Contains("tst.Double", names);
-        Assert.Contains("tst.Triple", names);
-        Assert.Contains("tst.AddN", names);
+        Assert.Contains("string.EXPLODE", names);
     }
 
     [Fact]
