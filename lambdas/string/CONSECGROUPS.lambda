@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      CONSECGROUPS
+    DESCRIPTION:*//**Decomposes a string into an array of consecutive-character run groups.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Tim Jacks   Initial version
+*/
+CONSECGROUPS = LAMBDA(
+//  Parameter Declarations
+    [input],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CONSECGROUPS(input)¶" &
+                "DESCRIPTION:   →Decomposes a string into an array of consecutive-character run groups.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   input          →(Required) A string to decompose into consecutive groups.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CONSECGROUPS(""AABBBCA"")¶" &
+                "Result         →{""AA"";""BBB"";""C"";""A""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(input),
+    //  Procedure
+        result, TRANSPOSE(REGEXEXTRACT(input, "(.)\1*", 1)),
+        IF(Help?, Help, result)
+)
+);

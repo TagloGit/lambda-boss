@@ -1,0 +1,24 @@
+tests:
+  - name: mixed runs
+    args: ["AABBBCA"]
+    expected: [["AA"], ["BBB"], ["C"], ["A"]]
+
+  - name: single character
+    args: ["X"]
+    expected: "X"
+
+  - name: no consecutive repeats
+    args: ["ABCD"]
+    expected: [["A"], ["B"], ["C"], ["D"]]
+
+  - name: all same character
+    args: ["ZZZZZ"]
+    expected: "ZZZZZ"
+
+  - name: arrows longest streak scenario
+    args: ["↑↑↓↓↓→"]
+    expected: [["↑↑"], ["↓↓↓"], ["→"]]
+
+  - name: help text
+    args: []
+    expected_type: array
