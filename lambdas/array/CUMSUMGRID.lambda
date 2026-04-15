@@ -1,0 +1,40 @@
+/*  FUNCTION NAME:      CUMSUMGRID
+    DESCRIPTION:*//**Cumulative running totals across a 2D array, column-wise by default or row-wise when horizontal=TRUE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-14  Tim Jacks   Initial version
+*/
+CUMSUMGRID = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [horizontal],
+    [function],
+    [seed],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CUMSUMGRID(array, [horizontal], [function], [seed])¶" &
+                "DESCRIPTION:   →Cumulative running totals across a 2D array, column-wise by default or row-wise when horizontal=TRUE.¶" &
+                "VERSION:       →Apr 14 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 2D array of numbers.¶" &
+                "   horizontal     →(Optional) If TRUE, accumulates left-to-right across each row. Default FALSE (top-to-bottom down each column).¶" &
+                "   function       →(Optional) A LAMBDA(a, b) used to combine the running accumulator with each element. Default is addition.¶" &
+                "   seed           →(Optional) Initial accumulator value. Default 0.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CUMSUMGRID({3,0;2,8;2,6;4,0})¶" &
+                "Result         →{3,0;5,8;7,14;11,14}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+        Horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
+        Fn, IF(ISOMITTED(function), SUM, function),
+        Seed0, IF(ISOMITTED(seed), 0, seed),
+    //  Procedure
+        result, IF(
+                    Horiz,
+                    BIROW(array, LAMBDA(r, SCAN(Seed0, r, Fn))),
+                    BICOL(array, LAMBDA(c, SCAN(Seed0, c, Fn)))
+                ),
+        IF(Help?, Help, result)
+)
+);
