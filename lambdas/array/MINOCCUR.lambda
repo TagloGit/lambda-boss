@@ -1,0 +1,28 @@
+/*  FUNCTION NAME:      MINOCCUR
+    DESCRIPTION:*//**Returns the value that occurs least often in an array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+MINOCCUR = LAMBDA(
+//  Parameter Declarations
+    [array],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MINOCCUR(array)¶" &
+                "DESCRIPTION:   →Returns the value that occurs least often in an array. Ties broken by first-seen.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 1D array of values to tally.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MINOCCUR({""A"",""A"",""B"",""B"",""B"",""C""})¶" &
+                "Result         →C",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        _arr, IF(ROWS(array)=1, TRANSPOSE(array), array),
+        result, INDEX(GROUPBY(_arr, _arr, ROWS, , 0, 2), 1, 1),
+        IF(Help?, Help, result)
+)
+);
