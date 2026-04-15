@@ -1,0 +1,34 @@
+/*  FUNCTION NAME:      CIRCPOS
+    DESCRIPTION:*//**Position on a circular track of n items after advancing moves steps from start.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+CIRCPOS = LAMBDA(
+//  Parameter Declarations
+    [start],
+    [moves],
+    [n],
+    [zero_based],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CIRCPOS(start, moves, n, [zero_based])¶" &
+                "DESCRIPTION:   →Position on a circular track of n items after advancing moves steps from start.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   start         →(Required) Starting position. 1-based by default, 0-based if zero_based=TRUE. Scalar or array.¶" &
+                "   moves         →(Required) Number of steps to advance. Negative = backward. Scalar or array.¶" &
+                "   n             →(Required) Size of the circular track (number of positions).¶" &
+                "   zero_based    →(Optional) If TRUE, uses 0-based indexing (0 to n-1). Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CIRCPOS(1, 35, 19)¶" &
+                "Result         →17",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(start),
+        ZeroBased, IF(ISOMITTED(zero_based), FALSE, zero_based),
+    //  Procedure
+        result, IF(ZeroBased, MOD(start + moves, n), MOD(start + moves - 1, n) + 1),
+        IF(Help?, Help, result)
+)
+);

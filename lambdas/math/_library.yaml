@@ -1,0 +1,3 @@
+name: Math
+description: Mathematical and numeric helper lambdas
+default_prefix: math
