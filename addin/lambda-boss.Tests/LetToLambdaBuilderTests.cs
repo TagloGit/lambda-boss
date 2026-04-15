@@ -1,0 +1,109 @@
+using Xunit;
+
+namespace LambdaBoss.Tests;
+
+public class LetToLambdaBuilderTests
+{
+    private static string Build(string formula, string lambdaName,
+        params (string name, string paramName, bool keep)[] choices)
+    {
+        var parsed = LetParser.Parse(formula);
+        var inputs = choices.Select(c => new InputChoice(c.name, c.paramName, c.keep)).ToList();
+        return LetToLambdaBuilder.Build(new LambdaGenerationRequest(lambdaName, parsed, inputs));
+    }
+
+    [Fact]
+    public void AllInputsKept_NoInternalLet()
+    {
+        var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
+            ("x", "x", true), ("y", "y", true));
+
+        Assert.Equal("=LAMBDA(x, y, SUM(x, y))", result);
+    }
+
+    [Fact]
+    public void RenamedParam_SubstitutesThroughBody()
+    {
+        var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
+            ("x", "a", true), ("y", "b", true));
+
+        Assert.Equal("=LAMBDA(a, b, SUM(a, b))", result);
+    }
+
+    [Fact]
+    public void MixedKeepAndCalc_WrapsInLet()
+    {
+        var result = Build("=LET(someRange, A1:A10, getMax, MAX(someRange), getMax)", "MyMax",
+            ("someRange", "someRange", true));
+
+        Assert.Equal("=LAMBDA(someRange, LET(getMax, MAX(someRange), getMax))", result);
+    }
+
+    [Fact]
+    public void RenamedInput_RenamesInsideInternalBindingRhs()
+    {
+        var result = Build("=LET(a, A1:A10, b, MAX(a), b)", "MaxLambda",
+            ("a", "myRange", true));
+
+        Assert.Equal("=LAMBDA(myRange, LET(b, MAX(myRange), b))", result);
+    }
+
+    [Fact]
+    public void RemovedInput_StaysAsInternalBinding()
+    {
+        var result = Build("=LET(x, 1, y, 2, x + y)", "Test",
+            ("x", "x", false), ("y", "y", true));
+
+        Assert.Equal("=LAMBDA(y, LET(x, 1, x + y))", result);
+    }
+
+    [Fact]
+    public void NoInputsKept_LambdaHasNoParams()
+    {
+        var result = Build("=LET(x, 1, y, 2, x + y)", "Zero",
+            ("x", "x", false), ("y", "y", false));
+
+        Assert.Equal("=LAMBDA(LET(x, 1, y, 2, x + y))", result);
+    }
+
+    [Fact]
+    public void StringLiteralContent_NotRenamed()
+    {
+        var result = Build("=LET(x, 1, CONCAT(\"x is \", x))", "WithString",
+            ("x", "value", true));
+
+        Assert.Equal("=LAMBDA(value, CONCAT(\"x is \", value))", result);
+    }
+
+    [Fact]
+    public void DuplicateParamName_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            Build("=LET(x, 1, y, 2, x + y)", "Dup",
+                ("x", "a", true), ("y", "a", true)));
+    }
+
+    [Fact]
+    public void ParamNameCollidesWithInternalBinding_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            Build("=LET(x, 1, y, MAX(x), y)", "Bad",
+                ("x", "y", true)));
+    }
+
+    [Fact]
+    public void EmptyParamName_Throws()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            Build("=LET(x, 1, x)", "Bad",
+                ("x", "", true)));
+    }
+
+    [Fact]
+    public void CalculationBindingOnly_NoInputs()
+    {
+        var result = Build("=LET(m, MAX(A1:A10), m + 1)", "MaxPlus1");
+
+        Assert.Equal("=LAMBDA(LET(m, MAX(A1:A10), m + 1))", result);
+    }
+}
