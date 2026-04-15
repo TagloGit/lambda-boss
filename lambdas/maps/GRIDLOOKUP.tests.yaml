@@ -31,6 +31,18 @@ tests:
     args: ['="A5"', "=SEQUENCE(10,10)", "=TRUE"]
     expected: 41
 
+  - name: match_mode 1 finds next larger value
+    args: ["=99.5", "=SEQUENCE(10,10)", "=FALSE", "=1"]
+    expected: "J10"
+
+  - name: match_mode -1 finds next smaller value
+    args: ["=41.5", "=SEQUENCE(10,10)", "=FALSE", "=-1"]
+    expected: "A5"
+
+  - name: find cell of MAX via match_mode 1 with large sentinel
+    args: ["=9999", "=SEQUENCE(10,10)", "=FALSE", "=-1"]
+    expected: "J10"
+
   - name: help text
     args: []
     expected_type: array

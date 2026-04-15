@@ -2,21 +2,24 @@
     DESCRIPTION:*//**Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
+                        2026-04-15  Claude      Switch to XMATCH; add match_mode parameter
 */
 GRIDLOOKUP = LAMBDA(
 //  Parameter Declarations
     [value],
     [grid],
     [return_Value],
+    [match_mode],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →GRIDLOOKUP(value, grid, [return_Value])¶" &
+                "FUNCTION:      →GRIDLOOKUP(value, grid, [return_Value], [match_mode])¶" &
                 "DESCRIPTION:   →Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.¶" &
                 "VERSION:       →Apr 15 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") to look up.¶" &
                 "   grid          →(Required) The grid range to search (e.g. M!C3:L12).¶" &
                 "   return_Value  →(Optional) FALSE (default) returns a cell address for the value. TRUE treats value as an address and returns the cell's value.¶" &
+                "   match_mode    →(Optional) Forwarded to XMATCH: 0 exact (default), -1 exact or next smaller, 1 exact or next larger, 2 wildcard. Ignored when return_Value is TRUE.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=GRIDLOOKUP(41, mp)¶" &
                 "Result         →E5",
@@ -25,14 +28,15 @@ GRIDLOOKUP = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(value),
         reverse, AND(NOT(ISOMITTED(return_Value)), return_Value),
+        mMode, IF(ISOMITTED(match_mode), 0, match_mode),
     //  Procedure
-        baseRow, MIN(ROW(grid)),
-        baseCol, MIN(COLUMN(grid)),
+        baseRow, IFERROR(MIN(ROW(grid)), 1),
+        baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         result, IF(reverse,
                     INDEX(grid,
                           ROW(INDIRECT(value)) - baseRow + 1,
                           COLUMN(INDIRECT(value)) - baseCol + 1),
-                    LET(p, MATCH(value, TOCOL(grid), 0),
+                    LET(p, XMATCH(value, TOCOL(grid), mMode),
                         cols, COLUMNS(grid),
                         ADDRESS(baseRow + INT((p - 1) / cols),
                                 baseCol + MOD(p - 1, cols), 4))),
