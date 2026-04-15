@@ -1,0 +1,41 @@
+/*  FUNCTION NAME:      GRIDLOOKUP
+    DESCRIPTION:*//**Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+GRIDLOOKUP = LAMBDA(
+//  Parameter Declarations
+    [value],
+    [grid],
+    [return_Value],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GRIDLOOKUP(value, grid, [return_Value])¶" &
+                "DESCRIPTION:   →Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") to look up.¶" &
+                "   grid          →(Required) The grid range to search (e.g. M!C3:L12).¶" &
+                "   return_Value  →(Optional) FALSE (default) returns a cell address for the value. TRUE treats value as an address and returns the cell's value.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GRIDLOOKUP(41, mp)¶" &
+                "Result         →E5",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(value),
+        reverse, AND(NOT(ISOMITTED(return_Value)), return_Value),
+    //  Procedure
+        baseRow, MIN(ROW(grid)),
+        baseCol, MIN(COLUMN(grid)),
+        result, IF(reverse,
+                    INDEX(grid,
+                          ROW(INDIRECT(value)) - baseRow + 1,
+                          COLUMN(INDIRECT(value)) - baseCol + 1),
+                    LET(p, MATCH(value, TOCOL(grid), 0),
+                        cols, COLUMNS(grid),
+                        ADDRESS(baseRow + INT((p - 1) / cols),
+                                baseCol + MOD(p - 1, cols), 4))),
+        IF(Help?, Help, result)
+)
+);

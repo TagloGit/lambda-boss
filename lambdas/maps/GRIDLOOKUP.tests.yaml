@@ -1,0 +1,36 @@
+tests:
+  - name: find 41 in 10x10 SEQUENCE grid
+    args: ["=41", "=SEQUENCE(10,10)"]
+    expected: "A5"
+
+  - name: find 1 in 10x10 SEQUENCE grid (top-left)
+    args: ["=1", "=SEQUENCE(10,10)"]
+    expected: "A1"
+
+  - name: find 100 in 10x10 SEQUENCE grid (bottom-right)
+    args: ["=100", "=SEQUENCE(10,10)"]
+    expected: "J10"
+
+  - name: find 5 in 2x5 SEQUENCE grid
+    args: ["=5", "=SEQUENCE(2,5)"]
+    expected: "E1"
+
+  - name: find 6 in 2x5 SEQUENCE grid
+    args: ["=6", "=SEQUENCE(2,5)"]
+    expected: "A2"
+
+  - name: reverse lookup A1 in 10x10 SEQUENCE grid
+    args: ['="A1"', "=SEQUENCE(10,10)", "=TRUE"]
+    expected: 1
+
+  - name: reverse lookup J10 in 10x10 SEQUENCE grid
+    args: ['="J10"', "=SEQUENCE(10,10)", "=TRUE"]
+    expected: 100
+
+  - name: reverse lookup A5 in 10x10 SEQUENCE grid
+    args: ['="A5"', "=SEQUENCE(10,10)", "=TRUE"]
+    expected: 41
+
+  - name: help text
+    args: []
+    expected_type: array
