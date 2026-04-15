@@ -240,8 +240,26 @@ public partial class LambdaPopup
                 LambdaList.ItemsSource = _allLambdas;
             else
             {
+                // Name matches rank above description-only matches; this bonus
+                // must exceed any realistic description score.
+                const int nameBonus = 10_000;
+
                 LambdaList.ItemsSource = _allLambdas
-                    .Where(l => l.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .Select(l =>
+                    {
+                        var nameScore = FuzzyMatcher.Score(query, l.Name);
+                        var descScore = FuzzyMatcher.Score(query, l.Description);
+                        var best = FuzzyMatcher.NoMatch;
+                        if (nameScore != FuzzyMatcher.NoMatch)
+                            best = nameScore + nameBonus;
+                        if (descScore != FuzzyMatcher.NoMatch && descScore > best)
+                            best = descScore;
+                        return (Item: l, Score: best);
+                    })
+                    .Where(x => x.Score != FuzzyMatcher.NoMatch)
+                    .OrderByDescending(x => x.Score)
+                    .ThenBy(x => x.Item.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => x.Item)
                     .ToList();
             }
 

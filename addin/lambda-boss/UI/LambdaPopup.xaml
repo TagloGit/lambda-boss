@@ -99,6 +99,7 @@
                  Visibility="Collapsed">
             <ListBox.ItemTemplate>
                 <DataTemplate>
+                    <!-- ReSharper disable once Xaml.BindingWithContextNotResolved -->
                     <Grid Margin="4,2"
                           ToolTip="{Binding DescriptionToolTip}">
                         <Grid.ColumnDefinitions>
