@@ -1,0 +1,28 @@
+tests:
+  - name: default start forward wrap
+    args: ["=35", "=19"]
+    expected: 17
+
+  - name: explicit start forward wrap
+    args: ["=12", "=19", "=5"]
+    expected: 17
+
+  - name: backward move wraps from default start
+    args: ["=-2", "=19"]
+    expected: 18
+
+  - name: zero-based indexing default start
+    args: ["=35", "=19", "=0", "=TRUE"]
+    expected: 16
+
+  - name: zero moves returns start
+    args: ["=0", "=19", "=7"]
+    expected: 7
+
+  - name: full loop returns start
+    args: ["=19", "=19", "=3"]
+    expected: 3
+
+  - name: help text
+    args: []
+    expected_type: array
