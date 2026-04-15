@@ -7,8 +7,8 @@ namespace LambdaBoss.UI;
 
 public class LetInputRow : INotifyPropertyChanged
 {
-    private string _paramName = "";
     private bool _keep = true;
+    private string _paramName = "";
 
     public string BindingName { get; set; } = "";
     public string RhsPreview { get; set; } = "";
@@ -16,30 +16,36 @@ public class LetInputRow : INotifyPropertyChanged
     public string ParamName
     {
         get => _paramName;
-        set { _paramName = value; OnChanged(); }
+        set
+        {
+            _paramName = value;
+            OnChanged();
+        }
     }
 
     public bool Keep
     {
         get => _keep;
-        set { _keep = value; OnChanged(); }
+        set
+        {
+            _keep = value;
+            OnChanged();
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
-    private void OnChanged([CallerMemberName] string? prop = null) =>
+
+    private void OnChanged([CallerMemberName] string? prop = null)
+    {
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+    }
 }
 
-public partial class LetToLambdaWindow : Window
+public partial class LetToLambdaWindow
 {
-    private readonly ParsedLet _parsed;
     private readonly Func<string, bool> _nameCollides;
+    private readonly ParsedLet _parsed;
     private readonly List<LetInputRow> _rows;
-
-    /// <summary>
-    ///     Populated on successful Save. Null if cancelled.
-    /// </summary>
-    public LambdaGenerationRequest? Result { get; private set; }
 
     public LetToLambdaWindow(ParsedLet parsed, Func<string, bool> nameCollides)
     {
@@ -54,7 +60,7 @@ public partial class LetToLambdaWindow : Window
                 BindingName = b.Name,
                 ParamName = b.Name,
                 RhsPreview = b.RhsText,
-                Keep = true,
+                Keep = true
             })
             .ToList();
 
@@ -67,12 +73,19 @@ public partial class LetToLambdaWindow : Window
         UpdateSaveEnabled();
     }
 
-    private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e) =>
+    /// <summary>
+    ///     Populated on successful Save. Null if cancelled.
+    /// </summary>
+    public LambdaGenerationRequest? Result { get; private set; }
+
+    private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
         UpdateSaveEnabled();
+    }
 
     private void UpdateSaveEnabled()
     {
-        var name = LambdaNameBox.Text?.Trim() ?? "";
+        var name = LambdaNameBox.Text.Trim();
         var validation = ExcelNameValidator.Validate(name);
 
         if (!validation.IsValid)

@@ -14,7 +14,12 @@ public static class ExcelNameValidator
 
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
     {
-        "C", "c", "R", "r", "TRUE", "FALSE",
+        "C",
+        "c",
+        "R",
+        "r",
+        "TRUE",
+        "FALSE",
     };
 
     public static ValidationResult Validate(string? name)
@@ -22,7 +27,7 @@ public static class ExcelNameValidator
         if (string.IsNullOrWhiteSpace(name))
             return ValidationResult.Invalid("Name is required.");
 
-        if (name!.Length > 255)
+        if (name.Length > 255)
             return ValidationResult.Invalid("Name is too long (max 255 characters).");
 
         var first = name[0];
@@ -30,10 +35,8 @@ public static class ExcelNameValidator
             return ValidationResult.Invalid("Name must start with a letter, underscore, or backslash.");
 
         foreach (var c in name)
-        {
             if (!char.IsLetterOrDigit(c) && c != '_' && c != '.' && c != '\\' && c != '?')
                 return ValidationResult.Invalid($"Invalid character '{c}' in name.");
-        }
 
         if (Reserved.Contains(name))
             return ValidationResult.Invalid($"'{name}' is reserved by Excel.");
@@ -47,6 +50,13 @@ public static class ExcelNameValidator
 
 public record ValidationResult(bool IsValid, string? Error)
 {
-    public static ValidationResult Valid() => new(true, null);
-    public static ValidationResult Invalid(string error) => new(false, error);
+    public static ValidationResult Valid()
+    {
+        return new ValidationResult(true, null);
+    }
+
+    public static ValidationResult Invalid(string error)
+    {
+        return new ValidationResult(false, error);
+    }
 }

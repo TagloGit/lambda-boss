@@ -25,7 +25,7 @@ public static class LetParser
     {
         if (string.IsNullOrEmpty(formula))
             return false;
-        return LetPrefix.IsMatch(formula!);
+        return LetPrefix.IsMatch(formula);
     }
 
     public static ParsedLet Parse(string formula)
@@ -46,8 +46,10 @@ public static class LetParser
         var args = SplitTopLevelCommas(inner);
 
         if (args.Count < 3 || args.Count % 2 == 0)
+        {
             throw new FormatException(
                 "LET must have an odd number of arguments (pairs of name/value plus a final body).");
+        }
 
         var bindings = new List<LetBinding>();
         for (var i = 0; i < args.Count - 1; i += 2)
@@ -123,8 +125,10 @@ public static class LetParser
                     if (i < len) i++;
                     continue;
                 }
+
                 i++;
             }
+
             var token = s[start..i];
 
             if (i < len && s[i] == '(' && IsIdentifierStart(token))
@@ -136,11 +140,15 @@ public static class LetParser
         return false;
     }
 
-    private static bool IsIdentifierStart(string token) =>
-        token.Length > 0 && (char.IsLetter(token[0]) || token[0] == '_');
+    private static bool IsIdentifierStart(string token)
+    {
+        return token.Length > 0 && (char.IsLetter(token[0]) || token[0] == '_');
+    }
 
-    private static bool IsOperatorChar(char c) =>
-        c is '+' or '-' or '*' or '/' or '^' or '&' or '=' or '<' or '>' or '%';
+    private static bool IsOperatorChar(char c)
+    {
+        return c is '+' or '-' or '*' or '/' or '^' or '&' or '=' or '<' or '>' or '%';
+    }
 
     private static int SkipString(string text, int openQuoteIndex)
     {
@@ -154,10 +162,13 @@ public static class LetParser
                     i += 2;
                     continue;
                 }
+
                 return i + 1;
             }
+
             i++;
         }
+
         return text.Length;
     }
 
@@ -173,14 +184,17 @@ public static class LetParser
                 i = SkipString(text, i);
                 continue;
             }
+
             if (c == '(') depth++;
             else if (c == ')')
             {
                 depth--;
                 if (depth == 0) return i;
             }
+
             i++;
         }
+
         return -1;
     }
 
@@ -198,6 +212,7 @@ public static class LetParser
                 i = SkipString(text, i);
                 continue;
             }
+
             if (c == '(' || c == '{' || c == '[')
                 depth++;
             else if (c == ')' || c == '}' || c == ']')
@@ -207,8 +222,10 @@ public static class LetParser
                 parts.Add(text[start..i]);
                 start = i + 1;
             }
+
             i++;
         }
+
         parts.Add(text[start..]);
         return parts;
     }
