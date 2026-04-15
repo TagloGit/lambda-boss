@@ -154,12 +154,14 @@ public class LibraryProvider
                         try
                         {
                             var (name, formula) = LambdaParser.Parse(content);
+                            var description = LambdaParser.ExtractDescription(content) ?? "";
                             lambdas.Add(new LambdaInfo
                             {
                                 Name = name,
                                 Formula = formula,
                                 LibraryInfo = info,
-                                FileName = fileName
+                                FileName = fileName,
+                                Description = description
                             });
                         }
                         catch (Exception ex)
@@ -214,12 +216,14 @@ public class LibraryProvider
                         try
                         {
                             var (name, formula) = LambdaParser.Parse(content);
+                            var description = LambdaParser.ExtractDescription(content) ?? "";
                             lambdas.Add(new LambdaInfo
                             {
                                 Name = name,
                                 Formula = formula,
                                 LibraryInfo = info,
-                                FileName = fileName
+                                FileName = fileName,
+                                Description = description
                             });
                         }
                         catch (Exception ex)
@@ -271,5 +275,11 @@ public sealed class LambdaInfo
     public string Formula { get; init; } = "";
     public LibraryInfo LibraryInfo { get; init; } = null!;
     public string FileName { get; init; } = "";
+
+    /// <summary>
+    ///     Description extracted from the header comment of the .lambda file.
+    ///     Empty string when no description was found.
+    /// </summary>
+    public string Description { get; init; } = "";
 }
 
