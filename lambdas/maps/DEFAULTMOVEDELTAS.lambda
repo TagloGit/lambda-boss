@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      DEFAULTMOVEDELTAS
+    DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in order matching DEFAULTARROWS.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+DEFAULTMOVEDELTAS = LAMBDA(
+//  Parameter Declarations
+    [ShowHelp],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →DEFAULTMOVEDELTAS()¶" &
+                "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in order matching DEFAULTARROWS.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the delta grid.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=DEFAULTMOVEDELTAS()¶" &
+                "Result         →8x2 array: up, down, left, right, up-left, up-right, down-left, down-right",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, {-1,0;1,0;0,-1;0,1;-1,-1;-1,1;1,-1;1,1},
+        IF(Help?, result, Help)
+)
+);

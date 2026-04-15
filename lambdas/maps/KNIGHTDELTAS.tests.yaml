@@ -1,0 +1,8 @@
+tests:
+  - name: returns 8x2 knight L-move grid
+    args: []
+    expected: [[-2, 1], [-1, 2], [1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1]]
+
+  - name: help text
+    args: ["=TRUE"]
+    expected_type: array

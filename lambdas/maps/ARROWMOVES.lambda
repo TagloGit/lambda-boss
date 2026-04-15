@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      ARROWMOVES
+    DESCRIPTION:*//**Returns an 8x3 moves table combining DEFAULTARROWS and DEFAULTMOVEDELTAS: {arrow, dRow, dCol}.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+ARROWMOVES = LAMBDA(
+//  Parameter Declarations
+    [ShowHelp],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →ARROWMOVES()¶" &
+                "DESCRIPTION:   →Returns an 8x3 moves table combining DEFAULTARROWS and DEFAULTMOVEDELTAS: {arrow, dRow, dCol}.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the moves table.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ARROWMOVES()¶" &
+                "Result         →8x3 array: col 1 is arrow char, cols 2-3 are dRow/dCol",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, HSTACK(DEFAULTARROWS(), DEFAULTMOVEDELTAS()),
+        IF(Help?, result, Help)
+)
+);

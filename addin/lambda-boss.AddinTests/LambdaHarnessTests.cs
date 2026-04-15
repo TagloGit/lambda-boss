@@ -105,13 +105,65 @@ public class LambdaHarnessTests
     {
         lock (InjectionLock)
         {
+            if (InjectedNames.Count == 0)
+                InjectAllLambdas();
+
             if (InjectedNames.Contains(name))
                 return;
 
+            // Fallback for any lambda not found during bulk injection
             _output.WriteLine($"Injecting {name}: {formula[..Math.Min(80, formula.Length)]}...");
             _excel.Workbook.Names.Add(name, formula);
             InjectedNames.Add(name);
         }
+    }
+
+    /// <summary>
+    ///     Injects every .lambda file in dependency order. Because Excel validates
+    ///     lambda bodies at Names.Add time, a lambda that references another lambda
+    ///     will fail to inject if its dependency isn't present yet. We retry until
+    ///     the pending set stops shrinking.
+    /// </summary>
+    private void InjectAllLambdas()
+    {
+        var lambdasDir = FindLambdasDirectory();
+        var files = Directory.GetFiles(lambdasDir, "*.lambda", SearchOption.AllDirectories);
+
+        var pending = new List<(string name, string formula)>();
+        foreach (var file in files)
+        {
+            var (n, f) = LambdaParser.ParseFile(file);
+            pending.Add((n, f));
+        }
+
+        while (pending.Count > 0)
+        {
+            var injectedThisPass = new List<(string, string)>();
+            foreach (var (n, f) in pending)
+            {
+                try
+                {
+                    _excel.Workbook.Names.Add(n, f);
+                    InjectedNames.Add(n);
+                    injectedThisPass.Add((n, f));
+                }
+                catch (COMException)
+                {
+                    // Dependency not yet injected; try again next pass
+                }
+            }
+
+            if (injectedThisPass.Count == 0)
+            {
+                var remaining = string.Join(", ", pending.Select(p => p.name));
+                throw new InvalidOperationException(
+                    $"Could not resolve lambda dependencies. Remaining: {remaining}");
+            }
+
+            pending.RemoveAll(p => injectedThisPass.Contains(p));
+        }
+
+        _output.WriteLine($"Injected {InjectedNames.Count} lambdas.");
     }
 
     private void AssertScalar(dynamic cell, object? expected, string testName)
