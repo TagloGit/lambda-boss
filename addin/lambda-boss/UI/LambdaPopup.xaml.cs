@@ -56,6 +56,7 @@ public partial class LambdaPopup
                 LibraryLabel = l.LibraryInfo.IsLocal
                     ? $"{l.LibraryInfo.DisplayName} [Local]"
                     : l.LibraryInfo.DisplayName,
+                Description = l.Description,
                 LibraryInfo = l.LibraryInfo
             })
             .ToList();
@@ -404,5 +405,12 @@ internal class LambdaDisplayItem
 {
     public string Name { get; init; } = "";
     public string LibraryLabel { get; init; } = "";
+    public string Description { get; init; } = "";
     public LibraryInfo LibraryInfo { get; init; } = null!;
+
+    /// <summary>
+    ///     Tooltip value for the description. Returns null for empty descriptions so WPF
+    ///     suppresses the tooltip entirely rather than showing a blank popup.
+    /// </summary>
+    public object? DescriptionToolTip => string.IsNullOrEmpty(Description) ? null : Description;
 }
