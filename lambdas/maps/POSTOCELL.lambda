@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      POSTOCELL
+    DESCRIPTION:*//**Decodes an integer position (from CELLTOPOS) back to an A1-style cell address string.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version
+*/
+POSTOCELL = LAMBDA(
+//  Parameter Declarations
+    [pos],
+    [mult],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →POSTOCELL(pos, [mult])¶" &
+                "DESCRIPTION:   →Decodes an integer position (from CELLTOPOS) back to an A1-style cell address string.¶" &
+                "VERSION:       →Apr 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   pos            →(Required) Integer position to decode.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: 1000. Must match the mult used by CELLTOPOS.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=POSTOCELL(5005)¶" &
+                "Result         →E5",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), 1000, mult),
+        result, ADDRESS(ROUNDDOWN(pos / m, 0), MOD(pos, m), 4),
+        IF(Help?, Help, result)
+)
+);

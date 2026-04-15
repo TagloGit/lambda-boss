@@ -1,0 +1,24 @@
+tests:
+  - name: default mult 5005
+    args: ["=5005"]
+    expected: "E5"
+
+  - name: default mult 3003
+    args: ["=3003"]
+    expected: "C3"
+
+  - name: default mult 12012
+    args: ["=12012"]
+    expected: "L12"
+
+  - name: custom mult 101
+    args: ["=101", "=100"]
+    expected: "A1"
+
+  - name: custom mult 526 with mult 50
+    args: ["=526", "=50"]
+    expected: "Z10"
+
+  - name: help text
+    args: []
+    expected_type: array
