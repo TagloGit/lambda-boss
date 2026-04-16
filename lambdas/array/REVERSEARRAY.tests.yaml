@@ -1,0 +1,20 @@
+tests:
+  - name: reverse vertical numeric array
+    args: ["={1;2;3;4;5}"]
+    expected: [[5], [4], [3], [2], [1]]
+
+  - name: reverse horizontal string array
+    args: ['={"A","B","C"}']
+    expected: [["C", "B", "A"]]
+
+  - name: reverse single element
+    args: ["={42}"]
+    expected: 42
+
+  - name: reverse two elements vertical
+    args: ["={10;20}"]
+    expected: [[20], [10]]
+
+  - name: help text
+    args: []
+    expected_type: array
