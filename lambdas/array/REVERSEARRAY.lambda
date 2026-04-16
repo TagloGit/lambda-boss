@@ -1,0 +1,32 @@
+/*  FUNCTION NAME:      REVERSEARRAY
+    DESCRIPTION:*//**Reverses the order of elements in a 1D array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-16  Claude      Initial version
+*/
+REVERSEARRAY = LAMBDA(
+//  Parameter Declarations
+    [array],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →REVERSEARRAY(array)¶" &
+                "DESCRIPTION:   →Reverses the order of elements in a 1D array.¶" &
+                "VERSION:       →Apr 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array         →(Required) A 1D array (vertical or horizontal) to reverse.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=REVERSEARRAY({1;2;3;4;5})¶" &
+                "Result         →{5;4;3;2;1}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        n, ROWS(array),
+        m, COLUMNS(array),
+        result, IF(m > 1,
+                    INDEX(array, , SEQUENCE(1,m,m,-1)),
+                    INDEX(array, SEQUENCE(n,,n,-1))
+                ),
+        IF(Help?, Help, result)
+)
+);

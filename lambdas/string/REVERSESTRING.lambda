@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      REVERSESTRING
+    DESCRIPTION:*//**Reverses the characters in a text string.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-16  Claude      Initial version
+*/
+REVERSESTRING = LAMBDA(
+//  Parameter Declarations
+    [text],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →REVERSESTRING(text)¶" &
+                "DESCRIPTION:   →Reverses the characters in a text string.¶" &
+                "VERSION:       →Apr 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   text          →(Required) The string to reverse.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=REVERSESTRING(""863FOVW595"")¶" &
+                "Result         →595WVOF368",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(text),
+    //  Procedure
+        result, CONCAT(MID(text, SEQUENCE(LEN(text),,LEN(text),-1), 1)),
+        IF(Help?, Help, result)
+)
+);

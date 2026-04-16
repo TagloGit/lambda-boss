@@ -1,0 +1,20 @@
+tests:
+  - name: reverse alphanumeric string
+    args: ["863FOVW595"]
+    expected: "595WVOF368"
+
+  - name: reverse word
+    args: ["hello"]
+    expected: "olleh"
+
+  - name: palindrome returns same string
+    args: ["racecar"]
+    expected: "racecar"
+
+  - name: single character
+    args: ["X"]
+    expected: "X"
+
+  - name: help text
+    args: []
+    expected_type: array
