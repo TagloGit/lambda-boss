@@ -26,6 +26,14 @@ public class RibbonController : ExcelRibbon
                   onAction='OnLoadLibrary'
                   screentip='Open the Lambda library browser (Ctrl+Shift+L)' />
         </group>
+        <group id='GenerateGroup' label='Generate'>
+          <button id='LetToLambdaButton'
+                  label='LET to LAMBDA'
+                  size='large'
+                  imageMso='FunctionWizard'
+                  onAction='OnLetToLambda'
+                  screentip='Convert the active cell&apos;s =LET(...) formula into a workbook-scoped LAMBDA' />
+        </group>
         <group id='ManageGroup' label='Manage'>
           <button id='SettingsButton'
                   label='Settings'
@@ -83,6 +91,11 @@ public class RibbonController : ExcelRibbon
     public void OnRefresh(IRibbonControl control)
     {
         ShowLambdaPopupCommand.RefreshData();
+    }
+
+    public void OnLetToLambda(IRibbonControl control)
+    {
+        ConvertLetToLambdaCommand.Run();
     }
 
     public void OnAbout(IRibbonControl control)

@@ -152,6 +152,17 @@ public static class ShowLambdaPopupCommand
         }
     }
 
+    /// <summary>
+    ///     Ensures the WPF STA thread is running and invokes <paramref name="action"/>
+    ///     with its Dispatcher. Used by commands that need to show their own windows.
+    /// </summary>
+    public static void InvokeOnWindowThread(Action<Dispatcher> action)
+    {
+        EnsureWindowThread();
+        if (_windowDispatcher != null)
+            action(_windowDispatcher);
+    }
+
     private static void EnsureWindowThread()
     {
         if (_windowThread != null && _windowThread.IsAlive)
