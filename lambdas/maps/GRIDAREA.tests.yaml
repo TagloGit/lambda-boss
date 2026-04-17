@@ -1,0 +1,44 @@
+tests:
+  - name: interior 3x3 around E5
+    args: ["=SEQUENCE(10,10)", "=E5", "=3", "=3"]
+    expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
+
+  - name: top-left corner A1 clamps to 2x2
+    args: ["=SEQUENCE(10,10)", "=A1", "=3", "=3"]
+    expected: [[1, 2], [11, 12]]
+
+  - name: top edge D1 clamps to 2x3
+    args: ["=SEQUENCE(10,10)", "=D1", "=3", "=3"]
+    expected: [[3, 4, 5], [13, 14, 15]]
+
+  - name: bottom-right J10 clamps to 2x2
+    args: ["=SEQUENCE(10,10)", "=J10", "=3", "=3"]
+    expected: [[89, 90], [99, 100]]
+
+  - name: 5x5 around E5
+    args: ["=SEQUENCE(10,10)", "=E5", "=5", "=5"]
+    expected: [[23, 24, 25, 26, 27], [33, 34, 35, 36, 37], [43, 44, 45, 46, 47], [53, 54, 55, 56, 57], [63, 64, 65, 66, 67]]
+
+  - name: asymmetric 3x5 around E5
+    args: ["=SEQUENCE(10,10)", "=E5", "=3", "=5"]
+    expected: [[33, 34, 35, 36, 37], [43, 44, 45, 46, 47], [53, 54, 55, 56, 57]]
+
+  - name: rows and cols default to 3x3
+    args: ["=SEQUENCE(10,10)", "=E5"]
+    expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
+
+  - name: cols defaults to rows (square)
+    args: ["=SEQUENCE(10,10)", "=E5", "=5"]
+    expected: [[23, 24, 25, 26, 27], [33, 34, 35, 36, 37], [43, 44, 45, 46, 47], [53, 54, 55, 56, 57], [63, 64, 65, 66, 67]]
+
+  - name: string address via INDIRECT
+    args: ["=SEQUENCE(10,10)", '=INDIRECT("E5")', "=3", "=3"]
+    expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
+
+  - name: single cell when rows=1
+    args: ["=SEQUENCE(10,10)", "=E5", "=1"]
+    expected: 45
+
+  - name: help text
+    args: []
+    expected_type: array

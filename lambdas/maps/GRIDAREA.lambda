@@ -1,0 +1,49 @@
+/*  FUNCTION NAME:      GRIDAREA
+    DESCRIPTION:*//**Extracts a rectangular neighborhood from grid around centerCell, clamped to the grid's bounds.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-17  Claude      Initial version
+                        2026-04-17  Claude      Swap grid/centerCell order; rename center to centerCell
+*/
+GRIDAREA = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [centerCell],
+    [rows],
+    [cols],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GRIDAREA(grid, centerCell, [rows], [cols])¶" &
+                "DESCRIPTION:   →Extracts a rectangular neighborhood from grid around centerCell, clamped to the grid's bounds.¶" &
+                "VERSION:       →Apr 17 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   grid           →(Required) The full grid range to extract from.¶" &
+                "   centerCell     →(Required) A cell reference for the center of the window (e.g. D4). If you have a string address, wrap it with INDIRECT, e.g. INDIRECT(""D4"").¶" &
+                "   rows           →(Optional) Height of the extraction window. Default 3.¶" &
+                "   cols           →(Optional) Width of the extraction window. Default = rows (square).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GRIDAREA(A1:I9, E5, 3, 3)¶" &
+                "Result         →3x3 array centered on E5, clamped to A1:I9¶" &
+                "With INDIRECT →=GRIDAREA(A1:I9, INDIRECT(""E5""), 3, 3)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+    //  Procedure
+        winR, IF(ISOMITTED(rows), 3, rows),
+        winC, IF(ISOMITTED(cols), winR, cols),
+        hr, INT(winR/2),
+        hc, INT(winC/2),
+        baseRow, IFERROR(MIN(ROW(grid)), 1),
+        baseCol, IFERROR(MIN(COLUMN(grid)), 1),
+        endRow, baseRow + ROWS(grid) - 1,
+        endCol, baseCol + COLUMNS(grid) - 1,
+        ctrRow, ROW(centerCell),
+        ctrCol, COLUMN(centerCell),
+        topRow, MAX(baseRow, ctrRow - hr),
+        botRow, MIN(endRow, ctrRow + hr),
+        leftCol, MAX(baseCol, ctrCol - hc),
+        rightCol, MIN(endCol, ctrCol + hc),
+        result, INDEX(grid, SEQUENCE(botRow - topRow + 1, 1, topRow - baseRow + 1), SEQUENCE(1, rightCol - leftCol + 1, leftCol - baseCol + 1)),
+        IF(Help?, Help, result)
+)
+);
