@@ -107,7 +107,13 @@ public static class LetToLambdaBuilder
         for (var i = 0; i < kept.Count; i++)
         {
             if (i > 0) sb.Append(", ");
-            sb.Append(kept[i].Choice.ParamName);
+            // Optional params are wrapped in [] in the signature per Excel's
+            // convention for optional-argument IntelliSense. The bare name is
+            // still used for the inner LET binding and body references.
+            if (kept[i].Choice.IsOptional)
+                sb.Append('[').Append(kept[i].Choice.ParamName).Append(']');
+            else
+                sb.Append(kept[i].Choice.ParamName);
         }
         if (kept.Count > 0)
             sb.Append(", ");

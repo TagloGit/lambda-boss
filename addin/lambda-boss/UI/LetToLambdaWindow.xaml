@@ -108,7 +108,7 @@
                                     ToolTip="Move up (Alt+Up)"
                                     Click="MoveUpButton_Click" />
                             <TextBlock DockPanel.Dock="Right"
-                                       Text="{Binding RhsPreview}"
+                                       Text="{Binding RhsPreviewDisplay}"
                                        Foreground="#808080"
                                        FontFamily="Consolas"
                                        FontSize="12"

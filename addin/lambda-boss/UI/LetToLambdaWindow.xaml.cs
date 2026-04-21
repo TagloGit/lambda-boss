@@ -19,6 +19,14 @@ public class LetInputRow : INotifyPropertyChanged
     public string RhsPreview { get; set; } = "";
 
     /// <summary>
+    ///     Display form of <see cref="RhsPreview" /> used by the row template.
+    ///     When the row is marked optional, the RHS becomes the default
+    ///     expression in the generated LAMBDA, so we prefix "default:" to
+    ///     make that role explicit.
+    /// </summary>
+    public string RhsPreviewDisplay => IsOptional ? $"default: {RhsPreview}" : RhsPreview;
+
+    /// <summary>
     ///     Zero-based position in the original LET source order. Used to keep
     ///     unchecked rows sorted by source order.
     /// </summary>
@@ -45,6 +53,7 @@ public class LetInputRow : INotifyPropertyChanged
             {
                 _isOptional = false;
                 OnChanged(nameof(IsOptional));
+                OnChanged(nameof(RhsPreviewDisplay));
             }
             OnChanged();
         }
@@ -58,6 +67,7 @@ public class LetInputRow : INotifyPropertyChanged
             if (_isOptional == value) return;
             _isOptional = value;
             OnChanged();
+            OnChanged(nameof(RhsPreviewDisplay));
         }
     }
 

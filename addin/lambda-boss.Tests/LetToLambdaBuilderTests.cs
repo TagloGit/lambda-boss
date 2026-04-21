@@ -165,7 +165,7 @@ public class LetToLambdaBuilderTests
             ("x", "x", true, false), ("y", "offset", true, true));
 
         Assert.Equal(
-            "=LAMBDA(x, offset, LET(offset, IF(ISOMITTED(offset), A1, offset), x + offset))",
+            "=LAMBDA(x, [offset], LET(offset, IF(ISOMITTED(offset), A1, offset), x + offset))",
             result);
     }
 
@@ -176,7 +176,7 @@ public class LetToLambdaBuilderTests
             ("x", "x", true, true), ("y", "offset", true, true));
 
         Assert.Equal(
-            "=LAMBDA(x, offset, LET(x, IF(ISOMITTED(x), 10, x), offset, IF(ISOMITTED(offset), A1, offset), x + offset))",
+            "=LAMBDA([x], [offset], LET(x, IF(ISOMITTED(x), 10, x), offset, IF(ISOMITTED(offset), A1, offset), x + offset))",
             result);
     }
 
@@ -190,7 +190,7 @@ public class LetToLambdaBuilderTests
             ("x", "x", true, true));
 
         Assert.Equal(
-            "=LAMBDA(x, LET(x, IF(ISOMITTED(x), 10, x), y, x + 1, x + y))",
+            "=LAMBDA([x], LET(x, IF(ISOMITTED(x), 10, x), y, x + 1, x + y))",
             result);
     }
 
@@ -214,7 +214,7 @@ public class LetToLambdaBuilderTests
             ("x", "a", true, false), ("y", "y", true, true));
 
         Assert.Equal(
-            "=LAMBDA(a, y, LET(y, IF(ISOMITTED(y), a, y), a + y))",
+            "=LAMBDA(a, [y], LET(y, IF(ISOMITTED(y), a, y), a + y))",
             result);
     }
 
@@ -225,7 +225,7 @@ public class LetToLambdaBuilderTests
             ("y", "offset", true, true), ("x", "base", true, false));
 
         Assert.Equal(
-            "=LAMBDA(offset, base, LET(offset, IF(ISOMITTED(offset), A1, offset), base + offset))",
+            "=LAMBDA([offset], base, LET(offset, IF(ISOMITTED(offset), A1, offset), base + offset))",
             result);
     }
 
@@ -246,7 +246,7 @@ public class LetToLambdaBuilderTests
             ("x", "x", true, true));
 
         Assert.Equal(
-            "=LAMBDA(x, LET(x, IF(ISOMITTED(x), 5, x), x + 1))",
+            "=LAMBDA([x], LET(x, IF(ISOMITTED(x), 5, x), x + 1))",
             result);
     }
 }
