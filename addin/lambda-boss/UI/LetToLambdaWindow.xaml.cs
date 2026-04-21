@@ -147,7 +147,16 @@ public partial class LetToLambdaWindow
         if (e.PropertyName == nameof(LetInputRow.Keep) && sender is LetInputRow row)
             RepositionAfterKeepChanged(row);
 
+        if (e.PropertyName is nameof(LetInputRow.IsOptional) or nameof(LetInputRow.Keep))
+            UpdateOptionalWarningVisibility();
+
         UpdateSaveEnabled();
+    }
+
+    private void UpdateOptionalWarningVisibility()
+    {
+        var anyOptional = _rows.Any(r => r.Keep && r.IsOptional);
+        OptionalWarningText.Visibility = anyOptional ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>

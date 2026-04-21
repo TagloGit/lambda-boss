@@ -69,41 +69,17 @@ public static class ConvertLetToLambdaCommand
 
                 if (result == null) return;
 
-                string generatedFormula;
                 try
                 {
-                    generatedFormula = LetToLambdaBuilder.Build(result);
+                    var generatedFormula = LetToLambdaBuilder.Build(result);
+                    LambdaLoader.InjectLambda(result.LambdaName, generatedFormula);
+                    Logger.Info($"ConvertLetToLambda: Created '{result.LambdaName}'");
                 }
                 catch (Exception ex)
                 {
                     Logger.Error("ConvertLetToLambda/Build", ex);
                     ShowError($"Failed to generate LAMBDA: {ex.Message}");
-                    return;
                 }
-
-                // Names.Add anchors relative references in the formula to the
-                // active cell at the time of the call. With the WPF popup
-                // intercepting focus, the active cell can drift away from the
-                // source cell before we inject — shifting any baked-in refs
-                // (e.g. optional-param defaults) by the offset between the
-                // drifted anchor and the source cell. Re-select the source
-                // cell on Excel's macro thread to anchor correctly.
-                ExcelAsyncUtil.QueueAsMacro(() =>
-                {
-                    try
-                    {
-                        try { activeCell.Select(); }
-                        catch (Exception ex) { Logger.Error("ConvertLetToLambda/ReSelect", ex); }
-
-                        LambdaLoader.InjectLambda(result.LambdaName, generatedFormula);
-                        Logger.Info($"ConvertLetToLambda: Created '{result.LambdaName}'");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Error("ConvertLetToLambda/Inject", ex);
-                        ShowError($"Failed to register LAMBDA: {ex.Message}");
-                    }
-                });
             });
         }
         catch (Exception ex)

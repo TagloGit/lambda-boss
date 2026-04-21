@@ -92,11 +92,20 @@ public static class LetToLambdaBuilder
         // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
         // They appear before internal bindings so internal bindings can
         // reference the defaulted value.
+        // Optional bindings wrap each optional kept param with an
+        // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
+        // They appear before internal bindings so internal bindings can
+        // reference the defaulted value. Cell references in the default are
+        // forced absolute: when Excel stores a LAMBDA as a workbook Name,
+        // relative refs shift by the offset between the active cell at
+        // registration time and the calling cell, which in practice baked
+        // wrong defaults into the LAMBDA. Absolute refs resolve the same
+        // regardless of where the LAMBDA is invoked.
         var optionalBindings = kept
             .Where(k => k.Choice.IsOptional)
             .Select(k => new LetBinding(
                 k.Choice.ParamName,
-                $"IF(ISOMITTED({k.Choice.ParamName}), {ApplyRenames(k.Binding.RhsText, renames)}, {k.Choice.ParamName})",
+                $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(k.Binding.RhsText, renames))}, {k.Choice.ParamName})",
                 IsCalculation: false))
             .ToList();
 
@@ -171,6 +180,42 @@ public static class LetToLambdaBuilder
                     string.Equals(k, m.Value, StringComparison.OrdinalIgnoreCase));
                 return renames[key];
             });
+            result.Append(rewritten);
+            i = segEnd;
+        }
+        return result.ToString();
+    }
+
+    /// <summary>
+    ///     Forces any A1-style cell reference in <paramref name="text" /> to
+    ///     fully absolute form (e.g. <c>A1</c>, <c>$A1</c>, <c>A$1</c> all
+    ///     become <c>$A$1</c>). Ranges like <c>A1:B5</c> and sheet-qualified
+    ///     refs like <c>Sheet1!A1</c> are handled; tokens inside string
+    ///     literals are left alone. Used so baked-in default expressions in
+    ///     optional-param LAMBDAs don't shift when the Name is invoked.
+    /// </summary>
+    internal static string AbsolutizeCellRefs(string text)
+    {
+        var regex = new Regex(
+            @"(?<![A-Za-z0-9_.])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_.!])");
+
+        var result = new StringBuilder();
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == '"')
+            {
+                var end = SkipString(text, i);
+                result.Append(text, i, end - i);
+                i = end;
+                continue;
+            }
+
+            var nextQuote = text.IndexOf('"', i);
+            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
+            var segment = text[i..segEnd];
+            var rewritten = regex.Replace(segment,
+                m => "$" + m.Groups[2].Value + "$" + m.Groups[4].Value);
             result.Append(rewritten);
             i = segEnd;
         }

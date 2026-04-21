@@ -161,11 +161,13 @@ public class LetToLambdaBuilderTests
     [Fact]
     public void OptionalSingleParam_WrapsWithIsOmitted()
     {
+        // Cell refs in optional defaults are absolute-ized to avoid shifting
+        // when the registered LAMBDA is invoked from any cell.
         var result = BuildWithOptional("=LET(x, 10, y, A1, x + y)", "Adder",
             ("x", "x", true, false), ("y", "offset", true, true));
 
         Assert.Equal(
-            "=LAMBDA(x, [offset], LET(offset, IF(ISOMITTED(offset), A1, offset), x + offset))",
+            "=LAMBDA(x, [offset], LET(offset, IF(ISOMITTED(offset), $A$1, offset), x + offset))",
             result);
     }
 
@@ -176,7 +178,7 @@ public class LetToLambdaBuilderTests
             ("x", "x", true, true), ("y", "offset", true, true));
 
         Assert.Equal(
-            "=LAMBDA([x], [offset], LET(x, IF(ISOMITTED(x), 10, x), offset, IF(ISOMITTED(offset), A1, offset), x + offset))",
+            "=LAMBDA([x], [offset], LET(x, IF(ISOMITTED(x), 10, x), offset, IF(ISOMITTED(offset), $A$1, offset), x + offset))",
             result);
     }
 
@@ -225,7 +227,7 @@ public class LetToLambdaBuilderTests
             ("y", "offset", true, true), ("x", "base", true, false));
 
         Assert.Equal(
-            "=LAMBDA([offset], base, LET(offset, IF(ISOMITTED(offset), A1, offset), base + offset))",
+            "=LAMBDA([offset], base, LET(offset, IF(ISOMITTED(offset), $A$1, offset), base + offset))",
             result);
     }
 
@@ -235,6 +237,24 @@ public class LetToLambdaBuilderTests
         Assert.Throws<InvalidOperationException>(() =>
             BuildWithOptional("=LET(x, 1, y, 2, x + y)", "Bad",
                 ("x", "x", false, true), ("y", "y", true, false)));
+    }
+
+    [Theory]
+    [InlineData("A1", "$A$1")]
+    [InlineData("$A1", "$A$1")]
+    [InlineData("A$1", "$A$1")]
+    [InlineData("$A$1", "$A$1")]
+    [InlineData("A1:B5", "$A$1:$B$5")]
+    [InlineData("Sheet1!A1", "Sheet1!$A$1")]
+    [InlineData("Sheet1!A1:B5", "Sheet1!$A$1:$B$5")]
+    [InlineData("SUM(A1, B2)", "SUM($A$1, $B$2)")]
+    [InlineData("\"A1 is a ref\"", "\"A1 is a ref\"")]
+    [InlineData("IF(ISOMITTED(x), 5, x)", "IF(ISOMITTED(x), 5, x)")]
+    [InlineData("offset", "offset")]
+    [InlineData("42", "42")]
+    public void AbsolutizeCellRefs_HandlesCommonShapes(string input, string expected)
+    {
+        Assert.Equal(expected, LetToLambdaBuilder.AbsolutizeCellRefs(input));
     }
 
     [Fact]
