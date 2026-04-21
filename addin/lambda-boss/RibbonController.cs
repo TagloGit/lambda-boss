@@ -33,6 +33,12 @@ public class RibbonController : ExcelRibbon
                   imageMso='FunctionWizard'
                   onAction='OnLetToLambda'
                   screentip='Convert the active cell&apos;s =LET(...) formula into a workbook-scoped LAMBDA' />
+          <button id='EditLambdaButton'
+                  label='Edit Lambda'
+                  size='large'
+                  imageMso='Edit'
+                  onAction='OnEditLambda'
+                  screentip='Expand the active cell&apos;s LAMBDA call back into an equivalent =LET(...) for editing' />
         </group>
         <group id='ManageGroup' label='Manage'>
           <button id='SettingsButton'
@@ -96,6 +102,11 @@ public class RibbonController : ExcelRibbon
     public void OnLetToLambda(IRibbonControl control)
     {
         ConvertLetToLambdaCommand.Run();
+    }
+
+    public void OnEditLambda(IRibbonControl control)
+    {
+        EditLambdaCommand.Run();
     }
 
     public void OnAbout(IRibbonControl control)
