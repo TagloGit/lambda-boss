@@ -24,7 +24,8 @@ NTH = LAMBDA(
         Help?, ISOMITTED(arr),
     //  Procedure
         flat, TOCOL(arr),
-        result, IF(n < 0, INDEX(flat, ROWS(flat) + n + 1), INDEX(flat, n)),
+        idx, IF(n < 0, ROWS(flat) + n + 1, n),
+        result, @INDEX(flat, idx, 1),
         IF(Help?, Help, result)
 )
 );
