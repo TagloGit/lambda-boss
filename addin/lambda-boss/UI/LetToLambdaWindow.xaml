@@ -73,6 +73,14 @@
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Uncheck to hardcode this binding inside the LAMBDA body" />
+                            <CheckBox DockPanel.Dock="Left"
+                                      Content="Optional"
+                                      IsChecked="{Binding IsOptional, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding Keep}"
+                                      Foreground="#cccccc"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0"
+                                      ToolTip="Caller may omit this argument; defaults to the original RHS expression" />
                             <Button DockPanel.Dock="Right"
                                     Content="&#x25BC;"
                                     Width="22"

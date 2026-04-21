@@ -6,7 +6,11 @@ namespace LambdaBoss;
 /// <summary>
 ///     User's decision for a single LET binding whose RHS is a value.
 /// </summary>
-public record InputChoice(string OriginalBindingName, string ParamName, bool Keep);
+public record InputChoice(
+    string OriginalBindingName,
+    string ParamName,
+    bool Keep,
+    bool IsOptional = false);
 
 public record LambdaGenerationRequest(
     string LambdaName,
@@ -63,6 +67,13 @@ public static class LetToLambdaBuilder
                 throw new InvalidOperationException(
                     $"Parameter name '{p}' collides with a retained LET binding name.");
 
+        // Optional flag only makes sense on kept rows.
+        var invalidOptional = request.Inputs
+            .FirstOrDefault(c => c.IsOptional && !c.Keep);
+        if (invalidOptional != null)
+            throw new InvalidOperationException(
+                $"Input '{invalidOptional.OriginalBindingName}' is marked optional but not kept.");
+
         // Build rename map for kept inputs where chosen name differs from original.
         var renames = kept
             .Where(k => !string.Equals(k.Binding.Name, k.Choice.ParamName, StringComparison.Ordinal))
@@ -77,6 +88,18 @@ public static class LetToLambdaBuilder
             .Select(b => new LetBinding(b.Name, ApplyRenames(b.RhsText, renames), b.IsCalculation))
             .ToList();
 
+        // Optional bindings wrap each optional kept param with an
+        // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
+        // They appear before internal bindings so internal bindings can
+        // reference the defaulted value.
+        var optionalBindings = kept
+            .Where(k => k.Choice.IsOptional)
+            .Select(k => new LetBinding(
+                k.Choice.ParamName,
+                $"IF(ISOMITTED({k.Choice.ParamName}), {ApplyRenames(k.Binding.RhsText, renames)}, {k.Choice.ParamName})",
+                IsCalculation: false))
+            .ToList();
+
         var body = ApplyRenames(parsed.Body, renames);
 
         var sb = new StringBuilder();
@@ -89,14 +112,15 @@ public static class LetToLambdaBuilder
         if (kept.Count > 0)
             sb.Append(", ");
 
-        if (internalBindings.Count == 0)
+        var innerBindings = optionalBindings.Concat(internalBindings).ToList();
+        if (innerBindings.Count == 0)
         {
             sb.Append(body);
         }
         else
         {
             sb.Append("LET(");
-            foreach (var ib in internalBindings)
+            foreach (var ib in innerBindings)
             {
                 sb.Append(ib.Name).Append(", ").Append(ib.RhsText).Append(", ");
             }

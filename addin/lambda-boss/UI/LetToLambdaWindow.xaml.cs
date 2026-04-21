@@ -11,6 +11,7 @@ public class LetInputRow : INotifyPropertyChanged
 {
     private bool _canMoveDown;
     private bool _canMoveUp;
+    private bool _isOptional;
     private bool _keep = true;
     private string _paramName = "";
 
@@ -40,6 +41,22 @@ public class LetInputRow : INotifyPropertyChanged
         {
             if (_keep == value) return;
             _keep = value;
+            if (!_keep && _isOptional)
+            {
+                _isOptional = false;
+                OnChanged(nameof(IsOptional));
+            }
+            OnChanged();
+        }
+    }
+
+    public bool IsOptional
+    {
+        get => _isOptional;
+        set
+        {
+            if (_isOptional == value) return;
+            _isOptional = value;
             OnChanged();
         }
     }
@@ -322,7 +339,7 @@ public partial class LetToLambdaWindow
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         var inputs = _rows
-            .Select(r => new InputChoice(r.BindingName, r.ParamName.Trim(), r.Keep))
+            .Select(r => new InputChoice(r.BindingName, r.ParamName.Trim(), r.Keep, r.IsOptional))
             .ToList();
 
         Result = new LambdaGenerationRequest(LambdaNameBox.Text.Trim(), _parsed, inputs);
