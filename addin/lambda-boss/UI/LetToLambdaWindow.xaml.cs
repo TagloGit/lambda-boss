@@ -11,11 +11,20 @@ public class LetInputRow : INotifyPropertyChanged
 {
     private bool _canMoveDown;
     private bool _canMoveUp;
+    private bool _isOptional;
     private bool _keep = true;
     private string _paramName = "";
 
     public string BindingName { get; set; } = "";
     public string RhsPreview { get; set; } = "";
+
+    /// <summary>
+    ///     Display form of <see cref="RhsPreview" /> used by the row template.
+    ///     When the row is marked optional, the RHS becomes the default
+    ///     expression in the generated LAMBDA, so we prefix "default:" to
+    ///     make that role explicit.
+    /// </summary>
+    public string RhsPreviewDisplay => IsOptional ? $"default: {RhsPreview}" : RhsPreview;
 
     /// <summary>
     ///     Zero-based position in the original LET source order. Used to keep
@@ -40,7 +49,25 @@ public class LetInputRow : INotifyPropertyChanged
         {
             if (_keep == value) return;
             _keep = value;
+            if (!_keep && _isOptional)
+            {
+                _isOptional = false;
+                OnChanged(nameof(IsOptional));
+                OnChanged(nameof(RhsPreviewDisplay));
+            }
             OnChanged();
+        }
+    }
+
+    public bool IsOptional
+    {
+        get => _isOptional;
+        set
+        {
+            if (_isOptional == value) return;
+            _isOptional = value;
+            OnChanged();
+            OnChanged(nameof(RhsPreviewDisplay));
         }
     }
 
@@ -120,7 +147,16 @@ public partial class LetToLambdaWindow
         if (e.PropertyName == nameof(LetInputRow.Keep) && sender is LetInputRow row)
             RepositionAfterKeepChanged(row);
 
+        if (e.PropertyName is nameof(LetInputRow.IsOptional) or nameof(LetInputRow.Keep))
+            UpdateOptionalWarningVisibility();
+
         UpdateSaveEnabled();
+    }
+
+    private void UpdateOptionalWarningVisibility()
+    {
+        var anyOptional = _rows.Any(r => r.Keep && r.IsOptional);
+        OptionalWarningText.Visibility = anyOptional ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -322,7 +358,7 @@ public partial class LetToLambdaWindow
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         var inputs = _rows
-            .Select(r => new InputChoice(r.BindingName, r.ParamName.Trim(), r.Keep))
+            .Select(r => new InputChoice(r.BindingName, r.ParamName.Trim(), r.Keep, r.IsOptional))
             .ToList();
 
         Result = new LambdaGenerationRequest(LambdaNameBox.Text.Trim(), _parsed, inputs);

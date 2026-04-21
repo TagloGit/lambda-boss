@@ -21,6 +21,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
@@ -73,6 +74,14 @@
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Uncheck to hardcode this binding inside the LAMBDA body" />
+                            <CheckBox DockPanel.Dock="Left"
+                                      Content="Optional"
+                                      IsChecked="{Binding IsOptional, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      IsEnabled="{Binding Keep}"
+                                      Foreground="#cccccc"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,8,0"
+                                      ToolTip="Caller may omit this argument; defaults to the original RHS expression" />
                             <Button DockPanel.Dock="Right"
                                     Content="&#x25BC;"
                                     Width="22"
@@ -100,7 +109,7 @@
                                     ToolTip="Move up (Alt+Up)"
                                     Click="MoveUpButton_Click" />
                             <TextBlock DockPanel.Dock="Right"
-                                       Text="{Binding RhsPreview}"
+                                       Text="{Binding RhsPreviewDisplay}"
                                        Foreground="#808080"
                                        FontFamily="Consolas"
                                        FontSize="12"
@@ -125,7 +134,16 @@
             </ItemsControl>
         </ScrollViewer>
 
-        <DockPanel Grid.Row="5" Margin="0,12,0,0">
+        <TextBlock x:Name="OptionalWarningText"
+                   Grid.Row="5"
+                   Margin="0,8,0,0"
+                   Foreground="#d7ba7d"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   Visibility="Collapsed"
+                   Text="Cell references in optional defaults are made absolute (e.g. $A$1) so the LAMBDA resolves them the same regardless of where it's called from." />
+
+        <DockPanel Grid.Row="6" Margin="0,12,0,0">
             <Button x:Name="CancelButton"
                     DockPanel.Dock="Right"
                     Content="Cancel"

@@ -6,7 +6,11 @@ namespace LambdaBoss;
 /// <summary>
 ///     User's decision for a single LET binding whose RHS is a value.
 /// </summary>
-public record InputChoice(string OriginalBindingName, string ParamName, bool Keep);
+public record InputChoice(
+    string OriginalBindingName,
+    string ParamName,
+    bool Keep,
+    bool IsOptional = false);
 
 public record LambdaGenerationRequest(
     string LambdaName,
@@ -63,6 +67,13 @@ public static class LetToLambdaBuilder
                 throw new InvalidOperationException(
                     $"Parameter name '{p}' collides with a retained LET binding name.");
 
+        // Optional flag only makes sense on kept rows.
+        var invalidOptional = request.Inputs
+            .FirstOrDefault(c => c.IsOptional && !c.Keep);
+        if (invalidOptional != null)
+            throw new InvalidOperationException(
+                $"Input '{invalidOptional.OriginalBindingName}' is marked optional but not kept.");
+
         // Build rename map for kept inputs where chosen name differs from original.
         var renames = kept
             .Where(k => !string.Equals(k.Binding.Name, k.Choice.ParamName, StringComparison.Ordinal))
@@ -77,6 +88,27 @@ public static class LetToLambdaBuilder
             .Select(b => new LetBinding(b.Name, ApplyRenames(b.RhsText, renames), b.IsCalculation))
             .ToList();
 
+        // Optional bindings wrap each optional kept param with an
+        // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
+        // They appear before internal bindings so internal bindings can
+        // reference the defaulted value.
+        // Optional bindings wrap each optional kept param with an
+        // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
+        // They appear before internal bindings so internal bindings can
+        // reference the defaulted value. Cell references in the default are
+        // forced absolute: when Excel stores a LAMBDA as a workbook Name,
+        // relative refs shift by the offset between the active cell at
+        // registration time and the calling cell, which in practice baked
+        // wrong defaults into the LAMBDA. Absolute refs resolve the same
+        // regardless of where the LAMBDA is invoked.
+        var optionalBindings = kept
+            .Where(k => k.Choice.IsOptional)
+            .Select(k => new LetBinding(
+                k.Choice.ParamName,
+                $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(k.Binding.RhsText, renames))}, {k.Choice.ParamName})",
+                IsCalculation: false))
+            .ToList();
+
         var body = ApplyRenames(parsed.Body, renames);
 
         var sb = new StringBuilder();
@@ -84,19 +116,26 @@ public static class LetToLambdaBuilder
         for (var i = 0; i < kept.Count; i++)
         {
             if (i > 0) sb.Append(", ");
-            sb.Append(kept[i].Choice.ParamName);
+            // Optional params are wrapped in [] in the signature per Excel's
+            // convention for optional-argument IntelliSense. The bare name is
+            // still used for the inner LET binding and body references.
+            if (kept[i].Choice.IsOptional)
+                sb.Append('[').Append(kept[i].Choice.ParamName).Append(']');
+            else
+                sb.Append(kept[i].Choice.ParamName);
         }
         if (kept.Count > 0)
             sb.Append(", ");
 
-        if (internalBindings.Count == 0)
+        var innerBindings = optionalBindings.Concat(internalBindings).ToList();
+        if (innerBindings.Count == 0)
         {
             sb.Append(body);
         }
         else
         {
             sb.Append("LET(");
-            foreach (var ib in internalBindings)
+            foreach (var ib in innerBindings)
             {
                 sb.Append(ib.Name).Append(", ").Append(ib.RhsText).Append(", ");
             }
@@ -141,6 +180,42 @@ public static class LetToLambdaBuilder
                     string.Equals(k, m.Value, StringComparison.OrdinalIgnoreCase));
                 return renames[key];
             });
+            result.Append(rewritten);
+            i = segEnd;
+        }
+        return result.ToString();
+    }
+
+    /// <summary>
+    ///     Forces any A1-style cell reference in <paramref name="text" /> to
+    ///     fully absolute form (e.g. <c>A1</c>, <c>$A1</c>, <c>A$1</c> all
+    ///     become <c>$A$1</c>). Ranges like <c>A1:B5</c> and sheet-qualified
+    ///     refs like <c>Sheet1!A1</c> are handled; tokens inside string
+    ///     literals are left alone. Used so baked-in default expressions in
+    ///     optional-param LAMBDAs don't shift when the Name is invoked.
+    /// </summary>
+    internal static string AbsolutizeCellRefs(string text)
+    {
+        var regex = new Regex(
+            @"(?<![A-Za-z0-9_.])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_.!])");
+
+        var result = new StringBuilder();
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == '"')
+            {
+                var end = SkipString(text, i);
+                result.Append(text, i, end - i);
+                i = end;
+                continue;
+            }
+
+            var nextQuote = text.IndexOf('"', i);
+            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
+            var segment = text[i..segEnd];
+            var rewritten = regex.Replace(segment,
+                m => "$" + m.Groups[2].Value + "$" + m.Groups[4].Value);
             result.Append(rewritten);
             i = segEnd;
         }
