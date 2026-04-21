@@ -16,3 +16,8 @@ obj/
 # VS / Rider
 .vs/
 .idea/
+
+# Installer
+installer/output/
+installer/bundled-runtime/*
+!installer/bundled-runtime/README.md
