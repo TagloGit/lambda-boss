@@ -31,9 +31,16 @@ public static class LetToLambdaBuilder
                     $"No input choice provided for binding '{b.Name}'.");
         }
 
-        var kept = parsed.Bindings
-            .Where(b => !b.IsCalculation && choicesByName[b.Name].Keep)
-            .Select(b => (Binding: b, Choice: choicesByName[b.Name]))
+        var bindingsByName = parsed.Bindings
+            .Where(b => !b.IsCalculation)
+            .ToDictionary(b => b.Name, b => b, StringComparer.OrdinalIgnoreCase);
+
+        // Kept bindings follow the order of request.Inputs, which lets the
+        // caller control the generated LAMBDA's parameter order independently
+        // of the LET source order.
+        var kept = request.Inputs
+            .Where(c => c.Keep)
+            .Select(c => (Binding: bindingsByName[c.OriginalBindingName], Choice: c))
             .ToList();
 
         // Validate param names: non-empty, unique, no collision with non-kept binding names.

@@ -106,4 +106,45 @@ public class LetToLambdaBuilderTests
 
         Assert.Equal("=LAMBDA(LET(m, MAX(A1:A10), m + 1))", result);
     }
+
+    [Fact]
+    public void KeptInputs_FollowInputListOrder()
+    {
+        // User reorders kept inputs: y first, then x.
+        var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
+            ("y", "y", true), ("x", "x", true));
+
+        Assert.Equal("=LAMBDA(y, x, SUM(x, y))", result);
+    }
+
+    [Fact]
+    public void ReorderedKeptInputs_InternalBindingsStayInSourceOrder()
+    {
+        // x and z kept and reordered; y is an internal calculation that must
+        // stay in its source position relative to other internal bindings.
+        var result = Build("=LET(x, 1, y, MAX(x), z, 3, x + y + z)", "Mix",
+            ("z", "z", true), ("x", "x", true));
+
+        Assert.Equal("=LAMBDA(z, x, LET(y, MAX(x), x + y + z))", result);
+    }
+
+    [Fact]
+    public void ReorderWithRename_RenamesThroughBody()
+    {
+        var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
+            ("y", "second", true), ("x", "first", true));
+
+        Assert.Equal("=LAMBDA(second, first, SUM(first, second))", result);
+    }
+
+    [Fact]
+    public void UncheckedInputs_PositionInInputListIgnoredForSignature()
+    {
+        // z appears first in request.Inputs but is unchecked, so it should
+        // not influence the LAMBDA signature; kept order is still y, x.
+        var result = Build("=LET(x, 1, y, 2, z, 3, x + y + z)", "Skip",
+            ("z", "z", false), ("y", "y", true), ("x", "x", true));
+
+        Assert.Equal("=LAMBDA(y, x, LET(z, 3, x + y + z))", result);
+    }
 }

@@ -9,6 +9,10 @@
         ResizeMode="CanResizeWithGrip"
         Background="#1e1e1e">
 
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -61,13 +65,40 @@
             <ItemsControl x:Name="InputsList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <DockPanel Margin="4,3">
+                        <DockPanel Margin="4,3"
+                                   PreviewKeyDown="InputRow_PreviewKeyDown">
                             <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
                             <CheckBox DockPanel.Dock="Left"
                                       IsChecked="{Binding Keep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Uncheck to hardcode this binding inside the LAMBDA body" />
+                            <Button DockPanel.Dock="Left"
+                                    Content="&#x25B2;"
+                                    Width="22"
+                                    Padding="0"
+                                    Margin="0,0,2,0"
+                                    Background="#2d2d2d"
+                                    Foreground="#cccccc"
+                                    BorderBrush="#3e3e3e"
+                                    BorderThickness="1"
+                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
+                                    IsEnabled="{Binding CanMoveUp}"
+                                    ToolTip="Move up (Alt+Up)"
+                                    Click="MoveUpButton_Click" />
+                            <Button DockPanel.Dock="Left"
+                                    Content="&#x25BC;"
+                                    Width="22"
+                                    Padding="0"
+                                    Margin="0,0,8,0"
+                                    Background="#2d2d2d"
+                                    Foreground="#cccccc"
+                                    BorderBrush="#3e3e3e"
+                                    BorderThickness="1"
+                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
+                                    IsEnabled="{Binding CanMoveDown}"
+                                    ToolTip="Move down (Alt+Down)"
+                                    Click="MoveDownButton_Click" />
                             <TextBlock DockPanel.Dock="Right"
                                        Text="{Binding RhsPreview}"
                                        Foreground="#808080"
