@@ -134,8 +134,11 @@ internal static class EditLambdaCommand
     /// <summary>
     ///     Builds a <c>=LET(param1, arg1, ..., body)</c> formula that binds
     ///     as many of the LAMBDA's parameters as call-site arguments were
-    ///     provided. Throws when the caller passed more arguments than the
-    ///     LAMBDA declares.
+    ///     provided. When the LAMBDA body is itself a LET, its bindings are
+    ///     folded into the outer LET so the result is a single flat LET
+    ///     rather than a LET-inside-LET. Output is formatted with newlines so
+    ///     it renders legibly in Excel's formula bar. Throws when the caller
+    ///     passed more arguments than the LAMBDA declares.
     /// </summary>
     internal static string BuildExpandedLet(LambdaSignature signature, IReadOnlyList<string> arguments)
     {
@@ -149,20 +152,74 @@ internal static class EditLambdaCommand
                 + $"but {arguments.Count} were provided.");
         }
 
-        if (arguments.Count == 0)
-            return "=" + signature.Body;
+        var pairs = new List<(string Name, string Value)>();
+        for (var i = 0; i < arguments.Count; i++)
+            pairs.Add((signature.Parameters[i], arguments[i]));
+
+        string body;
+        if (TryParseBodyAsLet(signature.Body, out var innerBindings, out var innerBody))
+        {
+            pairs.AddRange(innerBindings);
+            body = innerBody;
+        }
+        else
+        {
+            body = signature.Body;
+        }
+
+        if (pairs.Count == 0)
+            return "=" + body;
 
         var sb = new StringBuilder();
-        sb.Append("=LET(");
-        for (var i = 0; i < arguments.Count; i++)
-        {
-            sb.Append(signature.Parameters[i])
-              .Append(", ")
-              .Append(arguments[i])
-              .Append(", ");
-        }
-        sb.Append(signature.Body).Append(')');
+        sb.Append('=');
+        FormulaFormatter.AppendLet(sb, indent: 0, pairs, body);
         return sb.ToString();
+    }
+
+    private static readonly Regex NestedLetPrefix = new(
+        @"^LET\s*\(",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     Detects whether <paramref name="body" /> is exactly a single
+    ///     <c>LET(...)</c> expression (no leading or trailing content) and
+    ///     extracts its bindings and inner body if so. Returns false when the
+    ///     body isn't a pure LET or the LET is malformed.
+    /// </summary>
+    private static bool TryParseBodyAsLet(
+        string body,
+        out List<(string Name, string Value)> bindings,
+        out string innerBody)
+    {
+        bindings = new List<(string, string)>();
+        innerBody = string.Empty;
+
+        var trimmed = body.TrimStart();
+        var leading = body.Length - trimmed.Length;
+        var match = NestedLetPrefix.Match(trimmed);
+        if (!match.Success)
+            return false;
+
+        var openParen = leading + match.Index + match.Length - 1;
+        var closeParen = LetParser.FindMatchingClose(body, openParen);
+        if (closeParen < 0)
+            return false;
+
+        for (var i = closeParen + 1; i < body.Length; i++)
+        {
+            if (!char.IsWhiteSpace(body[i]))
+                return false;
+        }
+
+        var inner = body[(openParen + 1)..closeParen];
+        var args = LetParser.SplitTopLevelCommas(inner).Select(a => a.Trim()).ToList();
+        if (args.Count < 3 || args.Count % 2 == 0)
+            return false;
+
+        for (var i = 0; i < args.Count - 1; i += 2)
+            bindings.Add((args[i], args[i + 1]));
+        innerBody = args[^1];
+        return true;
     }
 
     private static string? ResolveName(dynamic workbook, string name)

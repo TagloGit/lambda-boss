@@ -111,38 +111,39 @@ public static class LetToLambdaBuilder
 
         var body = ApplyRenames(parsed.Body, renames);
 
-        var sb = new StringBuilder();
-        sb.Append("=LAMBDA(");
-        for (var i = 0; i < kept.Count; i++)
-        {
-            if (i > 0) sb.Append(", ");
-            // Optional params are wrapped in [] in the signature per Excel's
-            // convention for optional-argument IntelliSense. The bare name is
-            // still used for the inner LET binding and body references.
-            if (kept[i].Choice.IsOptional)
-                sb.Append('[').Append(kept[i].Choice.ParamName).Append(']');
-            else
-                sb.Append(kept[i].Choice.ParamName);
-        }
-        if (kept.Count > 0)
-            sb.Append(", ");
+        // Optional params wrap their name in [] per Excel's IntelliSense
+        // convention; the bare name is still used for inner-LET bindings and
+        // body references.
+        var paramSignatures = kept
+            .Select(k => k.Choice.IsOptional
+                ? $"[{k.Choice.ParamName}]"
+                : k.Choice.ParamName)
+            .ToList();
 
         var innerBindings = optionalBindings.Concat(internalBindings).ToList();
+
+        string lambdaBody;
         if (innerBindings.Count == 0)
         {
-            sb.Append(body);
+            lambdaBody = body;
         }
         else
         {
-            sb.Append("LET(");
-            foreach (var ib in innerBindings)
-            {
-                sb.Append(ib.Name).Append(", ").Append(ib.RhsText).Append(", ");
-            }
-            sb.Append(body).Append(')');
+            // LET sits one level below the LAMBDA (indent 4); its bindings sit
+            // two levels below (indent 8). Pre-format the block and pass it to
+            // AppendLambda so the LAMBDA layout stays uniform.
+            var bodyBuilder = new StringBuilder();
+            FormulaFormatter.AppendLet(
+                bodyBuilder,
+                FormulaFormatter.IndentStep,
+                innerBindings.Select(ib => (ib.Name, ib.RhsText)).ToList(),
+                body);
+            lambdaBody = bodyBuilder.ToString();
         }
 
-        sb.Append(')');
+        var sb = new StringBuilder();
+        sb.Append('=');
+        FormulaFormatter.AppendLambda(sb, indent: 0, paramSignatures, lambdaBody);
         return sb.ToString();
     }
 

@@ -6,6 +6,8 @@ namespace LambdaBoss.Tests;
 
 public class EditLambdaCommandTests
 {
+    private static string Lines(params string[] lines) => string.Join("\n", lines);
+
     [Fact]
     public void TryParseLambdaCall_SimpleCall_ReturnsNameAndArgs()
     {
@@ -110,12 +112,17 @@ public class EditLambdaCommandTests
     }
 
     [Fact]
-    public void BuildExpandedLet_FullArgs_EmitsLet()
+    public void BuildExpandedLet_FullArgs_EmitsFormattedLet()
     {
         var sig = new LambdaSignature(new[] { "x", "y" }, "x * y + 1");
         var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1 + 2" });
 
-        Assert.Equal("=LET(x, A1, y, B1 + 2, x * y + 1)", result);
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, B1 + 2,",
+            "    x * y + 1",
+            ")"), result);
     }
 
     [Fact]
@@ -133,7 +140,11 @@ public class EditLambdaCommandTests
         var sig = new LambdaSignature(new[] { "x", "y", "z" }, "x + y + z");
         var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1" });
 
-        Assert.Equal("=LET(x, A1, x + y + z)", result);
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    x + y + z",
+            ")"), result);
     }
 
     [Fact]
@@ -159,12 +170,73 @@ public class EditLambdaCommandTests
     [Fact]
     public void BuildExpandedLet_OptionalParamsStripped_GeneratesBareNamesInLet()
     {
-        // LAMBDA with an optional [y] still expands into a LET using the bare
-        // parameter name `y`.
         var sig = LambdaSignatureParser.Parse("=LAMBDA(x, [y], x + y)");
         var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" });
 
-        Assert.Equal("=LET(x, A1, y, B1, x + y)", result);
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, B1,",
+            "    x + y",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_BodyIsLet_FoldsIntoOuterLet()
+    {
+        // Nested LET in body should fold into the outer LET so the result is
+        // a single flat LET rather than LET-in-LET.
+        var sig = LambdaSignatureParser.Parse(
+            "=LAMBDA(x, y, LET(m, MAX(x), m + y))");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" });
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, B1,",
+            "    m, MAX(x),",
+            "    m + y",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_BodyIsMultiLineLet_FoldsCorrectly()
+    {
+        // Mirrors what Edit Lambda sees after LET to LAMBDA formatted the
+        // stored LAMBDA with newlines.
+        var refersTo = Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    y,",
+            "    LET(",
+            "        m, MAX(x),",
+            "        m + y",
+            "    )",
+            ")");
+        var sig = LambdaSignatureParser.Parse(refersTo);
+        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" });
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, B1,",
+            "    m, MAX(x),",
+            "    m + y",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_BodyContainsLetInsideExpression_DoesNotFold()
+    {
+        // Body has a LET but it's embedded in a larger expression.
+        var sig = new LambdaSignature(new[] { "x" }, "LET(a, x, a) + 1");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1" });
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    LET(a, x, a) + 1",
+            ")"), result);
     }
 
     [Fact]
@@ -180,6 +252,37 @@ public class EditLambdaCommandTests
         var sig = LambdaSignatureParser.Parse(refersTo);
         var letFormula = EditLambdaCommand.BuildExpandedLet(sig, call.Arguments);
 
-        Assert.Equal("=LET(x, A1, y, B1 + 2, x * y + 1)", letFormula);
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, B1 + 2,",
+            "    x * y + 1",
+            ")"), letFormula);
+    }
+
+    [Fact]
+    public void RoundTrip_LetToLambdaThenEditLambda_FlattensToOriginalShape()
+    {
+        // Simulate the full round trip: author a LET, convert to LAMBDA, then
+        // call it and expand via Edit Lambda. The expanded LET should fold
+        // the internal binding back into a single flat LET.
+        var parsed = LetParser.Parse("=LET(x, 5, y, MAX(x), x + y)");
+        var request = new LambdaGenerationRequest(
+            "MyCalc",
+            parsed,
+            new[] { new InputChoice("x", "x", true) });
+        var refersTo = LetToLambdaBuilder.Build(request);
+
+        var sig = LambdaSignatureParser.Parse(refersTo);
+        var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc(A1)");
+        Assert.NotNull(call);
+        var expanded = EditLambdaCommand.BuildExpandedLet(sig, call!.Arguments);
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, MAX(x),",
+            "    x + y",
+            ")"), expanded);
     }
 }

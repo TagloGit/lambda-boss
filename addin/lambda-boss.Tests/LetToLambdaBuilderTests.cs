@@ -22,13 +22,20 @@ public class LetToLambdaBuilderTests
         return LetToLambdaBuilder.Build(new LambdaGenerationRequest(lambdaName, parsed, inputs));
     }
 
+    private static string Lines(params string[] lines) => string.Join("\n", lines);
+
     [Fact]
     public void AllInputsKept_NoInternalLet()
     {
         var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
             ("x", "x", true), ("y", "y", true));
 
-        Assert.Equal("=LAMBDA(x, y, SUM(x, y))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    y,",
+            "    SUM(x, y)",
+            ")"), result);
     }
 
     [Fact]
@@ -37,7 +44,12 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
             ("x", "a", true), ("y", "b", true));
 
-        Assert.Equal("=LAMBDA(a, b, SUM(a, b))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    a,",
+            "    b,",
+            "    SUM(a, b)",
+            ")"), result);
     }
 
     [Fact]
@@ -46,7 +58,14 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(someRange, A1:A10, getMax, MAX(someRange), getMax)", "MyMax",
             ("someRange", "someRange", true));
 
-        Assert.Equal("=LAMBDA(someRange, LET(getMax, MAX(someRange), getMax))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    someRange,",
+            "    LET(",
+            "        getMax, MAX(someRange),",
+            "        getMax",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -55,7 +74,14 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(a, A1:A10, b, MAX(a), b)", "MaxLambda",
             ("a", "myRange", true));
 
-        Assert.Equal("=LAMBDA(myRange, LET(b, MAX(myRange), b))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    myRange,",
+            "    LET(",
+            "        b, MAX(myRange),",
+            "        b",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -64,7 +90,14 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, 2, x + y)", "Test",
             ("x", "x", false), ("y", "y", true));
 
-        Assert.Equal("=LAMBDA(y, LET(x, 1, x + y))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    y,",
+            "    LET(",
+            "        x, 1,",
+            "        x + y",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -73,7 +106,14 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, 2, x + y)", "Zero",
             ("x", "x", false), ("y", "y", false));
 
-        Assert.Equal("=LAMBDA(LET(x, 1, y, 2, x + y))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    LET(",
+            "        x, 1,",
+            "        y, 2,",
+            "        x + y",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -82,7 +122,11 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, CONCAT(\"x is \", x))", "WithString",
             ("x", "value", true));
 
-        Assert.Equal("=LAMBDA(value, CONCAT(\"x is \", value))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    value,",
+            "    CONCAT(\"x is \", value)",
+            ")"), result);
     }
 
     [Fact]
@@ -114,7 +158,13 @@ public class LetToLambdaBuilderTests
     {
         var result = Build("=LET(m, MAX(A1:A10), m + 1)", "MaxPlus1");
 
-        Assert.Equal("=LAMBDA(LET(m, MAX(A1:A10), m + 1))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    LET(",
+            "        m, MAX(A1:A10),",
+            "        m + 1",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -124,7 +174,12 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
             ("y", "y", true), ("x", "x", true));
 
-        Assert.Equal("=LAMBDA(y, x, SUM(x, y))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    y,",
+            "    x,",
+            "    SUM(x, y)",
+            ")"), result);
     }
 
     [Fact]
@@ -135,7 +190,15 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, MAX(x), z, 3, x + y + z)", "Mix",
             ("z", "z", true), ("x", "x", true));
 
-        Assert.Equal("=LAMBDA(z, x, LET(y, MAX(x), x + y + z))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    z,",
+            "    x,",
+            "    LET(",
+            "        y, MAX(x),",
+            "        x + y + z",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -144,7 +207,12 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
             ("y", "second", true), ("x", "first", true));
 
-        Assert.Equal("=LAMBDA(second, first, SUM(first, second))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    second,",
+            "    first,",
+            "    SUM(first, second)",
+            ")"), result);
     }
 
     [Fact]
@@ -155,7 +223,15 @@ public class LetToLambdaBuilderTests
         var result = Build("=LET(x, 1, y, 2, z, 3, x + y + z)", "Skip",
             ("z", "z", false), ("y", "y", true), ("x", "x", true));
 
-        Assert.Equal("=LAMBDA(y, x, LET(z, 3, x + y + z))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    y,",
+            "    x,",
+            "    LET(",
+            "        z, 3,",
+            "        x + y + z",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -166,9 +242,15 @@ public class LetToLambdaBuilderTests
         var result = BuildWithOptional("=LET(x, 10, y, A1, x + y)", "Adder",
             ("x", "x", true, false), ("y", "offset", true, true));
 
-        Assert.Equal(
-            "=LAMBDA(x, [offset], LET(offset, IF(ISOMITTED(offset), $A$1, offset), x + offset))",
-            result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    [offset],",
+            "    LET(",
+            "        offset, IF(ISOMITTED(offset), $A$1, offset),",
+            "        x + offset",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -177,9 +259,16 @@ public class LetToLambdaBuilderTests
         var result = BuildWithOptional("=LET(x, 10, y, A1, x + y)", "Adder",
             ("x", "x", true, true), ("y", "offset", true, true));
 
-        Assert.Equal(
-            "=LAMBDA([x], [offset], LET(x, IF(ISOMITTED(x), 10, x), offset, IF(ISOMITTED(offset), $A$1, offset), x + offset))",
-            result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    [x],",
+            "    [offset],",
+            "    LET(",
+            "        x, IF(ISOMITTED(x), 10, x),",
+            "        offset, IF(ISOMITTED(offset), $A$1, offset),",
+            "        x + offset",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -191,19 +280,30 @@ public class LetToLambdaBuilderTests
         var result = BuildWithOptional("=LET(x, 10, y, x + 1, x + y)", "Calc",
             ("x", "x", true, true));
 
-        Assert.Equal(
-            "=LAMBDA([x], LET(x, IF(ISOMITTED(x), 10, x), y, x + 1, x + y))",
-            result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    [x],",
+            "    LET(",
+            "        x, IF(ISOMITTED(x), 10, x),",
+            "        y, x + 1,",
+            "        x + y",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
     public void NoOptionalParams_OutputIsUnchanged()
     {
-        // Matches the today's output exactly when IsOptional is false for all.
+        // Matches today's output exactly when IsOptional is false for all.
         var result = BuildWithOptional("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
             ("x", "x", true, false), ("y", "y", true, false));
 
-        Assert.Equal("=LAMBDA(x, y, SUM(x, y))", result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    y,",
+            "    SUM(x, y)",
+            ")"), result);
     }
 
     [Fact]
@@ -215,9 +315,15 @@ public class LetToLambdaBuilderTests
         var result = BuildWithOptional("=LET(x, 5, y, x, x + y)", "Calc",
             ("x", "a", true, false), ("y", "y", true, true));
 
-        Assert.Equal(
-            "=LAMBDA(a, [y], LET(y, IF(ISOMITTED(y), a, y), a + y))",
-            result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    a,",
+            "    [y],",
+            "    LET(",
+            "        y, IF(ISOMITTED(y), a, y),",
+            "        a + y",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -226,9 +332,15 @@ public class LetToLambdaBuilderTests
         var result = BuildWithOptional("=LET(x, 10, y, A1, x + y)", "Adder",
             ("y", "offset", true, true), ("x", "base", true, false));
 
-        Assert.Equal(
-            "=LAMBDA([offset], base, LET(offset, IF(ISOMITTED(offset), $A$1, offset), base + offset))",
-            result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    [offset],",
+            "    base,",
+            "    LET(",
+            "        offset, IF(ISOMITTED(offset), $A$1, offset),",
+            "        base + offset",
+            "    )",
+            ")"), result);
     }
 
     [Fact]
@@ -265,8 +377,27 @@ public class LetToLambdaBuilderTests
         var result = BuildWithOptional("=LET(x, 5, x + 1)", "Inc",
             ("x", "x", true, true));
 
-        Assert.Equal(
-            "=LAMBDA([x], LET(x, IF(ISOMITTED(x), 5, x), x + 1))",
-            result);
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    [x],",
+            "    LET(",
+            "        x, IF(ISOMITTED(x), 5, x),",
+            "        x + 1",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void GeneratedLambda_ParsesBackViaLambdaSignatureParser()
+    {
+        // The formatted output must round-trip cleanly through the parser
+        // so Edit Lambda can expand it back into a LET.
+        var refersTo = Build("=LET(x, 1, y, 2, SUM(x, y))", "Adder",
+            ("x", "x", true), ("y", "y", true));
+
+        Assert.True(LambdaSignatureParser.IsLambdaFormula(refersTo));
+        var sig = LambdaSignatureParser.Parse(refersTo);
+        Assert.Equal(new[] { "x", "y" }, sig.Parameters);
+        Assert.Equal("SUM(x, y)", sig.Body);
     }
 }
