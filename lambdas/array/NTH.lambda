@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      NTH
+    DESCRIPTION:*//**Returns the Nth element of an array (flattened), with negative N counting from the end.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-21  Claude      Initial version
+*/
+NTH = LAMBDA(
+//  Parameter Declarations
+    [arr],
+    [n],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →NTH(arr, n)¶" &
+                "DESCRIPTION:   →Returns the Nth element of an array (flattened), with negative N counting from the end.¶" &
+                "VERSION:       →Apr 21 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   arr            →(Required) Any array or range — 1D, 2D, vertical, or horizontal.¶" &
+                "   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=NTH({""a"",""b"",""c""}, -1)¶" &
+                "Result         →""c""",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(arr),
+    //  Procedure
+        flat, TOCOL(arr),
+        result, IF(n < 0, INDEX(flat, ROWS(flat) + n + 1), INDEX(flat, n)),
+        IF(Help?, Help, result)
+)
+);
