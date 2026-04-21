@@ -16,7 +16,7 @@ namespace LambdaBoss.Commands;
 ///     workbook name definition is left in place so rerunning LET to LAMBDA
 ///     with the same name overwrites it.
 /// </summary>
-public static class EditLambdaCommand
+internal static class EditLambdaCommand
 {
     private const string NotALambdaCallMessage =
         "Edit Lambda requires a cell whose formula is exactly a call to a LAMBDA "

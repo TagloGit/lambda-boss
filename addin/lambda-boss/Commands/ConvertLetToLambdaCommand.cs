@@ -13,7 +13,7 @@ namespace LambdaBoss.Commands;
 ///     Ribbon handler: converts the active cell's =LET(...) formula into a
 ///     workbook-scoped LAMBDA registered in the Name Manager.
 /// </summary>
-public static class ConvertLetToLambdaCommand
+internal static class ConvertLetToLambdaCommand
 {
     public static void Run()
     {
