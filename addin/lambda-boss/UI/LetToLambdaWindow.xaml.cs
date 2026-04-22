@@ -1,10 +1,12 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using GongSolutions.Wpf.DragDrop;
 
 namespace LambdaBoss.UI;
 
@@ -118,8 +120,13 @@ public partial class LetToLambdaWindow
 
         foreach (var row in _rows)
             row.PropertyChanged += Row_PropertyChanged;
+        _rows.CollectionChanged += Rows_CollectionChanged;
 
         InputsList.ItemsSource = _rows;
+
+        var keepHandler = new KeptRowReorderHandler();
+        GongSolutions.Wpf.DragDrop.DragDrop.SetDragHandler(InputsList, keepHandler);
+        GongSolutions.Wpf.DragDrop.DragDrop.SetDropHandler(InputsList, keepHandler);
 
         LambdaNameBox.Focus();
         UpdateSaveEnabled();
@@ -243,94 +250,11 @@ public partial class LetToLambdaWindow
         }
     }
 
-    // --- Drag/drop reorder ---
-    //
-    // Minimal in-window drag/drop. Source must be a kept row; drop target
-    // must be another kept row. The rest of the kept-rows-first invariant
-    // is unaffected because unchecked rows refuse the drop.
-
-    private const string DragDataFormat = "LambdaBoss.LetInputRow";
-
-    private Point? _dragStartPoint;
-    private LetInputRow? _dragSourceRow;
-
-    private void DragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void Rows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (sender is FrameworkElement { DataContext: LetInputRow row } fe && row.Keep)
-        {
-            _dragStartPoint = e.GetPosition(fe);
-            _dragSourceRow = row;
-        }
-    }
-
-    private void DragHandle_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (_dragStartPoint is null || _dragSourceRow is null) return;
-
-        if (e.LeftButton != MouseButtonState.Pressed)
-        {
-            _dragStartPoint = null;
-            _dragSourceRow = null;
-            return;
-        }
-
-        if (sender is not FrameworkElement fe) return;
-
-        var current = e.GetPosition(fe);
-        var dx = current.X - _dragStartPoint.Value.X;
-        var dy = current.Y - _dragStartPoint.Value.Y;
-        if (Math.Abs(dx) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(dy) < SystemParameters.MinimumVerticalDragDistance)
-            return;
-
-        var data = new DataObject(DragDataFormat, _dragSourceRow);
-        try
-        {
-            DragDrop.DoDragDrop(fe, data, DragDropEffects.Move);
-        }
-        finally
-        {
-            _dragStartPoint = null;
-            _dragSourceRow = null;
-        }
-    }
-
-    private void InputRow_DragOver(object sender, DragEventArgs e)
-    {
-        var source = e.Data.GetData(DragDataFormat) as LetInputRow;
-        if (source is null
-            || sender is not FrameworkElement { DataContext: LetInputRow target }
-            || !target.Keep
-            || !source.Keep)
-        {
-            e.Effects = DragDropEffects.None;
-        }
-        else
-        {
-            e.Effects = DragDropEffects.Move;
-        }
-        e.Handled = true;
-    }
-
-    private void InputRow_Drop(object sender, DragEventArgs e)
-    {
-        var source = e.Data.GetData(DragDataFormat) as LetInputRow;
-        if (source is null
-            || sender is not FrameworkElement { DataContext: LetInputRow target }
-            || !target.Keep
-            || !source.Keep
-            || ReferenceEquals(source, target))
-        {
-            return;
-        }
-
-        var srcIdx = _rows.IndexOf(source);
-        var tgtIdx = _rows.IndexOf(target);
-        if (srcIdx < 0 || tgtIdx < 0 || srcIdx == tgtIdx) return;
-
-        _rows.Move(srcIdx, tgtIdx);
-        UpdateSaveEnabled();
-        e.Handled = true;
+        // Reorder via drag/drop fires Move; keep validation in sync.
+        if (e.Action == NotifyCollectionChangedAction.Move)
+            UpdateSaveEnabled();
     }
 
     private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -445,4 +369,53 @@ public partial class LetToLambdaWindow
         DialogResult = false;
         Close();
     }
+}
+
+/// <summary>
+///     Restricts gong-wpf-dragdrop reorder to kept rows on both ends.
+///     Unchecked rows can't be dragged or dropped onto, which preserves
+///     the kept-rows-first invariant in <c>_rows</c>. The base
+///     <see cref="DefaultDropHandler" /> already does the right
+///     <c>ObservableCollection.Move</c> for same-collection reorders.
+/// </summary>
+internal class KeptRowReorderHandler : DefaultDropHandler, IDragSource
+{
+    private readonly DefaultDragHandler _dragBase = new();
+
+    public override void DragOver(IDropInfo dropInfo)
+    {
+        if (dropInfo.Data is LetInputRow source
+            && dropInfo.TargetItem is LetInputRow target
+            && source.Keep
+            && target.Keep)
+        {
+            base.DragOver(dropInfo);
+        }
+        else
+        {
+            dropInfo.Effects = DragDropEffects.None;
+            dropInfo.DropTargetAdorner = null;
+        }
+    }
+
+    public void StartDrag(IDragInfo dragInfo)
+    {
+        if (dragInfo.SourceItem is LetInputRow row && row.Keep)
+            _dragBase.StartDrag(dragInfo);
+        else
+            dragInfo.Effects = DragDropEffects.None;
+    }
+
+    public bool CanStartDrag(IDragInfo dragInfo) =>
+        dragInfo.SourceItem is LetInputRow row && row.Keep && _dragBase.CanStartDrag(dragInfo);
+
+    public void Dropped(IDropInfo dropInfo) => _dragBase.Dropped(dropInfo);
+
+    public void DragDropOperationFinished(DragDropEffects operationResult, IDragInfo dragInfo) =>
+        _dragBase.DragDropOperationFinished(operationResult, dragInfo);
+
+    public void DragCancelled() => _dragBase.DragCancelled();
+
+    public bool TryCatchOccurredException(Exception exception) =>
+        _dragBase.TryCatchOccurredException(exception);
 }
