@@ -143,15 +143,15 @@ public partial class LetToLambdaWindow
             RepositionAfterKeepChanged(row);
 
         if (e.PropertyName is nameof(LetInputRow.IsOptional) or nameof(LetInputRow.Keep))
-            UpdateOptionalWarningVisibility();
+            UpdateAbsolutizeWarningVisibility();
 
         UpdateSaveEnabled();
     }
 
-    private void UpdateOptionalWarningVisibility()
+    private void UpdateAbsolutizeWarningVisibility()
     {
-        var anyOptional = _rows.Any(r => r.Keep && r.IsOptional);
-        OptionalWarningText.Visibility = anyOptional ? Visibility.Visible : Visibility.Collapsed;
+        var anyAbsolutized = _rows.Any(r => (r.Keep && r.IsOptional) || !r.Keep);
+        OptionalWarningText.Visibility = anyAbsolutized ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
