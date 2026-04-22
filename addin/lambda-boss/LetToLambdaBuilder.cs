@@ -80,12 +80,22 @@ public static class LetToLambdaBuilder
             .ToDictionary(k => k.Binding.Name, k => k.Choice.ParamName,
                 StringComparer.OrdinalIgnoreCase);
 
-        // Internal bindings preserve source order; their RHS text has renames applied.
+        // Internal bindings preserve source order; their RHS text has renames
+        // applied. For excluded inputs (value bindings the user chose not to
+        // keep) the RHS is hardcoded into the LAMBDA body, so cell refs are
+        // forced absolute for the same reason as optional defaults — see the
+        // note on AbsolutizeCellRefs. Calculation bindings are left untouched
+        // to preserve the author's original expression verbatim.
         var keptNames = kept.Select(k => k.Binding.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var internalBindings = parsed.Bindings
             .Where(b => !keptNames.Contains(b.Name))
-            .Select(b => new LetBinding(b.Name, ApplyRenames(b.RhsText, renames), b.IsCalculation))
+            .Select(b =>
+            {
+                var renamed = ApplyRenames(b.RhsText, renames);
+                var rhs = b.IsCalculation ? renamed : AbsolutizeCellRefs(renamed);
+                return new LetBinding(b.Name, rhs, b.IsCalculation);
+            })
             .ToList();
 
         // Optional bindings wrap each optional kept param with an
@@ -192,8 +202,10 @@ public static class LetToLambdaBuilder
     ///     fully absolute form (e.g. <c>A1</c>, <c>$A1</c>, <c>A$1</c> all
     ///     become <c>$A$1</c>). Ranges like <c>A1:B5</c> and sheet-qualified
     ///     refs like <c>Sheet1!A1</c> are handled; tokens inside string
-    ///     literals are left alone. Used so baked-in default expressions in
-    ///     optional-param LAMBDAs don't shift when the Name is invoked.
+    ///     literals are left alone. Used so baked-in expressions in a
+    ///     registered LAMBDA (optional-param defaults and excluded-input
+    ///     RHS values) don't shift when the Name is invoked from a cell
+    ///     other than the one it was registered against.
     /// </summary>
     internal static string AbsolutizeCellRefs(string text)
     {

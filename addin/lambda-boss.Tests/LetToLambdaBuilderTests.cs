@@ -388,6 +388,95 @@ public class LetToLambdaBuilderTests
     }
 
     [Fact]
+    public void ExcludedInput_CellRefsInRhsAreAbsolutized()
+    {
+        // y is excluded, so its RHS is baked into the LAMBDA body. Its cell
+        // ref must be forced absolute for the same reason as optional
+        // defaults: a registered LAMBDA invoked from another cell would
+        // otherwise shift the reference.
+        var result = Build("=LET(x, 1, y, A1, x + y)", "Calc",
+            ("x", "x", true), ("y", "y", false));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    LET(",
+            "        y, $A$1,",
+            "        x + y",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void ExcludedInput_RangeRefAbsolutized()
+    {
+        var result = Build("=LET(data, A1:B10, x, 1, SUM(data) + x)", "Calc",
+            ("data", "data", false), ("x", "x", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    LET(",
+            "        data, $A$1:$B$10,",
+            "        SUM(data) + x",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void CalculationBinding_CellRefsNotAbsolutized()
+    {
+        // Calculation bindings (RHS contains an operator/call that doesn't
+        // resolve to a simple value) are the author's original derived
+        // expressions and are left verbatim, unlike excluded value inputs.
+        var result = Build("=LET(x, 1, m, MAX(A1:A10), x + m)", "Calc",
+            ("x", "x", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    LET(",
+            "        m, MAX(A1:A10),",
+            "        x + m",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void ExcludedInput_SheetQualifiedRefAbsolutized()
+    {
+        var result = Build("=LET(y, Sheet1!B2, x, 1, x + y)", "Calc",
+            ("y", "y", false), ("x", "x", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    LET(",
+            "        y, Sheet1!$B$2,",
+            "        x + y",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void ExcludedInput_StringLiteralCellRefNotAbsolutized()
+    {
+        // Tokens inside string literals must not be touched even when the
+        // surrounding RHS is from an excluded input.
+        var result = Build("=LET(msg, \"see A1\", x, 1, msg)", "Calc",
+            ("msg", "msg", false), ("x", "x", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    LET(",
+            "        msg, \"see A1\",",
+            "        msg",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
     public void GeneratedLambda_ParsesBackViaLambdaSignatureParser()
     {
         // The formatted output must round-trip cleanly through the parser
