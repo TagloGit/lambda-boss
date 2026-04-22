@@ -3,22 +3,29 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 
+using ExcelDna.Integration;
+
+using LambdaBoss.Commands;
+
 namespace LambdaBoss.UI;
 
 public partial class LambdaPopup
 {
-    private enum Mode { Library, Search }
+    private enum Mode { Library, Search, Commands }
 
     private Mode _mode = Mode.Library;
     private bool _prefixPromptActive;
 
     private List<LibraryDisplayItem> _allLibraries = new();
     private List<LambdaDisplayItem> _allLambdas = new();
+    private readonly IReadOnlyList<SlashCommand> _allCommands;
 
     public LambdaPopup()
     {
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
+        _allCommands = BuildCommandRegistry();
+        CommandsList.ItemsSource = _allCommands;
     }
 
     /// <summary>
@@ -122,17 +129,29 @@ public partial class LambdaPopup
         switch (e.Key)
         {
             case Key.Escape:
-                Hide();
+                // Two-step exit from Commands mode: first Escape clears the
+                // leading "/", returning to Library or Search via TextChanged.
+                // A second Escape (now in the restored mode) closes the popup.
+                if (_mode == Mode.Commands)
+                    SearchBox.Text = "";
+                else
+                    Hide();
                 e.Handled = true;
                 break;
 
             case Key.Enter:
-                BeginLoad();
+                if (_mode == Mode.Commands)
+                    ExecuteSelectedCommand();
+                else
+                    BeginLoad();
                 e.Handled = true;
                 break;
 
             case Key.Tab:
-                SwitchMode(_mode == Mode.Library ? Mode.Search : Mode.Library);
+                // Tab toggles Library ↔ Search only. In Commands mode it's a
+                // no-op (the "/" prefix in the search box defines the mode).
+                if (_mode != Mode.Commands)
+                    SwitchMode(_mode == Mode.Library ? Mode.Search : Mode.Library);
                 e.Handled = true;
                 break;
 
@@ -166,59 +185,75 @@ public partial class LambdaPopup
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var query = SearchBox.Text.Trim();
+        var raw = SearchBox.Text;
+        var targetMode = raw.StartsWith("/")
+            ? Mode.Commands
+            : string.IsNullOrEmpty(raw.Trim()) ? Mode.Library : Mode.Search;
 
-        // Auto-switch to search mode when typing
-        if (!string.IsNullOrEmpty(query) && _mode == Mode.Library)
-            SwitchMode(Mode.Search);
+        if (_mode != targetMode)
+            SwitchMode(targetMode);
 
-        // Auto-switch back to library mode when clearing
-        if (string.IsNullOrEmpty(query) && _mode == Mode.Search)
-            SwitchMode(Mode.Library);
-
-        ApplyFilter(query);
+        ApplyFilter(raw);
     }
 
     private void LibraryModeLabel_Click(object sender, MouseButtonEventArgs e)
     {
+        // If the box carries a "/", clear it so the mode actually changes.
+        if (SearchBox.Text.StartsWith("/"))
+            SearchBox.Text = "";
         SwitchMode(Mode.Library);
     }
 
     private void SearchModeLabel_Click(object sender, MouseButtonEventArgs e)
     {
+        if (SearchBox.Text.StartsWith("/"))
+            SearchBox.Text = "";
         SwitchMode(Mode.Search);
+    }
+
+    private void CommandsModeLabel_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (!SearchBox.Text.StartsWith("/"))
+        {
+            SearchBox.Text = "/";
+            SearchBox.CaretIndex = SearchBox.Text.Length;
+        }
+        SearchBox.Focus();
     }
 
     private void SwitchMode(Mode newMode)
     {
         _mode = newMode;
 
-        if (_mode == Mode.Library)
-        {
-            LibraryModeLabel.FontWeight = FontWeights.Bold;
-            LibraryModeLabel.Foreground = BrushFromHex("#dcdcaa");
-            SearchModeLabel.FontWeight = FontWeights.Normal;
-            SearchModeLabel.Foreground = BrushFromHex("#808080");
+        SetLabelActive(LibraryModeLabel, _mode == Mode.Library);
+        SetLabelActive(SearchModeLabel, _mode == Mode.Search);
+        SetLabelActive(CommandsModeLabel, _mode == Mode.Commands);
 
-            LibraryList.Visibility = Visibility.Visible;
-            LambdaList.Visibility = Visibility.Collapsed;
-        }
-        else
-        {
-            LibraryModeLabel.FontWeight = FontWeights.Normal;
-            LibraryModeLabel.Foreground = BrushFromHex("#808080");
-            SearchModeLabel.FontWeight = FontWeights.Bold;
-            SearchModeLabel.Foreground = BrushFromHex("#dcdcaa");
+        LibraryList.Visibility = _mode == Mode.Library ? Visibility.Visible : Visibility.Collapsed;
+        LambdaList.Visibility = _mode == Mode.Search ? Visibility.Visible : Visibility.Collapsed;
+        CommandsList.Visibility = _mode == Mode.Commands ? Visibility.Visible : Visibility.Collapsed;
 
-            LibraryList.Visibility = Visibility.Collapsed;
-            LambdaList.Visibility = Visibility.Visible;
-        }
-
-        ApplyFilter(SearchBox.Text.Trim());
+        ApplyFilter(SearchBox.Text);
     }
 
-    private void ApplyFilter(string query)
+    private static void SetLabelActive(TextBlock label, bool active)
     {
+        label.FontWeight = active ? FontWeights.Bold : FontWeights.Normal;
+        label.Foreground = BrushFromHex(active ? "#dcdcaa" : "#808080");
+    }
+
+    private void ApplyFilter(string rawQuery)
+    {
+        if (_mode == Mode.Commands)
+        {
+            CommandsList.ItemsSource = SlashCommandFilter.Filter(_allCommands, rawQuery);
+            if (CommandsList.Items.Count > 0)
+                CommandsList.SelectedIndex = 0;
+            return;
+        }
+
+        var query = rawQuery.Trim();
+
         if (_mode == Mode.Library)
         {
             if (string.IsNullOrEmpty(query))
@@ -268,7 +303,13 @@ public partial class LambdaPopup
         }
     }
 
-    private ListBox ActiveList => _mode == Mode.Library ? LibraryList : LambdaList;
+    private ListBox ActiveList => _mode switch
+    {
+        Mode.Library => LibraryList,
+        Mode.Search => LambdaList,
+        Mode.Commands => CommandsList,
+        _ => LibraryList
+    };
 
     private void NavigateDown()
     {
@@ -360,6 +401,49 @@ public partial class LambdaPopup
         LibraryLoadRequested?.Invoke(this, request);
         Hide();
     }
+
+    private void ExecuteSelectedCommand()
+    {
+        if (CommandsList.SelectedItem is SlashCommand cmd)
+            cmd.Invoke();
+    }
+
+    private IReadOnlyList<SlashCommand> BuildCommandRegistry() => new[]
+    {
+        new SlashCommand(
+            "LET to LAMBDA",
+            "Convert the active =LET(...) cell into a named LAMBDA",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => ConvertLetToLambdaCommand.Run());
+            }),
+        new SlashCommand(
+            "Edit Lambda",
+            "Expand the active LAMBDA call back to =LET(...)",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
+            }),
+        new SlashCommand(
+            "Load Library",
+            "Switch to Library mode to pick a library",
+            () =>
+            {
+                // Clearing the box drives TextChanged → Mode.Library.
+                SearchBox.Text = "";
+                SearchBox.Focus();
+            }),
+        new SlashCommand(
+            "Settings",
+            "Open Lambda Boss settings",
+            () =>
+            {
+                Hide();
+                ShowLambdaPopupCommand.ShowSettings();
+            }),
+    };
 
     internal static string MakeLoadedKey(string repoUrl, string libraryName) =>
         $"{repoUrl.TrimEnd('/').ToLowerInvariant()}|{libraryName.ToLowerInvariant()}";

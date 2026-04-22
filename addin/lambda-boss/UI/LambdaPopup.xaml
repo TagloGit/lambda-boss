@@ -36,6 +36,15 @@
                        Foreground="#808080"
                        Cursor="Hand"
                        MouseLeftButtonDown="SearchModeLabel_Click" />
+            <TextBlock Text="  ·  "
+                       FontSize="12"
+                       Foreground="#555555" />
+            <TextBlock x:Name="CommandsModeLabel"
+                       Text="Commands"
+                       FontSize="12"
+                       Foreground="#808080"
+                       Cursor="Hand"
+                       MouseLeftButtonDown="CommandsModeLabel_Click" />
         </StackPanel>
 
         <!-- Search box -->
@@ -115,6 +124,37 @@
                                    TextTrimming="CharacterEllipsis" Margin="8,0,8,0" />
                         <TextBlock Grid.Column="2" Text="{Binding LibraryLabel}" Foreground="#569cd6"
                                    FontSize="11" VerticalAlignment="Center" />
+                        <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Commands list (commands mode) -->
+        <ListBox x:Name="CommandsList"
+                 Grid.Row="2"
+                 Background="#252526"
+                 Foreground="#cccccc"
+                 BorderBrush="#3e3e3e"
+                 BorderThickness="1"
+                 FontFamily="Consolas"
+                 FontSize="13"
+                 SelectionMode="Single"
+                 Visibility="Collapsed">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <!-- ReSharper disable once Xaml.BindingWithContextNotResolved -->
+                    <Grid Margin="4,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="Bold"
+                                   Foreground="#dcdcaa" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="{Binding Description}" Foreground="#808080"
+                                   FontSize="11" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" Margin="8,0,0,0" />
                         <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
                     </Grid>
                 </DataTemplate>
