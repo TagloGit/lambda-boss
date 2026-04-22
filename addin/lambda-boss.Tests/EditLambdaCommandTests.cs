@@ -1,12 +1,14 @@
 using LambdaBoss.Commands;
-
 using Xunit;
 
 namespace LambdaBoss.Tests;
 
 public class EditLambdaCommandTests
 {
-    private static string Lines(params string[] lines) => string.Join("\n", lines);
+    private static string Lines(params string[] lines)
+    {
+        return string.Join("\n", lines);
+    }
 
     [Fact]
     public void TryParseLambdaCall_SimpleCall_ReturnsNameAndArgs()
@@ -14,8 +16,8 @@ public class EditLambdaCommandTests
         var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc(A1, B1)");
 
         Assert.NotNull(call);
-        Assert.Equal("MyCalc", call!.Name);
-        Assert.Equal(new[] { "A1", "B1" }, call.Arguments);
+        Assert.Equal("MyCalc", call.Name);
+        Assert.Equal(["A1", "B1"], call.Arguments);
     }
 
     [Fact]
@@ -24,7 +26,7 @@ public class EditLambdaCommandTests
         var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc(A1, B1 + 2)");
 
         Assert.NotNull(call);
-        Assert.Equal(new[] { "A1", "B1 + 2" }, call!.Arguments);
+        Assert.Equal(["A1", "B1 + 2"], call.Arguments);
     }
 
     [Fact]
@@ -33,7 +35,7 @@ public class EditLambdaCommandTests
         var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc(SUM(A1, B1), C1)");
 
         Assert.NotNull(call);
-        Assert.Equal(new[] { "SUM(A1, B1)", "C1" }, call!.Arguments);
+        Assert.Equal(["SUM(A1, B1)", "C1"], call.Arguments);
     }
 
     [Fact]
@@ -42,7 +44,7 @@ public class EditLambdaCommandTests
         var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc()");
 
         Assert.NotNull(call);
-        Assert.Equal("MyCalc", call!.Name);
+        Assert.Equal("MyCalc", call.Name);
         Assert.Empty(call.Arguments);
     }
 
@@ -52,7 +54,7 @@ public class EditLambdaCommandTests
         var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc(  )");
 
         Assert.NotNull(call);
-        Assert.Empty(call!.Arguments);
+        Assert.Empty(call.Arguments);
     }
 
     [Fact]
@@ -61,7 +63,7 @@ public class EditLambdaCommandTests
         var call = EditLambdaCommand.TryParseLambdaCall("=tst.Double(A1)");
 
         Assert.NotNull(call);
-        Assert.Equal("tst.Double", call!.Name);
+        Assert.Equal("tst.Double", call.Name);
     }
 
     [Fact]
@@ -114,8 +116,8 @@ public class EditLambdaCommandTests
     [Fact]
     public void BuildExpandedLet_FullArgs_EmitsFormattedLet()
     {
-        var sig = new LambdaSignature(new[] { "x", "y" }, "x * y + 1");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1 + 2" });
+        var sig = new LambdaSignature(["x", "y"], "x * y + 1");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1", "B1 + 2"]);
 
         Assert.Equal(Lines(
             "=LET(",
@@ -128,8 +130,8 @@ public class EditLambdaCommandTests
     [Fact]
     public void BuildExpandedLet_ZeroParamsZeroArgs_ReturnsBareBody()
     {
-        var sig = new LambdaSignature(Array.Empty<string>(), "1 + 1");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, Array.Empty<string>());
+        var sig = new LambdaSignature([], "1 + 1");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, []);
 
         Assert.Equal("=1 + 1", result);
     }
@@ -137,8 +139,8 @@ public class EditLambdaCommandTests
     [Fact]
     public void BuildExpandedLet_FewerArgsThanParams_LeavesTrailingUnbound()
     {
-        var sig = new LambdaSignature(new[] { "x", "y", "z" }, "x + y + z");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1" });
+        var sig = new LambdaSignature(["x", "y", "z"], "x + y + z");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
 
         Assert.Equal(Lines(
             "=LET(",
@@ -150,8 +152,8 @@ public class EditLambdaCommandTests
     [Fact]
     public void BuildExpandedLet_ZeroArgsWithParams_OmitsLetWrapper()
     {
-        var sig = new LambdaSignature(new[] { "x" }, "x + 1");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, Array.Empty<string>());
+        var sig = new LambdaSignature(["x"], "x + 1");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, []);
 
         Assert.Equal("=x + 1", result);
     }
@@ -159,10 +161,10 @@ public class EditLambdaCommandTests
     [Fact]
     public void BuildExpandedLet_TooManyArgs_Throws()
     {
-        var sig = new LambdaSignature(new[] { "x" }, "x + 1");
+        var sig = new LambdaSignature(["x"], "x + 1");
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
-            EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" }));
+            EditLambdaCommand.BuildExpandedLet(sig, ["A1", "B1"]));
         Assert.Contains("1 parameter", ex.Message);
         Assert.Contains("2 were provided", ex.Message);
     }
@@ -171,7 +173,7 @@ public class EditLambdaCommandTests
     public void BuildExpandedLet_OptionalParamsStripped_GeneratesBareNamesInLet()
     {
         var sig = LambdaSignatureParser.Parse("=LAMBDA(x, [y], x + y)");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" });
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1", "B1"]);
 
         Assert.Equal(Lines(
             "=LET(",
@@ -188,7 +190,7 @@ public class EditLambdaCommandTests
         // a single flat LET rather than LET-in-LET.
         var sig = LambdaSignatureParser.Parse(
             "=LAMBDA(x, y, LET(m, MAX(x), m + y))");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" });
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1", "B1"]);
 
         Assert.Equal(Lines(
             "=LET(",
@@ -214,7 +216,7 @@ public class EditLambdaCommandTests
             "    )",
             ")");
         var sig = LambdaSignatureParser.Parse(refersTo);
-        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1", "B1" });
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1", "B1"]);
 
         Assert.Equal(Lines(
             "=LET(",
@@ -229,8 +231,8 @@ public class EditLambdaCommandTests
     public void BuildExpandedLet_BodyContainsLetInsideExpression_DoesNotFold()
     {
         // Body has a LET but it's embedded in a larger expression.
-        var sig = new LambdaSignature(new[] { "x" }, "LET(a, x, a) + 1");
-        var result = EditLambdaCommand.BuildExpandedLet(sig, new[] { "A1" });
+        var sig = new LambdaSignature(["x"], "LET(a, x, a) + 1");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
 
         Assert.Equal(Lines(
             "=LET(",
@@ -247,7 +249,7 @@ public class EditLambdaCommandTests
 
         var call = EditLambdaCommand.TryParseLambdaCall(formula);
         Assert.NotNull(call);
-        Assert.Equal("MyCalc", call!.Name);
+        Assert.Equal("MyCalc", call.Name);
 
         var sig = LambdaSignatureParser.Parse(refersTo);
         var letFormula = EditLambdaCommand.BuildExpandedLet(sig, call.Arguments);
@@ -270,13 +272,13 @@ public class EditLambdaCommandTests
         var request = new LambdaGenerationRequest(
             "MyCalc",
             parsed,
-            new[] { new InputChoice("x", "x", true) });
+            [new InputChoice("x", "x", true)]);
         var refersTo = LetToLambdaBuilder.Build(request);
 
         var sig = LambdaSignatureParser.Parse(refersTo);
         var call = EditLambdaCommand.TryParseLambdaCall("=MyCalc(A1)");
         Assert.NotNull(call);
-        var expanded = EditLambdaCommand.BuildExpandedLet(sig, call!.Arguments);
+        var expanded = EditLambdaCommand.BuildExpandedLet(sig, call.Arguments);
 
         Assert.Equal(Lines(
             "=LET(",

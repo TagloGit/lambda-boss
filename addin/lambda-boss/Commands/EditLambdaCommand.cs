@@ -1,9 +1,7 @@
+using ExcelDna.Integration;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
-
-using ExcelDna.Integration;
-
 using Taglo.Excel.Common;
 
 namespace LambdaBoss.Commands;
@@ -26,21 +24,23 @@ internal static class EditLambdaCommand
         @"^=\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\(",
         RegexOptions.CultureInvariant);
 
-    internal record LambdaCall(string Name, IReadOnlyList<string> Arguments);
+    private static readonly Regex NestedLetPrefix = new(
+        @"^LET\s*\(",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public static void Run()
     {
         try
         {
             dynamic app = ExcelDnaUtil.Application;
-            dynamic workbook = app.ActiveWorkbook;
+            var workbook = app.ActiveWorkbook;
             if (workbook == null)
             {
                 ShowError("No active workbook.");
                 return;
             }
 
-            dynamic activeCell = app.ActiveCell;
+            var activeCell = app.ActiveCell;
             var formula = activeCell?.Formula as string;
 
             var call = TryParseLambdaCall(formula);
@@ -81,7 +81,7 @@ internal static class EditLambdaCommand
 
             try
             {
-                activeCell.Formula = letFormula;
+                activeCell!.Formula = letFormula;
                 Logger.Info($"EditLambda: Expanded '{call.Name}' into LET");
             }
             catch (Exception ex)
@@ -118,14 +118,12 @@ internal static class EditLambdaCommand
             return null;
 
         for (var i = closeParen + 1; i < formula.Length; i++)
-        {
             if (!char.IsWhiteSpace(formula[i]))
                 return null;
-        }
 
         var inner = formula[(openParen + 1)..closeParen];
         var args = inner.Trim().Length == 0
-            ? new List<string>()
+            ? []
             : LetParser.SplitTopLevelCommas(inner).Select(a => a.Trim()).ToList();
 
         return new LambdaCall(name, args);
@@ -163,22 +161,16 @@ internal static class EditLambdaCommand
             body = innerBody;
         }
         else
-        {
             body = signature.Body;
-        }
 
         if (pairs.Count == 0)
             return "=" + body;
 
         var sb = new StringBuilder();
         sb.Append('=');
-        FormulaFormatter.AppendLet(sb, indent: 0, pairs, body);
+        FormulaFormatter.AppendLet(sb, 0, pairs, body);
         return sb.ToString();
     }
-
-    private static readonly Regex NestedLetPrefix = new(
-        @"^LET\s*\(",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>
     ///     Detects whether <paramref name="body" /> is exactly a single
@@ -191,7 +183,7 @@ internal static class EditLambdaCommand
         out List<(string Name, string Value)> bindings,
         out string innerBody)
     {
-        bindings = new List<(string, string)>();
+        bindings = [];
         innerBody = string.Empty;
 
         var trimmed = body.TrimStart();
@@ -206,10 +198,8 @@ internal static class EditLambdaCommand
             return false;
 
         for (var i = closeParen + 1; i < body.Length; i++)
-        {
             if (!char.IsWhiteSpace(body[i]))
                 return false;
-        }
 
         var inner = body[(openParen + 1)..closeParen];
         var args = LetParser.SplitTopLevelCommas(inner).Select(a => a.Trim()).ToList();
@@ -226,7 +216,7 @@ internal static class EditLambdaCommand
     {
         try
         {
-            dynamic n = workbook.Names.Item(name);
+            var n = workbook.Names.Item(name);
             return n?.RefersTo as string;
         }
         catch
@@ -246,4 +236,6 @@ internal static class EditLambdaCommand
             Logger.Info($"ShowError: {message}");
         }
     }
+
+    internal record LambdaCall(string Name, IReadOnlyList<string> Arguments);
 }
