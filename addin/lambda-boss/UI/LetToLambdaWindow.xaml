@@ -7,7 +7,8 @@
         ShowInTaskbar="True"
         Topmost="True"
         ResizeMode="CanResizeWithGrip"
-        Background="#1e1e1e">
+        Background="#1e1e1e"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -67,8 +68,27 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <DockPanel Margin="4,3"
-                                   PreviewKeyDown="InputRow_PreviewKeyDown">
+                                   AllowDrop="True"
+                                   PreviewKeyDown="InputRow_PreviewKeyDown"
+                                   DragOver="InputRow_DragOver"
+                                   Drop="InputRow_Drop">
                             <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                            <Border DockPanel.Dock="Left"
+                                    Width="16"
+                                    Margin="0,0,4,0"
+                                    Background="Transparent"
+                                    Cursor="SizeAll"
+                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
+                                    PreviewMouseLeftButtonDown="DragHandle_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="DragHandle_PreviewMouseMove"
+                                    ToolTip="Drag to reorder (or Alt+Up / Alt+Down)">
+                                <TextBlock Text="&#x22EE;&#x22EE;"
+                                           Foreground="#808080"
+                                           FontSize="14"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False" />
+                            </Border>
                             <CheckBox DockPanel.Dock="Left"
                                       IsChecked="{Binding Keep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       VerticalAlignment="Center"
@@ -82,32 +102,6 @@
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Caller may omit this argument; defaults to the original RHS expression" />
-                            <Button DockPanel.Dock="Right"
-                                    Content="&#x25BC;"
-                                    Width="22"
-                                    Padding="0"
-                                    Margin="0,0,0,0"
-                                    Background="#2d2d2d"
-                                    Foreground="#cccccc"
-                                    BorderBrush="#3e3e3e"
-                                    BorderThickness="1"
-                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
-                                    IsEnabled="{Binding CanMoveDown}"
-                                    ToolTip="Move down (Alt+Down)"
-                                    Click="MoveDownButton_Click" />
-                            <Button DockPanel.Dock="Right"
-                                    Content="&#x25B2;"
-                                    Width="22"
-                                    Padding="0"
-                                    Margin="8,0,2,0"
-                                    Background="#2d2d2d"
-                                    Foreground="#cccccc"
-                                    BorderBrush="#3e3e3e"
-                                    BorderThickness="1"
-                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
-                                    IsEnabled="{Binding CanMoveUp}"
-                                    ToolTip="Move up (Alt+Up)"
-                                    Click="MoveUpButton_Click" />
                             <TextBlock DockPanel.Dock="Right"
                                        Text="{Binding RhsPreviewDisplay}"
                                        Foreground="#808080"

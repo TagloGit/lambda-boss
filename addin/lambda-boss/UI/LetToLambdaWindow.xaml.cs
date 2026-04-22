@@ -10,8 +10,6 @@ namespace LambdaBoss.UI;
 
 public class LetInputRow : INotifyPropertyChanged
 {
-    private bool _canMoveDown;
-    private bool _canMoveUp;
     private bool _isOptional;
     private bool _keep = true;
     private string _paramName = "";
@@ -72,28 +70,6 @@ public class LetInputRow : INotifyPropertyChanged
         }
     }
 
-    public bool CanMoveUp
-    {
-        get => _canMoveUp;
-        set
-        {
-            if (_canMoveUp == value) return;
-            _canMoveUp = value;
-            OnChanged();
-        }
-    }
-
-    public bool CanMoveDown
-    {
-        get => _canMoveDown;
-        set
-        {
-            if (_canMoveDown == value) return;
-            _canMoveDown = value;
-            OnChanged();
-        }
-    }
-
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnChanged([CallerMemberName] string? prop = null)
@@ -144,7 +120,6 @@ public partial class LetToLambdaWindow
             row.PropertyChanged += Row_PropertyChanged;
 
         InputsList.ItemsSource = _rows;
-        UpdateReorderButtonStates();
 
         LambdaNameBox.Focus();
         UpdateSaveEnabled();
@@ -198,34 +173,6 @@ public partial class LetToLambdaWindow
 
         if (targetIndex != currentIndex)
             _rows.Move(currentIndex, targetIndex);
-
-        UpdateReorderButtonStates();
-    }
-
-    private void UpdateReorderButtonStates()
-    {
-        var firstKept = -1;
-        var lastKept = -1;
-        for (var i = 0; i < _rows.Count; i++)
-        {
-            if (!_rows[i].Keep) continue;
-            if (firstKept < 0) firstKept = i;
-            lastKept = i;
-        }
-
-        for (var i = 0; i < _rows.Count; i++)
-        {
-            var r = _rows[i];
-            if (!r.Keep)
-            {
-                r.CanMoveUp = false;
-                r.CanMoveDown = false;
-                continue;
-            }
-
-            r.CanMoveUp = i > firstKept;
-            r.CanMoveDown = i < lastKept;
-        }
     }
 
     private void MoveRowUp(LetInputRow row)
@@ -239,7 +186,6 @@ public partial class LetToLambdaWindow
             if (_rows[i].Keep)
             {
                 _rows.Move(index, i);
-                UpdateReorderButtonStates();
                 UpdateSaveEnabled();
                 return;
             }
@@ -256,23 +202,10 @@ public partial class LetToLambdaWindow
             if (_rows[i].Keep)
             {
                 _rows.Move(index, i);
-                UpdateReorderButtonStates();
                 UpdateSaveEnabled();
                 return;
             }
         }
-    }
-
-    private void MoveUpButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: LetInputRow row })
-            MoveRowUp(row);
-    }
-
-    private void MoveDownButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: LetInputRow row })
-            MoveRowDown(row);
     }
 
     private void InputRow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -289,6 +222,114 @@ public partial class LetToLambdaWindow
             MoveRowUp(row);
         else if (key == Key.Down)
             MoveRowDown(row);
+        e.Handled = true;
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            CancelButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter
+            && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+            && SaveButton.IsEnabled)
+        {
+            SaveButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
+    }
+
+    // --- Drag/drop reorder ---
+    //
+    // Minimal in-window drag/drop. Source must be a kept row; drop target
+    // must be another kept row. The rest of the kept-rows-first invariant
+    // is unaffected because unchecked rows refuse the drop.
+
+    private const string DragDataFormat = "LambdaBoss.LetInputRow";
+
+    private Point? _dragStartPoint;
+    private LetInputRow? _dragSourceRow;
+
+    private void DragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: LetInputRow row } fe && row.Keep)
+        {
+            _dragStartPoint = e.GetPosition(fe);
+            _dragSourceRow = row;
+        }
+    }
+
+    private void DragHandle_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragStartPoint is null || _dragSourceRow is null) return;
+
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            _dragStartPoint = null;
+            _dragSourceRow = null;
+            return;
+        }
+
+        if (sender is not FrameworkElement fe) return;
+
+        var current = e.GetPosition(fe);
+        var dx = current.X - _dragStartPoint.Value.X;
+        var dy = current.Y - _dragStartPoint.Value.Y;
+        if (Math.Abs(dx) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(dy) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        var data = new DataObject(DragDataFormat, _dragSourceRow);
+        try
+        {
+            DragDrop.DoDragDrop(fe, data, DragDropEffects.Move);
+        }
+        finally
+        {
+            _dragStartPoint = null;
+            _dragSourceRow = null;
+        }
+    }
+
+    private void InputRow_DragOver(object sender, DragEventArgs e)
+    {
+        var source = e.Data.GetData(DragDataFormat) as LetInputRow;
+        if (source is null
+            || sender is not FrameworkElement { DataContext: LetInputRow target }
+            || !target.Keep
+            || !source.Keep)
+        {
+            e.Effects = DragDropEffects.None;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.Move;
+        }
+        e.Handled = true;
+    }
+
+    private void InputRow_Drop(object sender, DragEventArgs e)
+    {
+        var source = e.Data.GetData(DragDataFormat) as LetInputRow;
+        if (source is null
+            || sender is not FrameworkElement { DataContext: LetInputRow target }
+            || !target.Keep
+            || !source.Keep
+            || ReferenceEquals(source, target))
+        {
+            return;
+        }
+
+        var srcIdx = _rows.IndexOf(source);
+        var tgtIdx = _rows.IndexOf(target);
+        if (srcIdx < 0 || tgtIdx < 0 || srcIdx == tgtIdx) return;
+
+        _rows.Move(srcIdx, tgtIdx);
+        UpdateSaveEnabled();
         e.Handled = true;
     }
 
