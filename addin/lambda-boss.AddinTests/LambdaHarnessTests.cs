@@ -49,7 +49,8 @@ public class LambdaHarnessTests
                     test.Name,
                     test.Args ?? [],
                     test.Expected ?? "",
-                    test.ExpectedType ?? ""
+                    test.ExpectedType ?? "",
+                    test.Setup!
                 ];
         }
     }
@@ -57,7 +58,7 @@ public class LambdaHarnessTests
     [Theory]
     [MemberData(nameof(TestCases))]
     public void LambdaTest(string lambdaPath, string testName, List<object> args,
-        object? expected, string expectedType)
+        object? expected, string expectedType, TestSetup? setup)
     {
         var (name, formula) = LambdaParser.ParseFile(lambdaPath);
         EnsureInjected(name, formula);
@@ -69,6 +70,7 @@ public class LambdaHarnessTests
         var ws = _excel.AddWorksheet();
         try
         {
+            ApplySetup(ws, setup);
             var cell = ws.Range["A1"];
             try
             {
@@ -99,6 +101,77 @@ public class LambdaHarnessTests
                 // Ignore cleanup
             }
         }
+    }
+
+    private static void ApplySetup(dynamic ws, TestSetup? setup)
+    {
+        if (setup == null)
+            return;
+
+        if (setup.Cells != null)
+        {
+            foreach (var sc in setup.Cells)
+            {
+                var range = ws.Range[sc.Address];
+                try
+                {
+                    range.Value = ConvertCellValues(sc.Values);
+                }
+                finally
+                {
+                    Marshal.ReleaseComObject(range);
+                }
+            }
+        }
+
+        if (setup.Names != null)
+        {
+            string sheetName = ws.Name;
+            foreach (var sn in setup.Names)
+            {
+                string refersTo = ResolveRefersTo(sn.RefersTo, sheetName);
+                ws.Names.Add(sn.Name, refersTo);
+            }
+        }
+    }
+
+    private static object ConvertCellValues(object? raw)
+    {
+        if (raw is List<object> outer && outer.Count > 0 && outer[0] is List<object>)
+        {
+            int rowCount = outer.Count;
+            int colCount = ((List<object>)outer[0]).Count;
+            var arr = new object[rowCount, colCount];
+            for (int r = 0; r < rowCount; r++)
+            {
+                var row = (List<object>)outer[r];
+                for (int c = 0; c < colCount; c++)
+                    arr[r, c] = ConvertScalar(row[c]);
+            }
+            return arr;
+        }
+        return ConvertScalar(raw) ?? "";
+    }
+
+    private static object? ConvertScalar(object? value)
+    {
+        if (value is string s)
+        {
+            if (long.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lv))
+                return lv;
+            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var dv))
+                return dv;
+            if (bool.TryParse(s, out var bv))
+                return bv;
+        }
+        return value;
+    }
+
+    private static string ResolveRefersTo(string refersTo, string sheetName)
+    {
+        var quotedSheet = $"'{sheetName}'";
+        var substituted = refersTo.Replace("{sheet}", quotedSheet);
+        return substituted.StartsWith("=") ? substituted : "=" + quotedSheet + "!" + substituted;
     }
 
     private void EnsureInjected(string name, string formula)
@@ -296,4 +369,23 @@ public class TestCase
     public List<object>? Args { get; set; }
     public object? Expected { get; set; }
     public string? ExpectedType { get; set; }
+    public TestSetup? Setup { get; set; }
+}
+
+public class TestSetup
+{
+    public List<SetupCell>? Cells { get; set; }
+    public List<SetupName>? Names { get; set; }
+}
+
+public class SetupCell
+{
+    public string Address { get; set; } = "";
+    public object? Values { get; set; }
+}
+
+public class SetupName
+{
+    public string Name { get; set; } = "";
+    public string RefersTo { get; set; } = "";
 }
