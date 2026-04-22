@@ -308,4 +308,22 @@ Tell the user:
 - **GROUPBY errors on a single-row input; skip one-element test cases.** `GROUPBY({"X"}, {"X"}, ROWS,, 0, -2)` returns `#CALC!` / HRESULT `-2146826273` in Excel even after normalising to a column. Drop the single-element test case — it's not a realistic use of a frequency lambda, and there's no clean workaround without branching on `ROWS(arr)=1`.
 - **SEQUENCE orientation matters for INDEX column indexing.** `INDEX(array, , SEQUENCE(n,,n,-1))` produces an nx1 vertical result even when the input array is 1xn horizontal, because `SEQUENCE(n,,n,-1)` is vertical. Use `SEQUENCE(1,n,n,-1)` (horizontal) to preserve the original 1xn orientation.
 - **Avoid LET variable names that look like R1C1 references.** Names ending in `R1`/`C1` (e.g. `gR1`, `gC1`), or short forms like `cR`, `cC`, `topR`, `botR`, `leftC`, `rightC` are rejected by Excel when injecting the lambda via Names.Add — the harness reports "Could not resolve lambda dependencies". Single-letter names `r` / `c` are also risky because they resemble R1C1 row/column references. Use descriptive names like `baseRow`, `endCol`, `ctrRow`, `topRow`, `leftCol`, `winR`, `winC` instead.
-- **Prefer `INDEX(arr, SEQUENCE(...), SEQUENCE(...))` over `OFFSET` for subrange extraction.** `OFFSET` requires a real range reference and errors on array inputs (e.g. `SEQUENCE(10,10)`), which the harness can only pass as array constants — so OFFSET-based lambdas can't be exercised in tests. `INDEX` with SEQUENCE row/col index arrays accepts both real ranges (production) and array constants (tests), returning the same 2D spilled result. Combine with the `IFERROR(MIN(ROW(grid)),1)` base-cell fallback so positional math stays correct for both inputs.
+- **`INDEX(arr, SEQUENCE(...), SEQUENCE(...))` and `OFFSET` are both testable; pick based on required semantics.** Historically the harness could only pass array constants (e.g. `SEQUENCE(10,10)`), which made `OFFSET` untestable — so lambdas were pushed toward `INDEX` with SEQUENCE index arrays. As of issue #85 the harness supports a `setup:` block that pre-populates cells and/or named ranges before the formula runs, so `OFFSET`-based lambdas (and any lambda that must return or consume a *range reference* rather than a spilled array) can now be exercised in tests. Choose `OFFSET` when the caller needs a true range (for data validation sources, conditional-formatting ranges, `SUBTOTAL`, further `OFFSET`, etc.); choose `INDEX` with SEQUENCE when a spilled 2D array is sufficient. Either way, keep the `IFERROR(MIN(ROW(grid)),1)` base-cell fallback so positional math stays correct for both real-range and array-constant inputs.
+- **Test YAML: `setup:` block pre-populates the sheet before the formula runs.** Each test runs on a fresh worksheet. An optional `setup:` block can populate cells and/or define worksheet-scoped names used by the formula args. Shape:
+    ```yaml
+    - name: real range input via named range
+      setup:
+        cells:
+          - address: "C5:G9"
+            values:
+              - [1, 2, 3, 4, 5]
+              - [6, 7, 8, 9, 10]
+              # ...
+        names:
+          - { name: "testGrid", refers_to: "C5:G9" }
+      args: ["=testGrid", "=E7", "=3", "=3"]
+      expected: [[7, 8, 9], [12, 13, 14], [17, 18, 19]]
+    ```
+  - `cells[].values` is a 2D list (`[[...]]`) whose shape matches `address`. Scalars are also accepted for single-cell addresses.
+  - `names[].refers_to`: a bare address (e.g. `C5:G9`) is auto-qualified with the current test sheet name. To write a full formula, prefix with `=`; use `{sheet}` as a placeholder for the sheet name if needed (e.g. `={sheet}!C5:G9`).
+  - Names are sheet-scoped — they live and die with the fresh worksheet, so no cleanup is required.
