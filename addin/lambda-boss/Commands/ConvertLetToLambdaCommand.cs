@@ -13,7 +13,7 @@ namespace LambdaBoss.Commands;
 ///     Ribbon handler: converts the active cell's =LET(...) formula into a
 ///     workbook-scoped LAMBDA registered in the Name Manager.
 /// </summary>
-public static class ConvertLetToLambdaCommand
+internal static class ConvertLetToLambdaCommand
 {
     public static void Run()
     {
@@ -58,7 +58,7 @@ public static class ConvertLetToLambdaCommand
                 {
                     var window = new LetToLambdaWindow(
                         parsed,
-                        name => existingNames.Contains(name));
+                        name => existingNames.TryGetValue(name, out string? refersTo) ? refersTo : null);
 
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
@@ -89,14 +89,19 @@ public static class ConvertLetToLambdaCommand
         }
     }
 
-    private static HashSet<string> GetExistingNames(dynamic workbook)
+    private static Dictionary<string, string> GetExistingNames(dynamic workbook)
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try
         {
             foreach (dynamic n in workbook.Names)
             {
-                try { names.Add((string)n.Name); }
+                try
+                {
+                    var name = (string)n.Name;
+                    var refersTo = (string?)n.RefersTo ?? string.Empty;
+                    names[name] = refersTo;
+                }
                 catch { /* skip unreadable */ }
             }
         }

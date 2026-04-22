@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace LambdaBoss.UI;
 
@@ -103,15 +104,27 @@ public class LetInputRow : INotifyPropertyChanged
 
 public partial class LetToLambdaWindow
 {
-    private readonly Func<string, bool> _nameCollides;
+    private static readonly Brush ErrorBrush =
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#e74856"));
+    private static readonly Brush InfoBrush =
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#d7ba7d"));
+
+    private readonly Func<string, string?> _resolveExistingRefersTo;
     private readonly ParsedLet _parsed;
     private readonly ObservableCollection<LetInputRow> _rows;
 
-    public LetToLambdaWindow(ParsedLet parsed, Func<string, bool> nameCollides)
+    /// <summary>
+    ///     Creates the dialog. <paramref name="resolveExistingRefersTo" />
+    ///     returns the <c>RefersTo</c> of an existing workbook name (or
+    ///     <c>null</c> if the name isn't taken). When the existing name is a
+    ///     LAMBDA, Save proceeds as an overwrite so authors can round-trip
+    ///     via Edit Lambda and re-register with the same name.
+    /// </summary>
+    public LetToLambdaWindow(ParsedLet parsed, Func<string, string?> resolveExistingRefersTo)
     {
         InitializeComponent();
         _parsed = parsed;
-        _nameCollides = nameCollides;
+        _resolveExistingRefersTo = resolveExistingRefersTo;
 
         var valueBindings = parsed.Bindings
             .Where(b => !b.IsCalculation)
@@ -296,14 +309,25 @@ public partial class LetToLambdaWindow
             return;
         }
 
-        if (_nameCollides(name))
+        var existingRefersTo = _resolveExistingRefersTo(name);
+        if (existingRefersTo != null)
         {
-            ShowNameError("Name already exists in this workbook.");
-            SaveButton.IsEnabled = false;
-            return;
+            if (LambdaSignatureParser.IsLambdaFormula(existingRefersTo))
+            {
+                ShowNameInfo($"'{name}' already exists — Save will overwrite the existing LAMBDA.");
+            }
+            else
+            {
+                ShowNameError(
+                    $"'{name}' already exists in this workbook and is not a LAMBDA. Choose another name.");
+                SaveButton.IsEnabled = false;
+                return;
+            }
         }
-
-        HideNameError();
+        else
+        {
+            HideNameError();
+        }
 
         // Validate rows: kept rows must have non-empty unique param names
         // not colliding with any retained LET binding name.
@@ -346,6 +370,14 @@ public partial class LetToLambdaWindow
     private void ShowNameError(string message)
     {
         NameErrorText.Text = message;
+        NameErrorText.Foreground = ErrorBrush;
+        NameErrorText.Visibility = Visibility.Visible;
+    }
+
+    private void ShowNameInfo(string message)
+    {
+        NameErrorText.Text = message;
+        NameErrorText.Foreground = InfoBrush;
         NameErrorText.Visibility = Visibility.Visible;
     }
 
