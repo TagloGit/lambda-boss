@@ -1,13 +1,15 @@
 <Window x:Class="LambdaBoss.UI.LetToLambdaWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dd="urn:gong-wpf-dragdrop"
         Title="Lambda Boss — LET to LAMBDA"
         Width="560" Height="480"
         WindowStyle="ToolWindow"
         ShowInTaskbar="True"
         Topmost="True"
         ResizeMode="CanResizeWithGrip"
-        Background="#1e1e1e">
+        Background="#1e1e1e"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -63,18 +65,38 @@
                       BorderBrush="#3e3e3e"
                       BorderThickness="1"
                       Padding="4">
-            <ItemsControl x:Name="InputsList">
+            <ItemsControl x:Name="InputsList"
+                          dd:DragDrop.IsDragSource="True"
+                          dd:DragDrop.IsDropTarget="True"
+                          dd:DragDrop.UseDefaultDragAdorner="True"
+                          dd:DragDrop.UseDefaultEffectDataTemplate="True">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <DockPanel Margin="4,3"
                                    PreviewKeyDown="InputRow_PreviewKeyDown">
                             <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                            <Border DockPanel.Dock="Left"
+                                    Width="16"
+                                    Margin="0,0,4,0"
+                                    Background="Transparent"
+                                    Cursor="SizeAll"
+                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
+                                    ToolTip="Drag to reorder (or Alt+Up / Alt+Down)">
+                                <TextBlock Text="&#x22EE;&#x22EE;"
+                                           Foreground="#808080"
+                                           FontSize="14"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False" />
+                            </Border>
                             <CheckBox DockPanel.Dock="Left"
+                                      dd:DragDrop.DragSourceIgnore="True"
                                       IsChecked="{Binding Keep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Uncheck to hardcode this binding inside the LAMBDA body" />
                             <CheckBox DockPanel.Dock="Left"
+                                      dd:DragDrop.DragSourceIgnore="True"
                                       Content="Optional"
                                       IsChecked="{Binding IsOptional, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                       IsEnabled="{Binding Keep}"
@@ -82,32 +104,6 @@
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Caller may omit this argument; defaults to the original RHS expression" />
-                            <Button DockPanel.Dock="Right"
-                                    Content="&#x25BC;"
-                                    Width="22"
-                                    Padding="0"
-                                    Margin="0,0,0,0"
-                                    Background="#2d2d2d"
-                                    Foreground="#cccccc"
-                                    BorderBrush="#3e3e3e"
-                                    BorderThickness="1"
-                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
-                                    IsEnabled="{Binding CanMoveDown}"
-                                    ToolTip="Move down (Alt+Down)"
-                                    Click="MoveDownButton_Click" />
-                            <Button DockPanel.Dock="Right"
-                                    Content="&#x25B2;"
-                                    Width="22"
-                                    Padding="0"
-                                    Margin="8,0,2,0"
-                                    Background="#2d2d2d"
-                                    Foreground="#cccccc"
-                                    BorderBrush="#3e3e3e"
-                                    BorderThickness="1"
-                                    Visibility="{Binding Keep, Converter={StaticResource BoolToVis}}"
-                                    IsEnabled="{Binding CanMoveUp}"
-                                    ToolTip="Move up (Alt+Up)"
-                                    Click="MoveUpButton_Click" />
                             <TextBlock DockPanel.Dock="Right"
                                        Text="{Binding RhsPreviewDisplay}"
                                        Foreground="#808080"
@@ -117,7 +113,8 @@
                                        Margin="8,0,0,0"
                                        TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding RhsPreview}" />
-                            <TextBox Text="{Binding ParamName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox dd:DragDrop.DragSourceIgnore="True"
+                                     Text="{Binding ParamName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      IsEnabled="{Binding Keep}"
                                      Padding="4,2"
                                      FontFamily="Consolas"

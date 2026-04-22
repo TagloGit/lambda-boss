@@ -1,17 +1,17 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using GongSolutions.Wpf.DragDrop;
 
 namespace LambdaBoss.UI;
 
 public class LetInputRow : INotifyPropertyChanged
 {
-    private bool _canMoveDown;
-    private bool _canMoveUp;
     private bool _isOptional;
     private bool _keep = true;
     private string _paramName = "";
@@ -72,28 +72,6 @@ public class LetInputRow : INotifyPropertyChanged
         }
     }
 
-    public bool CanMoveUp
-    {
-        get => _canMoveUp;
-        set
-        {
-            if (_canMoveUp == value) return;
-            _canMoveUp = value;
-            OnChanged();
-        }
-    }
-
-    public bool CanMoveDown
-    {
-        get => _canMoveDown;
-        set
-        {
-            if (_canMoveDown == value) return;
-            _canMoveDown = value;
-            OnChanged();
-        }
-    }
-
     public event PropertyChangedEventHandler? PropertyChanged;
 
     private void OnChanged([CallerMemberName] string? prop = null)
@@ -142,9 +120,13 @@ public partial class LetToLambdaWindow
 
         foreach (var row in _rows)
             row.PropertyChanged += Row_PropertyChanged;
+        _rows.CollectionChanged += Rows_CollectionChanged;
 
         InputsList.ItemsSource = _rows;
-        UpdateReorderButtonStates();
+
+        var keepHandler = new KeptRowReorderHandler();
+        GongSolutions.Wpf.DragDrop.DragDrop.SetDragHandler(InputsList, keepHandler);
+        GongSolutions.Wpf.DragDrop.DragDrop.SetDropHandler(InputsList, keepHandler);
 
         LambdaNameBox.Focus();
         UpdateSaveEnabled();
@@ -198,34 +180,6 @@ public partial class LetToLambdaWindow
 
         if (targetIndex != currentIndex)
             _rows.Move(currentIndex, targetIndex);
-
-        UpdateReorderButtonStates();
-    }
-
-    private void UpdateReorderButtonStates()
-    {
-        var firstKept = -1;
-        var lastKept = -1;
-        for (var i = 0; i < _rows.Count; i++)
-        {
-            if (!_rows[i].Keep) continue;
-            if (firstKept < 0) firstKept = i;
-            lastKept = i;
-        }
-
-        for (var i = 0; i < _rows.Count; i++)
-        {
-            var r = _rows[i];
-            if (!r.Keep)
-            {
-                r.CanMoveUp = false;
-                r.CanMoveDown = false;
-                continue;
-            }
-
-            r.CanMoveUp = i > firstKept;
-            r.CanMoveDown = i < lastKept;
-        }
     }
 
     private void MoveRowUp(LetInputRow row)
@@ -239,7 +193,6 @@ public partial class LetToLambdaWindow
             if (_rows[i].Keep)
             {
                 _rows.Move(index, i);
-                UpdateReorderButtonStates();
                 UpdateSaveEnabled();
                 return;
             }
@@ -256,23 +209,10 @@ public partial class LetToLambdaWindow
             if (_rows[i].Keep)
             {
                 _rows.Move(index, i);
-                UpdateReorderButtonStates();
                 UpdateSaveEnabled();
                 return;
             }
         }
-    }
-
-    private void MoveUpButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: LetInputRow row })
-            MoveRowUp(row);
-    }
-
-    private void MoveDownButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { DataContext: LetInputRow row })
-            MoveRowDown(row);
     }
 
     private void InputRow_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -290,6 +230,31 @@ public partial class LetToLambdaWindow
         else if (key == Key.Down)
             MoveRowDown(row);
         e.Handled = true;
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            CancelButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter
+            && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+            && SaveButton.IsEnabled)
+        {
+            SaveButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
+    }
+
+    private void Rows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Reorder via drag/drop fires Move; keep validation in sync.
+        if (e.Action == NotifyCollectionChangedAction.Move)
+            UpdateSaveEnabled();
     }
 
     private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -404,4 +369,53 @@ public partial class LetToLambdaWindow
         DialogResult = false;
         Close();
     }
+}
+
+/// <summary>
+///     Restricts gong-wpf-dragdrop reorder to kept rows on both ends.
+///     Unchecked rows can't be dragged or dropped onto, which preserves
+///     the kept-rows-first invariant in <c>_rows</c>. The base
+///     <see cref="DefaultDropHandler" /> already does the right
+///     <c>ObservableCollection.Move</c> for same-collection reorders.
+/// </summary>
+internal class KeptRowReorderHandler : DefaultDropHandler, IDragSource
+{
+    private readonly DefaultDragHandler _dragBase = new();
+
+    public override void DragOver(IDropInfo dropInfo)
+    {
+        if (dropInfo.Data is LetInputRow source
+            && dropInfo.TargetItem is LetInputRow target
+            && source.Keep
+            && target.Keep)
+        {
+            base.DragOver(dropInfo);
+        }
+        else
+        {
+            dropInfo.Effects = DragDropEffects.None;
+            dropInfo.DropTargetAdorner = null;
+        }
+    }
+
+    public void StartDrag(IDragInfo dragInfo)
+    {
+        if (dragInfo.SourceItem is LetInputRow row && row.Keep)
+            _dragBase.StartDrag(dragInfo);
+        else
+            dragInfo.Effects = DragDropEffects.None;
+    }
+
+    public bool CanStartDrag(IDragInfo dragInfo) =>
+        dragInfo.SourceItem is LetInputRow row && row.Keep && _dragBase.CanStartDrag(dragInfo);
+
+    public void Dropped(IDropInfo dropInfo) => _dragBase.Dropped(dropInfo);
+
+    public void DragDropOperationFinished(DragDropEffects operationResult, IDragInfo dragInfo) =>
+        _dragBase.DragDropOperationFinished(operationResult, dragInfo);
+
+    public void DragCancelled() => _dragBase.DragCancelled();
+
+    public bool TryCatchOccurredException(Exception exception) =>
+        _dragBase.TryCatchOccurredException(exception);
 }
