@@ -41,6 +41,9 @@ Execute approved implementation plans.
 2. Create PR with `Closes #<number>` in body
 3. Update issue: remove `status: in-progress`, add `status: in-review`
 
+### Coding guidelinse
+- Never reference Cell.Formula when manipulating Excel cells, it's a legacy property - use Cell.Formula2 instead.
+
 ## Self-Improvement
 
 When you notice a recurring problem, a workflow gap, or something that would help future instances:

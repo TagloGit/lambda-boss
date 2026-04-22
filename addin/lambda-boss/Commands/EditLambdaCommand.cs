@@ -41,7 +41,7 @@ internal static class EditLambdaCommand
             }
 
             var activeCell = app.ActiveCell;
-            var formula = activeCell?.Formula as string;
+            var formula = activeCell?.Formula2 as string;
 
             var call = TryParseLambdaCall(formula);
             if (call == null)
@@ -81,7 +81,7 @@ internal static class EditLambdaCommand
 
             try
             {
-                activeCell!.Formula = letFormula;
+                activeCell!.Formula2 = letFormula;
                 Logger.Info($"EditLambda: Expanded '{call.Name}' into LET");
             }
             catch (Exception ex)
