@@ -166,7 +166,11 @@ public static class LetToLambdaBuilder
         if (renames.Count == 0) return text;
 
         var pattern = string.Join("|", renames.Keys.Select(Regex.Escape));
-        var regex = new Regex($@"(?<![A-Za-z0-9_.]){pattern}(?![A-Za-z0-9_.])",
+        // Wrap the alternation in a non-capturing group so the word-boundary
+        // lookarounds apply to every alternative. Without the group, `|` would
+        // split the regex into "(?<!…)key1" and "key2(?!…)", letting a key
+        // match the first letter of a longer identifier (e.g. `a` in `ABS`).
+        var regex = new Regex($@"(?<![A-Za-z0-9_.])(?:{pattern})(?![A-Za-z0-9_.])",
             RegexOptions.IgnoreCase);
 
         var result = new StringBuilder();
