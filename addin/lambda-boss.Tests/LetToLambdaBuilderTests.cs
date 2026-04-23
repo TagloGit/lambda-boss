@@ -53,6 +53,32 @@ public class LetToLambdaBuilderTests
     }
 
     [Fact]
+    public void RenamedKey_DoesNotMatchInsideLongerIdentifier()
+    {
+        // Regression: when a rename key appears as the first letter of an
+        // identifier in the body (e.g. `a` inside `ABS`), the word-boundary
+        // lookarounds must still guard the match. A previous bug interpolated
+        // the alternation without grouping, so `|` split the regex and the
+        // first alternative was only left-guarded, causing `ABS` → `add_1BS`.
+        var result = Build(
+            "=LET(a, A1, b, B1, c, INDIRECT(a), d, INDIRECT(b), " +
+            "SUM(ABS(ROW(d)-ROW(c))+ABS(COLUMN(d)-COLUMN(c))))",
+            "Distance",
+            ("a", "add_1", true), ("b", "add_2", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    add_1,",
+            "    add_2,",
+            "    LET(",
+            "        c, INDIRECT(add_1),",
+            "        d, INDIRECT(add_2),",
+            "        SUM(ABS(ROW(d)-ROW(c))+ABS(COLUMN(d)-COLUMN(c)))",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
     public void MixedKeepAndCalc_WrapsInLet()
     {
         var result = Build("=LET(someRange, A1:A10, getMax, MAX(someRange), getMax)", "MyMax",
