@@ -43,6 +43,7 @@ Source: "{#BuildOutput}\lambda-boss64.dna"; DestDir: "{app}"; Flags: ignoreversi
 
 ; Core managed assemblies (unpacked per .dna config)
 Source: "{#BuildOutput}\lambda-boss.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildOutput}\GongSolutions.WPF.DragDrop.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\Ookii.Dialogs.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\Taglo.Excel.Common.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\YamlDotNet.dll"; DestDir: "{app}"; Flags: ignoreversion
