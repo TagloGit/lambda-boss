@@ -34,6 +34,12 @@ dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj
 - **Never use compound Bash commands** (no `&&`, `;`, or `|` chaining). Use separate Bash tool calls instead — independent calls can run in parallel. Compound commands trigger extra permission prompts.
 - **Never prefix Bash commands with `cd`**. The working directory is already the project root. All commands (`gh`, `git`, `npm`, etc.) work without `cd`.
 
+## Adding NuGet dependencies
+
+Until the publishing process is more sophisticated, any new NuGet package that produces a runtime DLL must be **manually added to `installer/lambda-boss.iss` under `[Files]`** in the same PR that introduces the dependency. Otherwise the installed build will crash at runtime with `FileNotFoundException` the first time the dependency is loaded — the XLL host probes the install directory, not the NuGet cache.
+
+To check what a new package adds to the build, look at `addin/lambda-boss/bin/Release/net6.0-windows/` after a Release build and cross-reference against the `[Files]` list in the `.iss`.
+
 ## Publishing a release
 
 End-to-end release publishing is handled by `scripts/publish-release.ps1`. Run it from a clean `main` branch; it walks through version bump, build, test, code-signing, installer compilation, PR merge, tagging, and draft GitHub Release creation.
