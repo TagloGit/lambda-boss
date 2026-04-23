@@ -2,7 +2,7 @@
 ; Installs to {localappdata}\LambdaBoss (no admin rights required)
 
 #define MyAppName "Lambda Boss"
-#define MyAppVersion "0.1.2"
+#define MyAppVersion "0.1.3"
 #define MyAppPublisher "Taglo"
 #define MyAppURL "https://github.com/TagloGit/lambda-boss"
 
