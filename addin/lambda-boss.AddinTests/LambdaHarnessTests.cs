@@ -146,7 +146,7 @@ public class LambdaHarnessTests
             {
                 var row = (List<object>)outer[r];
                 for (int c = 0; c < colCount; c++)
-                    arr[r, c] = ConvertScalar(row[c]);
+                    arr[r, c] = ConvertScalar(row[c]) ?? "";
             }
             return arr;
         }
