@@ -33,7 +33,7 @@ GetVar = LAMBDA(
                        IF(@match = "", NA(),
                           LET(
                               payload, MID(@match, LEN(name) + 2, LEN(@match)),
-                              IF(ISNUMBER(FIND(gs, payload)), TRANSPOSE(TEXTSPLIT(payload, gs)), payload)
+                              TRANSPOSE(TEXTSPLIT(payload, gs))
                           )
                        )
                    )
