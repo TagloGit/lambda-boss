@@ -1,5 +1,5 @@
 /*  FUNCTION NAME:      SplitState
-    DESCRIPTION:*//**Splits a state string into a debug table with columns name, type, value (arrays joined as [a, b, c]).*/
+    DESCRIPTION:*//**Splits a state (or column of states) into one row of values per state. Arrays render as [a, b, c].*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
 */
@@ -9,14 +9,14 @@ SplitState = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →SplitState(state)¶" &
-                "DESCRIPTION:   →Splits a state string into a debug table with columns name, type, value (arrays joined as [a, b, c]).¶" &
+                "DESCRIPTION:   →Splits a state (or column of states) into one row of values per state. Arrays render as [a, b, c].¶" &
                 "VERSION:       →Apr 27 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   state          →(Required) State string built with NewState/SetVar/SetVars/SetState.¶" &
+                "   state          →(Required) Scalar state, or a vertical column of states (e.g. SCAN result).¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=SplitState(SetVars(""cur"", 1, ""ends"", {1;3;7}))¶" &
-                "Result         →3x3 array: header row + one row per variable¶" &
-                "NOTE:          →Useful for debugging REDUCE/SCAN state. Pair with SCAN to see state at every iteration.",
+                "Formula        →=SplitState(SCAN(SetState(0,0), SEQUENCE(5), reducer))¶" &
+                "Result         →5xN table: each row is one iteration's variable values¶" &
+                "NOTE:          →Pair with SCAN to inspect REDUCE state at every iteration. Column order matches insertion order.",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -25,20 +25,25 @@ SplitState = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
-        header, HSTACK("name", "type", "value"),
-        result, IF(state = "",
-                   VSTACK(header, HSTACK("(empty)", "", "")),
-                   LET(
-                       parts, TEXTSPLIT(state, us),
-                       names, MAP(parts, LAMBDA(p, LEFT(p, FIND(rs, p) - 1))),
-                       tags, MAP(parts, LAMBDA(p, MID(p, FIND(rs, p) + 1, 1))),
-                       payloads, MAP(parts, LAMBDA(p, MID(p, FIND(rs, p) + 2, LEN(p)))),
-                       types, IF(tags = "a", "array", "scalar"),
-                       values, IF(tags = "a", "[" & SUBSTITUTE(payloads, gs, ", ") & "]", payloads),
-                       body, HSTACK(TRANSPOSE(names), TRANSPOSE(types), TRANSPOSE(values)),
-                       VSTACK(header, body)
-                   )
-                ),
+        n, ROWS(state),
+        firstState, INDEX(state, 1, 1),
+        firstParts, IF(firstState = "", "(empty)", TEXTSPLIT(firstState, us)),
+        numVars, COLUMNS(firstParts),
+        result, MAKEARRAY(n, numVars, LAMBDA(r, c,
+                    LET(
+                        s, INDEX(state, r, 1),
+                        IF(s = "", "(empty)",
+                            LET(
+                                parts, TEXTSPLIT(s, us),
+                                part, INDEX(parts, 1, c),
+                                pos, FIND(rs, part),
+                                tag, MID(part, pos + 1, 1),
+                                payload, MID(part, pos + 2, LEN(part)),
+                                IF(tag = "a", "[" & SUBSTITUTE(payload, gs, ", ") & "]", payload)
+                            )
+                        )
+                    )
+                )),
         IF(Help?, Help, result)
 )
 );
