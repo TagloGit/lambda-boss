@@ -37,9 +37,8 @@ SplitState = LAMBDA(
                                 parts, TEXTSPLIT(s, us),
                                 part, INDEX(parts, 1, c),
                                 pos, FIND(rs, part),
-                                tag, MID(part, pos + 1, 1),
-                                payload, MID(part, pos + 2, LEN(part)),
-                                IF(tag = "a", "[" & SUBSTITUTE(payload, gs, ", ") & "]", payload)
+                                payload, MID(part, pos + 1, LEN(part)),
+                                IF(ISNUMBER(FIND(gs, payload)), "[" & SUBSTITUTE(payload, gs, ", ") & "]", payload)
                             )
                         )
                     )

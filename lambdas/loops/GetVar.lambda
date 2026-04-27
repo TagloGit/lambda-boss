@@ -32,9 +32,8 @@ GetVar = LAMBDA(
                        match, FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
                        IF(@match = "", NA(),
                           LET(
-                              tag, MID(@match, LEN(name) + 2, 1),
-                              payload, MID(@match, LEN(name) + 3, LEN(@match)),
-                              IF(tag = "a", TRANSPOSE(TEXTSPLIT(payload, gs)), payload)
+                              payload, MID(@match, LEN(name) + 2, LEN(@match)),
+                              IF(ISNUMBER(FIND(gs, payload)), TRANSPOSE(TEXTSPLIT(payload, gs)), payload)
                           )
                        )
                    )

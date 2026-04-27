@@ -28,10 +28,8 @@ SetVar = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
-        isArr, ROWS(value) * COLUMNS(value) > 1,
-        tag, IF(isArr, "a", "s"),
-        encoded, IF(isArr, TEXTJOIN(gs, FALSE, value), value & ""),
-        newPair, name & rs & tag & encoded,
+        encoded, IF(ROWS(value) * COLUMNS(value) > 1, TEXTJOIN(gs, FALSE, value), value & ""),
+        newPair, name & rs & encoded,
         cleaned, IF(state = "", "",
                     LET(
                         parts, TEXTSPLIT(state, us),
