@@ -29,11 +29,11 @@ GetVar = LAMBDA(
         result, IF(state = "", NA(),
                    LET(
                        parts, TEXTSPLIT(state, us),
-                       match, FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
-                       IF(@match = "", NA(),
+                       match, @FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
+                       IF(match = "", NA(),
                           LET(
-                              payload, MID(@match, LEN(name) + 2, LEN(@match)),
-                              TRANSPOSE(TEXTSPLIT(payload, gs))
+                              payload, MID(match, LEN(name) + 2, LEN(match)),
+                              IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload)
                           )
                        )
                    )
