@@ -1,0 +1,44 @@
+tests:
+  - name: round-trip scalar
+    args: ['=SetVar(NewState(), "x", 5)', "x"]
+    expected: "5"
+
+  - name: round-trip after replacement returns latest value
+    args: ['=SetVar(SetVar(NewState(), "x", 5), "x", 7)', "x"]
+    expected: "7"
+
+  - name: read second var after appending
+    args: ['=SetVar(SetVar(NewState(), "x", 5), "y", 7)', "y"]
+    expected: "7"
+
+  - name: read first var still works after appending second
+    args: ['=SetVar(SetVar(NewState(), "x", 5), "y", 7)', "x"]
+    expected: "5"
+
+  - name: missing var returns NA
+    args: ['=SetVar(NewState(), "x", 5)', "missing"]
+    expected: -2146826246
+
+  - name: read from empty state returns NA
+    args: ['=NewState()', "anything"]
+    expected: -2146826246
+
+  - name: prefix collision - reading "abc" must not match "ab"
+    args: ['=SetVar(NewState(), "ab", 1)', "abc"]
+    expected: -2146826246
+
+  - name: prefix collision - reading "ab" with both "ab" and "abc" set
+    args: ['=SetVar(SetVar(NewState(), "ab", 1), "abc", 2)', "ab"]
+    expected: "1"
+
+  - name: array round-trip returns vertical array of text
+    args: ['=SetVar(NewState(), "arr", {10;20;30})', "arr"]
+    expected: [["10"], ["20"], ["30"]]
+
+  - name: 1x1 array collapses to scalar (Excel can't distinguish from scalar)
+    args: ['=SetVar(NewState(), "arr", SEQUENCE(1,1,42))', "arr"]
+    expected: "42"
+
+  - name: help text
+    args: []
+    expected_type: array

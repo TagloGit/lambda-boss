@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      GetVarAt
+    DESCRIPTION:*//**Reads a positional slot from a state built with SetState. Returns text scalar or vertical array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-27  Claude      Initial version
+*/
+GetVarAt = LAMBDA(
+//  Parameter Declarations
+    [state],
+    [index],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GetVarAt(state, index)¶" &
+                "DESCRIPTION:   →Reads a positional slot from a state built with SetState. Returns text scalar or vertical array.¶" &
+                "VERSION:       →Apr 27 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string built with SetState (or any state with names ""1""..""N"").¶" &
+                "   index          →(Required) 1-based slot number.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetVarAt(SetState(10, 20, 30), 2)¶" &
+                "Result         →""20"" (text). Use GetVarAtN to get a number.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        result, GetVar(state, index & ""),
+        IF(Help?, Help, result)
+)
+);

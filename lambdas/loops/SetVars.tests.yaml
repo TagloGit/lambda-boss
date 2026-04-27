@@ -1,0 +1,25 @@
+tests:
+  - name: one pair on empty state
+    args: ['=NewState()', "x", "=5"]
+    expected: "x\x1Es5"
+
+  - name: three pairs on empty state
+    args: ['=NewState()', "cur", "=1", "best", "=2", "ends", "=3"]
+    expected: "cur\x1Es1\x1Fbest\x1Es2\x1Fends\x1Es3"
+
+  - name: five pairs on empty state
+    args:
+      ['=NewState()', "a", "=1", "b", "=2", "c", "=3", "d", "=4", "e", "=5"]
+    expected: "a\x1Es1\x1Fb\x1Es2\x1Fc\x1Es3\x1Fd\x1Es4\x1Fe\x1Es5"
+
+  - name: omitted-tail behaviour - two pairs do not call SetVar with omitted args
+    args: ['=NewState()', "x", "=10", "y", "=20"]
+    expected: "x\x1Es10\x1Fy\x1Es20"
+
+  - name: replaces existing var by name
+    args: ['=SetVar(NewState(), "x", 5)', "x", "=99"]
+    expected: "x\x1Es99"
+
+  - name: help text
+    args: []
+    expected_type: array
