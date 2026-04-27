@@ -16,7 +16,7 @@ tests:
     expected: -2146826246
 
   - name: index collision - slot 1 vs slot 10
-    args: ['=SetVars(NewState(), "1", "first", "10", "tenth")', "=1"]
+    args: ['=SetVars("1", "first", "10", "tenth")', "=1"]
     expected: "first"
 
   - name: array slot returns vertical array of text

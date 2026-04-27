@@ -1,0 +1,32 @@
+tests:
+  - name: empty state shows placeholder row
+    args: ['=NewState()']
+    expected:
+      - ["name", "type", "value"]
+      - ["(empty)", "", ""]
+
+  - name: two scalar vars
+    args: ['=SetVars("cur", 1, "best", 5)']
+    expected:
+      - ["name", "type", "value"]
+      - ["cur", "scalar", "1"]
+      - ["best", "scalar", "5"]
+
+  - name: scalar plus array shows joined preview
+    args: ['=SetVars("cur", 1, "ends", {1;3;7})']
+    expected:
+      - ["name", "type", "value"]
+      - ["cur", "scalar", "1"]
+      - ["ends", "array", "[1, 3, 7]"]
+
+  - name: positional state from SetState
+    args: ['=SetState(10, 20, 30)']
+    expected:
+      - ["name", "type", "value"]
+      - ["1", "scalar", "10"]
+      - ["2", "scalar", "20"]
+      - ["3", "scalar", "30"]
+
+  - name: help text
+    args: []
+    expected_type: array

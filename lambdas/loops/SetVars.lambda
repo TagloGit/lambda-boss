@@ -1,11 +1,10 @@
 /*  FUNCTION NAME:      SetVars
-    DESCRIPTION:*//**Sets up to 5 named variables in one call. Alternating positional pairs.*/
+    DESCRIPTION:*//**Builds a fresh state holding up to 5 named variables. Alternating positional pairs.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
 */
 SetVars = LAMBDA(
 //  Parameter Declarations
-    [state],
     [n_1],
     [v_1],
     [n_2],
@@ -18,22 +17,22 @@ SetVars = LAMBDA(
     [v_5],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SetVars(state, n_1, v_1, [n_2], [v_2], [n_3], [v_3], [n_4], [v_4], [n_5], [v_5])¶" &
-                "DESCRIPTION:   →Sets up to 5 named variables in one call. Alternating positional pairs.¶" &
+                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], [n_3], [v_3], [n_4], [v_4], [n_5], [v_5])¶" &
+                "DESCRIPTION:   →Builds a fresh state holding up to 5 named variables. Alternating positional pairs.¶" &
                 "VERSION:       →Apr 27 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   state          →(Required) Current state string. Use NewState() to start fresh.¶" &
                 "   n_1, v_1       →(Required) First name and value pair.¶" &
                 "   n_2..v_5       →(Optional) Up to four more name/value pairs.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=SetVars(NewState(), ""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
-                "Result         →state holding cur=1, best=1, ends=1",
+                "Formula        →=SetVars(""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
+                "Result         →state holding cur=1, best=1, ends=1¶" &
+                "NOTE:          →To partially update an existing state by name, use SetVar.",
                 "→", "¶"
                 ),
     //  Check inputs
-        Help?, ISOMITTED(state),
+        Help?, ISOMITTED(n_1),
     //  Procedure
-        s_1, IF(ISOMITTED(n_1), state, SetVar(state, n_1, v_1)),
+        s_1, SetVar(NewState(), n_1, v_1),
         s_2, IF(ISOMITTED(n_2), s_1, SetVar(s_1, n_2, v_2)),
         s_3, IF(ISOMITTED(n_3), s_2, SetVar(s_2, n_3, v_3)),
         s_4, IF(ISOMITTED(n_4), s_3, SetVar(s_3, n_4, v_4)),

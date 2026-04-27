@@ -1,0 +1,44 @@
+/*  FUNCTION NAME:      SplitState
+    DESCRIPTION:*//**Splits a state string into a debug table with columns name, type, value (arrays joined as [a, b, c]).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-27  Claude      Initial version
+*/
+SplitState = LAMBDA(
+//  Parameter Declarations
+    [state],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SplitState(state)¶" &
+                "DESCRIPTION:   →Splits a state string into a debug table with columns name, type, value (arrays joined as [a, b, c]).¶" &
+                "VERSION:       →Apr 27 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string built with NewState/SetVar/SetVars/SetState.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SplitState(SetVars(""cur"", 1, ""ends"", {1;3;7}))¶" &
+                "Result         →3x3 array: header row + one row per variable¶" &
+                "NOTE:          →Useful for debugging REDUCE/SCAN state. Pair with SCAN to see state at every iteration.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        us, CHAR(31),
+        rs, CHAR(30),
+        gs, CHAR(29),
+        header, HSTACK("name", "type", "value"),
+        result, IF(state = "",
+                   VSTACK(header, HSTACK("(empty)", "", "")),
+                   LET(
+                       parts, TEXTSPLIT(state, us),
+                       names, MAP(parts, LAMBDA(p, LEFT(p, FIND(rs, p) - 1))),
+                       tags, MAP(parts, LAMBDA(p, MID(p, FIND(rs, p) + 1, 1))),
+                       payloads, MAP(parts, LAMBDA(p, MID(p, FIND(rs, p) + 2, LEN(p)))),
+                       types, IF(tags = "a", "array", "scalar"),
+                       values, IF(tags = "a", "[" & SUBSTITUTE(payloads, gs, ", ") & "]", payloads),
+                       body, HSTACK(TRANSPOSE(names), TRANSPOSE(types), TRANSPOSE(values)),
+                       VSTACK(header, body)
+                   )
+                ),
+        IF(Help?, Help, result)
+)
+);
