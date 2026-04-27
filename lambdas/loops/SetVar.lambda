@@ -1,0 +1,43 @@
+/*  FUNCTION NAME:      SetVar
+    DESCRIPTION:*//**Sets or replaces a named variable (scalar or 1-D array) in a state string.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-27  Claude      Initial version
+*/
+SetVar = LAMBDA(
+//  Parameter Declarations
+    [state],
+    [name],
+    [value],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SetVar(state, name, value)¶" &
+                "DESCRIPTION:   →Sets or replaces a named variable (scalar or 1-D array) in a state string.¶" &
+                "VERSION:       →Apr 27 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) Current state string. Use NewState() to start fresh.¶" &
+                "   name           →(Required) Variable name. Cannot contain CHAR(30).¶" &
+                "   value          →(Required) Scalar or 1-D array. Stored as text; coerce on read with GetVarN or --GetVar.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SetVar(NewState(), ""best"", 5)¶" &
+                "Result         →state string holding best=5",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        us, CHAR(31),
+        rs, CHAR(30),
+        gs, CHAR(29),
+        encoded, IF(ROWS(value) * COLUMNS(value) > 1, TEXTJOIN(gs, FALSE, value), value & ""),
+        newPair, name & rs & encoded,
+        cleaned, IF(state = "", "",
+                    LET(
+                        parts, TEXTSPLIT(state, us),
+                        keep, FILTER(parts, LEFT(parts, LEN(name) + 1) <> name & rs, ""),
+                        IF(@keep = "", "", TEXTJOIN(us, TRUE, keep))
+                    )
+                ),
+        result, IF(cleaned = "", newPair, cleaned & us & newPair),
+        IF(Help?, Help, result)
+)
+);

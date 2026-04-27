@@ -1,0 +1,43 @@
+/*  FUNCTION NAME:      GetVar
+    DESCRIPTION:*//**Reads a named variable from a state string. Returns text scalar or vertical array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-27  Claude      Initial version
+*/
+GetVar = LAMBDA(
+//  Parameter Declarations
+    [state],
+    [name],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GetVar(state, name)¶" &
+                "DESCRIPTION:   →Reads a named variable from a state string. Returns text scalar or vertical array.¶" &
+                "VERSION:       →Apr 27 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string built with NewState/SetVar/SetVars/SetState.¶" &
+                "   name           →(Required) Variable name to read.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetVar(SetVar(NewState(), ""x"", 5), ""x"")¶" &
+                "Result         →""5"" (text). Use GetVarN to get a number.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        us, CHAR(31),
+        rs, CHAR(30),
+        gs, CHAR(29),
+        result, IF(state = "", NA(),
+                   LET(
+                       parts, TEXTSPLIT(state, us),
+                       match, @FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
+                       IF(match = "", NA(),
+                          LET(
+                              payload, MID(match, LEN(name) + 2, LEN(match)),
+                              IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload)
+                          )
+                       )
+                   )
+                ),
+        IF(Help?, Help, result)
+)
+);

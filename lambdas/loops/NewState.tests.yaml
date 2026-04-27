@@ -1,0 +1,8 @@
+tests:
+  - name: empty state is empty string
+    args: []
+    expected: ""
+
+  - name: help text
+    args: ["=TRUE"]
+    expected_type: array

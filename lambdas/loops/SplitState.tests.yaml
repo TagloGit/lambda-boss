@@ -1,0 +1,36 @@
+tests:
+  - name: scalar state - one var returns scalar value
+    args: ['=SetVars("cur", 1)']
+    expected: "1"
+
+  - name: scalar state - two scalar vars returns 1x2 row
+    args: ['=SetVars("cur", 1, "best", 5)']
+    expected: [["1", "5"]]
+
+  - name: scalar state - mixed scalar and array
+    args: ['=SetVars("cur", 1, "ends", {1;3;7})']
+    expected: [["1", "[1, 3, 7]"]]
+
+  - name: column of states - VSTACKed to 2D
+    args: ['=VSTACK(SetVars("a", 1, "b", 2), SetVars("a", 3, "b", 4))']
+    expected:
+      - ["1", "2"]
+      - ["3", "4"]
+
+  - name: column of three states with array values
+    args:
+      [
+        '=VSTACK(SetVars("cur", 1, "ends", {7}), SetVars("cur", 2, "ends", {7;9}), SetVars("cur", 3, "ends", {7;9;11}))',
+      ]
+    expected:
+      - ["1", "7"]
+      - ["2", "[7, 9]"]
+      - ["3", "[7, 9, 11]"]
+
+  - name: empty state shows placeholder
+    args: ['=NewState()']
+    expected: "(empty)"
+
+  - name: help text
+    args: []
+    expected_type: array

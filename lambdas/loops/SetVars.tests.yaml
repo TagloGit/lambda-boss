@@ -1,0 +1,20 @@
+tests:
+  - name: one pair
+    args: ["x", "=5"]
+    expected: "x\x1E5"
+
+  - name: three pairs
+    args: ["cur", "=1", "best", "=2", "ends", "=3"]
+    expected: "cur\x1E1\x1Fbest\x1E2\x1Fends\x1E3"
+
+  - name: five pairs
+    args: ["a", "=1", "b", "=2", "c", "=3", "d", "=4", "e", "=5"]
+    expected: "a\x1E1\x1Fb\x1E2\x1Fc\x1E3\x1Fd\x1E4\x1Fe\x1E5"
+
+  - name: array value uses gs separator
+    args: ["arr", "={10;20;30}"]
+    expected: "arr\x1E10\x1D20\x1D30"
+
+  - name: help text
+    args: []
+    expected_type: array
