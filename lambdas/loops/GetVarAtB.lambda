@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      GetVarAtB
+    DESCRIPTION:*//**Reads a positional slot and coerces the payload to boolean. Scalar or vertical array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-28  Claude      Initial version
+*/
+GetVarAtB = LAMBDA(
+//  Parameter Declarations
+    [state],
+    [index],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GetVarAtB(state, index)¶" &
+                "DESCRIPTION:   →Reads a positional slot and coerces the payload to boolean. Scalar or vertical array.¶" &
+                "VERSION:       →Apr 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string built with SetState (or any state with names ""1""..""N"").¶" &
+                "   index          →(Required) 1-based slot number.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetVarAtB(SetState(TRUE, FALSE, TRUE), 2)¶" &
+                "Result         →FALSE (boolean). Use GetVarAt for raw text or GetVarAtN for numbers.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        result, GetVarB(state, index & ""),
+        IF(Help?, Help, result)
+)
+);

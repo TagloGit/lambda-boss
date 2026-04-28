@@ -1,0 +1,28 @@
+tests:
+  - name: scalar TRUE round-trip
+    args: ['=SetVar(NewState(), "x", TRUE)', "x"]
+    expected: True
+
+  - name: scalar FALSE round-trip
+    args: ['=SetVar(NewState(), "x", FALSE)', "x"]
+    expected: False
+
+  - name: lowercase "true" coerces to TRUE (Excel = is case-insensitive)
+    args: ['=SetVar(NewState(), "x", "true")', "x"]
+    expected: True
+
+  - name: numeric 1 does not coerce to TRUE
+    args: ['=SetVar(NewState(), "x", 1)', "x"]
+    expected: False
+
+  - name: array of booleans round-trips element-wise
+    args: ['=SetVar(NewState(), "flags", {TRUE;FALSE;TRUE})', "flags"]
+    expected: [[True], [False], [True]]
+
+  - name: missing var returns NA
+    args: ['=SetVar(NewState(), "x", TRUE)', "missing"]
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array
