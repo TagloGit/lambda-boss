@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Splits a state (or column of states) into one row of values per state. Arrays render as [a, b, c].*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
+                        2026-04-29  Claude      Skip past per-entry type tag when extracting payload
 */
 SplitState = LAMBDA(
 //  Parameter Declarations
@@ -10,7 +11,7 @@ SplitState = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →SplitState(state)¶" &
                 "DESCRIPTION:   →Splits a state (or column of states) into one row of values per state. Arrays render as [a, b, c].¶" &
-                "VERSION:       →Apr 27 2026¶" &
+                "VERSION:       →Apr 29 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   state          →(Required) Scalar state, or a vertical column of states (e.g. SCAN result).¶" &
                 "EXAMPLE:       →¶" &
@@ -37,7 +38,7 @@ SplitState = LAMBDA(
                                 parts, TEXTSPLIT(s, us),
                                 part, INDEX(parts, 1, c),
                                 pos, FIND(rs, part),
-                                payload, MID(part, pos + 1, LEN(part)),
+                                payload, MID(part, pos + 3, LEN(part)),
                                 IF(ISNUMBER(FIND(gs, payload)), "[" & SUBSTITUTE(payload, gs, ", ") & "]", payload)
                             )
                         )
