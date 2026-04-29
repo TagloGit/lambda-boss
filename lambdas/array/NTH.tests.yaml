@@ -27,6 +27,14 @@ tests:
     args: ['={42}', "=1"]
     expected: 42
 
+  - name: index 0 returns NA
+    args: ['={10,20,30,40}', "=0"]
+    expected: -2146826246
+
+  - name: negative index out of range returns NA
+    args: ['={10,20,30,40}', "=-5"]
+    expected: -2146826246
+
   - name: help text
     args: []
     expected_type: array
