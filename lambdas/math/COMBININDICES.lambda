@@ -1,0 +1,59 @@
+/*  FUNCTION NAME:      COMBININDICES
+    DESCRIPTION:*//**Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-29  Claude      Initial version
+*/
+COMBININDICES = LAMBDA(
+//  Parameter Declarations
+    [n],
+    [k],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →COMBININDICES(n, k)¶" &
+                "DESCRIPTION:   →Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.¶" &
+                "VERSION:       →Apr 29 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   n              →(Required) Population size. Positive integer.¶" &
+                "   k              →(Required) Combination size, 1 ≤ k ≤ n.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COMBININDICES(5, 3)¶" &
+                "Result         →10x3 matrix: {1,2,3; 1,2,4; ...; 3,4,5}¶" &
+                "NOTE:          →Pair with COMBINATIONS for value lookup. Returns NA() when n<1, k<1, k>n, or either argument is non-integer.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(n),
+        valid?, AND(n >= 1, k >= 1, k <= n, n = INT(n), k = INT(k)),
+    //  Procedure
+        result, IF(valid?,
+                    LET(
+                        total, COMBIN(n, k),
+                        unrank, LAMBDA(rank,
+                                    DROP(REDUCE(
+                                        rank,
+                                        SEQUENCE(k),
+                                        LAMBDA(state, slot,
+                                            LET(
+                                                rem,     INDEX(state, 1, 1),
+                                                prev,    IF(slot = 1, 0, INDEX(state, 1, slot)),
+                                                kLeft,   k - slot + 1,
+                                                nCands,  n - prev,
+                                                counts,  MAP(SEQUENCE(nCands), LAMBDA(cand, COMBIN(n - prev - cand, kLeft - 1))),
+                                                cum,     SCAN(0, counts, SUM),
+                                                pickIdx, XMATCH(rem, cum, 1, 2),
+                                                newPrev, prev + pickIdx,
+                                                skipped, IF(pickIdx = 1, 0, INDEX(cum, pickIdx - 1)),
+                                                IF(slot = 1,
+                                                   HSTACK(rem - skipped, newPrev),
+                                                   HSTACK(rem - skipped, DROP(state, , 1), newPrev))
+                                            )
+                                        )
+                                    ), , 1)
+                                ),
+                        IF(total = 1, unrank(1),
+                           REDUCE(unrank(1), SEQUENCE(total - 1, 1, 2), LAMBDA(acc, rank, VSTACK(acc, unrank(rank)))))
+                    ),
+                    NA()),
+        IF(Help?, Help, result)
+)
+);
