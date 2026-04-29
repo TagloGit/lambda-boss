@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      GetVar
-    DESCRIPTION:*//**Reads a named variable from a state string. Returns text scalar or vertical array.*/
+    DESCRIPTION:*//**Reads a named variable from a state string. Returns a native-typed scalar or vertical array based on the entry's type tag.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
+                        2026-04-29  Claude      Read per-entry tag and coerce to native type
 */
 GetVar = LAMBDA(
 //  Parameter Declarations
@@ -10,14 +11,15 @@ GetVar = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →GetVar(state, name)¶" &
-                "DESCRIPTION:   →Reads a named variable from a state string. Returns text scalar or vertical array.¶" &
-                "VERSION:       →Apr 27 2026¶" &
+                "DESCRIPTION:   →Reads a named variable from a state string. Returns a native-typed scalar or vertical array based on the entry's type tag.¶" &
+                "VERSION:       →Apr 29 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   state          →(Required) State string built with NewState/SetVar/SetVars/SetState.¶" &
                 "   name           →(Required) Variable name to read.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=GetVar(SetVar(NewState(), ""x"", 5), ""x"")¶" &
-                "Result         →""5"" (text). Use GetVarN to get a number.",
+                "Result         →5 (number — element type recovered from the tag)¶" &
+                "NOTE:          →Tag values: n=number, b=boolean, t=text. Element type is whatever was passed to SetVar.",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -32,8 +34,10 @@ GetVar = LAMBDA(
                        match, @FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
                        IF(match = "", NA(),
                           LET(
-                              payload, MID(match, LEN(name) + 2, LEN(match)),
-                              IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload)
+                              tag, MID(match, LEN(name) + 2, 1),
+                              payload, MID(match, LEN(name) + 4, LEN(match)),
+                              raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
+                              IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", raw))
                           )
                        )
                    )

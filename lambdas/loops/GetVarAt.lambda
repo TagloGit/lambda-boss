@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      GetVarAt
-    DESCRIPTION:*//**Reads a positional slot from a state built with SetState. Returns text scalar or vertical array.*/
+    DESCRIPTION:*//**Reads a positional slot from a state built with SetState. Returns a native-typed scalar or vertical array.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
+                        2026-04-29  Claude      Polymorphic via GetVar's per-entry tag
 */
 GetVarAt = LAMBDA(
 //  Parameter Declarations
@@ -10,14 +11,14 @@ GetVarAt = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →GetVarAt(state, index)¶" &
-                "DESCRIPTION:   →Reads a positional slot from a state built with SetState. Returns text scalar or vertical array.¶" &
-                "VERSION:       →Apr 27 2026¶" &
+                "DESCRIPTION:   →Reads a positional slot from a state built with SetState. Returns a native-typed scalar or vertical array.¶" &
+                "VERSION:       →Apr 29 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   state          →(Required) State string built with SetState (or any state with names ""1""..""N"").¶" &
                 "   index          →(Required) 1-based slot number.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=GetVarAt(SetState(10, 20, 30), 2)¶" &
-                "Result         →""20"" (text). Use GetVarAtN to get a number.",
+                "Result         →20 (number — element type recovered from the slot's tag)",
                 "→", "¶"
                 ),
     //  Check inputs

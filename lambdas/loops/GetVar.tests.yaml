@@ -1,19 +1,19 @@
 tests:
-  - name: round-trip scalar
+  - name: round-trip scalar number
     args: ['=SetVar(NewState(), "x", 5)', "x"]
-    expected: "5"
+    expected: 5
 
   - name: round-trip after replacement returns latest value
     args: ['=SetVar(SetVar(NewState(), "x", 5), "x", 7)', "x"]
-    expected: "7"
+    expected: 7
 
   - name: read second var after appending
     args: ['=SetVar(SetVar(NewState(), "x", 5), "y", 7)', "y"]
-    expected: "7"
+    expected: 7
 
   - name: read first var still works after appending second
     args: ['=SetVar(SetVar(NewState(), "x", 5), "y", 7)', "x"]
-    expected: "5"
+    expected: 5
 
   - name: missing var returns NA
     args: ['=SetVar(NewState(), "x", 5)', "missing"]
@@ -29,15 +29,27 @@ tests:
 
   - name: prefix collision - reading "ab" with both "ab" and "abc" set
     args: ['=SetVar(SetVar(NewState(), "ab", 1), "abc", 2)', "ab"]
-    expected: "1"
+    expected: 1
 
-  - name: array round-trip returns vertical array of text
+  - name: numeric array round-trips as vertical numeric array
     args: ['=SetVar(NewState(), "arr", {10;20;30})', "arr"]
-    expected: [["10"], ["20"], ["30"]]
+    expected: [[10], [20], [30]]
 
   - name: 1x1 array collapses to scalar (Excel can't distinguish from scalar)
     args: ['=SetVar(NewState(), "arr", SEQUENCE(1,1,42))', "arr"]
-    expected: "42"
+    expected: 42
+
+  - name: text scalar round-trips as text
+    args: ['=SetVar(NewState(), "name", "hello")', "name"]
+    expected: "hello"
+
+  - name: boolean scalar round-trips as boolean
+    args: ['=SetVar(NewState(), "done?", TRUE)', "done?"]
+    expected: True
+
+  - name: boolean array round-trips element-wise
+    args: ['=SetVar(NewState(), "flags", {TRUE;FALSE;TRUE})', "flags"]
+    expected: [[True], [False], [True]]
 
   - name: help text
     args: []
