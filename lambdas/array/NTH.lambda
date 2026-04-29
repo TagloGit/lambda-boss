@@ -25,7 +25,7 @@ NTH = LAMBDA(
     //  Procedure
         flat, TOCOL(arr),
         idx, IF(n < 0, ROWS(flat) + n + 1, n),
-        result, @INDEX(flat, idx, 1),
+        result, IF(idx < 1, NA(), @INDEX(flat, idx, 1)),
         IF(Help?, Help, result)
 )
 );
