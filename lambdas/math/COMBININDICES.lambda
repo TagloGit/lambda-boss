@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-29  Claude      Initial version
                         2026-04-29  Claude      Switch to broadcast+TOCOL extension for large-n performance
+                        2026-04-29  Claude      Use IFS in place of IF+NA, TAKE in place of INDEX for first/last column
 */
 COMBININDICES = LAMBDA(
 //  Parameter Declarations
@@ -32,12 +33,11 @@ COMBININDICES = LAMBDA(
                           LET(
                               kPrev,    targetK - 1,
                               newCol,   SEQUENCE(1, n),
-                              lastCol,  IF(kPrev = 1, prev, INDEX(prev, , kPrev)),
-                              mask,     newCol > lastCol,
-                              buildCol, LAMBDA(srcCol, TOCOL(IF(mask, srcCol, NA()), 2)),
-                              prevPart, IF(kPrev = 1,
-                                           buildCol(prev),
-                                           REDUCE(buildCol(INDEX(prev, , 1)),
+                              mask,     newCol > TAKE(prev, , -1),
+                              buildCol, LAMBDA(srcCol, TOCOL(IFS(mask, srcCol), 2)),
+                              seed,     buildCol(TAKE(prev, , 1)),
+                              prevPart, IF(kPrev = 1, seed,
+                                           REDUCE(seed,
                                                   SEQUENCE(kPrev - 1, 1, 2),
                                                   LAMBDA(acc, colIdx,
                                                       HSTACK(acc, buildCol(INDEX(prev, , colIdx)))))),
