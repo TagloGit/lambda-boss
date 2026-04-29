@@ -51,6 +51,18 @@ tests:
     args: ['=SetVar(NewState(), "flags", {TRUE;FALSE;TRUE})', "flags"]
     expected: [[True], [False], [True]]
 
+  - name: broadcast number scalar over column of states
+    args: ['=VSTACK(SetVar(NewState(), "x", 5), SetVar(NewState(), "x", 10), SetVar(NewState(), "x", 15))', "x"]
+    expected: [[5], [10], [15]]
+
+  - name: broadcast preserves boolean type per row
+    args: ['=VSTACK(SetVar(NewState(), "done?", TRUE), SetVar(NewState(), "done?", FALSE))', "done?"]
+    expected: [[True], [False]]
+
+  - name: broadcast preserves text type per row
+    args: ['=VSTACK(SetVar(NewState(), "name", "alice"), SetVar(NewState(), "name", "bob"))', "name"]
+    expected: [["alice"], ["bob"]]
+
   - name: help text
     args: []
     expected_type: array
