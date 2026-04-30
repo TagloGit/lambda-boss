@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      INCEL
+    DESCRIPTION:*//**Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-30  Claude      Initial version
+*/
+INCEL = LAMBDA(
+//  Parameter Declarations
+    [address],
+    [sheet],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →INCEL(address, [sheet])¶" &
+                "DESCRIPTION:   →Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.¶" &
+                "VERSION:       →Apr 30 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   address       →(Required) Cell or range address text (e.g. ""A1"" or ""B2:D5"").¶" &
+                "   sheet         →(Optional) Sheet name. If omitted, the address resolves on the current sheet.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=INCEL(""A1"", ""Data"")¶" &
+                "Result         →Value of A1 on the Data sheet",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(address),
+    //  Procedure
+        result, INDIRECT(IF(ISOMITTED(sheet), address, "'" & sheet & "'!" & address)),
+        IF(Help?, Help, result)
+)
+);
