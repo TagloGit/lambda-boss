@@ -1,0 +1,40 @@
+/*  FUNCTION NAME:      SNAQUENCE
+    DESCRIPTION:*//**Generates a 2D array filled with a sequence in a snake (boustrophedon) pattern, alternating direction each row.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-30  Tim Jacks   Initial version
+*/
+SNAQUENCE = LAMBDA(
+//  Parameter Declarations
+    [rows],
+    [columns],
+    [start],
+    [step],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SNAQUENCE(rows, [columns], [start], [step])¶" &
+                "DESCRIPTION:   →Generates a 2D array filled with a sequence in a snake (boustrophedon) pattern, alternating direction each row.¶" &
+                "VERSION:       →Apr 30 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   rows           →(Required) Number of rows in the output array.¶" &
+                "   columns        →(Optional) Number of columns. Default 1.¶" &
+                "   start          →(Optional) First number in the sequence. Default 1.¶" &
+                "   step           →(Optional) Increment between successive numbers. Default 1.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SNAQUENCE(3, 4)¶" &
+                "Result         →{1,2,3,4;8,7,6,5;9,10,11,12}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(rows),
+        Cols, IF(ISOMITTED(columns), 1, columns),
+        StartVal, IF(ISOMITTED(start), 1, start),
+        StepVal, IF(ISOMITTED(step), 1, step),
+    //  Procedure
+        rowIdx, SEQUENCE(rows),
+        colIdx, SEQUENCE(, Cols),
+        parity, MOD(rowIdx, 2),
+        linear, (rowIdx - 1) * Cols + parity * colIdx + (1 - parity) * (Cols + 1 - colIdx),
+        result, StartVal + (linear - 1) * StepVal,
+        IF(Help?, Help, result)
+)
+);
