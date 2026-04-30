@@ -1,0 +1,28 @@
+tests:
+  - name: cell with numeric value
+    setup:
+      cells:
+        - address: "A5"
+          values: 42
+    args: ['="A5"']
+    expected: 42
+
+  - name: cell with text value
+    setup:
+      cells:
+        - address: "B3"
+          values: "hello"
+    args: ['="B3"']
+    expected: "hello"
+
+  - name: range spills as array
+    setup:
+      cells:
+        - address: "C5:E5"
+          values: [[1, 2, 3]]
+    args: ['="C5:E5"']
+    expected: [[1, 2, 3]]
+
+  - name: help text
+    args: []
+    expected_type: array
