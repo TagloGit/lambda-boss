@@ -1,0 +1,38 @@
+/*  FUNCTION NAME:      COMBINATIONS
+    DESCRIPTION:*//**Returns all unordered k-combinations of items, lexicographic order. With delim, joins each row into a single string.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-29  Claude      Initial version
+*/
+COMBINATIONS = LAMBDA(
+//  Parameter Declarations
+    [items],
+    [k],
+    [delim],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →COMBINATIONS(items, k, [delim])¶" &
+                "DESCRIPTION:   →Returns all unordered k-combinations of items, lexicographic order. With delim, joins each row into a single string.¶" &
+                "VERSION:       →Apr 29 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   items          →(Required) 1-D array of items (row or column).¶" &
+                "   k              →(Required) Combination size, 1 ≤ k ≤ count(items).¶" &
+                "   delim          →(Optional) If provided, TEXTJOIN each combination row into a single string.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COMBINATIONS({""A"";""B"";""C"";""D""}, 3, ""|"")¶" &
+                "Result         →4x1: {""A|B|C""; ""A|B|D""; ""A|C|D""; ""B|C|D""}¶" &
+                "NOTE:          →Thin wrapper over COMBININDICES — splits the unranking math from value lookup so callers can reuse indices.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
+        nItems,   ROWS(itemsCol),
+        idx,      COMBININDICES(nItems, k),
+        vals,     INDEX(itemsCol, idx),
+        result,   IF(ISOMITTED(delim),
+                     vals,
+                     BYROW(vals, LAMBDA(rowVec, TEXTJOIN(delim, FALSE, rowVec)))),
+        IF(Help?, Help, result)
+)
+);
