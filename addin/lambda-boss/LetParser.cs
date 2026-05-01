@@ -18,8 +18,14 @@ public static class LetParser
         @"^=\s*LET\s*\(",
         RegexOptions.IgnoreCase);
 
+    // Excel allows '?' anywhere except the first character of a defined
+    // name (per ExcelNameValidator), and our LAMBDA library follows the
+    // common convention of using a trailing '?' for predicate-style
+    // parameters (e.g. Help?, IsEmpty?). The pattern mirrors that rule:
+    // start with letter or underscore; subsequent chars also allow digits,
+    // dots, and '?'.
     private static readonly Regex IdentifierPattern = new(
-        @"^[A-Za-z_][A-Za-z0-9_.]*$");
+        @"^[A-Za-z_][A-Za-z0-9_.?]*$");
 
     public static bool IsLetFormula(string? formula)
     {

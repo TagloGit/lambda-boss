@@ -67,4 +67,26 @@ public class LetNameSanitizerTests
     {
         Assert.Equal("aBC", LetNameSanitizer.Sanitize("a   ---   B   !!!   C"));
     }
+
+    [Theory]
+    [InlineData("Help?", "help?")]
+    [InlineData("IsEmpty?", "isEmpty?")]
+    [InlineData("Has Value?", "hasValue?")]
+    public void Sanitize_TrailingQuestionMark_Preserved(string input, string expected)
+    {
+        // Issue 152: '?' is allowed inside Excel names, and predicate-style
+        // labels like 'Help?' should sanitise to 'help?' rather than have
+        // the '?' silently stripped.
+        Assert.Equal(expected, LetNameSanitizer.Sanitize(input));
+    }
+
+    [Fact]
+    public void Sanitize_LeadingQuestionMark_PrefixedWithUnderscore()
+    {
+        // '?' isn't a valid name-start character; the sanitizer prefixes
+        // with '_' so the result is still a usable name. Alternative
+        // would be to return null — picking '_' is consistent with the
+        // existing leading-digit handling.
+        Assert.Equal("_?help", LetNameSanitizer.Sanitize("?help"));
+    }
 }
