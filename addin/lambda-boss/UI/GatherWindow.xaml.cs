@@ -26,29 +26,35 @@ namespace LambdaBoss.UI;
 /// </summary>
 public partial class GatherWindow
 {
-    private readonly Func<IReadOnlyList<RowState>, GatherResult?> _recompute;
-    private GatherResult _result;
-    private readonly ObservableCollection<GatherRowVm> _rows = new();
-    private readonly ObservableCollection<GatherRowVm> _orphans = new();
     // Snapshots of explicitly-excluded rows so they can re-appear in the
     // visible list after a Recompute (which only returns included
     // bindings). Stored as plain BindingRow data — no VM subscriptions to
     // manage across rebuilds. Re-checking removes the entry; the engine's
     // result is the source of truth for re-included rows.
-    private readonly Dictionary<FormulaRef, BindingRow> _excluded = new();
-    // Role overrides persist across rebuilds: when the user demotes B1 to
-    // input, that choice survives an unrelated checkbox toggle on A1
-    // (which would otherwise re-run the engine without the override and
-    // restore B1 to its natural classification). The dialog re-injects
-    // overrides into every Recompute so the engine sees a consistent
-    // view of user intent.
-    private readonly Dictionary<FormulaRef, BindingRole> _roleOverrides = new();
+    private readonly Dictionary<FormulaRef, BindingRow> _excluded = [];
+
+    private readonly ObservableCollection<GatherRowVm> _orphans = [];
+
     // Orphan tracker: precedents that fell out of the active list because
     // their only path ran through a cell the user demoted or excluded.
     // Surfaced in the Orphaned section below the bindings list and
     // removed when the user reverses the causing action — re-includes
     // an excluded cell, or promotes a demoted one back to a step.
     private readonly OrphanedRowTracker _orphanTracker = new();
+
+    private readonly Func<IReadOnlyList<RowState>, GatherResult?> _recompute;
+
+    // Role overrides persist across rebuilds: when the user demotes B1 to
+    // input, that choice survives an unrelated checkbox toggle on A1
+    // (which would otherwise re-run the engine without the override and
+    // restore B1 to its natural classification). The dialog re-injects
+    // overrides into every Recompute so the engine sees a consistent
+    // view of user intent.
+    private readonly Dictionary<FormulaRef, BindingRole> _roleOverrides = [];
+    private readonly ObservableCollection<GatherRowVm> _rows = [];
+
+    private GatherResult _result;
+
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
     // handler and trigger another Recompute. The guard short-circuits the
@@ -151,7 +157,7 @@ public partial class GatherWindow
             var surfaced = new HashSet<FormulaRef>();
             foreach (var binding in bindings)
             {
-                var vm = new GatherRowVm(binding, include: true);
+                var vm = new GatherRowVm(binding, true);
                 vm.PropertyChanged += Row_PropertyChanged;
                 _rows.Add(vm);
                 surfaced.Add(binding.Source);
@@ -166,7 +172,7 @@ public partial class GatherWindow
             foreach (var (source, snapshot) in _excluded)
             {
                 if (surfaced.Contains(source)) continue;
-                var vm = new GatherRowVm(snapshot, include: false);
+                var vm = new GatherRowVm(snapshot, false);
                 vm.PropertyChanged += Row_PropertyChanged;
                 _rows.Add(vm);
             }
@@ -181,7 +187,7 @@ public partial class GatherWindow
                 if (surfaced.Contains(source)) continue;
                 if (_excluded.ContainsKey(source)) continue;
                 var hint = entry.CausedBy.Start.A1Address;
-                var vm = new GatherRowVm(entry.Snapshot, include: true, orphanedByAddress: hint);
+                var vm = new GatherRowVm(entry.Snapshot, true, hint);
                 _orphans.Add(vm);
             }
         }
@@ -205,7 +211,7 @@ public partial class GatherWindow
             // forget the snapshot when re-checking so the engine result
             // owns the row's display (Role/Name/Rhs may have shifted as
             // other rows toggled in the meantime).
-            FormulaRef? causedBy = null;
+            FormulaRef? causedBy;
             if (!vm.Include)
             {
                 _excluded[vm.Source] = new BindingRow(
@@ -259,9 +265,7 @@ public partial class GatherWindow
             // _excluded), refresh that snapshot too so the cached row
             // carries the new role on its next re-render.
             if (_excluded.TryGetValue(vm.Source, out var existing))
-            {
                 _excluded[vm.Source] = existing with { Role = newRole };
-            }
 
             // Promotion: drop any orphans this cell originally caused
             // (whether by a prior demote or a prior exclude). Done up-
@@ -400,12 +404,16 @@ public class GatherRowVm : INotifyPropertyChanged
 {
     private static readonly Brush ActiveAddressBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9cdcfe"));
+
     private static readonly Brush ActiveRoleBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#808080"));
+
     private static readonly Brush ActiveNameBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#dcdcaa"));
+
     private static readonly Brush ActiveRhsBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#cccccc"));
+
     private static readonly Brush MutedBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6a6a6a"));
 
