@@ -79,7 +79,11 @@ internal static class GatherCommand
 
                 try
                 {
-                    activeCell.Formula = saved;
+                    // Formula2 is the dynamic-array-aware setter — the
+                    // legacy Formula property silently wraps array refs
+                    // like `A1#` with the implicit-intersection `@`
+                    // operator on write, which would scalarise our LET.
+                    activeCell.Formula2 = saved;
                     Logger.Info($"Gather: Wrote LET into {sink.A1Address}");
                 }
                 catch (Exception ex)
@@ -139,7 +143,7 @@ internal static class GatherCommand
             {
                 dynamic range = sheet.Cells[cell.Row, cell.Column];
                 if ((bool)range.HasFormula)
-                    return (string)range.Formula;
+                    return (string)range.Formula2;
                 return null;
             }
             catch (Exception ex)
@@ -163,6 +167,30 @@ internal static class GatherCommand
                 return null;
             return ReadStringValue(cell.Sheet, cell.Row, cell.Column - 1,
                 $"GetCellLeftText({cell.Sheet}!{cell.A1Address})");
+        }
+
+        public bool HasSpill(CellRef cell)
+        {
+            if (cell.IsExternal)
+                return false;
+            var sheet = TryGetWorksheet(cell.Sheet);
+            if (sheet == null)
+                return false;
+            try
+            {
+                dynamic range = sheet.Cells[cell.Row, cell.Column];
+                return (bool)range.HasSpill;
+            }
+            catch (Exception ex)
+            {
+                // Range.HasSpill is Excel 365 only. On older builds the
+                // property doesn't exist and the dynamic call throws — log
+                // and treat as non-spilling. The plan documents this as
+                // "modern Excel 365 only, no fallback"; this catch is the
+                // graceful-degradation safety net rather than a feature.
+                Logger.Error($"Gather/HasSpill({cell.Sheet}!{cell.A1Address})", ex);
+                return false;
+            }
         }
 
         private string? ReadStringValue(string sheetName, int row, int column, string context)

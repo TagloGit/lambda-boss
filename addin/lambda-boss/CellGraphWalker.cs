@@ -31,6 +31,7 @@ internal static class CellGraphWalker
             var formula = source.GetFormula(cell);
             var cellAbove = source.GetCellAboveText(cell);
             var cellLeft = source.GetCellLeftText(cell);
+            var hasSpill = source.HasSpill(cell);
 
             IReadOnlyList<FormulaRef> precedents;
             if (formula == null)
@@ -46,7 +47,7 @@ internal static class CellGraphWalker
                 precedents = CellRefExtractor.Extract(formula, cell.Sheet);
             }
 
-            byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents);
+            byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents, hasSpill);
 
             foreach (var p in precedents)
             {

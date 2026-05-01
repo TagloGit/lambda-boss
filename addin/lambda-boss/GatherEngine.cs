@@ -93,8 +93,15 @@ public static class GatherEngine
             {
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
                 // workbook-qualified for externals — DisplayAddress handles
-                // the quoting rules so the RHS round-trips cleanly.
+                // the quoting rules so the RHS round-trips cleanly. A
+                // spilling leaf appends '#' so the binding represents the
+                // whole array rather than just the anchor cell's value;
+                // step-classified cells skip the suffix because their RHS
+                // is the rewritten formula (array semantics flow through
+                // it naturally).
                 rhs = cell.Ref.DisplayAddress(source.SinkSheet);
+                if (cell.HasSpill)
+                    rhs += "#";
             }
             else
             {
@@ -222,7 +229,11 @@ public static class GatherEngine
         // (cell-binding for in-scope cells, range-binding for promoted
         // ranges). Cells whose precedents were all dropped (covered by a
         // range, out of scope, etc.) revert to inputs whose RHS is the
-        // cell address — promotion to step is a follow-up in PR 11.
+        // cell address — promotion to step is a follow-up in PR 11. Spill
+        // anchors follow the same rule: a spilling cell with in-scope
+        // precedents is a step (RHS = rewritten formula, array semantics
+        // flow through naturally); a spilling leaf is an input with RHS
+        // suffixed by `#` to preserve the dynamic-array binding.
         return cell.Precedents.Any(nameByRef.ContainsKey) ? BindingRole.Step : BindingRole.Input;
     }
 

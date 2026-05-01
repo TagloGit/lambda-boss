@@ -189,13 +189,20 @@ public sealed record FormulaRef(CellRef Start, CellRef? End = null)
 ///     and to the left on the cell's own sheet, null when out of range,
 ///     empty, or non-string. <see cref="Precedents" /> mixes single-cell and
 ///     range refs; the walker only recurses into single-cell precedents.
+///     <see cref="HasSpill" /> reflects <see cref="ICellSource.HasSpill" />
+///     for the cell's own anchor — true when the formula spills into a
+///     dynamic-array range. The engine uses it only to suffix <c>#</c> on
+///     the RHS of a spilling input so the binding represents the whole
+///     array; spilling cells with in-scope precedents are still steps
+///     whose RHS is the rewritten formula.
 /// </summary>
 public sealed record WalkedCell(
     CellRef Ref,
     string? Formula,
     string? CellAboveText,
     string? CellLeftText,
-    IReadOnlyList<FormulaRef> Precedents);
+    IReadOnlyList<FormulaRef> Precedents,
+    bool HasSpill = false);
 
 /// <summary>
 ///     A finalised LET binding row in PR 1's read-only dialog. PR 2 onwards
@@ -266,4 +273,15 @@ public interface ICellSource
     ///     column 1, or the cell is unreachable.
     /// </summary>
     string? GetCellLeftText(CellRef cell);
+
+    /// <summary>
+    ///     True when <paramref name="cell" /> is the anchor of a dynamic-
+    ///     array spill (its formula returns an array that fills the
+    ///     surrounding cells). The live adapter reads <c>Range.HasSpill</c> —
+    ///     modern Excel 365 only, no fallback for older builds. Always
+    ///     false for external refs, unreachable cells, and non-formula
+    ///     cells. The engine uses this to force a spilling cell to bind
+    ///     as an input with RHS <c>A1#</c>.
+    /// </summary>
+    bool HasSpill(CellRef cell);
 }
