@@ -1,0 +1,28 @@
+tests:
+  - name: set numeric scalar in empty state
+    args: ['=NewState()', "x", "=5"]
+    expected: "x\x1En\x1E5"
+
+  - name: replace scalar with same name
+    args: ['=SetVar(NewState(), "x", 5)', "x", "=7"]
+    expected: "x\x1En\x1E7"
+
+  - name: append second var
+    args: ['=SetVar(NewState(), "x", 5)', "y", "=7"]
+    expected: "x\x1En\x1E5\x1Fy\x1En\x1E7"
+
+  - name: numeric array uses gs separator
+    args: ['=NewState()', "arr", '={1;2;3}']
+    expected: "arr\x1En\x1E1\x1D2\x1D3"
+
+  - name: text value gets t tag
+    args: ['=NewState()', "name", "hello"]
+    expected: "name\x1Et\x1Ehello"
+
+  - name: boolean value gets b tag
+    args: ['=NewState()', "done?", "=TRUE"]
+    expected: "done?\x1Eb\x1ETRUE"
+
+  - name: help text
+    args: []
+    expected_type: array

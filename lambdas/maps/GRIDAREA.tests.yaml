@@ -39,6 +39,36 @@ tests:
     args: ["=SEQUENCE(10,10)", "=E5", "=1"]
     expected: 45
 
+  - name: real range input via named range
+    setup:
+      cells:
+        - address: "C5:G9"
+          values:
+            - [1, 2, 3, 4, 5]
+            - [6, 7, 8, 9, 10]
+            - [11, 12, 13, 14, 15]
+            - [16, 17, 18, 19, 20]
+            - [21, 22, 23, 24, 25]
+      names:
+        - { name: "testGrid", refers_to: "C5:G9" }
+    args: ["=testGrid", "=E7", "=3", "=3"]
+    expected: [[7, 8, 9], [12, 13, 14], [17, 18, 19]]
+
+  - name: real range clamps at top-left edge
+    setup:
+      cells:
+        - address: "C5:G9"
+          values:
+            - [1, 2, 3, 4, 5]
+            - [6, 7, 8, 9, 10]
+            - [11, 12, 13, 14, 15]
+            - [16, 17, 18, 19, 20]
+            - [21, 22, 23, 24, 25]
+      names:
+        - { name: "testGrid", refers_to: "C5:G9" }
+    args: ["=testGrid", "=C5", "=3", "=3"]
+    expected: [[1, 2], [6, 7]]
+
   - name: help text
     args: []
     expected_type: array

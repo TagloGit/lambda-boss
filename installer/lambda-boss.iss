@@ -2,7 +2,7 @@
 ; Installs to {localappdata}\LambdaBoss (no admin rights required)
 
 #define MyAppName "Lambda Boss"
-#define MyAppVersion "0.1.1"
+#define MyAppVersion "0.1.3"
 #define MyAppPublisher "Taglo"
 #define MyAppURL "https://github.com/TagloGit/lambda-boss"
 
@@ -43,6 +43,7 @@ Source: "{#BuildOutput}\lambda-boss64.dna"; DestDir: "{app}"; Flags: ignoreversi
 
 ; Core managed assemblies (unpacked per .dna config)
 Source: "{#BuildOutput}\lambda-boss.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildOutput}\GongSolutions.WPF.DragDrop.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\Ookii.Dialogs.Wpf.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\Taglo.Excel.Common.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildOutput}\YamlDotNet.dll"; DestDir: "{app}"; Flags: ignoreversion

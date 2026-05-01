@@ -1,0 +1,50 @@
+/*  FUNCTION NAME:      COMBININDICES
+    DESCRIPTION:*//**Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-29  Claude      Initial version
+                        2026-04-29  Claude      Switch to broadcast+TOCOL extension for large-n performance
+                        2026-04-29  Claude      Use IFS in place of IF+NA, TAKE in place of INDEX for first/last column
+*/
+COMBININDICES = LAMBDA(
+//  Parameter Declarations
+    [n],
+    [k],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →COMBININDICES(n, k)¶" &
+                "DESCRIPTION:   →Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.¶" &
+                "VERSION:       →Apr 29 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   n              →(Required) Population size. Positive integer.¶" &
+                "   k              →(Required) Combination size, 1 ≤ k ≤ n.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COMBININDICES(5, 3)¶" &
+                "Result         →10x3 matrix: {1,2,3; 1,2,4; ...; 3,4,5}¶" &
+                "NOTE:          →Pair with COMBINATIONS for value lookup. Returns NA() when n<1, k<1, k>n, or either argument is non-integer.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(n),
+        valid?, AND(n >= 1, k >= 1, k <= n, n = INT(n), k = INT(k)),
+    //  Procedure
+        result, IF(NOT(valid?), NA(),
+                   IF(k = 1, SEQUENCE(n),
+                      REDUCE(SEQUENCE(n), SEQUENCE(k - 1, 1, 2), LAMBDA(prev, targetK,
+                          LET(
+                              kPrev,    targetK - 1,
+                              newCol,   SEQUENCE(1, n),
+                              mask,     newCol > TAKE(prev, , -1),
+                              buildCol, LAMBDA(srcCol, TOCOL(IFS(mask, srcCol), 2)),
+                              seed,     buildCol(TAKE(prev, , 1)),
+                              prevPart, IF(kPrev = 1, seed,
+                                           REDUCE(seed,
+                                                  SEQUENCE(kPrev - 1, 1, 2),
+                                                  LAMBDA(acc, colIdx,
+                                                      HSTACK(acc, buildCol(INDEX(prev, , colIdx)))))),
+                              HSTACK(prevPart, buildCol(newCol))
+                          )
+                      ))
+                   )),
+        IF(Help?, Help, result)
+)
+);

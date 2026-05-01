@@ -1,0 +1,3 @@
+name: Loops
+description: Foundational state-passing primitives for multi-variable REDUCE/SCAN loops in single-cell formulas.
+default_prefix: loops

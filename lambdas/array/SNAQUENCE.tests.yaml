@@ -1,0 +1,32 @@
+tests:
+  - name: 3x4 snake grid default start and step
+    args: ["=3", "=4"]
+    expected: [[1, 2, 3, 4], [8, 7, 6, 5], [9, 10, 11, 12]]
+
+  - name: 2x2 simplest snake
+    args: ["=2", "=2"]
+    expected: [[1, 2], [4, 3]]
+
+  - name: single row degenerates to SEQUENCE
+    args: ["=1", "=5"]
+    expected: [[1, 2, 3, 4, 5]]
+
+  - name: single column default columns
+    args: ["=4"]
+    expected: [[1], [2], [3], [4]]
+
+  - name: custom start
+    args: ["=2", "=3", "=10"]
+    expected: [[10, 11, 12], [15, 14, 13]]
+
+  - name: custom start and step
+    args: ["=2", "=3", "=0", "=2"]
+    expected: [[0, 2, 4], [10, 8, 6]]
+
+  - name: negative step counts down
+    args: ["=2", "=3", "=6", "=-1"]
+    expected: [[6, 5, 4], [1, 2, 3]]
+
+  - name: help text
+    args: []
+    expected_type: array

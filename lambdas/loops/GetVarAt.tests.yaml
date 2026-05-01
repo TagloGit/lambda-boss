@@ -1,0 +1,40 @@
+tests:
+  - name: read slot 1 as native number
+    args: ['=SetState(10, 20, 30)', "=1"]
+    expected: 10
+
+  - name: read slot 2 as native number
+    args: ['=SetState(10, 20, 30)', "=2"]
+    expected: 20
+
+  - name: read slot 3 as native number
+    args: ['=SetState(10, 20, 30)', "=3"]
+    expected: 30
+
+  - name: missing slot returns NA
+    args: ['=SetState(10, 20, 30)', "=4"]
+    expected: -2146826246
+
+  - name: index collision - slot 1 vs slot 10
+    args: ['=SetVars("1", "first", "10", "tenth")', "=1"]
+    expected: "first"
+
+  - name: numeric array slot returns vertical numeric array
+    args: ['=SetState(1, {10;20;30})', "=2"]
+    expected: [[10], [20], [30]]
+
+  - name: read boolean slot as native boolean
+    args: ['=SetState(TRUE, FALSE, TRUE)', "=2"]
+    expected: False
+
+  - name: boolean array slot returns boolean vertical array
+    args: ['=SetState(TRUE, {TRUE;FALSE;TRUE})', "=2"]
+    expected: [[True], [False], [True]]
+
+  - name: broadcast positional read over column of states
+    args: ['=VSTACK(SetState(10, 20, 30), SetState(40, 50, 60))', "=2"]
+    expected: [[20], [50]]
+
+  - name: help text
+    args: []
+    expected_type: array

@@ -1,0 +1,54 @@
+/*  FUNCTION NAME:      SplitState
+    DESCRIPTION:*//**Splits a state (or column of states) into one row of values per state. Scalars are coerced to native types via the per-entry tag; arrays render as [a, b, c].*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-27  Claude      Initial version
+                        2026-04-29  Claude      Skip past per-entry type tag when extracting payload
+                        2026-04-29  Claude      Coerce scalar payloads to native types via tag
+*/
+SplitState = LAMBDA(
+//  Parameter Declarations
+    [state],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SplitState(state)¶" &
+                "DESCRIPTION:   →Splits a state (or column of states) into one row of values per state. Scalars are coerced to native types (number/boolean/text) via the per-entry tag; arrays render as [a, b, c].¶" &
+                "VERSION:       →Apr 29 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) Scalar state, or a vertical column of states (e.g. SCAN result).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SplitState(SCAN(SetState(0,0), SEQUENCE(5), reducer))¶" &
+                "Result         →5xN table: each row is one iteration's variable values¶" &
+                "NOTE:          →Pair with SCAN to inspect REDUCE state at every iteration. Column order matches insertion order. Array slots are flattened to a [a, b, c] text preview because a 2D output cell can't hold a nested array.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        us, CHAR(31),
+        rs, CHAR(30),
+        gs, CHAR(29),
+        n, ROWS(state),
+        firstState, INDEX(state, 1, 1),
+        firstParts, IF(firstState = "", "(empty)", TEXTSPLIT(firstState, us)),
+        numVars, COLUMNS(firstParts),
+        result, MAKEARRAY(n, numVars, LAMBDA(r, c,
+                    LET(
+                        s, INDEX(state, r, 1),
+                        IF(s = "", "(empty)",
+                            LET(
+                                parts, TEXTSPLIT(s, us),
+                                part, INDEX(parts, 1, c),
+                                pos, FIND(rs, part),
+                                tag, MID(part, pos + 1, 1),
+                                payload, MID(part, pos + 3, LEN(part)),
+                                IF(ISNUMBER(FIND(gs, payload)),
+                                    "[" & SUBSTITUTE(payload, gs, ", ") & "]",
+                                    IF(tag = "n", --payload,
+                                        IF(tag = "b", payload = "TRUE", payload)))
+                            )
+                        )
+                    )
+                )),
+        IF(Help?, Help, result)
+)
+);

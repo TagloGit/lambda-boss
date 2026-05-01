@@ -1,0 +1,52 @@
+tests:
+  - name: 5 letters choose 3
+    args: ['={"A";"B";"C";"D";"E"}', "=3"]
+    expected:
+      - ["A", "B", "C"]
+      - ["A", "B", "D"]
+      - ["A", "B", "E"]
+      - ["A", "C", "D"]
+      - ["A", "C", "E"]
+      - ["A", "D", "E"]
+      - ["B", "C", "D"]
+      - ["B", "C", "E"]
+      - ["B", "D", "E"]
+      - ["C", "D", "E"]
+
+  - name: 4 letters choose 3 with pipe delimiter
+    args: ['={"A";"B";"C";"D"}', "=3", "|"]
+    expected:
+      - ["A|B|C"]
+      - ["A|B|D"]
+      - ["A|C|D"]
+      - ["B|C|D"]
+
+  - name: numeric items choose 2
+    args: ['={10;20;30}', "=2"]
+    expected:
+      - [10, 20]
+      - [10, 30]
+      - [20, 30]
+
+  - name: row input gets normalized to column
+    args: ['={"A","B","C"}', "=2"]
+    expected:
+      - ["A", "B"]
+      - ["A", "C"]
+      - ["B", "C"]
+
+  - name: k=1 with delimiter returns column of single items
+    args: ['={"A";"B";"C"}', "=1", "-"]
+    expected:
+      - ["A"]
+      - ["B"]
+      - ["C"]
+
+  - name: k=n returns single row of all items
+    args: ['={"A";"B";"C"}', "=3"]
+    expected:
+      - ["A", "B", "C"]
+
+  - name: help text
+    args: []
+    expected_type: array

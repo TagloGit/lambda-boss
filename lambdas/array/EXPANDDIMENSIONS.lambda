@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Constructs all possible combinations (Cartesian product) of supplied dimensions.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-14  Tim Jacks   Initial version
+                        2026-04-29  Claude      Vectorize index math (REDUCE+HSTACK over per-cell MAKEARRAY)
 */
 EXPANDDIMENSIONS = LAMBDA(
 //  Parameter Declarations
@@ -12,7 +13,7 @@ EXPANDDIMENSIONS = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →EXPANDDIMENSIONS(Dimensions, CycleFromLeft, Delimiter)¶" &
                 "DESCRIPTION:   →Constructs all possible combinations (Cartesian product) of supplied dimensions.¶" &
-                "VERSION:       →Apr 14 2026¶" &
+                "VERSION:       →Apr 29 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   Dimensions     →(Required) A 2D array where each column is one dimension (combined via HSTACK).¶" &
                 "   CycleFromLeft  →(Optional) If TRUE, the leftmost dimension cycles every row. Default FALSE.¶" &
@@ -26,24 +27,19 @@ EXPANDDIMENSIONS = LAMBDA(
         Help?, ISOMITTED(Dimensions),
         Delimit?, NOT(ISOMITTED(Delimiter)),
     //  Procedure
-        usedCycleFromLeft, IF(ISOMITTED(CycleFromLeft), FALSE, N(CycleFromLeft)),
+        cycleLeft?, IF(ISOMITTED(CycleFromLeft), FALSE, N(CycleFromLeft)),
         cols, COLUMNS(Dimensions),
         dims, BYCOL(Dimensions, LAMBDA(col, ROWS(TOCOL(col, 2)))),
-        length, PRODUCT(dims),
-        rowIndices, MAKEARRAY(
-            length,
-            cols,
-            LAMBDA(row, col,
-                MOD(
-                    QUOTIENT(
-                        row - 1,
-                        PRODUCT(IFERROR(TAKE(dims, , IF(usedCycleFromLeft, col - 1, -(cols - col))), 1))
-                    ),
-                    INDEX(dims, 1, col)
-                ) + 1
-            )
-        ),
-        resultBeforeDelimiter, INDEX(Dimensions, rowIndices, SEQUENCE(, cols)),
+        total, PRODUCT(dims),
+        rowVec, SEQUENCE(total),
+        divisorFor, LAMBDA(col,
+                       PRODUCT(IFERROR(TAKE(dims, , IF(cycleLeft?, col - 1, -(cols - col))), 1))),
+        indexCol, LAMBDA(col,
+                     MOD(QUOTIENT(rowVec - 1, divisorFor(col)), INDEX(dims, 1, col)) + 1),
+        indices, IF(cols = 1, indexCol(1),
+                    REDUCE(indexCol(1), SEQUENCE(cols - 1, 1, 2),
+                           LAMBDA(acc, col, HSTACK(acc, indexCol(col))))),
+        resultBeforeDelimiter, INDEX(Dimensions, indices, SEQUENCE(1, cols)),
         result, IF(Delimit?, BYROW(resultBeforeDelimiter, LAMBDA(row, TEXTJOIN(Delimiter, TRUE, row))), resultBeforeDelimiter),
         IF(Help?, Help, result)
 )
