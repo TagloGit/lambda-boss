@@ -427,6 +427,14 @@ public partial class LambdaPopup
                 ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
             }),
         new SlashCommand(
+            "Gather",
+            "Roll up the active cell's precedents into a single =LET(...)",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => GatherCommand.Run());
+            }),
+        new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",
             () =>
