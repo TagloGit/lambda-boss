@@ -5,23 +5,26 @@ namespace LambdaBoss;
 /// <summary>
 ///     Pulls cell-shaped references out of a formula string. Recognises
 ///     single cells (<c>A1</c> with optional dollar anchors), ranges
-///     (<c>A1:A3</c>), and any of those forms with a sheet qualifier —
-///     unquoted (<c>Sheet1!A1</c>), quoted (<c>'My Sheet'!A1</c>), or
-///     external workbook (<c>[Wb.xlsx]Sheet1!A1</c>, <c>'[Wb.xlsx]My Sheet'!A1</c>,
-///     <c>'C:\path\[Wb.xlsx]Sheet'!A1</c>). PR 4 promotes ranges to first-
-///     class refs; spill refs are still recognised only enough to be
-///     excluded — they're handled by PR 5. String literals are skipped
-///     wholesale.
+///     (<c>A1:A3</c>), spill refs (<c>A1#</c>), and any of those forms with
+///     a sheet qualifier — unquoted (<c>Sheet1!A1</c>), quoted
+///     (<c>'My Sheet'!A1</c>), or external workbook (<c>[Wb.xlsx]Sheet1!A1</c>,
+///     <c>'[Wb.xlsx]My Sheet'!A1</c>, <c>'C:\path\[Wb.xlsx]Sheet'!A1</c>).
+///     PR 5 consumes the trailing <c>#</c> on spill refs as part of the
+///     match so the rewriter collapses the whole <c>A1#</c> token to a
+///     binding name; the engine learns spill-ness from
+///     <see cref="ICellSource.HasSpill" />, not from this flag. String
+///     literals are skipped wholesale.
 /// </summary>
 internal static class CellRefExtractor
 {
     // The single combined pattern walks each non-string segment looking for
     // an optional sheet qualifier (in one of four forms) followed by an A1
-    // cell address with an optional ":cell" tail to match a range. The
-    // bare alternative is a zero-width assertion that guards bare-cell
+    // cell address with an optional ":cell" range tail OR a single '#'
+    // spill marker (mutually exclusive — Excel has no `A1:A3#` syntax).
+    // The bare alternative is a zero-width assertion that guards bare-cell
     // matches against being part of a larger token (mid-identifier, after
-    // '!' / ':', etc.) — without it, the regex would also match the row
-    // digits at the tail of a sheet name. The trailing range tail is
+    // '!' / ':' / '#' etc.) — without it, the regex would also match the
+    // row digits at the tail of a sheet name. The trailing range tail is
     // greedy by default, so `A1:A3` matches as one ref rather than two.
     private static readonly Regex CellRefPattern = new(
         @"(?:" +
@@ -35,21 +38,26 @@ internal static class CellRefExtractor
             @"'(?<sheetQ>(?:[^']|'')+)'!" +
             @"|" +
             // Sheet!  — unquoted in-workbook sheet name
-            @"(?<![A-Za-z0-9_.!:'\]])(?<sheet>[A-Za-z_][A-Za-z0-9_.]*)!" +
+            @"(?<![A-Za-z0-9_.!:'\]#])(?<sheet>[A-Za-z_][A-Za-z0-9_.]*)!" +
             @"|" +
-            // bare A1 — same lookbehind guard as before, plus '/']' to
-            // reject bare matches immediately after a closed external tag.
-            @"(?<![A-Za-z0-9_.!:'\]])" +
+            // bare A1 — lookbehind also rejects '#' so a spill ref's tail
+            // doesn't seed a follow-on bare-cell match (e.g. `A1#B1`
+            // shouldn't extract B1 as a separate cell on the spill side).
+            @"(?<![A-Za-z0-9_.!:'\]#])" +
         @")" +
         @"\$?(?<col>[A-Za-z]{1,3})\$?(?<row>[0-9]+)" +
-        // Optional range tail. Excel ranges always share both endpoints'
-        // sheet, so we capture only the cell part on End — the qualifier
-        // from Start is reused when re-emitting.
-        @"(?::\$?(?<col2>[A-Za-z]{1,3})\$?(?<row2>[0-9]+))?" +
+        // Optional tail: either a `:cell` range end OR a `#` spill marker,
+        // but not both. The capture is non-greedy across the alternation —
+        // a range-shape match shadows the spill alternative because Excel
+        // can't have a range AND a spill suffix on the same ref.
+        @"(?:" +
+            @":\$?(?<col2>[A-Za-z]{1,3})\$?(?<row2>[0-9]+)" +
+            @"|" +
+            @"(?<spill>\#)" +
+        @")?" +
         // Trailing guards: not a longer identifier, not a sheet qualifier
         // ('!' for the next ref's sheet name), not a further range tail
-        // (':') or a function-call tail ('('), not a spill marker ('#' —
-        // PR 5).
+        // (':') or a function-call tail ('('), not a further spill marker.
         @"(?![A-Za-z0-9_.!:(#])",
         RegexOptions.CultureInvariant);
 

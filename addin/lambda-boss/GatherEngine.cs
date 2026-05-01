@@ -93,8 +93,12 @@ public static class GatherEngine
             {
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
                 // workbook-qualified for externals — DisplayAddress handles
-                // the quoting rules so the RHS round-trips cleanly.
+                // the quoting rules so the RHS round-trips cleanly. Spill
+                // anchors append '#' so the binding represents the whole
+                // array rather than just the anchor cell's value.
                 rhs = cell.Ref.DisplayAddress(source.SinkSheet);
+                if (cell.HasSpill)
+                    rhs += "#";
             }
             else
             {
@@ -217,6 +221,13 @@ public static class GatherEngine
         // cells (the source can't reach them) and so naturally classify as
         // input — exactly what we want.
         if (cell.Formula == null)
+            return BindingRole.Input;
+        // Spill anchors are always inputs (RHS A1#). Inlining the formula
+        // as a step would lose the dynamic-array semantics — the user
+        // referenced it via `#` because they want the whole array.
+        // Promote-to-step is a follow-up in PR 11 if the user ever wants
+        // the formula expanded inline.
+        if (cell.HasSpill)
             return BindingRole.Input;
         // A formula cell is a step iff at least one precedent has a binding
         // (cell-binding for in-scope cells, range-binding for promoted

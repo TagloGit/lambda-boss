@@ -183,6 +183,39 @@ public class CellGraphWalkerTests
         Assert.Contains(b1.Precedents, p => p.IsRange && p.A1Address == "A1:A3");
         Assert.Contains(b1.Precedents, p => !p.IsRange && p.Start.A1Address == "A4");
     }
+
+    [Fact]
+    public void Walk_SpillRef_WalksIntoAnchorCell()
+    {
+        // PR 5: A1#=SEQUENCE(10) referenced via SUM(A1#). The walker
+        // continues into A1 (the anchor) — A1 surfaces as a walked cell.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(10)")
+            .WithSpill("A1")
+            .WithFormula("B1", "=SUM(A1#)");
+
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var addresses = walked.Select(w => w.Ref.A1Address).ToList();
+
+        Assert.Equal(new[] { "A1", "B1" }, addresses);
+        var anchor = walked.Single(w => w.Ref.A1Address == "A1");
+        Assert.True(anchor.HasSpill);
+        Assert.Equal("=SEQUENCE(10)", anchor.Formula);
+    }
+
+    [Fact]
+    public void Walk_NonSpillingCell_HasSpillFalse()
+    {
+        // Sanity check: cells that aren't spill anchors carry HasSpill=false
+        // through the walker so the engine doesn't accidentally `#`-suffix
+        // a plain leaf input.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2");
+
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+
+        Assert.All(walked, w => Assert.False(w.HasSpill));
+    }
 }
 
 internal static class WalkedCellExtensions

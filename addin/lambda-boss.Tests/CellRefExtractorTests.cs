@@ -200,12 +200,38 @@ public class CellRefExtractorTests
     }
 
     [Fact]
-    public void Extract_SpillRef_IsExcluded()
+    public void Extract_SpillRef_ResolvesToAnchorCell()
     {
+        // PR 5: A1# is recognised as a ref to the anchor cell A1. The
+        // returned FormulaRef collapses spill onto the anchor (no separate
+        // flag) — the engine learns spill-ness from ICellSource.HasSpill.
         var refs = CellRefExtractor.Extract("=SUM(A1#)+B1", Sheet);
 
+        Assert.Equal(2, refs.Count);
+        Assert.Equal("A1", refs[0].A1Address);
+        Assert.False(refs[0].IsRange);
+        Assert.Equal("B1", refs[1].A1Address);
+    }
+
+    [Fact]
+    public void Extract_BareRefAndSpillRefOnSameCell_DedupedToOneRef()
+    {
+        // A1 and A1# resolve to the same FormulaRef key (the anchor cell).
+        // The dedupe in Extract drops the second occurrence.
+        var refs = CellRefExtractor.Extract("=A1+SUM(A1#)", Sheet);
+
         Assert.Single(refs);
-        Assert.Equal("B1", refs[0].A1Address);
+        Assert.Equal("A1", refs[0].A1Address);
+    }
+
+    [Fact]
+    public void Extract_CrossSheetSpillRef_KeepsSheetQualifier()
+    {
+        var refs = CellRefExtractor.Extract("=SUM(Sheet1!A1#)", "Sheet2");
+
+        Assert.Single(refs);
+        Assert.Equal("Sheet1", refs[0].Sheet);
+        Assert.Equal("A1", refs[0].A1Address);
     }
 
     [Fact]
@@ -361,6 +387,34 @@ public class CellRefExtractorTests
         var rewritten = CellRefExtractor.Rewrite("=SUM(Sheet1!A1:A3)", "Sheet2", lookup);
 
         Assert.Equal("=SUM(values)", rewritten);
+    }
+
+    [Fact]
+    public void Rewrite_SpillRef_CollapsesEntireTokenToBindingName()
+    {
+        // PR 5: `A1#` rewrites to the binding name without a trailing `#` —
+        // the binding IS the array, so re-emitting `name#` would be wrong.
+        var lookup = new Dictionary<FormulaRef, string>
+        {
+            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers"
+        };
+
+        var rewritten = CellRefExtractor.Rewrite("=SUM(A1#)", Sheet, lookup);
+
+        Assert.Equal("=SUM(numbers)", rewritten);
+    }
+
+    [Fact]
+    public void Rewrite_CrossSheetSpillRef_CollapsesEntireQualifier()
+    {
+        var lookup = new Dictionary<FormulaRef, string>
+        {
+            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "numbers"
+        };
+
+        var rewritten = CellRefExtractor.Rewrite("=SUM(Sheet1!A1#)", "Sheet2", lookup);
+
+        Assert.Equal("=SUM(numbers)", rewritten);
     }
 
     [Fact]

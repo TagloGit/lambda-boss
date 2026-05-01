@@ -13,6 +13,7 @@ internal sealed class StubCellSource : ICellSource
     // case-insensitively (matches CellRef equality).
     private readonly Dictionary<string, string> _formulas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _labels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _spills = new(StringComparer.OrdinalIgnoreCase);
 
     public StubCellSource(string sheet = "Sheet1")
     {
@@ -30,6 +31,16 @@ internal sealed class StubCellSource : ICellSource
     public StubCellSource WithLabel(string a1, string label)
     {
         _labels[Qualify(a1)] = label;
+        return this;
+    }
+
+    /// <summary>
+    ///     Marks <paramref name="a1" /> as a spill anchor for tests.
+    ///     Mirrors what the live adapter learns from <c>Range.HasSpill</c>.
+    /// </summary>
+    public StubCellSource WithSpill(string a1)
+    {
+        _spills.Add(Qualify(a1));
         return this;
     }
 
@@ -52,6 +63,13 @@ internal sealed class StubCellSource : ICellSource
         if (cell.IsExternal || cell.Column <= 1)
             return null;
         return _labels.TryGetValue(Key(cell.Sheet, cell.Column - 1, cell.Row), out var l) ? l : null;
+    }
+
+    public bool HasSpill(CellRef cell)
+    {
+        if (cell.IsExternal)
+            return false;
+        return _spills.Contains(Key(cell.Sheet, cell.Column, cell.Row));
     }
 
     /// <summary>

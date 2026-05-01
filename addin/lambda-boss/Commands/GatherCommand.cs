@@ -165,6 +165,30 @@ internal static class GatherCommand
                 $"GetCellLeftText({cell.Sheet}!{cell.A1Address})");
         }
 
+        public bool HasSpill(CellRef cell)
+        {
+            if (cell.IsExternal)
+                return false;
+            var sheet = TryGetWorksheet(cell.Sheet);
+            if (sheet == null)
+                return false;
+            try
+            {
+                dynamic range = sheet.Cells[cell.Row, cell.Column];
+                return (bool)range.HasSpill;
+            }
+            catch (Exception ex)
+            {
+                // Range.HasSpill is Excel 365 only. On older builds the
+                // property doesn't exist and the dynamic call throws — log
+                // and treat as non-spilling. The plan documents this as
+                // "modern Excel 365 only, no fallback"; this catch is the
+                // graceful-degradation safety net rather than a feature.
+                Logger.Error($"Gather/HasSpill({cell.Sheet}!{cell.A1Address})", ex);
+                return false;
+            }
+        }
+
         private string? ReadStringValue(string sheetName, int row, int column, string context)
         {
             var sheet = TryGetWorksheet(sheetName);

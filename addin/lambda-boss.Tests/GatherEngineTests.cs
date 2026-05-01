@@ -583,4 +583,106 @@ public class GatherEngineTests
         Assert.True(row.Source.IsRange);
         Assert.Equal("numbers", row.Name);
     }
+
+    [Fact]
+    public void Gather_SpillAnchorReferencedViaHash_RhsKeepsHash()
+    {
+        // PR 5 acceptance: A2=SEQUENCE(10) labelled "Numbers" (header at A1),
+        // B2=SUM(A2#) sink → =LET(numbers, A2#, SUM(numbers)). Anchor's
+        // RHS keeps the `#`; the body rewrites `A2#` to the bare binding
+        // name (no trailing `#` — the binding IS the array).
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("A2", "=SEQUENCE(10)")
+            .WithSpill("A2")
+            .WithFormula("B2", "=SUM(A2#)");
+
+        var result = GatherEngine.Gather(source.Ref("B2"), source)!;
+
+        Assert.Single(result.Bindings);
+        var aRow = result.Bindings[0];
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.Equal("A2", aRow.Source.A1Address);
+        Assert.Equal("numbers", aRow.Name);
+        Assert.Equal("A2#", aRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("A2#", parsed.Bindings[0].RhsText);
+        Assert.Equal("SUM(numbers)", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_SpillAnchorInChain_StillBindsAsInputWithHash()
+    {
+        // Chain: A2 spills, B2 = SUM(A2#), C2 = B2 + 1 (sink). A2 is the
+        // anchor leaf input (RHS A2#), B2 is a step that references the
+        // anchor's binding name (no `#`).
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("A2", "=SEQUENCE(10)")
+            .WithSpill("A2")
+            .WithFormula("B2", "=SUM(A2#)")
+            .WithFormula("C2", "=B2+1");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.Equal("A2#", aRow.Rhs);
+        Assert.Equal("numbers", aRow.Name);
+
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+        Assert.Equal($"SUM({aRow.Name})", bRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal($"{bRow.Name}+1", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_SpillAnchorWithInScopePrecedent_StillClassifiedAsInput()
+    {
+        // The spec table classifies any formula-with-precedents cell as a
+        // step, but a spill anchor needs to bind as `A1#` — making it a
+        // step would drop the array semantics. PR 5 forces spill anchors
+        // to be inputs even when their formula references in-scope cells.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Count")
+            .WithFormula("A2", "=10")
+            .WithLabel("B1", "Numbers")
+            .WithFormula("B2", "=SEQUENCE(A2)")
+            .WithSpill("B2")
+            .WithFormula("C2", "=SUM(B2#)");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
+        Assert.Equal(BindingRole.Input, bRow.Role);
+        Assert.Equal("B2#", bRow.Rhs);
+        Assert.Equal("numbers", bRow.Name);
+
+        // A2 was only reachable via B2's formula. Once B2 is forced to an
+        // input (RHS B2#, not the rewritten formula), A2 is unreachable
+        // and falls out of the binding list.
+        Assert.DoesNotContain(result.Bindings, b => b.Source.A1Address == "A2");
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal($"SUM({bRow.Name})", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_NonSpillingCell_RhsHasNoHash()
+    {
+        // Regression guard: a plain leaf input must NOT pick up a stray `#`.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B2", "=A2*2");
+
+        var result = GatherEngine.Gather(source.Ref("B2"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal("A2", aRow.Rhs);
+        Assert.DoesNotContain("#", aRow.Rhs);
+    }
 }

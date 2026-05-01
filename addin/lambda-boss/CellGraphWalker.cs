@@ -31,6 +31,7 @@ internal static class CellGraphWalker
             var formula = source.GetFormula(cell);
             var cellAbove = source.GetCellAboveText(cell);
             var cellLeft = source.GetCellLeftText(cell);
+            var hasSpill = source.HasSpill(cell);
 
             IReadOnlyList<FormulaRef> precedents;
             if (formula == null)
@@ -46,7 +47,17 @@ internal static class CellGraphWalker
                 precedents = CellRefExtractor.Extract(formula, cell.Sheet);
             }
 
-            byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents);
+            byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents, hasSpill);
+
+            // Spill anchors are opaque from the walker's perspective: the
+            // engine will bind them as `A1#` inputs (their formula is NOT
+            // inlined as a step), so anything the formula references
+            // contributes nothing to the LET via this path. Skip pushing
+            // precedents — cells reached only through a spill anchor's
+            // formula don't appear in the binding list. Cells reached via
+            // other paths still get walked from those paths.
+            if (hasSpill)
+                continue;
 
             foreach (var p in precedents)
             {
