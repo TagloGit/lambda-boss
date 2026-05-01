@@ -130,4 +130,34 @@ public class LambdaSignatureParserTests
         Assert.Equal(new[] { "x", "y" }, sig.Parameters);
         Assert.Equal("x * y + 1", sig.Body);
     }
+
+    [Fact]
+    public void Parse_TrailingQuestionMarkParam_Accepted()
+    {
+        // Issue 152: predicate parameters like 'Help?' are a Lambda
+        // library convention — the parser must accept them, not just
+        // ExcelNameValidator.
+        var sig = LambdaSignatureParser.Parse("=LAMBDA(Help?, IF(Help?, 1, 0))");
+
+        Assert.Equal(new[] { "Help?" }, sig.Parameters);
+        Assert.Equal("IF(Help?, 1, 0)", sig.Body);
+    }
+
+    [Fact]
+    public void Parse_OptionalTrailingQuestionMarkParam_StripsBracketsKeepsQuestionMark()
+    {
+        // [Help?] is an optional predicate parameter — bracket stripping
+        // must preserve the trailing '?'.
+        var sig = LambdaSignatureParser.Parse("=LAMBDA(x, [Help?], x + 1)");
+
+        Assert.Equal(new[] { "x", "Help?" }, sig.Parameters);
+    }
+
+    [Fact]
+    public void Parse_QuestionMarkAtStart_Throws()
+    {
+        // '?' at the start is NOT a valid Excel name.
+        Assert.Throws<FormatException>(() =>
+            LambdaSignatureParser.Parse("=LAMBDA(?x, x)"));
+    }
 }

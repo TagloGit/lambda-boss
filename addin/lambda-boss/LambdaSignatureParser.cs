@@ -17,8 +17,11 @@ public static class LambdaSignatureParser
         @"^=\s*LAMBDA\s*\(",
         RegexOptions.IgnoreCase);
 
+    // Mirrors LetParser.IdentifierPattern: '?' is permitted anywhere except
+    // as the first character so trailing-predicate parameters like 'Help?'
+    // round-trip cleanly through the parser.
     private static readonly Regex ParamNamePattern = new(
-        @"^\[?([A-Za-z_][A-Za-z0-9_.]*)\]?$");
+        @"^\[?([A-Za-z_][A-Za-z0-9_.?]*)\]?$");
 
     public static bool IsLambdaFormula(string? formula)
     {

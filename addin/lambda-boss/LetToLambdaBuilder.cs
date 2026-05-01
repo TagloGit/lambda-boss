@@ -165,12 +165,17 @@ public static class LetToLambdaBuilder
     {
         if (renames.Count == 0) return text;
 
-        var pattern = string.Join("|", renames.Keys.Select(Regex.Escape));
+        // Lookbehind/lookahead include '?' so a rename of 'Help?' isn't
+        // accidentally matched inside a longer name like 'Help??' or
+        // 'foo?Help?'. Mirrors the identifier rule in LetParser /
+        // ExcelNameValidator: '?' is part of the name body.
+        //
         // Wrap the alternation in a non-capturing group so the word-boundary
         // lookarounds apply to every alternative. Without the group, `|` would
         // split the regex into "(?<!…)key1" and "key2(?!…)", letting a key
         // match the first letter of a longer identifier (e.g. `a` in `ABS`).
-        var regex = new Regex($@"(?<![A-Za-z0-9_.])(?:{pattern})(?![A-Za-z0-9_.])",
+        var pattern = string.Join("|", renames.Keys.Select(Regex.Escape));
+        var regex = new Regex($@"(?<![A-Za-z0-9_.?])(?:{pattern})(?![A-Za-z0-9_.?])",
             RegexOptions.IgnoreCase);
 
         var result = new StringBuilder();
@@ -213,8 +218,13 @@ public static class LetToLambdaBuilder
     /// </summary>
     internal static string AbsolutizeCellRefs(string text)
     {
+        // Lookbehind includes '?' so a name fragment like 'Help?A1' isn't
+        // accidentally absolutized as the cell ref 'A1'. The lookahead
+        // already guards the cell-ref tail; '?' is added there too in
+        // case a defined name happens to start with what looks like a
+        // cell address followed by '?'.
         var regex = new Regex(
-            @"(?<![A-Za-z0-9_.])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_.!])");
+            @"(?<![A-Za-z0-9_.?])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_.!?])");
 
         var result = new StringBuilder();
         var i = 0;
