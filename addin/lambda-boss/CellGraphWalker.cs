@@ -14,15 +14,28 @@ namespace LambdaBoss;
 ///     pass — on a back-edge to a grey ancestor the walker returns a
 ///     <see cref="WalkOutcome" /> carrying the cycle's cells in path order
 ///     so the engine can refuse with a clear diagnostic instead of
-///     spinning forever.
+///     spinning forever. PR 9 adds an optional <c>restrictTo</c> set: when
+///     non-null, any non-sink cell outside the set is treated as a leaf
+///     (formula <c>null</c>, no precedents) so its sub-tree is dropped
+///     from the walk and its cell-ref appears as an input on the boundary.
+///     The sink itself is never restricted — gathering always processes the
+///     sink's formula. Spill anchors keep their <see cref="ICellSource.HasSpill" />
+///     flag even when leaf-restricted so the engine still emits <c>A1#</c>
+///     on the boundary input, preserving the array semantics of the
+///     dropped sub-tree.
 /// </summary>
 internal static class CellGraphWalker
 {
-    public static WalkOutcome Walk(CellRef sink, ICellSource source)
+    public static WalkOutcome Walk(CellRef sink, ICellSource source) =>
+        Walk(sink, source, restrictTo: null);
+
+    public static WalkOutcome Walk(
+        CellRef sink, ICellSource source, IReadOnlySet<CellRef>? restrictTo)
     {
         ArgumentNullException.ThrowIfNull(source);
 
         var byRef = new Dictionary<CellRef, WalkedCell>();
+        var leafRestricted = 0;
         var stack = new Stack<CellRef>();
         stack.Push(sink);
 
@@ -32,23 +45,42 @@ internal static class CellGraphWalker
             if (byRef.ContainsKey(cell))
                 continue;
 
-            var formula = source.GetFormula(cell);
+            // Cell is leaf-restricted when a restriction set is given and
+            // this cell isn't in it. The sink is exempt — gather always
+            // processes its formula. Cell-above/left labels and HasSpill
+            // are still queried so the boundary input's binding name and
+            // `#`-suffix come out the same as a natural leaf would.
+            var isRestricted = restrictTo != null
+                               && !cell.Equals(sink)
+                               && !restrictTo.Contains(cell);
+
             var cellAbove = source.GetCellAboveText(cell);
             var cellLeft = source.GetCellLeftText(cell);
             var hasSpill = source.HasSpill(cell);
 
+            string? formula;
             IReadOnlyList<FormulaRef> precedents;
-            if (formula == null)
+            if (isRestricted)
             {
+                formula = null;
                 precedents = Array.Empty<FormulaRef>();
+                leafRestricted++;
             }
             else
             {
-                // Unqualified refs in this cell's formula resolve against
-                // its OWN sheet, not the sink's — otherwise crossing into
-                // Sheet1 from a sink on Sheet2 would mis-route Sheet1's
-                // internal `B1` references back to Sheet2.
-                precedents = CellRefExtractor.Extract(formula, cell.Sheet);
+                formula = source.GetFormula(cell);
+                if (formula == null)
+                {
+                    precedents = Array.Empty<FormulaRef>();
+                }
+                else
+                {
+                    // Unqualified refs in this cell's formula resolve against
+                    // its OWN sheet, not the sink's — otherwise crossing into
+                    // Sheet1 from a sink on Sheet2 would mis-route Sheet1's
+                    // internal `B1` references back to Sheet2.
+                    precedents = CellRefExtractor.Extract(formula, cell.Sheet);
+                }
             }
 
             byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents, hasSpill);
@@ -67,7 +99,7 @@ internal static class CellGraphWalker
             }
         }
 
-        return CycleAwareTopoSort(sink, byRef);
+        return CycleAwareTopoSort(sink, byRef, leafRestricted);
     }
 
     /// <summary>
@@ -82,7 +114,7 @@ internal static class CellGraphWalker
     ///     spin forever pushing back and forth between the cycle's cells.
     /// </summary>
     private static WalkOutcome CycleAwareTopoSort(
-        CellRef sink, Dictionary<CellRef, WalkedCell> byRef)
+        CellRef sink, Dictionary<CellRef, WalkedCell> byRef, int leafRestrictedCount)
     {
         var ordered = new List<WalkedCell>(byRef.Count);
         var visited = new HashSet<CellRef>();
@@ -119,7 +151,7 @@ internal static class CellGraphWalker
             }
         }
 
-        return WalkOutcome.Success(ordered);
+        return WalkOutcome.Success(ordered, leafRestrictedCount);
     }
 
     /// <summary>
@@ -152,21 +184,32 @@ internal static class CellGraphWalker
 ///     Result of <see cref="CellGraphWalker.Walk" />: either a topo-ordered
 ///     list of cells or a cycle's cell list. Exactly one of
 ///     <see cref="Cells" /> and <see cref="Cycle" /> is non-null.
+///     <see cref="LeafRestrictedCount" /> reports how many cells were
+///     leaf-restricted by the walker's <c>restrictTo</c> set (PR 9) — zero
+///     for unrestricted walks. The engine subtracts this from
+///     <see cref="Cells" />'s count to derive the "M" in the
+///     <c>Walking M of N cells from &lt;addr&gt;</c> header.
 /// </summary>
 internal readonly struct WalkOutcome
 {
-    private WalkOutcome(IReadOnlyList<WalkedCell>? cells, IReadOnlyList<CellRef>? cycle)
+    private WalkOutcome(
+        IReadOnlyList<WalkedCell>? cells,
+        IReadOnlyList<CellRef>? cycle,
+        int leafRestrictedCount)
     {
         Cells = cells;
         Cycle = cycle;
+        LeafRestrictedCount = leafRestrictedCount;
     }
 
     public IReadOnlyList<WalkedCell>? Cells { get; }
     public IReadOnlyList<CellRef>? Cycle { get; }
+    public int LeafRestrictedCount { get; }
 
     public bool IsCycle => Cycle != null;
 
-    public static WalkOutcome Success(IReadOnlyList<WalkedCell> cells) => new(cells, null);
+    public static WalkOutcome Success(IReadOnlyList<WalkedCell> cells, int leafRestrictedCount = 0) =>
+        new(cells, null, leafRestrictedCount);
 
-    public static WalkOutcome WithCycle(IReadOnlyList<CellRef> cycle) => new(null, cycle);
+    public static WalkOutcome WithCycle(IReadOnlyList<CellRef> cycle) => new(null, cycle, 0);
 }

@@ -34,17 +34,23 @@ public static class GatherEngine
     }
 
     /// <summary>
-    ///     Selection-aware overload (PR 7). When
-    ///     <paramref name="selection" /> contains more than one cell, the
-    ///     engine first checks the multi-sink rule: if 2+ selected cells
-    ///     have no in-scope dependent (i.e. aren't transitively referenced
-    ///     by another selected cell), the engine refuses with a
+    ///     Selection-aware overload. When <paramref name="selection" />
+    ///     contains more than one cell, the engine first checks the
+    ///     multi-sink rule (PR 7): if 2+ selected cells have no in-scope
+    ///     dependent (i.e. aren't transitively referenced by another
+    ///     selected cell), the engine refuses with a
     ///     <see cref="GatherDiagnosticKind.MultipleSinks" /> diagnostic.
     ///     Cycle detection runs whether or not the selection is multi-cell;
     ///     a cycle anywhere in the walked graph surfaces as
-    ///     <see cref="GatherDiagnosticKind.Cycle" />. PR 9 will additionally
-    ///     use the selection to restrict the walk; for PR 7 the selection
-    ///     only feeds the multi-sink check.
+    ///     <see cref="GatherDiagnosticKind.Cycle" />.
+    ///     PR 9 adds selection-restricted walking: when the multi-selection
+    ///     covers the active cell plus others, the walker leaf-restricts
+    ///     any precedent that isn't in the selection — its sub-tree drops
+    ///     out of the LET and its cell-ref appears as an input on the
+    ///     boundary. The result's <see cref="GatherResult.WalkedCount" />
+    ///     and <see cref="GatherResult.FreeWalkCount" /> let the dialog
+    ///     render the header hint (free: <c>Walking N cells from &lt;addr&gt;</c>;
+    ///     restricted: <c>Walking M of N cells from &lt;addr&gt; — restricted by selection</c>).
     /// </summary>
     public static GatherResult? Gather(CellRef sink, IReadOnlyList<CellRef> selection, ICellSource source)
     {
@@ -79,11 +85,33 @@ public static class GatherEngine
         if (multiSinkDiagnostic != null)
             return multiSinkDiagnostic;
 
-        var outcome = CellGraphWalker.Walk(sink, source);
-        if (outcome.IsCycle)
-            return RefusedWithCycle(sink, sinkFormula, outcome.Cycle!);
+        // Free walk first — surfaces cycles ahead of any restriction work
+        // and gives us "N" (the count of cells the walk would have visited
+        // without restriction) for the dialog header. The restricted walk
+        // is a strict sub-walk of this graph (subgraph of an acyclic graph
+        // is acyclic), so cycle detection on the free walk is sufficient.
+        var freeOutcome = CellGraphWalker.Walk(sink, source);
+        if (freeOutcome.IsCycle)
+            return RefusedWithCycle(sink, sinkFormula, freeOutcome.Cycle!);
+
+        var freeWalkCount = freeOutcome.Cells!.Count;
+
+        // Restricted walk only when the multi-selection meaningfully
+        // narrows the walk. A single-cell selection — the common case —
+        // skips this and reuses the free walk verbatim.
+        WalkOutcome outcome;
+        if (selection.Count > 1)
+        {
+            var restrictTo = new HashSet<CellRef>(selection);
+            outcome = CellGraphWalker.Walk(sink, source, restrictTo);
+        }
+        else
+        {
+            outcome = freeOutcome;
+        }
 
         var walked = outcome.Cells!;
+        var walkedCount = walked.Count - outcome.LeafRestrictedCount;
 
         // Collect unique range refs encountered anywhere in the walk. Order
         // is by first-encountered; that becomes the binding order for
@@ -273,7 +301,9 @@ public static class GatherEngine
             bindings.Select(b => (b.Name, b.Rhs)).ToList(),
             bodyText);
 
-        return new GatherResult(sink, sinkFormula, bindings, sb.ToString());
+        return new GatherResult(
+            sink, sinkFormula, bindings, sb.ToString(),
+            WalkedCount: walkedCount, FreeWalkCount: freeWalkCount);
     }
 
     /// <summary>

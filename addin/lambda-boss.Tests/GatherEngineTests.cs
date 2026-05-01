@@ -1461,4 +1461,134 @@ public class GatherEngineTests
         var parsed = LetParser.Parse(result.SynthesisedLet);
         Assert.Equal("doubled+1", parsed.Body);
     }
+
+    [Fact]
+    public void Gather_SingleCellSelection_ReportsFreeWalkCounts()
+    {
+        // PR 9: single-cell selection means free walk. M and N both equal
+        // the count of cells the walker visited (sink + every reachable
+        // precedent). The dialog will render this as
+        // "Walking 3 cells from C1".
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        Assert.Equal(3, result.FreeWalkCount);
+        Assert.Equal(3, result.WalkedCount);
+    }
+
+    [Fact]
+    public void Gather_MultiSelectionFullCover_ReportsEqualCounts()
+    {
+        // PR 9: a multi-selection that covers every walked cell restricts
+        // nothing, so M == N. The dialog suppresses the "restricted by
+        // selection" hint when the selection didn't actually narrow the
+        // walk — this matches the issue's "behaves like a free walk".
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("C1"),
+            new[] { source.Ref("A1"), source.Ref("B1"), source.Ref("C1") },
+            source)!;
+
+        Assert.Equal(3, result.FreeWalkCount);
+        Assert.Equal(3, result.WalkedCount);
+    }
+
+    [Fact]
+    public void Gather_MultiSelectionPartialCover_DemotesPrecedentToCellRefInput()
+    {
+        // PR 9 acceptance scenario: A1=10 literal, B1=A1*2, C1=B1+1
+        // (sink). Selecting {B1, C1} restricts the walk so A1 isn't a
+        // step candidate, but its cell-ref still appears as an input
+        // binding on the boundary. A1 happens to be a literal here, so
+        // the binding shape is the same as the free-walk case — what
+        // changes is the count: the dialog header shows "2 of 3".
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("C1"),
+            new[] { source.Ref("B1"), source.Ref("C1") },
+            source)!;
+
+        Assert.Null(result.Diagnostic);
+        Assert.Equal(3, result.FreeWalkCount);
+        Assert.Equal(2, result.WalkedCount);
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.Equal("A1", aRow.Rhs);
+
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+    }
+
+    [Fact]
+    public void Gather_MultiSelectionPartialCover_DropsOutOfSelectionPrecedentSubTree()
+    {
+        // A1 (formula referencing X1) → B1 → C1 → D1 (sink). Selection
+        // {C1, D1} restricts B1 to a leaf-input (cell-ref RHS); A1 and
+        // X1 are never reached because B1's sub-tree is pruned. Without
+        // restriction the walk would visit 4 cells (A1 has no formula, so
+        // X1 isn't reached even in the free walk — it would only matter
+        // if A1 had a formula).
+        var source = new StubCellSource()
+            .WithFormula("A1", "=X1+1")
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1")
+            .WithFormula("D1", "=C1*3");
+
+        var freeResult = GatherEngine.Gather(source.Ref("D1"), source)!;
+        Assert.Equal(5, freeResult.FreeWalkCount);
+        Assert.Equal(5, freeResult.WalkedCount);
+
+        var restrictedResult = GatherEngine.Gather(
+            source.Ref("D1"),
+            new[] { source.Ref("C1"), source.Ref("D1") },
+            source)!;
+
+        Assert.Equal(5, restrictedResult.FreeWalkCount);
+        Assert.Equal(2, restrictedResult.WalkedCount);
+
+        var addresses = restrictedResult.Bindings
+            .Select(b => b.Source.A1Address)
+            .ToHashSet();
+        Assert.Contains("B1", addresses);
+        Assert.Contains("C1", addresses);
+        Assert.DoesNotContain("A1", addresses);
+        Assert.DoesNotContain("X1", addresses);
+
+        // B1 is the boundary leaf — input role with cell-ref RHS, no
+        // matter that its formula is "=A1*2" in the workbook.
+        var bRow = restrictedResult.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Input, bRow.Role);
+        Assert.Equal("B1", bRow.Rhs);
+    }
+
+    [Fact]
+    public void Gather_RestrictedWalk_LetRoundTripsThroughLetParser()
+    {
+        // Round-trip safety on the restricted-walk branch: synthesised
+        // LET still parses cleanly even though some bindings are leafs
+        // demoted from steps.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("C1"),
+            new[] { source.Ref("B1"), source.Ref("C1") },
+            source)!;
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.NotEmpty(parsed.Bindings);
+        Assert.NotEmpty(parsed.Body);
+    }
 }

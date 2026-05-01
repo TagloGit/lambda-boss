@@ -296,6 +296,142 @@ public class CellGraphWalkerTests
     }
 
     [Fact]
+    public void Walk_RestrictedToSelection_OutOfSelectionPrecedentLeafed()
+    {
+        // PR 9: A1=10 literal, B1=A1*2, C1=B1+1 (sink). Restricting to
+        // {B1, C1} leaves A1 in the discovered set but with formula=null
+        // and no precedents — its ref still appears as a binding boundary
+        // for the engine, just as a leaf. Here A1 has no formula anyway,
+        // so the restriction is observationally indistinguishable from a
+        // free walk; the leaf-restricted counter is what tells the engine
+        // (and the dialog) that the user actually narrowed the walk.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var restrictTo = new HashSet<CellRef> { source.Ref("B1"), source.Ref("C1") };
+        var outcome = CellGraphWalker.Walk(source.Ref("C1"), source, restrictTo);
+
+        Assert.False(outcome.IsCycle);
+        var addresses = outcome.Cells!.Select(w => w.Ref.A1Address).ToList();
+        Assert.Equal(new[] { "A1", "B1", "C1" }, addresses);
+
+        var aLeaf = outcome.Cells!.Single(w => w.Ref.A1Address == "A1");
+        Assert.Null(aLeaf.Formula);
+        Assert.Empty(aLeaf.Precedents);
+        Assert.Equal(1, outcome.LeafRestrictedCount);
+    }
+
+    [Fact]
+    public void Walk_RestrictedSubTreeNotDiscovered_BeyondLeafBoundary()
+    {
+        // A1 → B1 → C1 → D1 (sink). Restricting to {C1, D1} leaves B1 as
+        // a leaf-restricted boundary; A1 is never even pushed because B1
+        // contributed no precedents to the walker stack. Ensures the
+        // restriction prunes the sub-tree wholesale rather than just
+        // hiding it post-walk.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1")
+            .WithFormula("D1", "=C1*3");
+
+        var restrictTo = new HashSet<CellRef> { source.Ref("C1"), source.Ref("D1") };
+        var outcome = CellGraphWalker.Walk(source.Ref("D1"), source, restrictTo);
+
+        var addresses = outcome.Cells!.Select(w => w.Ref.A1Address).ToHashSet();
+        Assert.Contains("D1", addresses);
+        Assert.Contains("C1", addresses);
+        Assert.Contains("B1", addresses);
+        Assert.DoesNotContain("A1", addresses);
+        Assert.Equal(1, outcome.LeafRestrictedCount);
+    }
+
+    [Fact]
+    public void Walk_RestrictedFullCover_BehavesLikeFreeWalk()
+    {
+        // Multi-selection that covers every cell in the precedent graph
+        // restricts nothing — leafRestrictedCount stays zero and the
+        // walked list matches the free walk.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var freeOutcome = CellGraphWalker.Walk(source.Ref("C1"), source);
+        var restrictTo = new HashSet<CellRef>
+        {
+            source.Ref("A1"), source.Ref("B1"), source.Ref("C1"),
+        };
+        var restrictedOutcome = CellGraphWalker.Walk(source.Ref("C1"), source, restrictTo);
+
+        Assert.Equal(0, restrictedOutcome.LeafRestrictedCount);
+        Assert.Equal(
+            freeOutcome.Cells!.Select(w => w.Ref.A1Address),
+            restrictedOutcome.Cells!.Select(w => w.Ref.A1Address));
+    }
+
+    [Fact]
+    public void Walk_RestrictedDoesNotApplyToSink_EvenWhenSinkOmittedFromSet()
+    {
+        // The sink is always processed, regardless of the restriction set.
+        // Defensive: even if a caller forgets to include the sink, the
+        // walker still walks the sink's formula so we get a valid LET.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2");
+
+        // Only B1 in the set, but B1 is also the sink — A1 is out, so
+        // gets leaf-restricted.
+        var restrictTo = new HashSet<CellRef> { source.Ref("B1") };
+        var outcome = CellGraphWalker.Walk(source.Ref("B1"), source, restrictTo);
+
+        var sink = outcome.Cells!.Single(w => w.Ref.A1Address == "B1");
+        Assert.Equal("=A1*2", sink.Formula);
+        Assert.NotEmpty(sink.Precedents);
+
+        var leaf = outcome.Cells!.Single(w => w.Ref.A1Address == "A1");
+        Assert.Null(leaf.Formula);
+        Assert.Equal(1, outcome.LeafRestrictedCount);
+    }
+
+    [Fact]
+    public void Walk_RestrictedSpillAnchor_KeepsHasSpillFlag()
+    {
+        // A spill anchor that's leaf-restricted still carries HasSpill so
+        // the engine emits `A1#` on the boundary input — preserving the
+        // dynamic-array semantics of the dropped sub-tree.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(10)")
+            .WithSpill("A1")
+            .WithFormula("B1", "=SUM(A1#)");
+
+        var restrictTo = new HashSet<CellRef> { source.Ref("B1") };
+        var outcome = CellGraphWalker.Walk(source.Ref("B1"), source, restrictTo);
+
+        var anchor = outcome.Cells!.Single(w => w.Ref.A1Address == "A1");
+        Assert.Null(anchor.Formula);
+        Assert.True(anchor.HasSpill);
+        Assert.Equal(1, outcome.LeafRestrictedCount);
+    }
+
+    [Fact]
+    public void Walk_NullRestrictTo_BehavesLikeUnrestrictedOverload()
+    {
+        // Regression guard: the restriction-aware overload with a null set
+        // produces the same outcome as the convenience overload.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var unrestricted = CellGraphWalker.Walk(source.Ref("C1"), source);
+        var nullRestricted = CellGraphWalker.Walk(source.Ref("C1"), source, restrictTo: null);
+
+        Assert.Equal(0, unrestricted.LeafRestrictedCount);
+        Assert.Equal(0, nullRestricted.LeafRestrictedCount);
+        Assert.Equal(
+            unrestricted.Cells!.Select(w => w.Ref.A1Address),
+            nullRestricted.Cells!.Select(w => w.Ref.A1Address));
+    }
+
+    [Fact]
     public void Walk_AcyclicGraph_HasNoCycle()
     {
         // Regression guard: a normal acyclic walk surfaces Cells, not

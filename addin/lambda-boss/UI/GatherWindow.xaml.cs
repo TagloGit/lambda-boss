@@ -18,6 +18,7 @@ public partial class GatherWindow
         InitializeComponent();
         _result = result;
 
+        WalkHintText.Text = BuildWalkHint(result);
         SinkAddressText.Text = result.Sink.A1Address;
         OriginalFormulaText.Text = result.OriginalFormula;
         PreviewText.Text = result.SynthesisedLet;
@@ -50,6 +51,29 @@ public partial class GatherWindow
         SavedFormula = null;
         DialogResult = false;
         Close();
+    }
+
+    /// <summary>
+    ///     Renders the header hint per spec 0005 §"Selection-restricted
+    ///     walk". A free walk (single-cell selection, or a multi-selection
+    ///     that happened to cover every walked cell) reads
+    ///     <c>Walking N cells from &lt;addr&gt;</c>; a restriction that
+    ///     actually narrowed the walk reads
+    ///     <c>Walking M of N cells from &lt;addr&gt; — restricted by selection</c>.
+    ///     The "M == N" case is treated as a free walk in the header even
+    ///     when the selection was multi-cell, matching the issue's "behaves
+    ///     like a free walk" wording — restricting and then happening to
+    ///     cover everything is observationally indistinguishable from a
+    ///     free walk and showing "N of N" reads as noise.
+    /// </summary>
+    private static string BuildWalkHint(GatherResult result)
+    {
+        var addr = result.Sink.A1Address;
+        var n = result.FreeWalkCount;
+        var m = result.WalkedCount;
+        if (m == n)
+            return $"Walking {n} cells from {addr}";
+        return $"Walking {m} of {n} cells from {addr} — restricted by selection";
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
