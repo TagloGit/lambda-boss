@@ -37,13 +37,18 @@ internal static class CellRefExtractor
             // 'Sheet'!  — quoted in-workbook sheet name
             @"'(?<sheetQ>(?:[^']|'')+)'!" +
             @"|" +
-            // Sheet!  — unquoted in-workbook sheet name
-            @"(?<![A-Za-z0-9_.!:'\]#])(?<sheet>[A-Za-z_][A-Za-z0-9_.]*)!" +
+            // Sheet!  — unquoted in-workbook sheet name. Lookbehind
+            // includes '?' so a name fragment ending in '?' (the
+            // predicate-marker convention) doesn't seed a bogus
+            // sheet-qualified match on its tail.
+            @"(?<![A-Za-z0-9_.!:'\]#?])(?<sheet>[A-Za-z_][A-Za-z0-9_.]*)!" +
             @"|" +
             // bare A1 — lookbehind also rejects '#' so a spill ref's tail
             // doesn't seed a follow-on bare-cell match (e.g. `A1#B1`
             // shouldn't extract B1 as a separate cell on the spill side).
-            @"(?<![A-Za-z0-9_.!:'\]#])" +
+            // '?' is in the class for the same reason: a name like
+            // 'Help?A1' is one identifier, not 'Help?' followed by 'A1'.
+            @"(?<![A-Za-z0-9_.!:'\]#?])" +
         @")" +
         @"\$?(?<col>[A-Za-z]{1,3})\$?(?<row>[0-9]+)" +
         // Optional tail: either a `:cell` range end OR a `#` spill marker,
@@ -58,7 +63,11 @@ internal static class CellRefExtractor
         // Trailing guards: not a longer identifier, not a sheet qualifier
         // ('!' for the next ref's sheet name), not a further range tail
         // (':') or a function-call tail ('('), not a further spill marker.
-        @"(?![A-Za-z0-9_.!:(#])",
+        // '?' is in the class so an identifier like 'A1?Result' (the
+        // predicate-marker convention applied to a name that happens to
+        // start with cell-address-shaped letters and digits) isn't
+        // truncated to its 'A1' prefix.
+        @"(?![A-Za-z0-9_.!:(#?])",
         RegexOptions.CultureInvariant);
 
     /// <summary>

@@ -1414,6 +1414,34 @@ public class GatherEngineTests
     }
 
     [Fact]
+    public void Gather_NestedLetWithQuestionMarkBinding_ParsesAndPreservesName()
+    {
+        // Issue 152: a step's nested LET uses 'Help?' as a binding name —
+        // the engine must parse it (LetParser allows '?' in body chars)
+        // and preserve the name in both the spliced inner row and any
+        // body references. Without the fix this throws "Invalid LET
+        // binding name: 'Help?'" before any walking happens.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=LET(Help?, A1+1, Help? * 2)")
+            .WithFormula("C1", "=B1+5");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        Assert.Null(result.Diagnostic);
+        var inner = result.Bindings.Single(b => b.Name == "Help?");
+        Assert.Equal("step_1+1", inner.Rhs);
+
+        var stepB1 = result.Bindings.Single(b => b.Source.A1Address == "B1" && b.Name != "Help?");
+        // The inner body 'Help? * 2' becomes the step's RHS — the
+        // tokenizer must recognise 'Help?' as one identifier so the
+        // (no-op) inner-rename pass doesn't truncate it.
+        Assert.Equal("Help? * 2", stepB1.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Contains(parsed.Bindings, b => b.Name == "Help?");
+    }
+
+    [Fact]
     public void Gather_PureLetSink_StillExpandedNotRefused()
     {
         // =LET(...) matches the call-shape regex with name "LET" but

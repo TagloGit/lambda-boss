@@ -115,4 +115,38 @@ public class LetParserTests
         Assert.True(parsed.Bindings[1].IsCalculation);
         Assert.Equal("getMax", parsed.Body);
     }
+
+    [Fact]
+    public void Parse_BindingNameWithTrailingQuestionMark_Accepted()
+    {
+        // Issue 152: predicate-style names like 'Help?' are valid Excel
+        // names (per ExcelNameValidator) and the LAMBDA library uses
+        // them throughout. The parser must accept them as binding names.
+        var parsed = LetParser.Parse("=LET(Help?, 1, Help? + 1)");
+
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("Help?", parsed.Bindings[0].Name);
+        Assert.Equal("Help? + 1", parsed.Body);
+    }
+
+    [Fact]
+    public void Parse_QuestionMarkInsideName_Accepted()
+    {
+        // '?' anywhere except the first character is valid; mid-name
+        // occurrences round-trip just like trailing ones.
+        var parsed = LetParser.Parse("=LET(is?valid, TRUE, is?valid)");
+
+        Assert.Equal("is?valid", parsed.Bindings[0].Name);
+        Assert.Equal("is?valid", parsed.Body);
+    }
+
+    [Fact]
+    public void Parse_BindingNameStartingWithQuestionMark_Throws()
+    {
+        // '?' at the start is NOT a valid Excel name — names must begin
+        // with a letter or underscore. Guard against accidentally
+        // accepting it via the relaxed pattern.
+        Assert.Throws<FormatException>(() =>
+            LetParser.Parse("=LET(?help, 1, ?help)"));
+    }
 }

@@ -596,8 +596,11 @@ public static class GatherEngine
         return $"{baseName}_{suffix}";
     }
 
+    // Mirrors LetParser.IdentifierPattern. '?' is permitted anywhere
+    // except the first character so a binding renamed to a
+    // predicate-style name like 'Help?' is recognised as a single token.
     private static readonly Regex BareIdentifierPattern = new(
-        @"^[A-Za-z_][A-Za-z0-9_.]*$",
+        @"^[A-Za-z_][A-Za-z0-9_.?]*$",
         RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -621,11 +624,13 @@ public static class GatherEngine
     /// <summary>
     ///     Replaces every bare-identifier occurrence of a key in
     ///     <paramref name="renames" /> with the mapped value. Tokens are
-    ///     identified by Excel's name-shape rule (<c>[A-Za-z_][A-Za-z0-9_.]*</c>).
-    ///     Strings (<c>"..."</c>) and single-quoted sheet/workbook
-    ///     qualifiers (<c>'My Sheet'!</c>) are skipped wholesale. A token
-    ///     followed by <c>!</c> is treated as a sheet qualifier and left
-    ///     alone — that's a cell-ref position, not a name reference.
+    ///     identified by Excel's name-shape rule (<c>[A-Za-z_][A-Za-z0-9_.?]*</c>) —
+    ///     <c>?</c> is part of the name body so a rename of <c>Help?</c>
+    ///     matches the whole token instead of just <c>Help</c>. Strings
+    ///     (<c>"..."</c>) and single-quoted sheet/workbook qualifiers
+    ///     (<c>'My Sheet'!</c>) are skipped wholesale. A token followed by
+    ///     <c>!</c> is treated as a sheet qualifier and left alone —
+    ///     that's a cell-ref position, not a name reference.
     /// </summary>
     private static string ApplyInnerRenames(string text, IReadOnlyDictionary<string, string> renames)
     {
@@ -680,7 +685,12 @@ public static class GatherEngine
 
     private static bool IsIdentStart(char c) => char.IsLetter(c) || c == '_';
 
-    private static bool IsIdentPart(char c) => char.IsLetterOrDigit(c) || c == '_' || c == '.';
+    // '?' is allowed anywhere except the first char of an Excel name, so
+    // it's part of the identifier body but not its start. Without this,
+    // the tokenizer would split 'Help?' into 'Help' + '?' and an inner
+    // rename keyed on 'Help?' would never match the whole token.
+    private static bool IsIdentPart(char c) =>
+        char.IsLetterOrDigit(c) || c == '_' || c == '.' || c == '?';
 
     private static int SkipDoubleQuoted(string text, int openQuoteIndex)
     {
