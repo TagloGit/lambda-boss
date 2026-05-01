@@ -641,12 +641,14 @@ public class GatherEngineTests
     }
 
     [Fact]
-    public void Gather_SpillAnchorWithInScopePrecedent_StillClassifiedAsInput()
+    public void Gather_SpillAnchorWithInScopePrecedent_ClassifiedAsStep()
     {
-        // The spec table classifies any formula-with-precedents cell as a
-        // step, but a spill anchor needs to bind as `A1#` — making it a
-        // step would drop the array semantics. PR 5 forces spill anchors
-        // to be inputs even when their formula references in-scope cells.
+        // A spilling cell whose formula references in-scope cells is a
+        // step like any other formula-with-precedents cell. Its RHS is
+        // the rewritten formula — the array semantics flow through the
+        // LET because the inner expression (e.g. SEQUENCE) still returns
+        // an array regardless of how it's bound. The cell's HasSpill flag
+        // only matters for inputs, where it suffixes `#` on the RHS.
         var source = new StubCellSource()
             .WithLabel("A1", "Count")
             .WithFormula("A2", "=10")
@@ -657,15 +659,16 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C2"), source)!;
 
-        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
-        Assert.Equal(BindingRole.Input, bRow.Role);
-        Assert.Equal("B2#", bRow.Rhs);
-        Assert.Equal("numbers", bRow.Name);
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.Equal("count", aRow.Name);
+        Assert.Equal("A2", aRow.Rhs);
+        Assert.DoesNotContain("#", aRow.Rhs);
 
-        // A2 was only reachable via B2's formula. Once B2 is forced to an
-        // input (RHS B2#, not the rewritten formula), A2 is unreachable
-        // and falls out of the binding list.
-        Assert.DoesNotContain(result.Bindings, b => b.Source.A1Address == "A2");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+        Assert.Equal("numbers", bRow.Name);
+        Assert.Equal($"SEQUENCE({aRow.Name})", bRow.Rhs);
 
         var parsed = LetParser.Parse(result.SynthesisedLet);
         Assert.Equal($"SUM({bRow.Name})", parsed.Body);

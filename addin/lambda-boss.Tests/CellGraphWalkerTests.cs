@@ -204,6 +204,27 @@ public class CellGraphWalkerTests
     }
 
     [Fact]
+    public void Walk_SpillAnchorWithInScopeRef_RecursesIntoPrecedents()
+    {
+        // Spill anchors aren't opaque — the walker treats them like any
+        // other cell. B2 = SEQUENCE(A2) (spills) referenced via B2#; A2
+        // must be walked since it's an in-scope precedent of B2. The
+        // engine later decides B2 is a step and inlines its formula.
+        var source = new StubCellSource()
+            .WithFormula("A2", "=10")
+            .WithFormula("B2", "=SEQUENCE(A2)")
+            .WithSpill("B2")
+            .WithFormula("C2", "=SUM(B2#)");
+
+        var walked = CellGraphWalker.Walk(source.Ref("C2"), source);
+        var addresses = walked.Select(w => w.Ref.A1Address).ToList();
+
+        Assert.Equal(new[] { "A2", "B2", "C2" }, addresses);
+        Assert.True(walked.Single(w => w.Ref.A1Address == "B2").HasSpill);
+        Assert.False(walked.Single(w => w.Ref.A1Address == "A2").HasSpill);
+    }
+
+    [Fact]
     public void Walk_NonSpillingCell_HasSpillFalse()
     {
         // Sanity check: cells that aren't spill anchors carry HasSpill=false

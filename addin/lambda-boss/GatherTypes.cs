@@ -191,8 +191,10 @@ public sealed record FormulaRef(CellRef Start, CellRef? End = null)
 ///     range refs; the walker only recurses into single-cell precedents.
 ///     <see cref="HasSpill" /> reflects <see cref="ICellSource.HasSpill" />
 ///     for the cell's own anchor — true when the formula spills into a
-///     dynamic-array range. The engine forces spilling cells to bind as
-///     inputs (RHS <c>A1#</c>) so the LET preserves the array.
+///     dynamic-array range. The engine uses it only to suffix <c>#</c> on
+///     the RHS of a spilling input so the binding represents the whole
+///     array; spilling cells with in-scope precedents are still steps
+///     whose RHS is the rewritten formula.
 /// </summary>
 public sealed record WalkedCell(
     CellRef Ref,
