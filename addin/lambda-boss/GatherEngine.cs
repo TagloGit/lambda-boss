@@ -21,18 +21,52 @@ public static class GatherEngine
     /// <summary>
     ///     Runs the gather over <paramref name="sink" />. Returns null if
     ///     the sink has no formula — the caller (slash command) treats this
-    ///     as a silent no-op rather than an error.
+    ///     as a silent no-op rather than an error. Cycles in the precedent
+    ///     graph (PR 7) surface as a non-null result with
+    ///     <see cref="GatherResult.Diagnostic" /> set; bindings and
+    ///     synthesised LET are empty in that case.
     /// </summary>
     public static GatherResult? Gather(CellRef sink, ICellSource source)
     {
+        return Gather(sink, new[] { sink }, source);
+    }
+
+    /// <summary>
+    ///     Selection-aware overload (PR 7). When
+    ///     <paramref name="selection" /> contains more than one cell, the
+    ///     engine first checks the multi-sink rule: if 2+ selected cells
+    ///     have no in-scope dependent (i.e. aren't transitively referenced
+    ///     by another selected cell), the engine refuses with a
+    ///     <see cref="GatherDiagnosticKind.MultipleSinks" /> diagnostic.
+    ///     Cycle detection runs whether or not the selection is multi-cell;
+    ///     a cycle anywhere in the walked graph surfaces as
+    ///     <see cref="GatherDiagnosticKind.Cycle" />. PR 9 will additionally
+    ///     use the selection to restrict the walk; for PR 7 the selection
+    ///     only feeds the multi-sink check.
+    /// </summary>
+    public static GatherResult? Gather(CellRef sink, IReadOnlyList<CellRef> selection, ICellSource source)
+    {
         ArgumentNullException.ThrowIfNull(sink);
+        ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(source);
 
         var sinkFormula = source.GetFormula(sink);
         if (sinkFormula == null)
             return null;
 
-        var walked = CellGraphWalker.Walk(sink, source);
+        // Multi-sink check uses the cycle-aware walker on each selected
+        // cell. If any walk hits a cycle, surface that cycle diagnostic
+        // first — cycles are an unconditional refusal, while multi-sink
+        // is selection-shape dependent.
+        var multiSinkDiagnostic = CheckMultipleSinks(sink, selection, sinkFormula, source);
+        if (multiSinkDiagnostic != null)
+            return multiSinkDiagnostic;
+
+        var outcome = CellGraphWalker.Walk(sink, source);
+        if (outcome.IsCycle)
+            return RefusedWithCycle(sink, sinkFormula, outcome.Cycle!);
+
+        var walked = outcome.Cells!;
 
         // Collect unique range refs encountered anywhere in the walk. Order
         // is by first-encountered; that becomes the binding order for
@@ -224,6 +258,78 @@ public static class GatherEngine
 
         return new GatherResult(sink, sinkFormula, bindings, sb.ToString());
     }
+
+    /// <summary>
+    ///     Multi-sink check (PR 7). For a multi-cell selection, walks each
+    ///     selected cell and marks the others it transitively reaches; the
+    ///     selected cells nobody reached are independent sinks. If 2+
+    ///     remain, the user has accidentally multi-selected disconnected
+    ///     calculations and the engine refuses. Single-cell selection
+    ///     short-circuits — there's only one possible sink. If any sub-walk
+    ///     hits a cycle, the cycle diagnostic wins (cycles are an
+    ///     unconditional refusal regardless of selection shape) — so the
+    ///     author always sees the more fundamental error first.
+    /// </summary>
+    private static GatherResult? CheckMultipleSinks(
+        CellRef sink, IReadOnlyList<CellRef> selection, string sinkFormula, ICellSource source)
+    {
+        if (selection.Count <= 1)
+            return null;
+
+        var selectionSet = new HashSet<CellRef>(selection);
+        var covered = new HashSet<CellRef>();
+        foreach (var cell in selection)
+        {
+            var outcome = CellGraphWalker.Walk(cell, source);
+            if (outcome.IsCycle)
+                return RefusedWithCycle(sink, sinkFormula, outcome.Cycle!);
+
+            foreach (var walked in outcome.Cells!)
+            {
+                if (walked.Ref.Equals(cell))
+                    continue;
+                if (selectionSet.Contains(walked.Ref))
+                    covered.Add(walked.Ref);
+            }
+        }
+
+        var sinkCount = selection.Count(s => !covered.Contains(s));
+        if (sinkCount <= 1)
+            return null;
+
+        var diagnostic = new GatherDiagnostic(
+            GatherDiagnosticKind.MultipleSinks,
+            "The selection contains multiple independent calculations.\n\n" +
+            "To gather, select a single sink cell, or restrict the selection " +
+            "to a single calculation chain.",
+            Array.Empty<CellRef>());
+
+        return new GatherResult(
+            sink, sinkFormula, Array.Empty<BindingRow>(), string.Empty, diagnostic);
+    }
+
+    /// <summary>
+    ///     Builds a refusal result with a cycle diagnostic, formatting the
+    ///     cell list as a closed path (each cell joined by <c>→</c>, with
+    ///     the cycle's first cell repeated at the end so the loop is
+    ///     visible). Sheet names are always included so cross-sheet cycles
+    ///     remain unambiguous in the dialog text.
+    /// </summary>
+    private static GatherResult RefusedWithCycle(
+        CellRef sink, string sinkFormula, IReadOnlyList<CellRef> cycle)
+    {
+        var path = string.Join(" → ", cycle.Select(FormatCell));
+        var closed = $"{path} → {FormatCell(cycle[0])}";
+        var message =
+            "Cell graph contains a circular reference:\n\n" +
+            $"  {closed}\n\n" +
+            "Excel itself flags this as a circular reference. Resolve it before running /Gather.";
+        var diagnostic = new GatherDiagnostic(GatherDiagnosticKind.Cycle, message, cycle);
+        return new GatherResult(
+            sink, sinkFormula, Array.Empty<BindingRow>(), string.Empty, diagnostic);
+    }
+
+    private static string FormatCell(CellRef cell) => $"{cell.Sheet}!{cell.A1Address}";
 
     /// <summary>
     ///     Picks a binding name for each range and each non-sink cell.

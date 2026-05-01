@@ -225,12 +225,40 @@ public enum BindingRole
 /// <summary>
 ///     The output of <see cref="GatherEngine" />: enough state to render
 ///     the dialog and write the synthesised LET back to the sink on Save.
+///     <see cref="Diagnostic" /> is non-null when the engine refused (PR 7+ —
+///     cycle in the precedent graph or multi-sink selection); in that case
+///     <see cref="Bindings" /> is empty and <see cref="SynthesisedLet" /> is
+///     empty too. Callers must check <see cref="Diagnostic" /> before using
+///     the rest of the result.
 /// </summary>
 public sealed record GatherResult(
     CellRef Sink,
     string OriginalFormula,
     IReadOnlyList<BindingRow> Bindings,
-    string SynthesisedLet);
+    string SynthesisedLet,
+    GatherDiagnostic? Diagnostic = null);
+
+/// <summary>
+///     A reason the engine refused to synthesise a LET. Surfaced by
+///     <see cref="GatherEngine" /> via <see cref="GatherResult.Diagnostic" />
+///     so the slash-command handler can render a <c>MessageBox</c> instead
+///     of opening the dialog. PR 7 introduces cycle and multi-sink
+///     diagnostics; later PRs may add more kinds (e.g. LAMBDA-call sink in
+///     PR 8).
+/// </summary>
+public sealed record GatherDiagnostic(
+    GatherDiagnosticKind Kind,
+    string Message,
+    IReadOnlyList<CellRef> Cells);
+
+public enum GatherDiagnosticKind
+{
+    /// <summary>The precedent graph contains a cycle.</summary>
+    Cycle,
+
+    /// <summary>The multi-selection contains 2+ cells with no in-scope dependent.</summary>
+    MultipleSinks
+}
 
 /// <summary>
 ///     COM-free abstraction over the active workbook used by

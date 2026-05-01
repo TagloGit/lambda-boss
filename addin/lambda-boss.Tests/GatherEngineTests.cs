@@ -1126,4 +1126,213 @@ public class GatherEngineTests
         Assert.NotNull(parsed);
         Assert.NotEmpty(parsed.Bindings);
     }
+
+    [Fact]
+    public void Gather_TwoCycle_ReturnsCycleDiagnostic()
+    {
+        // PR 7 acceptance: A1 ↔ B1 cycle. Engine returns a result with
+        // Diagnostic.Kind = Cycle, an empty bindings list, and an empty
+        // synthesised LET. The diagnostic's Cells list contains both
+        // cycle members so the caller (or future tests) can introspect.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=A1+1");
+
+        var result = GatherEngine.Gather(source.Ref("A1"), source);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result!.Diagnostic);
+        Assert.Equal(GatherDiagnosticKind.Cycle, result.Diagnostic!.Kind);
+        Assert.Empty(result.Bindings);
+        Assert.Empty(result.SynthesisedLet);
+        var addresses = result.Diagnostic.Cells.Select(c => c.A1Address).ToHashSet();
+        Assert.Equal(new HashSet<string> { "A1", "B1" }, addresses);
+    }
+
+    [Fact]
+    public void Gather_TwoCycle_DiagnosticMessageNamesBothCells()
+    {
+        // The MessageBox text the user sees must list both cells with
+        // sheet qualifiers so cross-sheet cycles remain unambiguous.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=A1+1");
+
+        var result = GatherEngine.Gather(source.Ref("A1"), source)!;
+
+        Assert.NotNull(result.Diagnostic);
+        Assert.Contains("A1", result.Diagnostic!.Message);
+        Assert.Contains("B1", result.Diagnostic.Message);
+        // Closes the cycle path with the back-edge target repeated at
+        // the end so the loop is visible — exact format isn't pinned
+        // here but the arrow separator must be present.
+        Assert.Contains("→", result.Diagnostic.Message);
+    }
+
+    [Fact]
+    public void Gather_ThreeCycle_DiagnosticListsAllThreeCells()
+    {
+        // PR 7 acceptance: 3-cycle. Diagnostic.Cells contains all three
+        // members in path order; the message names each one.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=C1+1")
+            .WithFormula("C1", "=A1+1");
+
+        var result = GatherEngine.Gather(source.Ref("A1"), source)!;
+
+        Assert.Equal(GatherDiagnosticKind.Cycle, result.Diagnostic!.Kind);
+        var addresses = result.Diagnostic.Cells.Select(c => c.A1Address).ToList();
+        Assert.Equal(3, addresses.Count);
+        Assert.Contains("A1", addresses);
+        Assert.Contains("B1", addresses);
+        Assert.Contains("C1", addresses);
+    }
+
+    [Fact]
+    public void Gather_CycleReachableFromSink_StillSurfaces()
+    {
+        // The cycle doesn't include the sink itself; engine still
+        // surfaces it because the walker's DFS reaches into it.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=A1+1")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        Assert.Equal(GatherDiagnosticKind.Cycle, result.Diagnostic!.Kind);
+    }
+
+    [Fact]
+    public void Gather_NoCycle_DiagnosticIsNull()
+    {
+        // Regression guard: an acyclic walk produces no diagnostic.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        Assert.Null(result.Diagnostic);
+        Assert.NotEmpty(result.Bindings);
+    }
+
+    [Fact]
+    public void Gather_NoFormulaSink_StillReturnsNullEvenWithSelection()
+    {
+        // The silent-no-op contract is preserved when the new selection
+        // overload is called: a non-formula sink still yields null,
+        // never a diagnostic — the slash command treats it as a quiet
+        // close, not an error worth a MessageBox.
+        var source = new StubCellSource();
+
+        var result = GatherEngine.Gather(
+            source.Ref("A1"),
+            new[] { source.Ref("A1"), source.Ref("B1") },
+            source);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Gather_MultiSinkSelection_ReturnsMultipleSinksDiagnostic()
+    {
+        // PR 7 acceptance: A1=10 (literal), B1=A1*2, C1=A1+1 — B1 and
+        // C1 are independent sinks (neither references the other).
+        // Multi-selecting both must refuse with MultipleSinks. The sink
+        // passed in is whichever cell was active at trigger time; the
+        // diagnostic's Cells is empty per the spec ("no list — situation
+        // is obvious to the author").
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=A1+1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("B1"),
+            new[] { source.Ref("B1"), source.Ref("C1") },
+            source);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result!.Diagnostic);
+        Assert.Equal(GatherDiagnosticKind.MultipleSinks, result.Diagnostic!.Kind);
+        Assert.Empty(result.Bindings);
+        Assert.Empty(result.SynthesisedLet);
+        Assert.Empty(result.Diagnostic.Cells);
+    }
+
+    [Fact]
+    public void Gather_MultiSelectionWithDependency_AllowedSingleSink()
+    {
+        // Multi-selection is allowed when one of the selected cells
+        // transitively reaches every other selected cell — there's only
+        // one true sink. Walk proceeds normally; no diagnostic.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("C1"),
+            new[] { source.Ref("A1"), source.Ref("B1"), source.Ref("C1") },
+            source);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.Diagnostic);
+        Assert.NotEmpty(result.Bindings);
+    }
+
+    [Fact]
+    public void Gather_SingleCellSelection_BypassesMultiSinkCheck()
+    {
+        // PR 7 acceptance: the multi-sink check is skipped when the
+        // selection is a single cell — the spec says "single-cell
+        // selection (always allowed)".
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2");
+
+        var result = GatherEngine.Gather(
+            source.Ref("B1"),
+            new[] { source.Ref("B1") },
+            source);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.Diagnostic);
+    }
+
+    [Fact]
+    public void Gather_ThreeIndependentSinksInSelection_RefusedAsMultiSink()
+    {
+        // Three disconnected sinks (B1, C1, D1 all refer to A1 only)
+        // — three sink candidates, two would already trigger refusal.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=A1+1")
+            .WithFormula("D1", "=A1-1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("B1"),
+            new[] { source.Ref("B1"), source.Ref("C1"), source.Ref("D1") },
+            source);
+
+        Assert.Equal(GatherDiagnosticKind.MultipleSinks, result!.Diagnostic!.Kind);
+    }
+
+    [Fact]
+    public void Gather_CycleWithMultiSelection_CycleDiagnosticWins()
+    {
+        // Cycles are an unconditional refusal regardless of selection
+        // shape — even a multi-sink-shaped selection should surface
+        // the cycle first because it's the more fundamental error and
+        // the multi-sink check itself walks the graph.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=A1+1");
+
+        var result = GatherEngine.Gather(
+            source.Ref("A1"),
+            new[] { source.Ref("A1"), source.Ref("B1") },
+            source);
+
+        Assert.Equal(GatherDiagnosticKind.Cycle, result!.Diagnostic!.Kind);
+    }
 }
