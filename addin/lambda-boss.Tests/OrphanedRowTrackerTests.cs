@@ -39,7 +39,7 @@ public sealed class OrphanedRowTrackerTests
         Assert.True(tracker.HasOrphans);
         Assert.Single(tracker.Orphans);
         var orphan = tracker.Orphans[a1];
-        Assert.Equal(b1, orphan.DemotedBy);
+        Assert.Equal(b1, orphan.CausedBy);
         Assert.Equal("numbers", orphan.Snapshot.Name);
         Assert.Equal("A1", orphan.Snapshot.Rhs);
     }
@@ -180,7 +180,7 @@ public sealed class OrphanedRowTrackerTests
     }
 
     [Fact]
-    public void OnPromote_DropsOrphansAttributedToTheCell()
+    public void Forget_DropsOrphansAttributedToTheCell()
     {
         // Demote B1 → A1 orphans. Then promote B1 — A1 should clear
         // from the orphan list (the engine will surface A1 again on
@@ -199,24 +199,24 @@ public sealed class OrphanedRowTrackerTests
         tracker.Reconcile(before, new HashSet<FormulaRef> { b1 }, new HashSet<FormulaRef>(), b1);
         Assert.True(tracker.HasOrphans);
 
-        tracker.OnPromote(b1);
+        tracker.Forget(b1);
 
         Assert.False(tracker.HasOrphans);
     }
 
     [Fact]
-    public void OnPromote_LeavesOrphansFromOtherDemotersIntact()
+    public void Forget_LeavesOrphansFromOtherCausersIntact()
     {
-        // Two independent demotes orphan two different cells. Promoting
-        // only one demoter clears its own orphans without disturbing
-        // the others.
+        // Two independent causes orphan two different cells (one
+        // demote, one exclude). Reversing only one of them clears its
+        // own orphans without disturbing the others.
         var a1 = Cell("A1");
         var b1 = Cell("B1");
         var c1 = Cell("C1");
         var d1 = Cell("D1");
 
         var tracker = new OrphanedRowTracker();
-        // Demote 1: B1 demoted, A1 orphans.
+        // Cause 1: B1 demoted → A1 orphans.
         tracker.Reconcile(
             new Dictionary<FormulaRef, BindingRow>
             {
@@ -226,22 +226,89 @@ public sealed class OrphanedRowTrackerTests
             new HashSet<FormulaRef> { b1 },
             new HashSet<FormulaRef>(),
             b1);
-        // Demote 2: D1 demoted, C1 orphans.
+        // Cause 2: D1 excluded → C1 orphans (D1 leaves snapshotBefore
+        // before Reconcile is called — same flow as the dialog's
+        // Recompute, where the just-excluded cell is filtered out
+        // before snapshotting; the cell is still passed as causedBy).
         tracker.Reconcile(
             new Dictionary<FormulaRef, BindingRow>
             {
                 [c1] = Row(c1, BindingRole.Input, "c", "C1"),
-                [d1] = Row(d1, BindingRole.Step, "step_d", "c+1")
             },
-            new HashSet<FormulaRef> { d1, b1 },
-            new HashSet<FormulaRef>(),
+            new HashSet<FormulaRef> { b1 },
+            new HashSet<FormulaRef> { d1 },
             d1);
         Assert.Equal(2, tracker.Orphans.Count);
 
-        tracker.OnPromote(b1);
+        tracker.Forget(b1);
 
         Assert.Single(tracker.Orphans);
         Assert.Contains(c1, tracker.Orphans);
+        Assert.Equal(d1, tracker.Orphans[c1].CausedBy);
+    }
+
+    [Fact]
+    public void Reconcile_ExcludeStepCausesPrecedentToDrop_RecordsOrphan()
+    {
+        // Mirror of the demote scenario, via the Include path. The
+        // excluded step itself is filtered out of activeBefore by the
+        // dialog (the just-excluded row's vm.Include is false at
+        // snapshot time), but it's still passed as causedBy. A1 was
+        // active and reachable only via B1, so the exclude drops it
+        // — tracker records A1 as orphaned-by-B1.
+        var a1 = Cell("A1");
+        var b1 = Cell("B1");
+
+        var before = new Dictionary<FormulaRef, BindingRow>
+        {
+            [a1] = Row(a1, BindingRole.Input, "numbers", "A1"),
+            // B1 deliberately absent — vm.Include just flipped to
+            // false in the dialog before Recompute, so it's filtered
+            // out of activeBefore.
+        };
+        var after = new HashSet<FormulaRef>();
+        var excluded = new HashSet<FormulaRef> { b1 };
+
+        var tracker = new OrphanedRowTracker();
+        tracker.Reconcile(before, after, excluded, b1);
+
+        Assert.True(tracker.HasOrphans);
+        Assert.Single(tracker.Orphans);
+        Assert.Equal(b1, tracker.Orphans[a1].CausedBy);
+    }
+
+    [Fact]
+    public void Reconcile_ReincludeAfterExclude_OrphansClearViaResurfacing()
+    {
+        // Exclude B1 → A1 orphan. Re-include B1 → A1 surfaces again
+        // in activeAfter. Reconcile alone (without an explicit Forget
+        // call) drops A1 from orphans because the engine restored it.
+        var a1 = Cell("A1");
+        var b1 = Cell("B1");
+
+        var tracker = new OrphanedRowTracker();
+        // Exclude B1 → A1 orphans.
+        tracker.Reconcile(
+            new Dictionary<FormulaRef, BindingRow>
+            {
+                [a1] = Row(a1, BindingRole.Input, "n", "A1"),
+            },
+            new HashSet<FormulaRef>(),
+            new HashSet<FormulaRef> { b1 },
+            b1);
+        Assert.True(tracker.HasOrphans);
+
+        // User re-includes B1; engine restores A1 to active. The dialog
+        // calls Forget(B1) up-front (covered by Forget tests above)
+        // and Reconcile with no causedBy. Even without Forget, the
+        // resurfacing path drops the orphan.
+        tracker.Reconcile(
+            new Dictionary<FormulaRef, BindingRow>(),
+            new HashSet<FormulaRef> { a1, b1 },
+            new HashSet<FormulaRef>(),
+            null);
+
+        Assert.False(tracker.HasOrphans);
     }
 
     [Fact]
@@ -287,8 +354,8 @@ public sealed class OrphanedRowTrackerTests
         Assert.Equal(2, tracker.Orphans.Count);
         Assert.Contains(a1, tracker.Orphans);
         Assert.Contains(c1, tracker.Orphans);
-        Assert.Equal(b1, tracker.Orphans[a1].DemotedBy);
-        Assert.Equal(d1, tracker.Orphans[c1].DemotedBy);
+        Assert.Equal(b1, tracker.Orphans[a1].CausedBy);
+        Assert.Equal(d1, tracker.Orphans[c1].CausedBy);
     }
 
     [Fact]
@@ -313,7 +380,7 @@ public sealed class OrphanedRowTrackerTests
             new HashSet<FormulaRef> { b1 },
             new HashSet<FormulaRef>(),
             b1);
-        Assert.Equal(b1, tracker.Orphans[a1].DemotedBy);
+        Assert.Equal(b1, tracker.Orphans[a1].CausedBy);
 
         // Now demote C1 — A1 still doesn't reappear in the active list
         // (it's still orphaned). Second Reconcile shouldn't re-attribute
@@ -328,7 +395,7 @@ public sealed class OrphanedRowTrackerTests
             new HashSet<FormulaRef>(),
             c1);
 
-        Assert.Equal(b1, tracker.Orphans[a1].DemotedBy);
+        Assert.Equal(b1, tracker.Orphans[a1].CausedBy);
     }
 
     private static FormulaRef Cell(string a1)

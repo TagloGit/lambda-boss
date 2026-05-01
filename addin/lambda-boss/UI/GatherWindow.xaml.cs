@@ -15,13 +15,14 @@ namespace LambdaBoss.UI;
 ///     re-included rows return as the engine surfaces them, explicitly-
 ///     excluded rows are kept visible (greyed out, checkbox off) so the
 ///     user can re-tick them, and rows the engine no longer surfaces
-///     because their only path ran through a demoted cell appear in a
-///     separate "Orphaned" section beneath the active bindings (issue
-///     #157, mirrors the excluded-row pattern). Role overrides persist
-///     across rebuilds via <see cref="_roleOverrides" /> so a user's
-///     promote/demote choice stays in effect through subsequent Include
-///     toggles. Save returns the synthesised LET text from the latest
-///     result so the caller writes that back to the sink.
+///     because their only path ran through a cell the user demoted or
+///     excluded appear in a separate "Orphaned" section beneath the
+///     active bindings (issue #157, mirrors the excluded-row pattern).
+///     Role overrides persist across rebuilds via
+///     <see cref="_roleOverrides" /> so a user's promote/demote choice
+///     stays in effect through subsequent Include toggles. Save returns
+///     the synthesised LET text from the latest result so the caller
+///     writes that back to the sink.
 /// </summary>
 public partial class GatherWindow
 {
@@ -43,9 +44,10 @@ public partial class GatherWindow
     // view of user intent.
     private readonly Dictionary<FormulaRef, BindingRole> _roleOverrides = new();
     // Orphan tracker: precedents that fell out of the active list because
-    // their only path ran through a cell the user demoted. Surfaced in
-    // the Orphaned section below the bindings list and removed when the
-    // user promotes the demoter back to a step.
+    // their only path ran through a cell the user demoted or excluded.
+    // Surfaced in the Orphaned section below the bindings list and
+    // removed when the user reverses the causing action — re-includes
+    // an excluded cell, or promotes a demoted one back to a step.
     private readonly OrphanedRowTracker _orphanTracker = new();
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
@@ -178,7 +180,7 @@ public partial class GatherWindow
             {
                 if (surfaced.Contains(source)) continue;
                 if (_excluded.ContainsKey(source)) continue;
-                var hint = entry.DemotedBy.Start.A1Address;
+                var hint = entry.CausedBy.Start.A1Address;
                 var vm = new GatherRowVm(entry.Snapshot, include: true, orphanedByAddress: hint);
                 _orphans.Add(vm);
             }
@@ -203,18 +205,32 @@ public partial class GatherWindow
             // forget the snapshot when re-checking so the engine result
             // owns the row's display (Role/Name/Rhs may have shifted as
             // other rows toggled in the meantime).
+            FormulaRef? causedBy = null;
             if (!vm.Include)
             {
                 _excluded[vm.Source] = new BindingRow(
                     vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
                     vm.IsExpansion, vm.CanToggleRole);
+                // Excluding a step drops any precedents reachable only
+                // via this cell — same upstream effect as a demote.
+                // Pass the cell as the cause so the tracker records
+                // those drops as orphans instead of letting them
+                // vanish silently. Reconcile no-ops on excludes that
+                // don't drop anything (leaves, or steps with no sole-
+                // path upstream cells).
+                causedBy = vm.Source;
             }
             else
             {
                 _excluded.Remove(vm.Source);
+                // Re-including the cell reverses the exclude; any
+                // orphans we attributed to it should clear up-front so
+                // the rebuild after Recompute doesn't render stale
+                // orphan rows. No-op when the cell never caused any.
+                _orphanTracker.Forget(vm.Source);
             }
 
-            Recompute(demotedCell: null);
+            Recompute(causedBy);
             return;
         }
 
@@ -238,37 +254,39 @@ public partial class GatherWindow
                 _excluded[vm.Source] = existing with { Role = newRole };
             }
 
-            // Promotion: drop any orphans this cell originally caused.
-            // Done up-front (before Recompute) so the post-recompute
-            // reconcile pass doesn't see a stale orphan record while
-            // the engine is still surfacing the formerly-orphaned cell
-            // back into the active list. A role flip on an excluded
-            // row is a snapshot-only edit (the engine keeps treating
-            // the cell as excluded so the override never takes effect)
-            // — we skip the tracker hooks in that case so excluding a
-            // demoter doesn't accidentally lose its orphan attribution.
-            FormulaRef? newlyDemoted = null;
+            // Promotion: drop any orphans this cell originally caused
+            // (whether by a prior demote or a prior exclude). Done up-
+            // front so the post-recompute reconcile pass doesn't see a
+            // stale orphan record while the engine is still surfacing
+            // the formerly-orphaned cell back into the active list. A
+            // role flip on an excluded row is a snapshot-only edit
+            // (the engine keeps treating the cell as excluded so the
+            // override never takes effect) — we skip the tracker
+            // hooks in that case so excluding a causer doesn't
+            // accidentally lose its orphan attribution.
+            FormulaRef? causedBy = null;
             if (vm.Include)
             {
                 if (newRole == BindingRole.Step)
-                    _orphanTracker.OnPromote(vm.Source);
+                    _orphanTracker.Forget(vm.Source);
                 else
-                    newlyDemoted = vm.Source;
+                    causedBy = vm.Source;
             }
 
-            Recompute(newlyDemoted);
+            Recompute(causedBy);
         }
     }
 
-    private void Recompute(FormulaRef? demotedCell)
+    private void Recompute(FormulaRef? causedBy)
     {
         // Snapshot the active rows BEFORE the recompute. Used by the
         // orphan tracker to detect cells that fell off the active list
-        // because of a demote — diff'd against the new active set
-        // returned by the engine. Skip expansion rows (they share a
-        // Source with their host cell, so snapshotting them would
-        // collide on the dictionary key) and excluded rows (those have
-        // their own visual lane and are explicitly not "active").
+        // because of a demote or an exclude — diff'd against the new
+        // active set returned by the engine. Skip expansion rows (they
+        // share a Source with their host cell, so snapshotting them
+        // would collide on the dictionary key) and excluded rows
+        // (those have their own visual lane and are explicitly not
+        // "active").
         var snapshotBefore = new Dictionary<FormulaRef, BindingRow>();
         foreach (var vm in _rows)
         {
@@ -320,7 +338,7 @@ public partial class GatherWindow
             snapshotBefore,
             activeAfter,
             new HashSet<FormulaRef>(_excluded.Keys),
-            demotedCell);
+            causedBy);
 
         _result = newResult;
         PreviewText.Text = newResult.SynthesisedLet;
@@ -381,10 +399,10 @@ public class GatherRowVm : INotifyPropertyChanged
     public bool CanToggleRole { get; }
 
     /// <summary>
-    ///     Address of the cell whose demotion orphaned this row, or
-    ///     null when the row isn't an orphan. Drives the
-    ///     "orphaned by &lt;addr&gt;" hint in the orphan section
-    ///     and gates which controls render on the row.
+    ///     Address of the cell whose demote-or-exclude orphaned this
+    ///     row, or null when the row isn't an orphan. Drives the
+    ///     "orphaned by &lt;addr&gt;" hint in the orphan section and
+    ///     gates which controls render on the row.
     /// </summary>
     public string? OrphanedByAddress { get; }
 
@@ -435,7 +453,8 @@ public class GatherRowVm : INotifyPropertyChanged
     ///     drives the toggle, and a checkbox here would be a confusing
     ///     no-op (the engine doesn't expose per-inner-binding exclusion).
     ///     Orphan rows hide it too — they're inert until the user
-    ///     promotes the demoter that orphaned them back to a step.
+    ///     reverses the action on the row above (re-include or
+    ///     promote) that orphaned them.
     /// </summary>
     public Visibility IncludeCheckboxVisibility =>
         IsExpansion || IsOrphan ? Visibility.Hidden : Visibility.Visible;

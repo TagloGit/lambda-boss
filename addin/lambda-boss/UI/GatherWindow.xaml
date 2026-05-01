@@ -155,7 +155,7 @@
                     Grid.Row="7"
                     Margin="0,8,0,0"
                     Visibility="Collapsed">
-            <TextBlock Text="Orphaned (would re-appear if you promote a row above)"
+            <TextBlock Text="Orphaned (re-include or promote a row above to bring them back)"
                        FontSize="12"
                        FontStyle="Italic"
                        Foreground="#9cdcfe"
