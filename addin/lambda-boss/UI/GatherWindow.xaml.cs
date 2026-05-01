@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -164,6 +165,39 @@ public partial class GatherWindow
             SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    ///     Selects the entire Name when the TextBox gains focus — covers
+    ///     Tab navigation between rows so the user can immediately
+    ///     overtype each name without backspacing. The mouse-click path
+    ///     is hooked separately via
+    ///     <see cref="NameTextBox_PreviewMouseLeftButtonDown" /> because
+    ///     a click would otherwise position the caret and clear the
+    ///     selection right after this handler ran.
+    /// </summary>
+    private void NameTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            tb.SelectAll();
+    }
+
+    /// <summary>
+    ///     First click into a TextBox that doesn't yet have keyboard
+    ///     focus: hijack it to call <c>Focus()</c> ourselves and mark
+    ///     the event handled, so the default click-to-position-caret
+    ///     behavior never runs and the
+    ///     <see cref="NameTextBox_GotFocus" /> SelectAll sticks.
+    ///     Subsequent clicks (when the box already has focus) fall
+    ///     through normally so the user can place the caret to edit
+    ///     part of the name.
+    /// </summary>
+    private void NameTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+        if (tb.IsKeyboardFocusWithin) return;
+        tb.Focus();
+        e.Handled = true;
     }
 
     private void BuildRowsFromBindings(IReadOnlyList<BindingRow> bindings)
