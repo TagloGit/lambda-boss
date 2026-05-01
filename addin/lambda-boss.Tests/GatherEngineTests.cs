@@ -2220,4 +2220,112 @@ public class GatherEngineTests
         Assert.Equal(BindingRole.Step, aRow.Role);
         Assert.Equal("SEQUENCE(5)", aRow.Rhs);
     }
+
+    // PR 12 — Live binding-name editor + validation. Recompute accepts
+    // name overrides via RowState so the dialog can pass the user's
+    // typed names through the same plumbing it uses for Include and
+    // Role overrides.
+
+    [Fact]
+    public void Recompute_NameOverride_AppliedThroughoutLet()
+    {
+        // A1 is a leaf input; B1 is a step that references A1; C1 is
+        // the sink that references B1. Renaming A1 from its auto-
+        // derived "step_1" to "count" must update every reference: the
+        // binding row itself, B1's step RHS (which previously read
+        // "step_1*2" → now "count*2"), and the body (which was
+        // already step_2 from B1, but now B1 is "step_1" since A1 took
+        // its slot). The synthesised LET round-trips through the parser.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+        var sink = source.Ref("C1");
+        var selection = new[] { sink };
+
+        var states = new[]
+        {
+            new RowState(
+                new FormulaRef(source.Ref("A1")),
+                NameOverride: "count"),
+            new RowState(new FormulaRef(source.Ref("B1")))
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal("count", aRow.Name);
+
+        // B1's RHS now references "count" instead of the original
+        // auto-derived name.
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal("count*2", bRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("count", parsed.Bindings[0].Name);
+        Assert.Equal("A1", parsed.Bindings[0].RhsText);
+        Assert.Equal("count*2", parsed.Bindings[1].RhsText);
+    }
+
+    [Fact]
+    public void Recompute_NameOverrideClaimsName_AutoDerivedSuffixesAround()
+    {
+        // Two leaf inputs A2 and B2 (literal cells under header labels
+        // in row 1); the user renames B2 to something that would
+        // otherwise be A2's auto-derived name. The override wins
+        // (locked into `used` first) and A2 suffixes around it.
+        var source = new StubCellSource()
+            .WithLabel("A1", "values")           // A2's auto-derived name
+            .WithLabel("B1", "totals")           // B2's auto-derived name
+            .WithFormula("C2", "=A2+B2");
+        var sink = source.Ref("C2");
+        var selection = new[] { sink };
+
+        // User renames B2 to "values" — same as A2's auto-derived label.
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A2"))),
+            new RowState(
+                new FormulaRef(source.Ref("B2")),
+                NameOverride: "values")
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        // B2's override "values" is authoritative; A2's auto-derivation
+        // sees "values" already taken and suffixes to "values_2".
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
+        Assert.Equal("values", bRow.Name);
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal("values_2", aRow.Name);
+
+        // Body references match: A2 → "values_2", B2 → "values".
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("values_2+values", parsed.Body);
+    }
+
+    [Fact]
+    public void Recompute_EmptyNameOverride_TreatedAsNoOverride()
+    {
+        // Defensive: a RowState with a blank NameOverride (the dialog
+        // would normally filter these to canonical entries before
+        // sending) falls back to auto-derivation rather than emitting
+        // an empty binding name. The dialog gates on validity already,
+        // so this path is the engine's safety net.
+        var source = new StubCellSource()
+            .WithLabel("A1", "numbers")
+            .WithFormula("B2", "=A2*2");
+        var sink = source.Ref("B2");
+        var selection = new[] { sink };
+
+        var states = new[]
+        {
+            new RowState(
+                new FormulaRef(source.Ref("A2")),
+                NameOverride: "")
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        // Empty override is dropped; A2 falls back to its label-derived
+        // auto-name "numbers".
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal("numbers", aRow.Name);
+    }
 }
