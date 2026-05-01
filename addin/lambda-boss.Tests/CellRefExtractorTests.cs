@@ -58,7 +58,7 @@ public class CellRefExtractorTests
         Assert.Equal("A1", refs[0].Start.A1Address);
         Assert.Equal("A3", refs[0].End!.A1Address);
         Assert.Equal(Sheet, refs[0].Start.Sheet);
-        Assert.Equal(Sheet, refs[0].End.Sheet);
+        Assert.Equal(Sheet, refs[0].End!.Sheet);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class CellRefExtractorTests
         Assert.Equal("Sheet1", refs[0].Start.Sheet);
         Assert.Equal("Sheet1", refs[0].End!.Sheet);
         Assert.Equal("A1", refs[0].Start.A1Address);
-        Assert.Equal("A3", refs[0].End.A1Address);
+        Assert.Equal("A3", refs[0].End!.A1Address);
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public class CellRefExtractorTests
         var lookup = new Dictionary<FormulaRef, string>
         {
             [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers",
-            [new FormulaRef(new CellRef(Sheet, 2, 1))] = "step_1",
+            [new FormulaRef(new CellRef(Sheet, 2, 1))] = "step_1"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=A1*2+B1", Sheet, lookup);
@@ -243,7 +243,7 @@ public class CellRefExtractorTests
     {
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers",
+            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=A1*Z99", Sheet, lookup);
@@ -256,7 +256,7 @@ public class CellRefExtractorTests
     {
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers",
+            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=A1&\"A1 unchanged\"", Sheet, lookup);
@@ -270,7 +270,7 @@ public class CellRefExtractorTests
         // The whole `Sheet1!A1` collapses to the binding name, not just A1.
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "shared",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "shared"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=Sheet1!A1*2", "Sheet2", lookup);
@@ -283,7 +283,7 @@ public class CellRefExtractorTests
     {
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef("My Sheet", 1, 1))] = "mine",
+            [new FormulaRef(new CellRef("My Sheet", 1, 1))] = "mine"
         };
 
         var rewritten = CellRefExtractor.Rewrite("='My Sheet'!A1+1", "Sheet2", lookup);
@@ -296,7 +296,7 @@ public class CellRefExtractorTests
     {
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef("Sheet1", 1, 1, "Other.xlsx"))] = "outside",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1, "Other.xlsx"))] = "outside"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=[Other.xlsx]Sheet1!A1*2", "Sheet2", lookup);
@@ -310,7 +310,7 @@ public class CellRefExtractorTests
         var lookup = new Dictionary<FormulaRef, string>
         {
             [new FormulaRef(new CellRef("Sheet2", 2, 1))] = "local",
-            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "shared",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "shared"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=B1+Sheet1!A1", "Sheet2", lookup);
@@ -325,7 +325,7 @@ public class CellRefExtractorTests
         // name in the rewritten formula.
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef(Sheet, 1, 1), new CellRef(Sheet, 1, 3))] = "values",
+            [new FormulaRef(new CellRef(Sheet, 1, 1), new CellRef(Sheet, 1, 3))] = "values"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=SUM(A1:A3)", Sheet, lookup);
@@ -342,7 +342,7 @@ public class CellRefExtractorTests
         var lookup = new Dictionary<FormulaRef, string>
         {
             [new FormulaRef(new CellRef(Sheet, 1, 1), new CellRef(Sheet, 1, 3))] = "values",
-            [new FormulaRef(new CellRef(Sheet, 1, 4))] = "extra",
+            [new FormulaRef(new CellRef(Sheet, 1, 4))] = "extra"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=SUM(A1:A3)+A4", Sheet, lookup);
@@ -355,7 +355,7 @@ public class CellRefExtractorTests
     {
         var lookup = new Dictionary<FormulaRef, string>
         {
-            [new FormulaRef(new CellRef("Sheet1", 1, 1), new CellRef("Sheet1", 1, 3))] = "values",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1), new CellRef("Sheet1", 1, 3))] = "values"
         };
 
         var rewritten = CellRefExtractor.Rewrite("=SUM(Sheet1!A1:A3)", "Sheet2", lookup);
