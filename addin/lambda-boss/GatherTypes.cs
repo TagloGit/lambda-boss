@@ -229,14 +229,21 @@ public enum BindingRole
 ///     cycle in the precedent graph or multi-sink selection); in that case
 ///     <see cref="Bindings" /> is empty and <see cref="SynthesisedLet" /> is
 ///     empty too. Callers must check <see cref="Diagnostic" /> before using
-///     the rest of the result.
+///     the rest of the result. PR 9 adds <see cref="WalkedCount" /> and
+///     <see cref="FreeWalkCount" /> so the dialog can render the header
+///     hint: <c>WalkedCount</c> ("M") is cells the walker actually walked
+///     into, and <c>FreeWalkCount</c> ("N") is cells the walk would have
+///     visited without selection-based restriction. Both are zero when the
+///     engine refused.
 /// </summary>
 public sealed record GatherResult(
     CellRef Sink,
     string OriginalFormula,
     IReadOnlyList<BindingRow> Bindings,
     string SynthesisedLet,
-    GatherDiagnostic? Diagnostic = null);
+    GatherDiagnostic? Diagnostic = null,
+    int WalkedCount = 0,
+    int FreeWalkCount = 0);
 
 /// <summary>
 ///     A reason the engine refused to synthesise a LET. Surfaced by
