@@ -688,4 +688,263 @@ public class GatherEngineTests
         Assert.Equal("A2", aRow.Rhs);
         Assert.DoesNotContain("#", aRow.Rhs);
     }
+
+    [Fact]
+    public void Gather_NestedLetWithoutCollision_BindingsSplicedInOrder()
+    {
+        // PR 6 acceptance #1: a step whose formula is =LET(a, A1+1, a*2)
+        // and no outer name `a` produces an inner binding `a, A1_rewritten+1`
+        // ahead of the step row, with the step's RHS being the inner body
+        // `a*2`. A1 is the only outer leaf and gets the auto-name step_1.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=LET(a, A1+1, a*2)")
+            .WithFormula("C1", "=B1+5");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var inner = result.Bindings.Single(b => b.Name == "a");
+        Assert.Equal(BindingRole.Step, inner.Role);
+        Assert.Equal("step_1+1", inner.Rhs);
+
+        var stepB1 = result.Bindings.Single(b => b.Source.A1Address == "B1" && b.Name != "a");
+        Assert.Equal(BindingRole.Step, stepB1.Role);
+        Assert.Equal("a*2", stepB1.Rhs);
+
+        // Inner binding sits between the outer input and the outer step.
+        var bindings = result.Bindings.ToList();
+        var aIdx = bindings.FindIndex(b => b.Source.A1Address == "A1");
+        var innerIdx = bindings.IndexOf(inner);
+        var stepIdx = bindings.IndexOf(stepB1);
+        Assert.True(aIdx < innerIdx && innerIdx < stepIdx);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(3, parsed.Bindings.Count);
+        Assert.Equal("step_1", parsed.Bindings[0].Name);
+        Assert.Equal("a", parsed.Bindings[1].Name);
+        Assert.Equal("step_1+1", parsed.Bindings[1].RhsText);
+        Assert.Equal("a*2", parsed.Bindings[2].RhsText);
+    }
+
+    [Fact]
+    public void Gather_NestedLetWithCollidingName_AutoSuffixedAndRefsRewritten()
+    {
+        // PR 6 acceptance #2: inner binding `x` collides with outer `x`
+        // (A2 labelled "x" via the cell above at A1) and is silently
+        // renamed to `x_2`. Inside the inner LET, references to `x` (in
+        // the body) become `x_2`; the inner binding's RHS rewrites the
+        // outer cell ref `A2` to its outer binding name `x` (which is
+        // unaffected by the inner-rename pass because cell-ref rewriting
+        // runs second).
+        var source = new StubCellSource()
+            .WithLabel("A1", "x")
+            .WithFormula("B2", "=LET(x, A2*2, x+5)")
+            .WithFormula("C2", "=B2*2");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var outerX = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal("x", outerX.Name);
+
+        var innerX2 = result.Bindings.Single(b => b.Name == "x_2");
+        Assert.Equal("x*2", innerX2.Rhs);
+
+        var stepB2 = result.Bindings.Single(b => b.Source.A1Address == "B2" && b.Name != "x_2");
+        Assert.Equal("step_1", stepB2.Name);
+        Assert.Equal("x_2+5", stepB2.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(3, parsed.Bindings.Count);
+        Assert.Equal("x", parsed.Bindings[0].Name);
+        Assert.Equal("A2", parsed.Bindings[0].RhsText);
+        Assert.Equal("x_2", parsed.Bindings[1].Name);
+        Assert.Equal("x*2", parsed.Bindings[1].RhsText);
+        Assert.Equal("step_1", parsed.Bindings[2].Name);
+        Assert.Equal("x_2+5", parsed.Bindings[2].RhsText);
+        Assert.Equal("step_1*2", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_TwoStepsWithSameInnerName_SecondGetsSuffix()
+    {
+        // PR 6 acceptance #3: two steps each with =LET(x, ..., x+1). The
+        // first expansion claims `x`; the second collides against `x`
+        // already in `used` and becomes `x_2`. The outer `B1`/`C1` are
+        // step-classified because each references an in-scope precedent.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=LET(x, A1+1, x+1)")
+            .WithFormula("C1", "=LET(x, B1+1, x+1)")
+            .WithFormula("D1", "=C1+1");
+
+        var result = GatherEngine.Gather(source.Ref("D1"), source)!;
+
+        var firstInner = result.Bindings.Single(b => b.Name == "x");
+        var secondInner = result.Bindings.Single(b => b.Name == "x_2");
+
+        Assert.Equal("B1", firstInner.Source.A1Address);
+        Assert.Equal("C1", secondInner.Source.A1Address);
+
+        var stepB1 = result.Bindings.Single(b => b.Source.A1Address == "B1" && b.Name != "x");
+        Assert.Equal("x+1", stepB1.Rhs);
+
+        var stepC1 = result.Bindings.Single(b => b.Source.A1Address == "C1" && b.Name != "x_2");
+        Assert.Equal("x_2+1", stepC1.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        var names = parsed.Bindings.Select(b => b.Name).ToList();
+        Assert.Contains("x", names);
+        Assert.Contains("x_2", names);
+        Assert.True(names.IndexOf("x") < names.IndexOf("x_2"));
+    }
+
+    [Fact]
+    public void Gather_NestedLetReferencingOuterCell_RewritesToBindingName()
+    {
+        // PR 6 acceptance #4: inner LET binding RHS references an outer
+        // cell `A2`; after expansion the ref is rewritten to A2's outer
+        // binding name. Body references inside the inner LET keep the
+        // binding's (un-renamed) name. (The label sits at A1 so cell-above
+        // for A2 picks it up — A1 itself has no cell-above and so couldn't
+        // own a label-derived name.)
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B2", "=LET(doubled, A2*2, doubled+10)")
+            .WithFormula("C2", "=B2+5");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var inner = result.Bindings.Single(b => b.Name == "doubled");
+        // The outer A2 binding is `numbers`; the inner binding's RHS
+        // rewrites A2 to that name, not the cell address.
+        Assert.Equal("numbers*2", inner.Rhs);
+
+        var stepB2 = result.Bindings.Single(b => b.Source.A1Address == "B2" && b.Name != "doubled");
+        Assert.Equal("doubled+10", stepB2.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("numbers*2", parsed.Bindings[1].RhsText);
+        Assert.Equal("doubled+10", parsed.Bindings[2].RhsText);
+    }
+
+    [Fact]
+    public void Gather_NestedLetMatchingIssueManualScenario_ProducesExpectedShape()
+    {
+        // Adapted from issue 136's manual-test scenario, shifted down one
+        // row so the label-above lookup actually has a cell to read (A1
+        // can't have a label-above; the issue's "A0=x" is a thought
+        // exercise). Outer A2 has label "x" → outer binding `x`; B2 holds
+        // the nested LET; C2 is the sink. Expected synthesised LET shape:
+        //   =LET(x, A2, x_2, x*2, step_1, x_2+5, step_1*2)
+        var source = new StubCellSource()
+            .WithLabel("A1", "x")
+            .WithFormula("B2", "=LET(x, A2*2, x+5)")
+            .WithFormula("C2", "=B2*2");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(3, parsed.Bindings.Count);
+        Assert.Equal(("x", "A2"), (parsed.Bindings[0].Name, parsed.Bindings[0].RhsText));
+        Assert.Equal(("x_2", "x*2"), (parsed.Bindings[1].Name, parsed.Bindings[1].RhsText));
+        Assert.Equal(("step_1", "x_2+5"), (parsed.Bindings[2].Name, parsed.Bindings[2].RhsText));
+        Assert.Equal("step_1*2", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_NestedLetWithMultipleInnerBindings_AllSpliced()
+    {
+        // Inner LET has two bindings; both are spliced in order. The
+        // second's RHS references the first inner name, which we leave
+        // alone (no renames needed).
+        var source = new StubCellSource()
+            .WithFormula("B1", "=LET(a, A1+1, b, a*2, b+1)")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.Name == "a");
+        var bRow = result.Bindings.Single(b => b.Name == "b");
+        var stepB1 = result.Bindings.Single(b => b.Source.A1Address == "B1" && b.Name != "a" && b.Name != "b");
+
+        Assert.Equal("step_1+1", aRow.Rhs);
+        Assert.Equal("a*2", bRow.Rhs);
+        Assert.Equal("b+1", stepB1.Rhs);
+
+        var bindings = result.Bindings.ToList();
+        Assert.True(bindings.IndexOf(aRow) < bindings.IndexOf(bRow));
+        Assert.True(bindings.IndexOf(bRow) < bindings.IndexOf(stepB1));
+    }
+
+    [Fact]
+    public void Gather_NestedLetSecondBindingRefersToCollidingFirst_RenameCascades()
+    {
+        // Outer A2 has binding name `a` (label sits at A1). Inner LET's
+        // first binding `a` collides → renamed to `a_2`. Inner LET's
+        // second binding `b` doesn't collide; its RHS references the
+        // (renamed) `a`, which must become `a_2`.
+        var source = new StubCellSource()
+            .WithLabel("A1", "a")
+            .WithFormula("B2", "=LET(a, A2+1, b, a*3, b+1)")
+            .WithFormula("C2", "=B2+1");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var outerA = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal("a", outerA.Name);
+
+        var innerA2 = result.Bindings.Single(b => b.Name == "a_2");
+        Assert.Equal("a+1", innerA2.Rhs);
+
+        var innerB = result.Bindings.Single(b => b.Name == "b");
+        // The inner-rename pass turns the original `a*3` into `a_2*3`
+        // BEFORE the cell-ref rewrite runs (so a hypothetical outer cell
+        // ref producing `a` wouldn't get caught).
+        Assert.Equal("a_2*3", innerB.Rhs);
+
+        var stepB2 = result.Bindings.Single(
+            b => b.Source.A1Address == "B2" && b.Name != "a_2" && b.Name != "b");
+        Assert.Equal("b+1", stepB2.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(4, parsed.Bindings.Count);
+    }
+
+    [Fact]
+    public void Gather_FormulaIsLetButHasTrailingExpression_NotExpanded()
+    {
+        // Guard against IsLetFormula's prefix-only check: `=LET(...) + A1`
+        // must NOT be expanded — its trailing `+ A1` would be silently
+        // dropped on naive expansion. The cell stays a regular step whose
+        // RHS is the rewritten formula.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=LET(x, 1, x+1) + A1")
+            .WithFormula("C1", "=B1+5");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        // No `x` binding in the result — expansion was suppressed.
+        Assert.DoesNotContain(result.Bindings, b => b.Name == "x");
+
+        var stepB1 = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, stepB1.Role);
+        // The rewriter substitutes `A1` with its binding name; the LET
+        // expression itself is preserved verbatim.
+        Assert.Equal("LET(x, 1, x+1) + step_1", stepB1.Rhs);
+    }
+
+    [Fact]
+    public void Gather_NestedLet_RoundTripsThroughLetParser()
+    {
+        // PR 6 acceptance: round-trip safety. Synthesised LET parses
+        // cleanly even for the complex collision-and-rewrite case.
+        var source = new StubCellSource()
+            .WithLabel("A1", "x")
+            .WithFormula("B1", "=LET(x, A1*2, x+5)")
+            .WithFormula("C1", "=B1*2");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.NotNull(parsed);
+        Assert.NotEmpty(parsed.Bindings);
+    }
 }
