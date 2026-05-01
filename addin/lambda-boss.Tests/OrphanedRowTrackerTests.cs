@@ -1,7 +1,7 @@
-using LambdaBoss;
 using LambdaBoss.UI;
-
 using Xunit;
+
+// ReSharper disable CollectionNeverUpdated.Local
 
 namespace LambdaBoss.Tests;
 
@@ -28,13 +28,13 @@ public sealed class OrphanedRowTrackerTests
         var before = new Dictionary<FormulaRef, BindingRow>
         {
             [a1] = Row(a1, BindingRole.Input, "numbers", "A1"),
-            [b1] = Row(b1, BindingRole.Step, "step_1", "numbers*2"),
+            [b1] = Row(b1, BindingRole.Step, "step_1", "numbers*2")
         };
         var after = new HashSet<FormulaRef> { b1 };
         var excluded = new HashSet<FormulaRef>();
 
         var tracker = new OrphanedRowTracker();
-        tracker.Reconcile(before, after, excluded, demotedCell: b1);
+        tracker.Reconcile(before, after, excluded, b1);
 
         Assert.True(tracker.HasOrphans);
         Assert.Single(tracker.Orphans);
@@ -58,7 +58,7 @@ public sealed class OrphanedRowTrackerTests
         {
             [a1] = Row(a1, BindingRole.Input, "n", "A1"),
             [b1] = Row(b1, BindingRole.Step, "double", "n*2"),
-            [c1] = Row(c1, BindingRole.Step, "another", "n+1"),
+            [c1] = Row(c1, BindingRole.Step, "another", "n+1")
         };
         // After demoting B1, A1 still reachable via C1's reference, so
         // it stays active. Only B1's role flipped.
@@ -66,7 +66,7 @@ public sealed class OrphanedRowTrackerTests
         var excluded = new HashSet<FormulaRef>();
 
         var tracker = new OrphanedRowTracker();
-        tracker.Reconcile(before, after, excluded, demotedCell: b1);
+        tracker.Reconcile(before, after, excluded, b1);
 
         Assert.False(tracker.HasOrphans);
     }
@@ -83,14 +83,14 @@ public sealed class OrphanedRowTrackerTests
         var before = new Dictionary<FormulaRef, BindingRow>
         {
             [a1] = Row(a1, BindingRole.Input, "numbers", "A1"),
-            [b1] = Row(b1, BindingRole.Step, "step_1", "numbers*2"),
+            [b1] = Row(b1, BindingRole.Step, "step_1", "numbers*2")
         };
         // Pretend after Recompute, B1 is in the active list as input.
         var after = new HashSet<FormulaRef> { b1 };
         var excluded = new HashSet<FormulaRef>();
 
         var tracker = new OrphanedRowTracker();
-        tracker.Reconcile(before, after, excluded, demotedCell: b1);
+        tracker.Reconcile(before, after, excluded, b1);
 
         Assert.DoesNotContain(b1, tracker.Orphans);
         // A1 dropped — it's the orphan.
@@ -109,13 +109,13 @@ public sealed class OrphanedRowTrackerTests
 
         var before = new Dictionary<FormulaRef, BindingRow>
         {
-            [b1] = Row(b1, BindingRole.Step, "step_1", "A1*2"),
+            [b1] = Row(b1, BindingRole.Step, "step_1", "A1*2")
         };
         var after = new HashSet<FormulaRef> { b1 };
         var excluded = new HashSet<FormulaRef> { a1 };
 
         var tracker = new OrphanedRowTracker();
-        tracker.Reconcile(before, after, excluded, demotedCell: b1);
+        tracker.Reconcile(before, after, excluded, b1);
 
         Assert.False(tracker.HasOrphans);
     }
@@ -134,13 +134,13 @@ public sealed class OrphanedRowTrackerTests
         var before = new Dictionary<FormulaRef, BindingRow>
         {
             [a1] = Row(a1, BindingRole.Input, "n", "A1"),
-            [b1] = Row(b1, BindingRole.Step, "step_1", "n*2"),
+            [b1] = Row(b1, BindingRole.Step, "step_1", "n*2")
         };
         var after = new HashSet<FormulaRef> { b1 };
         var excluded = new HashSet<FormulaRef>();
 
         var tracker = new OrphanedRowTracker();
-        tracker.Reconcile(before, after, excluded, demotedCell: null);
+        tracker.Reconcile(before, after, excluded, null);
 
         Assert.False(tracker.HasOrphans);
     }
@@ -158,7 +158,7 @@ public sealed class OrphanedRowTrackerTests
         var before1 = new Dictionary<FormulaRef, BindingRow>
         {
             [a1] = Row(a1, BindingRole.Input, "n", "A1"),
-            [b1] = Row(b1, BindingRole.Step, "step_1", "n*2"),
+            [b1] = Row(b1, BindingRole.Step, "step_1", "n*2")
         };
         tracker.Reconcile(before1, new HashSet<FormulaRef> { b1 }, new HashSet<FormulaRef>(), b1);
         Assert.True(tracker.HasOrphans);
@@ -168,13 +168,13 @@ public sealed class OrphanedRowTrackerTests
         // the orphan record.
         var before2 = new Dictionary<FormulaRef, BindingRow>
         {
-            [b1] = Row(b1, BindingRole.Input, "step_1", "B1"),
+            [b1] = Row(b1, BindingRole.Input, "step_1", "B1")
         };
         tracker.Reconcile(
             before2,
             new HashSet<FormulaRef> { a1, b1 },
             new HashSet<FormulaRef>(),
-            demotedCell: null);
+            null);
 
         Assert.False(tracker.HasOrphans);
     }
@@ -194,7 +194,7 @@ public sealed class OrphanedRowTrackerTests
         var before = new Dictionary<FormulaRef, BindingRow>
         {
             [a1] = Row(a1, BindingRole.Input, "n", "A1"),
-            [b1] = Row(b1, BindingRole.Step, "step_1", "n*2"),
+            [b1] = Row(b1, BindingRole.Step, "step_1", "n*2")
         };
         tracker.Reconcile(before, new HashSet<FormulaRef> { b1 }, new HashSet<FormulaRef>(), b1);
         Assert.True(tracker.HasOrphans);
@@ -221,7 +221,7 @@ public sealed class OrphanedRowTrackerTests
             new Dictionary<FormulaRef, BindingRow>
             {
                 [a1] = Row(a1, BindingRole.Input, "a", "A1"),
-                [b1] = Row(b1, BindingRole.Step, "step_b", "a*2"),
+                [b1] = Row(b1, BindingRole.Step, "step_b", "a*2")
             },
             new HashSet<FormulaRef> { b1 },
             new HashSet<FormulaRef>(),
@@ -231,7 +231,7 @@ public sealed class OrphanedRowTrackerTests
             new Dictionary<FormulaRef, BindingRow>
             {
                 [c1] = Row(c1, BindingRole.Input, "c", "C1"),
-                [d1] = Row(d1, BindingRole.Step, "step_d", "c+1"),
+                [d1] = Row(d1, BindingRole.Step, "step_d", "c+1")
             },
             new HashSet<FormulaRef> { d1, b1 },
             new HashSet<FormulaRef>(),
@@ -264,7 +264,7 @@ public sealed class OrphanedRowTrackerTests
                 [a1] = Row(a1, BindingRole.Input, "a", "A1"),
                 [b1] = Row(b1, BindingRole.Step, "b", "a*2"),
                 [c1] = Row(c1, BindingRole.Input, "c", "C1"),
-                [d1] = Row(d1, BindingRole.Step, "d", "c+1"),
+                [d1] = Row(d1, BindingRole.Step, "d", "c+1")
             },
             new HashSet<FormulaRef> { b1, c1, d1 },
             new HashSet<FormulaRef>(),
@@ -278,7 +278,7 @@ public sealed class OrphanedRowTrackerTests
             {
                 [b1] = Row(b1, BindingRole.Input, "b", "B1"),
                 [c1] = Row(c1, BindingRole.Input, "c", "C1"),
-                [d1] = Row(d1, BindingRole.Step, "d", "c+1"),
+                [d1] = Row(d1, BindingRole.Step, "d", "c+1")
             },
             new HashSet<FormulaRef> { b1, d1 },
             new HashSet<FormulaRef>(),
@@ -308,7 +308,7 @@ public sealed class OrphanedRowTrackerTests
             new Dictionary<FormulaRef, BindingRow>
             {
                 [a1] = Row(a1, BindingRole.Input, "a", "A1"),
-                [b1] = Row(b1, BindingRole.Step, "b", "a*2"),
+                [b1] = Row(b1, BindingRole.Step, "b", "a*2")
             },
             new HashSet<FormulaRef> { b1 },
             new HashSet<FormulaRef>(),
@@ -322,7 +322,7 @@ public sealed class OrphanedRowTrackerTests
             new Dictionary<FormulaRef, BindingRow>
             {
                 [b1] = Row(b1, BindingRole.Input, "b", "B1"),
-                [c1] = Row(c1, BindingRole.Step, "c", "B1+1"),
+                [c1] = Row(c1, BindingRole.Step, "c", "B1+1")
             },
             new HashSet<FormulaRef> { b1, c1 },
             new HashSet<FormulaRef>(),
@@ -340,6 +340,8 @@ public sealed class OrphanedRowTrackerTests
         return new FormulaRef(new CellRef("Sheet1", col, row));
     }
 
-    private static BindingRow Row(FormulaRef source, BindingRole role, string name, string rhs) =>
-        new(source, role, name, rhs, IsExpansion: false, CanToggleRole: true);
+    private static BindingRow Row(FormulaRef source, BindingRole role, string name, string rhs)
+    {
+        return new BindingRow(source, role, name, rhs, false, true);
+    }
 }
