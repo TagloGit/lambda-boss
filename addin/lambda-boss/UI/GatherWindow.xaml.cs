@@ -228,6 +228,15 @@ public partial class GatherWindow
                 // the rebuild after Recompute doesn't render stale
                 // orphan rows. No-op when the cell never caused any.
                 _orphanTracker.Forget(vm.Source);
+                // The just-re-included cell may still be unreachable
+                // because some unrelated cell is currently demoted or
+                // excluded and cuts the path. Pass that cell as
+                // causedBy so the unsurfaced row lands in the orphan
+                // section attributed to the actual blocker, instead
+                // of vanishing. Reconcile no-ops when the cell does
+                // surface (the diff is empty), so this is safe in the
+                // common case.
+                causedBy = FindCurrentBlocker();
             }
 
             Recompute(causedBy);
@@ -275,6 +284,33 @@ public partial class GatherWindow
 
             Recompute(causedBy);
         }
+    }
+
+    /// <summary>
+    ///     Heuristic: pick any cell currently demoted-to-input or
+    ///     excluded — those are the only user actions that can block a
+    ///     path through the precedent graph. Used as the fallback
+    ///     <c>causedBy</c> when re-including a cell, so a re-included
+    ///     cell that still doesn't surface (because another override
+    ///     cuts its only path) lands in the orphan section attributed
+    ///     to whatever's plausibly blocking it. Returns the first
+    ///     candidate found; when several blockers are in effect we
+    ///     can't tell which one the user "really" meant, but the hint
+    ///     just needs to point at *a* row above so the user knows
+    ///     where to look — they can experiment to find the actual
+    ///     cause. Returns null when nothing is currently overridden;
+    ///     in that case a re-included cell that fails to surface
+    ///     genuinely has no recoverable explanation, and falling out
+    ///     of the UI is acceptable.
+    /// </summary>
+    private FormulaRef? FindCurrentBlocker()
+    {
+        foreach (var (src, role) in _roleOverrides)
+            if (role == BindingRole.Input)
+                return src;
+        foreach (var src in _excluded.Keys)
+            return src;
+        return null;
     }
 
     private void Recompute(FormulaRef? causedBy)

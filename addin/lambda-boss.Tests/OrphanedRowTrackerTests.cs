@@ -278,6 +278,38 @@ public sealed class OrphanedRowTrackerTests
     }
 
     [Fact]
+    public void Reconcile_ReincludedCellStillBlockedByDemote_LandsInOrphans()
+    {
+        // Edge case: user excluded x, demoted y (which cuts x's only
+        // path), then re-ticked x. The dialog asks the tracker to
+        // record what fell off, with causedBy = the still-active
+        // blocker (y) found via the dialog's FindCurrentBlocker
+        // heuristic. x is in snapshotBefore (vm.Include just flipped
+        // to true) but not in activeAfter (engine can't reach it
+        // through the demoted y). Tracker records x as orphaned-by-y
+        // so the user sees where to look — promoting y brings x back.
+        var x = Cell("X1");
+        var y = Cell("Y1");
+
+        var before = new Dictionary<FormulaRef, BindingRow>
+        {
+            [x] = Row(x, BindingRole.Input, "x_name", "X1"),
+            // y appears as input because the dialog passes its
+            // current (demoted) shape; engine still surfaces it.
+            [y] = Row(y, BindingRole.Input, "y_name", "Y1")
+        };
+        var after = new HashSet<FormulaRef> { y };
+        var excluded = new HashSet<FormulaRef>();
+
+        var tracker = new OrphanedRowTracker();
+        tracker.Reconcile(before, after, excluded, y);
+
+        Assert.True(tracker.HasOrphans);
+        Assert.Single(tracker.Orphans);
+        Assert.Equal(y, tracker.Orphans[x].CausedBy);
+    }
+
+    [Fact]
     public void Reconcile_ReincludeAfterExclude_OrphansClearViaResurfacing()
     {
         // Exclude B1 → A1 orphan. Re-include B1 → A1 surfaces again
