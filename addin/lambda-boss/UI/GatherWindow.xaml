@@ -83,6 +83,7 @@
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
+                                <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding Address}"
                                            FontFamily="Consolas"
@@ -109,6 +110,7 @@
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            ToolTip="{Binding Rhs}" />
+                                <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

@@ -27,7 +27,7 @@ public class GatherEngineTests
         var result = GatherEngine.Gather(source.Ref("C2"), source);
 
         Assert.NotNull(result);
-        Assert.Equal("=B2+1", result!.OriginalFormula);
+        Assert.Equal("=B2+1", result.OriginalFormula);
 
         // A2 is an input named "Numbers" (cell-above A1 is "Numbers"),
         // B2 is a step named step_1 (cell-above B1 is empty).
