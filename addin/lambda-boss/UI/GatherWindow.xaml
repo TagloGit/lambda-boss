@@ -97,6 +97,7 @@
                                           IsChecked="{Binding Include, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                           Visibility="{Binding IncludeCheckboxVisibility}"
                                           VerticalAlignment="Center"
+                                          Cursor="Hand"
                                           ToolTip="Include in the synthesised LET" />
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding Address}"
@@ -118,6 +119,7 @@
                                               Foreground="{Binding RoleBrush}"
                                               BorderBrush="#3e3e3e"
                                               BorderThickness="1"
+                                              Cursor="Hand"
                                               ToolTip="Click to flip between input and step" />
                                 <TextBlock Grid.Column="2"
                                            Text="{Binding Role}"
@@ -186,11 +188,13 @@
                     Foreground="#cccccc"
                     BorderBrush="#3e3e3e"
                     BorderThickness="1"
+                    Cursor="Hand"
                     Click="CancelButton_Click" />
             <Button x:Name="SaveButton"
                     DockPanel.Dock="Right"
                     Content="Save"
                     Padding="16,4"
+                    Cursor="Hand"
                     Background="#0e639c"
                     Foreground="#ffffff"
                     BorderThickness="0"
