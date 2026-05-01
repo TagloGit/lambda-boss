@@ -23,6 +23,15 @@ namespace LambdaBoss;
 ///     flag even when leaf-restricted so the engine still emits <c>A1#</c>
 ///     on the boundary input, preserving the array semantics of the
 ///     dropped sub-tree.
+///     PR 10 adds an optional <c>excludedCells</c> set: cells in the set
+///     are not pushed onto the walk stack and never appear in the returned
+///     <see cref="WalkedCell" /> list. The sink itself is exempt (the
+///     dialog never lets the user exclude the sink). An excluded cell's
+///     ref still appears in any calling step's
+///     <see cref="WalkedCell.Precedents" />, so the engine's role
+///     classification can keep that step a step (its formula still has
+///     content), and the rewriter leaves the ref as a literal cell address
+///     because the lookup dictionary won't contain it.
 /// </summary>
 internal static class CellGraphWalker
 {
@@ -33,6 +42,15 @@ internal static class CellGraphWalker
 
     public static WalkOutcome Walk(
         CellRef sink, ICellSource source, IReadOnlySet<CellRef>? restrictTo)
+    {
+        return Walk(sink, source, restrictTo, null);
+    }
+
+    public static WalkOutcome Walk(
+        CellRef sink,
+        ICellSource source,
+        IReadOnlySet<CellRef>? restrictTo,
+        IReadOnlySet<CellRef>? excludedCells)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -93,6 +111,14 @@ internal static class CellGraphWalker
                 // range that happen to be reached via OTHER precedents are
                 // walked normally and dropped post-walk.
                 if (p.IsRange)
+                    continue;
+                // Excluded precedents don't get walked — that's how the
+                // user's "Include" toggle drops a cell and its
+                // upstream-only-reachable sub-tree. The ref still lives in
+                // this cell's Precedents list (we just don't push it), so
+                // the engine sees the precedent for role classification
+                // and the rewriter passes the literal cell-ref through.
+                if (excludedCells != null && excludedCells.Contains(p.Start))
                     continue;
                 if (!byRef.ContainsKey(p.Start))
                     stack.Push(p.Start);

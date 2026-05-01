@@ -1591,4 +1591,290 @@ public class GatherEngineTests
         Assert.NotEmpty(parsed.Bindings);
         Assert.NotEmpty(parsed.Body);
     }
+
+    // PR 10 — Include checkbox + orphan drop. Recompute takes per-row
+    // Include flags and re-walks from scratch: dropping a row removes it
+    // from the LET, the calling step keeps the cell-ref literally, and
+    // any precedents reachable only via the dropped cell also drop.
+    // Re-checking the row pulls it (and its newly-reachable precedents)
+    // back without losing earlier toggles on other rows.
+
+    [Fact]
+    public void Recompute_AllIncluded_MatchesGather()
+    {
+        // Sanity: with every row Include=true, Recompute returns the
+        // same shape as the initial Gather. Validates the Recompute path
+        // doesn't drift from Gather when nothing is excluded.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var initial = GatherEngine.Gather(source.Ref("C1"), source)!;
+        var states = initial.Bindings
+            .Select(b => new RowState(b.Source, true))
+            .ToList();
+
+        var recomputed = GatherEngine.Recompute(
+            source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
+
+        Assert.Null(recomputed.Diagnostic);
+        Assert.Equal(initial.SynthesisedLet, recomputed.SynthesisedLet);
+        Assert.Equal(initial.Bindings.Count, recomputed.Bindings.Count);
+    }
+
+    [Fact]
+    public void Recompute_ExcludeLeaf_DropsRowAndKeepsCellRefInCallingStep()
+    {
+        // A1 leaf input, B1 step that references A1, C1 sink that
+        // references B1. Excluding A1 drops just A1 — B1 stays a step
+        // (its formula still has content) but its RHS keeps the literal
+        // "A1" since A1 has no binding name to rewrite to. C1 is the
+        // sink; its body is unchanged because it doesn't reference A1
+        // directly.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        Assert.DoesNotContain(result.Bindings, b => b.Source.A1Address == "A1");
+
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+        Assert.Equal("A1*2", bRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("A1*2", parsed.Bindings[0].RhsText);
+    }
+
+    [Fact]
+    public void Recompute_ExcludeStep_CascadesToUpstreamOnlyReachable()
+    {
+        // Acceptance scenario from issue #140: A1=10, B1=A1*2, C1=B1+1
+        // (sink). Untick B1 (a step). B1 drops AND A1 also drops because
+        // A1 was only reachable via B1. The sink body keeps `B1+1` with
+        // B1 as a literal cell-ref.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        // Both B1 (excluded) and A1 (orphaned) are absent from bindings.
+        Assert.Empty(result.Bindings);
+        // No bindings → bare formula (no LET wrapper). Excel rejects
+        // LET with zero binding pairs, so the engine emits just the
+        // body — observably the sink's formula minus any in-scope
+        // rewrites, which is what the user sees in the Preview pane.
+        Assert.Equal("=B1+1", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_ExcludeBranch_PreservesOtherBranches()
+    {
+        // Diamond graph: A1 (literal) feeds B1, C1 (literal) feeds D1,
+        // E1 = B1 + D1 (sink). Excluding B1 drops B1 + A1 (A1 only
+        // reaches the sink via B1) but D1 + C1 are preserved because
+        // they're on the other branch.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("D1", "=C1+5")
+            .WithFormula("E1", "=B1+D1");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("D1")), Include: true),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("E1"), new[] { source.Ref("E1") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        var addrs = result.Bindings.Select(b => b.Source.A1Address).ToHashSet();
+        Assert.DoesNotContain("A1", addrs);
+        Assert.DoesNotContain("B1", addrs);
+        Assert.Contains("C1", addrs);
+        Assert.Contains("D1", addrs);
+
+        // D1 stays a step that rewrites C1's ref, B1's literal text
+        // survives in the sink body because B1 has no binding name now.
+        var dRow = result.Bindings.Single(b => b.Source.A1Address == "D1");
+        Assert.Equal(BindingRole.Step, dRow.Role);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        // Body shape: B1 literal + D1's binding name.
+        var dName = dRow.Name;
+        Assert.Equal($"B1+{dName}", parsed.Body);
+    }
+
+    [Fact]
+    public void Recompute_RetoggleRestoresPreviouslyOrphanedPrecedent()
+    {
+        // The acceptance scenario's "re-tick B1" flow: same chain, after
+        // toggling B1 off (which drops both B1 and A1), toggling B1 back
+        // on restores B1 *and* A1 as bindings, returning the LET to its
+        // original shape. Verifies Recompute is a stateless re-run of
+        // the engine — no leftover state from the previous excluded
+        // pass affects the next.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+        var sink = source.Ref("C1");
+        var selection = new[] { sink };
+
+        var initial = GatherEngine.Gather(sink, source)!;
+        var initialAddrs = initial.Bindings.Select(b => b.Source.A1Address).ToHashSet();
+        Assert.Contains("A1", initialAddrs);
+        Assert.Contains("B1", initialAddrs);
+
+        // Toggle B1 off — the dialog would also drop A1 from view
+        // (orphan), but the user can re-tick B1 via the row that's
+        // still rendered (the dialog snapshot keeps it visible).
+        var dropped = GatherEngine.Recompute(sink, selection, source, new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+        })!;
+        Assert.Empty(dropped.Bindings);
+
+        // Re-tick B1 — the engine walks back into A1 because nothing
+        // else is excluded. Bindings come back in topological order.
+        var restored = GatherEngine.Recompute(sink, selection, source, new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+        })!;
+
+        Assert.Equal(initial.SynthesisedLet, restored.SynthesisedLet);
+        var restoredAddrs = restored.Bindings.Select(b => b.Source.A1Address).ToHashSet();
+        Assert.Contains("A1", restoredAddrs);
+        Assert.Contains("B1", restoredAddrs);
+    }
+
+    [Fact]
+    public void Recompute_ExcludedCellReferencedFromMultipleBranches_OrphansOnlyWhereSole()
+    {
+        // A1 (literal) is referenced both via B1 = A1*2 AND C1 = A1+5.
+        // D1 = B1 + C1 (sink). Excluding B1 should drop B1 but keep A1
+        // (C1 still reaches it). The sink body's `B1` reference
+        // collapses to a literal cell-ref; C1's name still stands and
+        // C1's RHS still rewrites A1 to A1's binding name.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=A1+5")
+            .WithFormula("D1", "=B1+C1");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("D1"), new[] { source.Ref("D1") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        var addrs = result.Bindings.Select(b => b.Source.A1Address).ToHashSet();
+        Assert.Contains("A1", addrs);
+        Assert.DoesNotContain("B1", addrs);
+        Assert.Contains("C1", addrs);
+
+        // C1's RHS rewrites A1 to A1's binding name — A1 is still in
+        // scope because C1 reaches it.
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        var cRow = result.Bindings.Single(b => b.Source.A1Address == "C1");
+        Assert.Equal($"{aRow.Name}+5", cRow.Rhs);
+    }
+
+    [Fact]
+    public void Recompute_ExcludeStepWithNoInScopePrecedents_StaysAStepWithLiteralRefs()
+    {
+        // B1 = `=A1*2` where A1 is excluded — there are no other
+        // in-scope precedents, but the step's role should still be
+        // Step (not Input) because the calling formula has content the
+        // user wants preserved literally. Without the "excluded
+        // counts as a binding for role classification" rule, B1 would
+        // demote to Input with RHS=B1, losing the `*2`.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
+
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+        Assert.Equal("A1*2", bRow.Rhs);
+    }
+
+    [Fact]
+    public void Recompute_ExcludeRange_KeepsLiteralRangeInCallingStep()
+    {
+        // B1 = SUM(A1:A3) sink. Excluding the A1:A3 range row drops the
+        // range binding from the LET; the sink body keeps `SUM(A1:A3)`
+        // literally because the rewriter leaves unmapped refs alone.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=SUM(A1:A3)");
+
+        var rangeRef = new FormulaRef(source.Ref("A1"), source.Ref("A3"));
+        var states = new[]
+        {
+            new RowState(rangeRef, Include: false),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("B1"), new[] { source.Ref("B1") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        Assert.Empty(result.Bindings);
+        // No bindings → bare formula. The literal range survives the
+        // rewrite (it's not in the lookup map), so the LET reduces to
+        // the original sink formula.
+        Assert.Equal("=SUM(A1:A3)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_LetRoundTripsThroughLetParser()
+    {
+        // Round-trip safety on the Recompute branch: an arbitrary
+        // exclusion shouldn't break LET parseability.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+10")
+            .WithFormula("D1", "=C1+B1");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("D1"), new[] { source.Ref("D1") }, source, states)!;
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.NotEmpty(parsed.Body);
+    }
 }

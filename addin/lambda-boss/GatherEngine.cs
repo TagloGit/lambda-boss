@@ -54,6 +54,44 @@ public static class GatherEngine
     /// </summary>
     public static GatherResult? Gather(CellRef sink, IReadOnlyList<CellRef> selection, ICellSource source)
     {
+        return GatherInternal(sink, selection, source, excluded: null);
+    }
+
+    /// <summary>
+    ///     PR 10: re-runs the gather with the dialog's current row state,
+    ///     supporting the Include checkbox. Each <see cref="RowState" />
+    ///     with <see cref="RowState.Include" /> = false drops its
+    ///     <see cref="RowState.Source" /> from the LET; the walker treats
+    ///     the cell as if it didn't exist, so any precedents reachable
+    ///     only via that cell drop too. Range exclusions stop the range
+    ///     from being promoted to a binding (the literal range stays in
+    ///     the calling step's formula). Skips the multi-sink and pure-
+    ///     LAMBDA-call diagnostic checks — those gated the initial
+    ///     <see cref="Gather(CellRef, IReadOnlyList{CellRef}, ICellSource)" />
+    ///     call so the dialog wouldn't be open if either fired; cycle
+    ///     detection still runs (exclusion only removes nodes, but the
+    ///     walker's cycle check is cheap and defensive).
+    /// </summary>
+    public static GatherResult? Recompute(
+        CellRef sink,
+        IReadOnlyList<CellRef> selection,
+        ICellSource source,
+        IReadOnlyList<RowState> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        var excluded = new HashSet<FormulaRef>();
+        foreach (var r in rows)
+            if (!r.Include)
+                excluded.Add(r.Source);
+        return GatherInternal(sink, selection, source, excluded);
+    }
+
+    private static GatherResult? GatherInternal(
+        CellRef sink,
+        IReadOnlyList<CellRef> selection,
+        ICellSource source,
+        IReadOnlySet<FormulaRef>? excluded)
+    {
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(selection);
         ArgumentNullException.ThrowIfNull(source);
@@ -62,48 +100,86 @@ public static class GatherEngine
         if (sinkFormula == null)
             return null;
 
-        // Pure-LAMBDA-call sink check (PR 8). A formula like
-        // `=Foo(A1, B1)` where Foo is a registered LAMBDA can't be
-        // gathered — the cell already IS a LAMBDA invocation, so the
-        // author should expand it via /EditLambda first and then re-run
-        // /Gather on the resulting LET. TryParseLambdaCall returns
-        // non-null only when the whole formula is a single call (modulo
-        // trailing whitespace), so wrapped calls like `=Foo(A1) + 1`
-        // slip through and walk normally. The IsLambdaName check
-        // distinguishes a registered LAMBDA from a built-in like
-        // `=SUM(A1, B1)` — built-ins aren't workbook names so they
-        // also walk normally.
-        var lambdaCallDiagnostic = CheckLambdaCallSink(sink, sinkFormula, source);
-        if (lambdaCallDiagnostic != null)
-            return lambdaCallDiagnostic;
+        // Split exclusion set by ref shape: cells get propagated to the
+        // walker (which skips pushing them onto the stack), ranges stay
+        // here and gate the engine's range-promotion + coverage logic.
+        // The sink itself is exempt — the dialog never offers an Include
+        // checkbox on the sink (it's the LET body, not a binding row), so
+        // a defensive Remove keeps malformed inputs from breaking gather.
+        HashSet<CellRef>? excludedCells = null;
+        HashSet<FormulaRef>? excludedRanges = null;
+        if (excluded != null && excluded.Count > 0)
+        {
+            excludedCells = new HashSet<CellRef>();
+            excludedRanges = new HashSet<FormulaRef>();
+            foreach (var fr in excluded)
+            {
+                if (fr.IsRange)
+                    excludedRanges.Add(fr);
+                else if (!fr.Start.Equals(sink))
+                    excludedCells.Add(fr.Start);
+            }
+        }
 
-        // Multi-sink check uses the cycle-aware walker on each selected
-        // cell. If any walk hits a cycle, surface that cycle diagnostic
-        // first — cycles are an unconditional refusal, while multi-sink
-        // is selection-shape dependent.
-        var multiSinkDiagnostic = CheckMultipleSinks(sink, selection, sinkFormula, source);
-        if (multiSinkDiagnostic != null)
-            return multiSinkDiagnostic;
+        // Diagnostic checks (PR 7/8) only gate the initial Gather. On
+        // Recompute the dialog wouldn't be open if either the multi-sink
+        // or pure-LAMBDA-call rule had fired, and exclusion can't
+        // introduce them: dropping a cell can't turn a single sink into
+        // multiple sinks, and the sink's formula text doesn't change.
+        if (excluded == null)
+        {
+            // Pure-LAMBDA-call sink check (PR 8). A formula like
+            // `=Foo(A1, B1)` where Foo is a registered LAMBDA can't be
+            // gathered — the cell already IS a LAMBDA invocation, so the
+            // author should expand it via /EditLambda first and then re-run
+            // /Gather on the resulting LET. TryParseLambdaCall returns
+            // non-null only when the whole formula is a single call (modulo
+            // trailing whitespace), so wrapped calls like `=Foo(A1) + 1`
+            // slip through and walk normally. The IsLambdaName check
+            // distinguishes a registered LAMBDA from a built-in like
+            // `=SUM(A1, B1)` — built-ins aren't workbook names so they
+            // also walk normally.
+            var lambdaCallDiagnostic = CheckLambdaCallSink(sink, sinkFormula, source);
+            if (lambdaCallDiagnostic != null)
+                return lambdaCallDiagnostic;
+
+            // Multi-sink check uses the cycle-aware walker on each selected
+            // cell. If any walk hits a cycle, surface that cycle diagnostic
+            // first — cycles are an unconditional refusal, while multi-sink
+            // is selection-shape dependent.
+            var multiSinkDiagnostic = CheckMultipleSinks(sink, selection, sinkFormula, source);
+            if (multiSinkDiagnostic != null)
+                return multiSinkDiagnostic;
+        }
 
         // Free walk first — surfaces cycles ahead of any restriction work
         // and gives us "N" (the count of cells the walk would have visited
         // without restriction) for the dialog header. The restricted walk
         // is a strict sub-walk of this graph (subgraph of an acyclic graph
         // is acyclic), so cycle detection on the free walk is sufficient.
+        // The free walk doesn't apply exclusion — the dialog header reads
+        // a count of "what the walker would visit on a fresh open", which
+        // stays stable across Include toggles so the user sees one
+        // anchor count rather than a number that drifts on every click.
         var freeOutcome = CellGraphWalker.Walk(sink, source);
         if (freeOutcome.IsCycle)
             return RefusedWithCycle(sink, sinkFormula, freeOutcome.Cycle!);
 
         var freeWalkCount = freeOutcome.Cells!.Count;
 
-        // Restricted walk only when the multi-selection meaningfully
-        // narrows the walk. A single-cell selection — the common case —
-        // skips this and reuses the free walk verbatim.
+        // Restricted/excluded walk: applies the selection restriction
+        // (PR 9) and the user's Include exclusions (PR 10) together.
+        // Either narrows the visited cell set; both compose without
+        // interaction (a cell can be leaf-restricted by selection AND
+        // excluded by Include — the exclusion path wins because it's
+        // checked at push-time, before the leaf-restriction logic runs).
         WalkOutcome outcome;
-        if (selection.Count > 1)
+        var hasRestriction = selection.Count > 1;
+        var hasExclusion = excludedCells != null && excludedCells.Count > 0;
+        if (hasRestriction || hasExclusion)
         {
-            var restrictTo = new HashSet<CellRef>(selection);
-            outcome = CellGraphWalker.Walk(sink, source, restrictTo);
+            var restrictTo = hasRestriction ? new HashSet<CellRef>(selection) : null;
+            outcome = CellGraphWalker.Walk(sink, source, restrictTo, excludedCells);
         }
         else
         {
@@ -115,14 +191,20 @@ public static class GatherEngine
 
         // Collect unique range refs encountered anywhere in the walk. Order
         // is by first-encountered; that becomes the binding order for
-        // ranges (which always sort before cell bindings).
+        // ranges (which always sort before cell bindings). Excluded ranges
+        // (PR 10) skip both promotion and coverage: the literal range
+        // text stays in the calling step's formula and any cells reached
+        // via other paths reappear as their own bindings instead of being
+        // dropped under a range that no longer exists.
         var ranges = new List<FormulaRef>();
         var rangeSet = new HashSet<FormulaRef>();
         foreach (var cell in walked)
         {
             foreach (var p in cell.Precedents)
             {
-                if (p.IsRange && rangeSet.Add(p))
+                if (!p.IsRange) continue;
+                if (excludedRanges != null && excludedRanges.Contains(p)) continue;
+                if (rangeSet.Add(p))
                     ranges.Add(p);
             }
         }
@@ -176,7 +258,7 @@ public static class GatherEngine
         {
             var cellFormulaRef = new FormulaRef(cell.Ref);
             var name = nameByRef[cellFormulaRef];
-            var role = ClassifyRole(cell, nameByRef);
+            var role = ClassifyRole(cell, nameByRef, excluded);
             if (role == BindingRole.Input)
             {
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
@@ -293,13 +375,26 @@ public static class GatherEngine
                 StripLeadingEquals(sinkFormula), source.SinkSheet, nameByRef);
         }
 
+        // PR 10: when every row was excluded (or alias-elimination
+        // collapsed the bindings to nothing) the LET would be invalid —
+        // Excel requires at least one binding pair. Emit just the body
+        // as a bare formula in that case; the synthesised result is
+        // observably the original formula minus any in-scope rewrites,
+        // which is the right output for a "gather nothing" pass.
         var sb = new StringBuilder();
         sb.Append('=');
-        FormulaFormatter.AppendLet(
-            sb,
-            indent: 0,
-            bindings.Select(b => (b.Name, b.Rhs)).ToList(),
-            bodyText);
+        if (bindings.Count == 0)
+        {
+            sb.Append(bodyText);
+        }
+        else
+        {
+            FormulaFormatter.AppendLet(
+                sb,
+                indent: 0,
+                bindings.Select(b => (b.Name, b.Rhs)).ToList(),
+                bodyText);
+        }
 
         return new GatherResult(
             sink, sinkFormula, bindings, sb.ToString(),
@@ -492,7 +587,10 @@ public static class GatherEngine
         return source.GetCellLeftText(cell);
     }
 
-    private static BindingRole ClassifyRole(WalkedCell cell, IReadOnlyDictionary<FormulaRef, string> nameByRef)
+    private static BindingRole ClassifyRole(
+        WalkedCell cell,
+        IReadOnlyDictionary<FormulaRef, string> nameByRef,
+        IReadOnlySet<FormulaRef>? excluded)
     {
         // External refs and missing-sheet refs surface here as null-formula
         // cells (the source can't reach them) and so naturally classify as
@@ -508,7 +606,19 @@ public static class GatherEngine
         // precedents is a step (RHS = rewritten formula, array semantics
         // flow through naturally); a spilling leaf is an input with RHS
         // suffixed by `#` to preserve the dynamic-array binding.
-        return cell.Precedents.Any(nameByRef.ContainsKey) ? BindingRole.Step : BindingRole.Input;
+        // PR 10: a precedent the user explicitly excluded still keeps the
+        // cell a step. The rewritten formula will carry the excluded
+        // ref's literal text (the rewriter leaves unmapped refs alone),
+        // which is the spec's "calling step keeps the cell-ref" — turning
+        // the cell into an input would discard the formula instead.
+        foreach (var p in cell.Precedents)
+        {
+            if (nameByRef.ContainsKey(p))
+                return BindingRole.Step;
+            if (excluded != null && excluded.Contains(p))
+                return BindingRole.Step;
+        }
+        return BindingRole.Input;
     }
 
     private static string StripLeadingEquals(string formula)
@@ -606,8 +716,13 @@ public static class GatherEngine
             // value/reference is an input, a calculation is a step.
             // Inputs/steps are rendered identically in the LET text — this
             // distinction only matters for the dialog's visual grouping.
+            // Inner-LET rows are flagged as expansions so the dialog can
+            // hide the Include checkbox: they share their host cell's
+            // Source and don't represent a discrete cell the user can drop
+            // independently — toggling the host cell's checkbox is the
+            // way to remove an inner LET from the gather output.
             var role = binding.IsCalculation ? BindingRole.Step : BindingRole.Input;
-            innerRows.Add(new BindingRow(hostCell, role, finalName, rhs));
+            innerRows.Add(new BindingRow(hostCell, role, finalName, rhs, IsExpansion: true));
         }
 
         var body = ApplyInnerRenames(parsed.Body, innerRenames);
