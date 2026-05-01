@@ -26,8 +26,10 @@ namespace LambdaBoss;
 /// </summary>
 internal static class CellGraphWalker
 {
-    public static WalkOutcome Walk(CellRef sink, ICellSource source) =>
-        Walk(sink, source, restrictTo: null);
+    public static WalkOutcome Walk(CellRef sink, ICellSource source)
+    {
+        return Walk(sink, source, null);
+    }
 
     public static WalkOutcome Walk(
         CellRef sink, ICellSource source, IReadOnlySet<CellRef>? restrictTo)
@@ -70,9 +72,7 @@ internal static class CellGraphWalker
             {
                 formula = source.GetFormula(cell);
                 if (formula == null)
-                {
                     precedents = Array.Empty<FormulaRef>();
-                }
                 else
                 {
                     // Unqualified refs in this cell's formula resolve against
@@ -181,7 +181,7 @@ internal static class CellGraphWalker
 }
 
 /// <summary>
-///     Result of <see cref="CellGraphWalker.Walk" />: either a topo-ordered
+///     Result of CellGraphWalker.Walk: either a topo-ordered
 ///     list of cells or a cycle's cell list. Exactly one of
 ///     <see cref="Cells" /> and <see cref="Cycle" /> is non-null.
 ///     <see cref="LeafRestrictedCount" /> reports how many cells were
@@ -208,8 +208,13 @@ internal readonly struct WalkOutcome
 
     public bool IsCycle => Cycle != null;
 
-    public static WalkOutcome Success(IReadOnlyList<WalkedCell> cells, int leafRestrictedCount = 0) =>
-        new(cells, null, leafRestrictedCount);
+    public static WalkOutcome Success(IReadOnlyList<WalkedCell> cells, int leafRestrictedCount = 0)
+    {
+        return new WalkOutcome(cells, null, leafRestrictedCount);
+    }
 
-    public static WalkOutcome WithCycle(IReadOnlyList<CellRef> cycle) => new(null, cycle, 0);
+    public static WalkOutcome WithCycle(IReadOnlyList<CellRef> cycle)
+    {
+        return new WalkOutcome(null, cycle, 0);
+    }
 }
