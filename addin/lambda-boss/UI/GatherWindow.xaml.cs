@@ -8,15 +8,18 @@ using System.Windows.Media;
 namespace LambdaBoss.UI;
 
 /// <summary>
-///     Display of a <see cref="GatherResult" /> with PR 10's Include
-///     checkbox column. Toggling Include calls back into
-///     <see cref="GatherEngine.Recompute" /> via
+///     Display of a <see cref="GatherResult" /> with the Include checkbox
+///     column (PR 10) and the role toggle (PR 11). Toggling either
+///     control calls back into <see cref="GatherEngine.Recompute" /> via
 ///     <see cref="_recompute" />, then rebuilds the row list:
 ///     re-included rows return as the engine surfaces them, explicitly-
 ///     excluded rows are kept visible (greyed out, checkbox off) so the
 ///     user can re-tick them, and orphaned rows that the engine no longer
-///     surfaces drop out. Save returns the synthesised LET text from the
-///     latest result so the caller writes that back to the sink.
+///     surfaces drop out. Role overrides persist across rebuilds via
+///     <see cref="_roleOverrides" /> so a user's promote/demote choice
+///     stays in effect through subsequent Include toggles. Save returns
+///     the synthesised LET text from the latest result so the caller
+///     writes that back to the sink.
 /// </summary>
 public partial class GatherWindow
 {
@@ -29,6 +32,13 @@ public partial class GatherWindow
     // manage across rebuilds. Re-checking removes the entry; the engine's
     // result is the source of truth for re-included rows.
     private readonly Dictionary<FormulaRef, BindingRow> _excluded = new();
+    // Role overrides persist across rebuilds: when the user demotes B1 to
+    // input, that choice survives an unrelated checkbox toggle on A1
+    // (which would otherwise re-run the engine without the override and
+    // restore B1 to its natural classification). The dialog re-injects
+    // overrides into every Recompute so the engine sees a consistent
+    // view of user intent.
+    private readonly Dictionary<FormulaRef, BindingRole> _roleOverrides = new();
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
     // handler and trigger another Recompute. The guard short-circuits the
@@ -155,24 +165,54 @@ public partial class GatherWindow
     private void Row_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (_suppressRecompute) return;
-        if (e.PropertyName != nameof(GatherRowVm.Include)) return;
         if (sender is not GatherRowVm vm) return;
 
-        // Snapshot when unchecking so the row stays visible for re-tick;
-        // forget the snapshot when re-checking so the engine result
-        // owns the row's display (Role/Name/Rhs may have shifted as
-        // other rows toggled in the meantime).
-        if (!vm.Include)
+        if (e.PropertyName == nameof(GatherRowVm.Include))
         {
-            _excluded[vm.Source] = new BindingRow(
-                vm.Source, vm.RoleEnum, vm.Name, vm.Rhs, vm.IsExpansion);
-        }
-        else
-        {
-            _excluded.Remove(vm.Source);
+            // Snapshot when unchecking so the row stays visible for re-tick;
+            // forget the snapshot when re-checking so the engine result
+            // owns the row's display (Role/Name/Rhs may have shifted as
+            // other rows toggled in the meantime).
+            if (!vm.Include)
+            {
+                _excluded[vm.Source] = new BindingRow(
+                    vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
+                    vm.IsExpansion, vm.CanToggleRole);
+            }
+            else
+            {
+                _excluded.Remove(vm.Source);
+            }
+
+            Recompute();
+            return;
         }
 
-        Recompute();
+        if (e.PropertyName == nameof(GatherRowVm.IsStep))
+        {
+            // The toggle's IsChecked drives the override, not the
+            // engine's classification — record the user's chosen role
+            // here so subsequent Recomputes (including unrelated
+            // Include toggles) keep enforcing it. Setting an override
+            // for a row that already matched its natural role is
+            // harmless; the engine's defensive paths handle no-op
+            // overrides without churn.
+            _roleOverrides[vm.Source] =
+                vm.IsStep ? BindingRole.Step : BindingRole.Input;
+
+            // If this row is currently marked excluded (snapshot in
+            // _excluded), refresh that snapshot too so the cached row
+            // carries the new role on its next re-render.
+            if (_excluded.TryGetValue(vm.Source, out var existing))
+            {
+                _excluded[vm.Source] = existing with
+                {
+                    Role = _roleOverrides[vm.Source],
+                };
+            }
+
+            Recompute();
+        }
     }
 
     private void Recompute()
@@ -180,14 +220,19 @@ public partial class GatherWindow
         // Build RowState list from the visible rows. Inner-LET rows are
         // skipped because they share a Source with their host cell — the
         // host's row owns the toggle, so passing the inner rows' state
-        // would double-flag their Source.
+        // would double-flag their Source. Role overrides are layered on
+        // top of each row's Include flag so the engine sees a single
+        // consistent view of user intent.
         var states = new List<RowState>(_rows.Count);
         var seen = new HashSet<FormulaRef>();
         foreach (var vm in _rows)
         {
             if (vm.IsExpansion) continue;
             if (!seen.Add(vm.Source)) continue;
-            states.Add(new RowState(vm.Source, vm.Include));
+            BindingRole? roleOverride = null;
+            if (_roleOverrides.TryGetValue(vm.Source, out var o))
+                roleOverride = o;
+            states.Add(new RowState(vm.Source, vm.Include, roleOverride));
         }
 
         var newResult = _recompute(states);
@@ -209,11 +254,13 @@ public partial class GatherWindow
 
 /// <summary>
 ///     Row view-model bound to <see cref="GatherWindow" />'s ItemsControl.
-///     Carries the row's static identity (Source, IsExpansion) plus the
-///     mutable Include flag; engine-driven fields (Role, Name, Rhs) are
-///     immutable per VM instance — a Recompute rebuilds the collection
-///     rather than mutating individual rows, so we don't need INPCC
-///     plumbing on those fields.
+///     Carries the row's static identity (Source, IsExpansion,
+///     CanToggleRole) plus the mutable Include flag and IsStep toggle;
+///     engine-driven Name/Rhs are immutable per VM instance — a Recompute
+///     rebuilds the collection rather than mutating individual rows, so
+///     we don't need INPCC plumbing on those fields. Role flips through
+///     <see cref="IsStep" /> trigger an override that the dialog
+///     persists across rebuilds.
 /// </summary>
 public class GatherRowVm : INotifyPropertyChanged
 {
@@ -229,6 +276,7 @@ public class GatherRowVm : INotifyPropertyChanged
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6a6a6a"));
 
     private bool _include;
+    private bool _isStep;
 
     public GatherRowVm(BindingRow binding, bool include)
     {
@@ -237,7 +285,9 @@ public class GatherRowVm : INotifyPropertyChanged
         Name = binding.Name;
         Rhs = binding.Rhs;
         IsExpansion = binding.IsExpansion;
+        CanToggleRole = binding.CanToggleRole;
         _include = include;
+        _isStep = binding.Role == BindingRole.Step;
     }
 
     public FormulaRef Source { get; }
@@ -247,6 +297,7 @@ public class GatherRowVm : INotifyPropertyChanged
     public string Name { get; }
     public string Rhs { get; }
     public bool IsExpansion { get; }
+    public bool CanToggleRole { get; }
 
     public bool Include
     {
@@ -267,12 +318,44 @@ public class GatherRowVm : INotifyPropertyChanged
     }
 
     /// <summary>
+    ///     Two-way bound to the role toggle button. The setter fires the
+    ///     PropertyChanged event the dialog handler watches for to spawn
+    ///     a Recompute with the override applied. The natural-role
+    ///     baseline is the engine-classified <see cref="RoleEnum" />, so
+    ///     IsStep is initialised to <c>RoleEnum == Step</c> at
+    ///     construction; toggling flips the override.
+    /// </summary>
+    public bool IsStep
+    {
+        get => _isStep;
+        set
+        {
+            if (_isStep == value) return;
+            _isStep = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
     ///     Inner-LET expansion rows hide their checkbox: the host cell
     ///     drives the toggle, and a checkbox here would be a confusing
     ///     no-op (the engine doesn't expose per-inner-binding exclusion).
     /// </summary>
     public Visibility IncludeCheckboxVisibility =>
         IsExpansion ? Visibility.Hidden : Visibility.Visible;
+
+    /// <summary>
+    ///     Show the role toggle button only on rows where promote/demote
+    ///     is meaningful — cell rows with a source formula (range rows,
+    ///     literal-cell inputs, and inner-LET expansions all keep the
+    ///     toggle hidden). When hidden, the static Role text takes the
+    ///     same column slot via <see cref="RoleStaticVisibility" />.
+    /// </summary>
+    public Visibility RoleToggleVisibility =>
+        CanToggleRole ? Visibility.Visible : Visibility.Collapsed;
+
+    public Visibility RoleStaticVisibility =>
+        CanToggleRole ? Visibility.Collapsed : Visibility.Visible;
 
     public Brush AddressBrush => Include ? ActiveAddressBrush : MutedBrush;
     public Brush RoleBrush => Include ? ActiveRoleBrush : MutedBrush;

@@ -32,6 +32,19 @@ namespace LambdaBoss;
 ///     classification can keep that step a step (its formula still has
 ///     content), and the rewriter leaves the ref as a literal cell address
 ///     because the lookup dictionary won't contain it.
+///     PR 11 adds an optional <c>demotedCells</c> set: cells in the set
+///     are visited (so they appear in the returned list and remain
+///     bindings) but treated as leaves — formula nulled, precedents not
+///     pushed — so any precedents reachable only via the demoted cell
+///     drop as orphans, exactly mirroring the leaf-restriction effect for
+///     cells the user demoted via the role toggle. Distinct from
+///     <c>restrictTo</c> in two ways: (1) demotion is tracked separately
+///     from <see cref="WalkOutcome.LeafRestrictedCount" /> so the dialog
+///     header hint doesn't drift on every role toggle (selection
+///     restriction is the anchor, role overrides are user edits); (2)
+///     promotion of leaf-restricted cells (passed in as members of
+///     <c>restrictTo</c> via the engine's union) overrides the
+///     restriction, which the demotion path doesn't need.
 /// </summary>
 internal static class CellGraphWalker
 {
@@ -51,6 +64,16 @@ internal static class CellGraphWalker
         ICellSource source,
         IReadOnlySet<CellRef>? restrictTo,
         IReadOnlySet<CellRef>? excludedCells)
+    {
+        return Walk(sink, source, restrictTo, excludedCells, null);
+    }
+
+    public static WalkOutcome Walk(
+        CellRef sink,
+        ICellSource source,
+        IReadOnlySet<CellRef>? restrictTo,
+        IReadOnlySet<CellRef>? excludedCells,
+        IReadOnlySet<CellRef>? demotedCells)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -74,9 +97,30 @@ internal static class CellGraphWalker
                                && !cell.Equals(sink)
                                && !restrictTo.Contains(cell);
 
+            // Demoted cells (user role toggle) get the same null-formula
+            // treatment as leaf-restricted cells but skip the
+            // LeafRestrictedCount bump — they aren't a selection
+            // narrowing and shouldn't drift the dialog header. The sink
+            // can't be demoted (the dialog never offers a role toggle on
+            // the sink — it's the LET body, not a binding), so the
+            // sink-exempt rule is implicit but we mirror it for safety.
+            var isDemoted = demotedCells != null
+                            && !cell.Equals(sink)
+                            && demotedCells.Contains(cell);
+
             var cellAbove = source.GetCellAboveText(cell);
             var cellLeft = source.GetCellLeftText(cell);
             var hasSpill = source.HasSpill(cell);
+
+            // Always probe the source for the cell's formula, even when
+            // the cell is restricted or demoted — the engine uses
+            // <see cref="WalkedCell.HasSourceFormula" /> to gate the role
+            // toggle, and that decision needs the underlying source state
+            // independent of the user's restriction/demotion choice.
+            // Restricted/demoted cells then null out their walked
+            // formula so the rest of the engine treats them as leaves.
+            var sourceFormula = source.GetFormula(cell);
+            var hasSourceFormula = sourceFormula != null;
 
             string? formula;
             IReadOnlyList<FormulaRef> precedents;
@@ -86,9 +130,14 @@ internal static class CellGraphWalker
                 precedents = Array.Empty<FormulaRef>();
                 leafRestricted++;
             }
+            else if (isDemoted)
+            {
+                formula = null;
+                precedents = Array.Empty<FormulaRef>();
+            }
             else
             {
-                formula = source.GetFormula(cell);
+                formula = sourceFormula;
                 if (formula == null)
                     precedents = Array.Empty<FormulaRef>();
                 else
@@ -101,7 +150,8 @@ internal static class CellGraphWalker
                 }
             }
 
-            byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents, hasSpill);
+            byRef[cell] = new WalkedCell(
+                cell, formula, cellAbove, cellLeft, precedents, hasSpill, hasSourceFormula);
 
             foreach (var p in precedents)
             {

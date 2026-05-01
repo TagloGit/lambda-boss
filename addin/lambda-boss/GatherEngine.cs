@@ -58,15 +58,22 @@ public static class GatherEngine
     }
 
     /// <summary>
-    ///     PR 10: re-runs the gather with the dialog's current row state,
-    ///     supporting the Include checkbox. Each <see cref="RowState" />
-    ///     with <see cref="RowState.Include" /> = false drops its
-    ///     <see cref="RowState.Source" /> from the LET; the walker treats
-    ///     the cell as if it didn't exist, so any precedents reachable
-    ///     only via that cell drop too. Range exclusions stop the range
-    ///     from being promoted to a binding (the literal range stays in
-    ///     the calling step's formula). Skips the multi-sink and pure-
-    ///     LAMBDA-call diagnostic checks — those gated the initial
+    ///     Re-runs the gather with the dialog's current row state. Each
+    ///     <see cref="RowState" /> with <see cref="RowState.Include" /> =
+    ///     false drops its <see cref="RowState.Source" /> from the LET (PR
+    ///     10): the walker treats the cell as if it didn't exist, so any
+    ///     precedents reachable only via that cell drop too. Range
+    ///     exclusions stop the range from being promoted to a binding (the
+    ///     literal range stays in the calling step's formula). Each row's
+    ///     <see cref="RowState.RoleOverride" /> (PR 11) flips the
+    ///     classification: a step demoted to an input drops out of the
+    ///     walk's recursion (its precedents only stay if reached via
+    ///     another path); an input promoted to a step bakes the cell's
+    ///     formula into the binding RHS and walks any cell-refs that
+    ///     formula carries (including ones leaf-restricted by the original
+    ///     selection — promotion overrides the restriction). Skips the
+    ///     multi-sink and pure-LAMBDA-call diagnostic checks — those
+    ///     gated the initial
     ///     <see cref="Gather(CellRef, IReadOnlyList{CellRef}, ICellSource)" />
     ///     call so the dialog wouldn't be open if either fired; cycle
     ///     detection still runs (exclusion only removes nodes, but the
@@ -80,17 +87,26 @@ public static class GatherEngine
     {
         ArgumentNullException.ThrowIfNull(rows);
         var excluded = new HashSet<FormulaRef>();
+        Dictionary<FormulaRef, BindingRole>? roleOverrides = null;
         foreach (var r in rows)
+        {
             if (!r.Include)
                 excluded.Add(r.Source);
-        return GatherInternal(sink, selection, source, excluded);
+            if (r.RoleOverride.HasValue)
+            {
+                roleOverrides ??= new Dictionary<FormulaRef, BindingRole>();
+                roleOverrides[r.Source] = r.RoleOverride.Value;
+            }
+        }
+        return GatherInternal(sink, selection, source, excluded, roleOverrides);
     }
 
     private static GatherResult? GatherInternal(
         CellRef sink,
         IReadOnlyList<CellRef> selection,
         ICellSource source,
-        IReadOnlySet<FormulaRef>? excluded)
+        IReadOnlySet<FormulaRef>? excluded,
+        IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides = null)
     {
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(selection);
@@ -118,6 +134,38 @@ public static class GatherEngine
                     excludedRanges.Add(fr);
                 else if (!fr.Start.Equals(sink))
                     excludedCells.Add(fr.Start);
+            }
+        }
+
+        // PR 11: split role overrides into walker-facing cell sets.
+        // Demoted cells need the walker to stop recursing through them
+        // so their upstream-only-reachable precedents drop. Promoted
+        // cells need the walker to load their formula even when the
+        // selection would have leaf-restricted them — the engine
+        // unions promoted cells into restrictTo below to override that.
+        // Range refs and the sink itself ignore overrides; excluded
+        // cells already drop entirely so any override on them is moot
+        // (we still record them so ClassifyRole sees consistent state
+        // if the engine ever consults the override map for a cell that
+        // slipped through, though none currently does).
+        HashSet<CellRef>? demotedCells = null;
+        HashSet<CellRef>? promotedCells = null;
+        if (roleOverrides != null && roleOverrides.Count > 0)
+        {
+            foreach (var (fr, role) in roleOverrides)
+            {
+                if (fr.IsRange) continue;
+                if (fr.Start.Equals(sink)) continue;
+                if (role == BindingRole.Input)
+                {
+                    demotedCells ??= new HashSet<CellRef>();
+                    demotedCells.Add(fr.Start);
+                }
+                else if (role == BindingRole.Step)
+                {
+                    promotedCells ??= new HashSet<CellRef>();
+                    promotedCells.Add(fr.Start);
+                }
             }
         }
 
@@ -167,19 +215,37 @@ public static class GatherEngine
 
         var freeWalkCount = freeOutcome.Cells!.Count;
 
-        // Restricted/excluded walk: applies the selection restriction
-        // (PR 9) and the user's Include exclusions (PR 10) together.
-        // Either narrows the visited cell set; both compose without
-        // interaction (a cell can be leaf-restricted by selection AND
-        // excluded by Include — the exclusion path wins because it's
-        // checked at push-time, before the leaf-restriction logic runs).
+        // Restricted/excluded/demoted walk: composes the selection
+        // restriction (PR 9), the user's Include exclusions (PR 10), and
+        // PR 11's role overrides. Exclusion drops cells entirely;
+        // demotion treats cells as leaves; promotion un-leaf-restricts
+        // by union'ing into restrictTo (the walker's full-walk set). A
+        // cell could in principle be both demoted and promoted via the
+        // same dictionary (the rowstate parser would've stored only the
+        // last value, but defensively we emit at-most-one membership per
+        // cell here too — promotion's restrictTo union is harmless even
+        // for demoted cells because demotion is checked first inside the
+        // walker).
         WalkOutcome outcome;
         var hasRestriction = selection.Count > 1;
         var hasExclusion = excludedCells != null && excludedCells.Count > 0;
-        if (hasRestriction || hasExclusion)
+        var hasDemotion = demotedCells != null && demotedCells.Count > 0;
+        var hasPromotion = promotedCells != null && promotedCells.Count > 0;
+        if (hasRestriction || hasExclusion || hasDemotion || hasPromotion)
         {
-            var restrictTo = hasRestriction ? new HashSet<CellRef>(selection) : null;
-            outcome = CellGraphWalker.Walk(sink, source, restrictTo, excludedCells);
+            HashSet<CellRef>? restrictTo = null;
+            if (hasRestriction)
+            {
+                // Promoted cells override leaf-restriction so their
+                // formulas are loaded and their precedents pushed —
+                // exactly what "promote pulls new precedents in" means
+                // when the cell sat outside the original selection.
+                restrictTo = new HashSet<CellRef>(selection);
+                if (hasPromotion)
+                    restrictTo.UnionWith(promotedCells!);
+            }
+            outcome = CellGraphWalker.Walk(
+                sink, source, restrictTo, excludedCells, demotedCells);
         }
         else
         {
@@ -258,7 +324,7 @@ public static class GatherEngine
         {
             var cellFormulaRef = new FormulaRef(cell.Ref);
             var name = nameByRef[cellFormulaRef];
-            var role = ClassifyRole(cell, nameByRef, excluded);
+            var role = ClassifyRole(cell, nameByRef, excluded, roleOverrides);
             if (role == BindingRole.Input)
             {
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
@@ -272,7 +338,13 @@ public static class GatherEngine
                 var inputRhs = cell.Ref.DisplayAddress(source.SinkSheet);
                 if (cell.HasSpill)
                     inputRhs += "#";
-                bindings.Add(new BindingRow(cellFormulaRef, BindingRole.Input, name, inputRhs));
+                // CanToggleRole = "this row can be promoted to a step".
+                // Inputs without a source formula (literal-value cells)
+                // can't be promoted — there's nothing to bake into the
+                // RHS — so the dialog hides the toggle for them.
+                bindings.Add(new BindingRow(
+                    cellFormulaRef, BindingRole.Input, name, inputRhs,
+                    CanToggleRole: cell.HasSourceFormula));
                 continue;
             }
 
@@ -347,7 +419,14 @@ public static class GatherEngine
                 used.Add(name);
             }
 
-            stepRows.Add(new BindingRow(cellFormulaRef, BindingRole.Step, name, stepRhs));
+            // Steps always have a formula (we just rewrote it into
+            // stepRhs), so they're always demote-toggleable — flipping
+            // a step to input replaces stepRhs with the cell-ref and
+            // drops any precedents that were only reachable via this
+            // cell.
+            stepRows.Add(new BindingRow(
+                cellFormulaRef, BindingRole.Step, name, stepRhs,
+                CanToggleRole: true));
         }
 
         // Range and cell inputs first, then steps in topo order — matches
@@ -590,8 +669,30 @@ public static class GatherEngine
     private static BindingRole ClassifyRole(
         WalkedCell cell,
         IReadOnlyDictionary<FormulaRef, string> nameByRef,
-        IReadOnlySet<FormulaRef>? excluded)
+        IReadOnlySet<FormulaRef>? excluded,
+        IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides)
     {
+        // PR 11: a row-level role override forces the classification.
+        // Demotion (Input override on a step) lands here as a request to
+        // bind the cell-ref instead of the rewritten formula; the
+        // walker's demotion path has already nulled the formula and
+        // emptied the precedents so the natural Formula==null branch
+        // below would return Input anyway, but the explicit check makes
+        // the intent legible.
+        // Promotion (Step override on an input) requires a non-null
+        // formula — without one there's nothing to render as the RHS.
+        // The dialog hides the toggle for cells without a formula in the
+        // source so this path is defensive; an out-of-source promote
+        // silently falls through to natural classification (Input,
+        // because Formula==null).
+        var fr = new FormulaRef(cell.Ref);
+        if (roleOverrides != null && roleOverrides.TryGetValue(fr, out var overrideRole))
+        {
+            if (overrideRole == BindingRole.Step && cell.Formula != null)
+                return BindingRole.Step;
+            if (overrideRole == BindingRole.Input)
+                return BindingRole.Input;
+        }
         // External refs and missing-sheet refs surface here as null-formula
         // cells (the source can't reach them) and so naturally classify as
         // input — exactly what we want.
