@@ -14,6 +14,7 @@ internal sealed class StubCellSource : ICellSource
     private readonly Dictionary<string, string> _formulas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _labels = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _spills = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _lambdaNames = new(StringComparer.OrdinalIgnoreCase);
 
     public StubCellSource(string sheet = "Sheet1")
     {
@@ -44,6 +45,17 @@ internal sealed class StubCellSource : ICellSource
         return this;
     }
 
+    /// <summary>
+    ///     Registers <paramref name="name" /> as a workbook-scoped LAMBDA.
+    ///     Mirrors what the live adapter learns from <c>Workbook.Names</c>
+    ///     plus <see cref="LambdaSignatureParser.IsLambdaFormula" />.
+    /// </summary>
+    public StubCellSource WithLambdaName(string name)
+    {
+        _lambdaNames.Add(name);
+        return this;
+    }
+
     public string? GetFormula(CellRef cell)
     {
         if (cell.IsExternal)
@@ -70,6 +82,11 @@ internal sealed class StubCellSource : ICellSource
         if (cell.IsExternal)
             return false;
         return _spills.Contains(Key(cell.Sheet, cell.Column, cell.Row));
+    }
+
+    public bool IsLambdaName(string name)
+    {
+        return !string.IsNullOrEmpty(name) && _lambdaNames.Contains(name);
     }
 
     /// <summary>

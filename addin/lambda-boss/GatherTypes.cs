@@ -257,7 +257,15 @@ public enum GatherDiagnosticKind
     Cycle,
 
     /// <summary>The multi-selection contains 2+ cells with no in-scope dependent.</summary>
-    MultipleSinks
+    MultipleSinks,
+
+    /// <summary>
+    ///     The sink's formula is exactly a single call to a registered
+    ///     LAMBDA (e.g. <c>=Foo(A1, B1)</c>). The author should run
+    ///     <c>/EditLambda</c> first to expand it into a LET, then re-run
+    ///     <c>/Gather</c>.
+    /// </summary>
+    LambdaCallSink
 }
 
 /// <summary>
@@ -312,4 +320,17 @@ public interface ICellSource
     ///     as an input with RHS <c>A1#</c>.
     /// </summary>
     bool HasSpill(CellRef cell);
+
+    /// <summary>
+    ///     True when <paramref name="name" /> resolves to a workbook-scoped
+    ///     LAMBDA. The live adapter checks <c>Workbook.Names</c> and the
+    ///     name's <c>RefersTo</c> via <see cref="LambdaSignatureParser.IsLambdaFormula" />.
+    ///     PR 8 uses this to refuse pure-LAMBDA-call sinks (e.g.
+    ///     <c>=Foo(A1, B1)</c>) and steer the author to <c>/EditLambda</c>
+    ///     first. Names that don't exist on the workbook (built-in
+    ///     functions like <c>SUM</c>, sheet-scoped names, free-floating
+    ///     identifiers) return false so the engine treats their calls as
+    ///     ordinary expressions and walks them normally.
+    /// </summary>
+    bool IsLambdaName(string name);
 }

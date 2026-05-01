@@ -1333,4 +1333,104 @@ public class GatherEngineTests
 
         Assert.Equal(GatherDiagnosticKind.Cycle, result!.Diagnostic!.Kind);
     }
+
+    [Fact]
+    public void Gather_PureLambdaCallSink_ReturnsLambdaCallSinkDiagnostic()
+    {
+        // PR 8 acceptance #1: sink formula is exactly =Foo(A1, B1) with
+        // Foo registered as a LAMBDA. Engine refuses with a diagnostic
+        // pointing at /EditLambda and emits no bindings or LET.
+        var source = new StubCellSource()
+            .WithFormula("C1", "=Foo(A1, B1)")
+            .WithLambdaName("Foo");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source);
+
+        Assert.NotNull(result);
+        Assert.NotNull(result.Diagnostic);
+        Assert.Equal(GatherDiagnosticKind.LambdaCallSink, result.Diagnostic!.Kind);
+        Assert.Empty(result.Bindings);
+        Assert.Empty(result.SynthesisedLet);
+        Assert.Contains("/EditLambda", result.Diagnostic.Message);
+    }
+
+    [Fact]
+    public void Gather_LambdaCallWrappedInExpression_WalksNormally()
+    {
+        // PR 8 acceptance #2: =Foo(A1) + 1 is NOT a pure LAMBDA call —
+        // the trailing `+ 1` makes it an ordinary expression. The walk
+        // proceeds normally and Foo(A1) is left untouched in the
+        // rewritten step body (CellRefExtractor doesn't match function
+        // names, only cell-shaped tokens).
+        var source = new StubCellSource()
+            .WithFormula("D1", "=Foo(A1) + 1")
+            .WithLambdaName("Foo");
+
+        var result = GatherEngine.Gather(source.Ref("D1"), source);
+
+        Assert.NotNull(result);
+        Assert.Null(result.Diagnostic);
+        // A1 is the only in-scope precedent.
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+
+        // The synthesised LET body keeps the LAMBDA call verbatim and
+        // rewrites the cell ref inside it to the binding name.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal($"Foo({aRow.Name}) + 1", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_NonLambdaCallSink_WalksNormally()
+    {
+        // PR 8 acceptance #3: a sink with no LAMBDA call at all must
+        // not be touched by the new check. Regression guard against
+        // accidentally refusing plain arithmetic sinks.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1 + 1");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source);
+
+        Assert.NotNull(result);
+        Assert.Null(result.Diagnostic);
+        Assert.NotEmpty(result.Bindings);
+    }
+
+    [Fact]
+    public void Gather_BuiltInFunctionCallSink_NotRefused()
+    {
+        // =SUM(A1, B1) matches the call-shape regex but SUM isn't a
+        // workbook-scoped LAMBDA, so the engine must walk it normally
+        // rather than refuse. This guards against the LAMBDA-call check
+        // accidentally catching every single-call formula.
+        var source = new StubCellSource()
+            .WithFormula("C1", "=SUM(A1, B1)");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source);
+
+        Assert.NotNull(result);
+        Assert.Null(result.Diagnostic);
+        Assert.Equal(2, result.Bindings.Count);
+    }
+
+    [Fact]
+    public void Gather_PureLetSink_StillExpandedNotRefused()
+    {
+        // =LET(...) matches the call-shape regex with name "LET" but
+        // LET isn't a registered LAMBDA, so the engine takes its
+        // existing pure-LET sink path (inline expansion) rather than
+        // refusing. Regression guard against the LAMBDA-call check
+        // catching the engine's own LET inlining flow.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B1", "=LET(doubled, A2*2, doubled+1)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source);
+
+        Assert.NotNull(result);
+        Assert.Null(result.Diagnostic);
+        // Sink LET was inlined (body is `doubled+1`, not nested).
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("doubled+1", parsed.Body);
+    }
 }
