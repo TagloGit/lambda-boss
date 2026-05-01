@@ -125,27 +125,86 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
 }
 
 /// <summary>
+///     A reference appearing inside a formula — either a single cell
+///     (<see cref="End" /> null) or a contiguous range (<see cref="End" />
+///     set, on the same sheet as <see cref="Start" />). The walker tracks
+///     range refs without recursing into their constituent cells; the engine
+///     promotes each unique range to a single leaf input and drops walked
+///     cells covered by any promoted range. Equality follows
+///     <see cref="CellRef" />'s case-insensitive sheet rule.
+/// </summary>
+public sealed record FormulaRef(CellRef Start, CellRef? End = null)
+{
+    public bool IsRange => End is not null;
+
+    /// <summary>
+    ///     The convenience accessor most callers want; for ranges it returns
+    ///     <c>Start:End</c> so the value still uniquely identifies the ref.
+    /// </summary>
+    public string A1Address => IsRange ? $"{Start.A1Address}:{End!.A1Address}" : Start.A1Address;
+
+    /// <summary>The host sheet (always shared between Start and End for ranges).</summary>
+    public string Sheet => Start.Sheet;
+
+    public bool IsExternal => Start.IsExternal;
+
+    public string? ExternalWorkbook => Start.ExternalWorkbook;
+
+    /// <summary>
+    ///     True if this range covers <paramref name="cell" /> — used by the
+    ///     engine to drop walked cells that fall inside a promoted range.
+    ///     Always false for single-cell refs.
+    /// </summary>
+    public bool Covers(CellRef cell)
+    {
+        if (!IsRange)
+            return false;
+        if (!string.Equals(Start.Sheet, cell.Sheet, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!string.Equals(Start.ExternalWorkbook, cell.ExternalWorkbook, StringComparison.OrdinalIgnoreCase))
+            return false;
+        return cell.Column >= Start.Column && cell.Column <= End!.Column
+                                           && cell.Row >= Start.Row && cell.Row <= End.Row;
+    }
+
+    /// <summary>
+    ///     The form to emit as a LET binding RHS when the LET lives on
+    ///     <paramref name="hostSheet" />. For ranges, the sheet qualifier is
+    ///     emitted once on Start; the End cell's address is rendered bare.
+    /// </summary>
+    public string DisplayAddress(string hostSheet)
+    {
+        if (!IsRange)
+            return Start.DisplayAddress(hostSheet);
+        return $"{Start.DisplayAddress(hostSheet)}:{End!.A1Address}";
+    }
+}
+
+/// <summary>
 ///     A cell discovered by <see cref="CellGraphWalker" />. The
 ///     <see cref="Formula" /> is null when the cell holds a literal value or
 ///     is unreachable (external workbook ref, missing sheet) — both treated
 ///     as leaf inputs. <see cref="CellAboveText" /> and
 ///     <see cref="CellLeftText" /> are the text of the cells directly above
 ///     and to the left on the cell's own sheet, null when out of range,
-///     empty, or non-string.
+///     empty, or non-string. <see cref="Precedents" /> mixes single-cell and
+///     range refs; the walker only recurses into single-cell precedents.
 /// </summary>
 public sealed record WalkedCell(
     CellRef Ref,
     string? Formula,
     string? CellAboveText,
     string? CellLeftText,
-    IReadOnlyList<CellRef> Precedents);
+    IReadOnlyList<FormulaRef> Precedents);
 
 /// <summary>
 ///     A finalised LET binding row in PR 1's read-only dialog. PR 2 onwards
-///     will allow the user to edit <see cref="Name" /> and toggle role.
+///     will allow the user to edit <see cref="Name" /> and toggle role. The
+///     <see cref="Source" /> is a single cell for cell-derived bindings and
+///     a range for range-promoted leaves (PR 4).
 /// </summary>
 public sealed record BindingRow(
-    CellRef CellRef,
+    FormulaRef Source,
     BindingRole Role,
     string Name,
     string Rhs);
