@@ -47,13 +47,81 @@ public class CellRefExtractorTests
     }
 
     [Fact]
-    public void Extract_RangeRef_ExcludesBothEndpoints()
+    public void Extract_RangeRef_ReturnedAsSingleRangeFormulaRef()
     {
-        // PR 1 doesn't promote ranges; we just need to NOT pick up A1 or
-        // A3 as standalone cells while a range is being parsed elsewhere.
+        // PR 4 promotes ranges to first-class refs. A1:A3 surfaces as one
+        // FormulaRef (Start=A1, End=A3), not two cells.
         var refs = CellRefExtractor.Extract("=SUM(A1:A3)", Sheet);
 
-        Assert.Empty(refs);
+        Assert.Single(refs);
+        Assert.True(refs[0].IsRange);
+        Assert.Equal("A1", refs[0].Start.A1Address);
+        Assert.Equal("A3", refs[0].End!.A1Address);
+        Assert.Equal(Sheet, refs[0].Start.Sheet);
+        Assert.Equal(Sheet, refs[0].End.Sheet);
+    }
+
+    [Fact]
+    public void Extract_RangeRefWithDollarAnchors_StripsAnchors()
+    {
+        var refs = CellRefExtractor.Extract("=SUM($A$1:$A$3)", Sheet);
+
+        Assert.Single(refs);
+        Assert.True(refs[0].IsRange);
+        Assert.Equal("A1", refs[0].Start.A1Address);
+        Assert.Equal("A3", refs[0].End!.A1Address);
+    }
+
+    [Fact]
+    public void Extract_MultiRowRange_BothEndpointsCaptured()
+    {
+        // Two-dimensional range: the End cell carries its own column AND
+        // row — the engine uses both to test cell coverage.
+        var refs = CellRefExtractor.Extract("=SUM(A1:C3)", Sheet);
+
+        Assert.Single(refs);
+        Assert.True(refs[0].IsRange);
+        Assert.Equal("A1", refs[0].Start.A1Address);
+        Assert.Equal("C3", refs[0].End!.A1Address);
+    }
+
+    [Fact]
+    public void Extract_CrossSheetRange_BothEndpointsOnQualifiedSheet()
+    {
+        var refs = CellRefExtractor.Extract("=SUM(Sheet1!A1:A3)", "Sheet2");
+
+        Assert.Single(refs);
+        Assert.True(refs[0].IsRange);
+        Assert.Equal("Sheet1", refs[0].Start.Sheet);
+        Assert.Equal("Sheet1", refs[0].End!.Sheet);
+        Assert.Equal("A1", refs[0].Start.A1Address);
+        Assert.Equal("A3", refs[0].End.A1Address);
+    }
+
+    [Fact]
+    public void Extract_QuotedSheetRange_StripsQuotesOnBothEndpoints()
+    {
+        var refs = CellRefExtractor.Extract("=SUM('My Sheet'!A1:A3)", "Sheet2");
+
+        Assert.Single(refs);
+        Assert.True(refs[0].IsRange);
+        Assert.Equal("My Sheet", refs[0].Start.Sheet);
+        Assert.Equal("My Sheet", refs[0].End!.Sheet);
+    }
+
+    [Fact]
+    public void Extract_RangeAndIndividualCell_BothReturnedSeparately()
+    {
+        // The PR 4 acceptance scenario: =SUM(A1:A3) + A4 must yield two
+        // distinct refs — the range and the individual cell — so the
+        // engine can promote the range while still walking A4.
+        var refs = CellRefExtractor.Extract("=SUM(A1:A3) + A4", Sheet);
+
+        Assert.Equal(2, refs.Count);
+        Assert.True(refs[0].IsRange);
+        Assert.Equal("A1:A3", refs[0].A1Address);
+        Assert.False(refs[1].IsRange);
+        Assert.Equal("A4", refs[1].Start.A1Address);
     }
 
     [Fact]
@@ -159,10 +227,10 @@ public class CellRefExtractorTests
     [Fact]
     public void Rewrite_ReplacesInScopeRefsWithBindingNames()
     {
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef(Sheet, 1, 1)] = "numbers",
-            [new CellRef(Sheet, 2, 1)] = "step_1",
+            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers",
+            [new FormulaRef(new CellRef(Sheet, 2, 1))] = "step_1",
         };
 
         var rewritten = CellRefExtractor.Rewrite("=A1*2+B1", Sheet, lookup);
@@ -173,9 +241,9 @@ public class CellRefExtractorTests
     [Fact]
     public void Rewrite_LeavesOutOfScopeRefsAlone()
     {
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef(Sheet, 1, 1)] = "numbers",
+            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers",
         };
 
         var rewritten = CellRefExtractor.Rewrite("=A1*Z99", Sheet, lookup);
@@ -186,9 +254,9 @@ public class CellRefExtractorTests
     [Fact]
     public void Rewrite_PreservesStringLiterals()
     {
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef(Sheet, 1, 1)] = "numbers",
+            [new FormulaRef(new CellRef(Sheet, 1, 1))] = "numbers",
         };
 
         var rewritten = CellRefExtractor.Rewrite("=A1&\"A1 unchanged\"", Sheet, lookup);
@@ -200,9 +268,9 @@ public class CellRefExtractorTests
     public void Rewrite_SheetQualifiedRef_ReplacesWholeQualifier()
     {
         // The whole `Sheet1!A1` collapses to the binding name, not just A1.
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef("Sheet1", 1, 1)] = "shared",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "shared",
         };
 
         var rewritten = CellRefExtractor.Rewrite("=Sheet1!A1*2", "Sheet2", lookup);
@@ -213,9 +281,9 @@ public class CellRefExtractorTests
     [Fact]
     public void Rewrite_QuotedSheetRef_ReplacesWholeQualifier()
     {
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef("My Sheet", 1, 1)] = "mine",
+            [new FormulaRef(new CellRef("My Sheet", 1, 1))] = "mine",
         };
 
         var rewritten = CellRefExtractor.Rewrite("='My Sheet'!A1+1", "Sheet2", lookup);
@@ -226,9 +294,9 @@ public class CellRefExtractorTests
     [Fact]
     public void Rewrite_ExternalRef_ReplacesWholeQualifier()
     {
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef("Sheet1", 1, 1, "Other.xlsx")] = "outside",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1, "Other.xlsx"))] = "outside",
         };
 
         var rewritten = CellRefExtractor.Rewrite("=[Other.xlsx]Sheet1!A1*2", "Sheet2", lookup);
@@ -239,15 +307,60 @@ public class CellRefExtractorTests
     [Fact]
     public void Rewrite_BareRefAndCrossSheetRef_BothMatchedSeparately()
     {
-        var lookup = new Dictionary<CellRef, string>
+        var lookup = new Dictionary<FormulaRef, string>
         {
-            [new CellRef("Sheet2", 2, 1)] = "local",
-            [new CellRef("Sheet1", 1, 1)] = "shared",
+            [new FormulaRef(new CellRef("Sheet2", 2, 1))] = "local",
+            [new FormulaRef(new CellRef("Sheet1", 1, 1))] = "shared",
         };
 
         var rewritten = CellRefExtractor.Rewrite("=B1+Sheet1!A1", "Sheet2", lookup);
 
         Assert.Equal("=local+shared", rewritten);
+    }
+
+    [Fact]
+    public void Rewrite_RangeRef_ReplacedByRangeBindingName()
+    {
+        // PR 4: a range key in the lookup collapses A1:A3 to one binding
+        // name in the rewritten formula.
+        var lookup = new Dictionary<FormulaRef, string>
+        {
+            [new FormulaRef(new CellRef(Sheet, 1, 1), new CellRef(Sheet, 1, 3))] = "values",
+        };
+
+        var rewritten = CellRefExtractor.Rewrite("=SUM(A1:A3)", Sheet, lookup);
+
+        Assert.Equal("=SUM(values)", rewritten);
+    }
+
+    [Fact]
+    public void Rewrite_RangeAndCellBindings_BothApplied()
+    {
+        // Range + standalone cell ref in the same formula. The range
+        // binding takes the whole `A1:A3` token; the standalone `A4`
+        // collapses separately.
+        var lookup = new Dictionary<FormulaRef, string>
+        {
+            [new FormulaRef(new CellRef(Sheet, 1, 1), new CellRef(Sheet, 1, 3))] = "values",
+            [new FormulaRef(new CellRef(Sheet, 1, 4))] = "extra",
+        };
+
+        var rewritten = CellRefExtractor.Rewrite("=SUM(A1:A3)+A4", Sheet, lookup);
+
+        Assert.Equal("=SUM(values)+extra", rewritten);
+    }
+
+    [Fact]
+    public void Rewrite_CrossSheetRange_ReplacesWholeQualifier()
+    {
+        var lookup = new Dictionary<FormulaRef, string>
+        {
+            [new FormulaRef(new CellRef("Sheet1", 1, 1), new CellRef("Sheet1", 1, 3))] = "values",
+        };
+
+        var rewritten = CellRefExtractor.Rewrite("=SUM(Sheet1!A1:A3)", "Sheet2", lookup);
+
+        Assert.Equal("=SUM(values)", rewritten);
     }
 
     [Fact]

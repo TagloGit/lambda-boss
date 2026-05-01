@@ -34,12 +34,12 @@ public class GatherEngineTests
         // above B1 is empty, no cell-left either).
         Assert.Equal(2, result.Bindings.Count);
 
-        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A2");
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A2");
         Assert.Equal(BindingRole.Input, aRow.Role);
         Assert.Equal("numbers", aRow.Name);
         Assert.Equal("A2", aRow.Rhs);
 
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
         Assert.Equal(BindingRole.Step, bRow.Role);
         Assert.Equal("step_1", bRow.Name);
         Assert.Equal("numbers*2", bRow.Rhs);
@@ -69,7 +69,7 @@ public class GatherEngineTests
 
         Assert.Equal(2, result.Bindings.Count);
         Assert.All(result.Bindings, b => Assert.Equal(BindingRole.Input, b.Role));
-        var addrs = result.Bindings.Select(b => b.CellRef.A1Address).ToList();
+        var addrs = result.Bindings.Select(b => b.Source.A1Address).ToList();
         Assert.Contains("A1", addrs);
         Assert.Contains("B1", addrs);
 
@@ -120,8 +120,8 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C1"), source)!;
 
-        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
         Assert.Equal("step_1", aRow.Name);
         Assert.Equal("step_2", bRow.Name);
     }
@@ -180,7 +180,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C1"), source)!;
 
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
         Assert.Equal(BindingRole.Input, bRow.Role);
         Assert.Equal("B1", bRow.Rhs);
     }
@@ -196,7 +196,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C2"), source)!;
 
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
         Assert.Equal("numbers", bRow.Name);
     }
 
@@ -211,7 +211,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C2"), source)!;
 
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
         Assert.Equal("above", bRow.Name);
     }
 
@@ -227,7 +227,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C2"), source)!;
 
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B2");
         Assert.Equal("numbers", bRow.Name);
     }
 
@@ -244,8 +244,8 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C1"), source)!;
 
-        var b1 = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
-        var b2 = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var b1 = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        var b2 = result.Bindings.Single(b => b.Source.A1Address == "B2");
         var names = new[] { b1.Name, b2.Name }.OrderBy(n => n).ToList();
         Assert.Equal(new[] { "sales", "sales_2" }, names);
     }
@@ -264,7 +264,7 @@ public class GatherEngineTests
         var result = GatherEngine.Gather(source.Ref("D1"), source)!;
 
         var names = new[] { "B1", "B2", "B3" }
-            .Select(addr => result.Bindings.Single(b => b.CellRef.A1Address == addr).Name)
+            .Select(addr => result.Bindings.Single(b => b.Source.A1Address == addr).Name)
             .OrderBy(n => n)
             .ToList();
         Assert.Equal(new[] { "x", "x_2", "x_3" }, names);
@@ -281,8 +281,8 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C1"), source)!;
 
-        var b1 = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
-        var b2 = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var b1 = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        var b2 = result.Bindings.Single(b => b.Source.A1Address == "B2");
         Assert.Equal("step_1", b1.Name);
         Assert.Equal("step_2", b2.Name);
     }
@@ -297,7 +297,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("Sheet2!C1"), source)!;
 
-        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
         Assert.Equal(BindingRole.Input, aRow.Role);
         Assert.Equal("Sheet1!A1", aRow.Rhs);
 
@@ -322,11 +322,11 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("Sheet2!C1"), source)!;
 
-        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
         Assert.Equal(BindingRole.Step, bRow.Role);
         // The step's RHS uses the leaf binding name, not the cross-sheet
         // form `Sheet1!A1` it had in the source formula.
-        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
         Assert.Equal($"{aRow.Name}*2", bRow.Rhs);
 
         var parsed = LetParser.Parse(result.SynthesisedLet);
@@ -342,8 +342,8 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("Sheet2!B1"), source)!;
 
-        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
-        Assert.Equal("My Sheet", aRow.CellRef.Sheet);
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal("My Sheet", aRow.Source.Sheet);
         Assert.Equal("'My Sheet'!A1", aRow.Rhs);
 
         // Round-trips through LetParser despite the spaced sheet name —
@@ -364,7 +364,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("Sheet1!B1"), source)!;
 
-        var ext = result.Bindings.Single(b => b.CellRef.IsExternal);
+        var ext = result.Bindings.Single(b => b.Source.IsExternal);
         Assert.Equal(BindingRole.Input, ext.Role);
         Assert.Equal("[Other.xlsx]Sheet1!A1", ext.Rhs);
 
@@ -383,7 +383,7 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("Sheet1!B1"), source)!;
 
-        var ext = result.Bindings.Single(b => b.CellRef.IsExternal);
+        var ext = result.Bindings.Single(b => b.Source.IsExternal);
         Assert.Equal("'[Other.xlsx]My Sheet'!A1", ext.Rhs);
     }
 
@@ -407,14 +407,180 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C4"), source)!;
 
-        Assert.Equal("sales", result.Bindings.Single(b => b.CellRef.A1Address == "B1").Name);
-        Assert.Equal("sales_2", result.Bindings.Single(b => b.CellRef.A1Address == "B2").Name);
-        Assert.Equal("taxRate", result.Bindings.Single(b => b.CellRef.A1Address == "B3").Name);
-        Assert.Equal("total", result.Bindings.Single(b => b.CellRef.A1Address == "B4").Name);
+        Assert.Equal("sales", result.Bindings.Single(b => b.Source.A1Address == "B1").Name);
+        Assert.Equal("sales_2", result.Bindings.Single(b => b.Source.A1Address == "B2").Name);
+        Assert.Equal("taxRate", result.Bindings.Single(b => b.Source.A1Address == "B3").Name);
+        Assert.Equal("total", result.Bindings.Single(b => b.Source.A1Address == "B4").Name);
 
         // Sanity: synthesised LET round-trips and the body uses the step
         // binding name rather than the cell ref.
         var parsed = LetParser.Parse(result.SynthesisedLet);
         Assert.Equal("total+1", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_RangeRef_PromotedToSingleInputBinding()
+    {
+        // PR 4 acceptance: =SUM(A1:A3) with A1/A2/A3 having formulas →
+        // range A1:A3 becomes the single binding; A1/A2/A3 are NOT
+        // walked (only the range references them) so they don't appear
+        // as separate bindings.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=RAND()")
+            .WithFormula("A2", "=RAND()")
+            .WithFormula("A3", "=RAND()")
+            .WithFormula("B1", "=SUM(A1:A3)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        Assert.Single(result.Bindings);
+        var rangeRow = result.Bindings[0];
+        Assert.Equal(BindingRole.Input, rangeRow.Role);
+        Assert.True(rangeRow.Source.IsRange);
+        Assert.Equal("A1:A3", rangeRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("A1:A3", parsed.Bindings[0].RhsText);
+        Assert.Equal($"SUM({rangeRow.Name})", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_RangeAndIndividualCell_BothBecomeBindings()
+    {
+        // PR 4 acceptance: =SUM(A1:A3) + A4 walks A4 separately while
+        // still promoting the range. A4 lands as its own input binding;
+        // the range stays as a single leaf input.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=SUM(A1:A3) + A4");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        Assert.Equal(2, result.Bindings.Count);
+        var rangeRow = result.Bindings.Single(b => b.Source.IsRange);
+        var a4Row = result.Bindings.Single(b => !b.Source.IsRange);
+        Assert.Equal(BindingRole.Input, rangeRow.Role);
+        Assert.Equal("A1:A3", rangeRow.Rhs);
+        Assert.Equal(BindingRole.Input, a4Row.Role);
+        Assert.Equal("A4", a4Row.Source.A1Address);
+        Assert.Equal("A4", a4Row.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(2, parsed.Bindings.Count);
+        // Body refers to the bindings, not the source refs. Whitespace
+        // between operands is preserved by the rewriter.
+        Assert.Equal($"SUM({rangeRow.Name}) + {a4Row.Name}", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_RangeFullCoverage_DropsEveryCoveredCell()
+    {
+        // Full coverage: A1/A2/A3 are each in-scope (referenced directly
+        // by B1) AND covered by the sink's range. All three drop; B1
+        // loses every precedent and reverts to an input.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1+A2+A3")
+            .WithFormula("C1", "=SUM(A1:A3) + B1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var addresses = result.Bindings.Select(b => b.Source.A1Address).ToList();
+        Assert.DoesNotContain("A1", addresses);
+        Assert.DoesNotContain("A2", addresses);
+        Assert.DoesNotContain("A3", addresses);
+        Assert.Contains("A1:A3", addresses);
+        Assert.Contains("B1", addresses);
+
+        var b1Row = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Input, b1Row.Role);
+    }
+
+    [Fact]
+    public void Gather_RangePartialCoverage_DropsCoveredCellFromBindings()
+    {
+        // Partial coverage: B1 references A2 directly (so A2 is in-scope),
+        // and the sink references A1:A3 (which covers A2). The covered A2
+        // must drop from the bindings; B1 keeps its place but loses its
+        // only in-scope precedent and reverts to an input.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A2*5")
+            .WithFormula("C1", "=SUM(A1:A3) + B1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var addresses = result.Bindings.Select(b => b.Source.A1Address).ToList();
+        Assert.DoesNotContain("A2", addresses);
+        Assert.Contains("A1:A3", addresses);
+        Assert.Contains("B1", addresses);
+
+        var rangeRow = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal(BindingRole.Input, rangeRow.Role);
+
+        var b1Row = result.Bindings.Single(b => !b.Source.IsRange);
+        // B1's only precedent (A2) was dropped, so it has no in-scope
+        // precedents and reverts to an input bound to its cell address.
+        Assert.Equal(BindingRole.Input, b1Row.Role);
+        Assert.Equal("B1", b1Row.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal($"SUM({rangeRow.Name}) + {b1Row.Name}", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_MultiRowRange_RecognisedAsSingleBinding()
+    {
+        // Two-dimensional range A1:C3 still promotes to one binding, with
+        // the literal range text in the RHS so Excel evaluates it as the
+        // same array.
+        var source = new StubCellSource()
+            .WithFormula("D1", "=SUM(A1:C3)");
+
+        var result = GatherEngine.Gather(source.Ref("D1"), source)!;
+
+        Assert.Single(result.Bindings);
+        Assert.True(result.Bindings[0].Source.IsRange);
+        Assert.Equal("A1:C3", result.Bindings[0].Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("A1:C3", parsed.Bindings[0].RhsText);
+    }
+
+    [Fact]
+    public void Gather_CrossSheetRange_RhsKeepsSheetQualifier()
+    {
+        // Sheet2!B1 = =SUM(Sheet1!A1:A3) — the binding RHS must keep the
+        // sheet qualifier so the LET works when written into Sheet2.
+        var source = new StubCellSource("Sheet2")
+            .WithFormula("Sheet2!B1", "=SUM(Sheet1!A1:A3)");
+
+        var result = GatherEngine.Gather(source.Ref("Sheet2!B1"), source)!;
+
+        Assert.Single(result.Bindings);
+        var rangeRow = result.Bindings[0];
+        Assert.True(rangeRow.Source.IsRange);
+        Assert.Equal("Sheet1", rangeRow.Source.Sheet);
+        Assert.Equal("Sheet1!A1:A3", rangeRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("Sheet1!A1:A3", parsed.Bindings[0].RhsText);
+        Assert.Equal($"SUM({rangeRow.Name})", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_RangeWithLabelAbove_NamedFromHeader()
+    {
+        // The range's label is the cell directly above its top-left
+        // corner — common in real spreadsheets where the header sits one
+        // row above the data.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B1", "=SUM(A2:A4)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        Assert.Single(result.Bindings);
+        var row = result.Bindings[0];
+        Assert.True(row.Source.IsRange);
+        Assert.Equal("numbers", row.Name);
     }
 }

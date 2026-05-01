@@ -25,7 +25,7 @@ public partial class GatherWindow
         BindingsList.ItemsSource = result.Bindings
             .Select(b => new GatherRowDisplay
             {
-                Address = b.CellRef.A1Address,
+                Address = b.Source.A1Address,
                 Role = b.Role == BindingRole.Input ? "input" : "step",
                 Name = b.Name,
                 Rhs = b.Rhs,

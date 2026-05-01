@@ -4,12 +4,13 @@ namespace LambdaBoss;
 ///     Walks the precedent graph rooted at a sink cell. Discovery uses
 ///     <see cref="ICellSource" /> for cell-shape lookups and
 ///     <see cref="CellRefExtractor" /> to find precedents inside formulas.
-///     PR 3 widens scope to all sheets in the active workbook: cross-sheet
-///     refs are walked normally; external-workbook refs surface as leaves
-///     because <see cref="ICellSource.GetFormula" /> returns null for them.
-///     The returned cells are in topological order (precedents before
-///     dependents) with the sink as the final entry. PR 7 layers cycle
-///     detection on top.
+///     PR 4 introduces range-aware walking: cell precedents recurse as
+///     before, range precedents are recorded on the cell but not expanded
+///     into their constituent cells. The engine post-processes ranges to
+///     promote each unique range to a leaf input and drop walked cells that
+///     fall inside any promoted range. The returned cells are in topological
+///     order (precedents before dependents) with the sink as the final
+///     entry. PR 7 layers cycle detection on top.
 /// </summary>
 internal static class CellGraphWalker
 {
@@ -31,10 +32,10 @@ internal static class CellGraphWalker
             var cellAbove = source.GetCellAboveText(cell);
             var cellLeft = source.GetCellLeftText(cell);
 
-            IReadOnlyList<CellRef> precedents;
+            IReadOnlyList<FormulaRef> precedents;
             if (formula == null)
             {
-                precedents = Array.Empty<CellRef>();
+                precedents = Array.Empty<FormulaRef>();
             }
             else
             {
@@ -49,8 +50,15 @@ internal static class CellGraphWalker
 
             foreach (var p in precedents)
             {
-                if (!byRef.ContainsKey(p))
-                    stack.Push(p);
+                // Range refs aren't expanded into their constituent cells —
+                // they're an opaque "block" precedent that the engine
+                // promotes to a single leaf input. Cells covered by the
+                // range that happen to be reached via OTHER precedents are
+                // walked normally and dropped post-walk.
+                if (p.IsRange)
+                    continue;
+                if (!byRef.ContainsKey(p.Start))
+                    stack.Push(p.Start);
             }
         }
 
@@ -76,7 +84,10 @@ internal static class CellGraphWalker
             if (nextChild < node.Precedents.Count)
             {
                 stack.Push((cell, nextChild + 1));
-                var child = node.Precedents[nextChild];
+                var pre = node.Precedents[nextChild];
+                if (pre.IsRange)
+                    continue;
+                var child = pre.Start;
                 if (!visited.Contains(child) && byRef.ContainsKey(child))
                     stack.Push((child, 0));
             }

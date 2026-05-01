@@ -139,6 +139,50 @@ public class CellGraphWalkerTests
         Assert.Null(external.Formula);
         Assert.Empty(external.Precedents);
     }
+
+    [Fact]
+    public void Walk_RangePrecedent_DoesNotRecurseIntoRangeCells()
+    {
+        // PR 4: A1, A2, A3 each have a formula but only the range
+        // references them. The walker must NOT include A1/A2/A3 as walked
+        // cells (they're not directly referenced) — the range precedent is
+        // an opaque leaf for the engine to promote.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=RAND()")
+            .WithFormula("A2", "=RAND()")
+            .WithFormula("A3", "=RAND()")
+            .WithFormula("B1", "=SUM(A1:A3)");
+
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+
+        Assert.Single(walked);
+        Assert.Equal("B1", walked[0].Ref.A1Address);
+
+        var precedents = walked[0].Precedents;
+        Assert.Single(precedents);
+        Assert.True(precedents[0].IsRange);
+        Assert.Equal("A1", precedents[0].Start.A1Address);
+        Assert.Equal("A3", precedents[0].End!.A1Address);
+    }
+
+    [Fact]
+    public void Walk_RangeAndIndividualCell_IndividualCellWalkedSeparately()
+    {
+        // PR 4 acceptance: =SUM(A1:A3) + A4 — A4 is an individual ref and
+        // must be walked, while the range stays opaque.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=SUM(A1:A3) + A4");
+
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var addresses = walked.Select(w => w.Ref.A1Address).OrderBy(a => a).ToList();
+
+        Assert.Equal(new[] { "A4", "B1" }, addresses);
+
+        var b1 = walked.Single(w => w.Ref.A1Address == "B1");
+        Assert.Equal(2, b1.Precedents.Count);
+        Assert.Contains(b1.Precedents, p => p.IsRange && p.A1Address == "A1:A3");
+        Assert.Contains(b1.Precedents, p => !p.IsRange && p.Start.A1Address == "A4");
+    }
 }
 
 internal static class WalkedCellExtensions
