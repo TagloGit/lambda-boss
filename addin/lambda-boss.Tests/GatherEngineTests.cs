@@ -2302,6 +2302,42 @@ public class GatherEngineTests
     }
 
     [Fact]
+    public void Recompute_TwoColliderUserOverrides_SecondGetsSuffix()
+    {
+        // Both A2 and B2 have user overrides "values". The engine
+        // suffixes the second to "values_2" so the LET stays valid;
+        // the dialog reflects the suffix back into the row's
+        // TextBox. Iteration order is topo, so the upstream cell
+        // (A2 here, since both are leaves the order depends on walk
+        // order — we just assert the SET of names is {values, values_2}
+        // rather than picking a winner).
+        var source = new StubCellSource()
+            .WithFormula("C2", "=A2+B2");
+        var sink = source.Ref("C2");
+        var selection = new[] { sink };
+
+        var states = new[]
+        {
+            new RowState(
+                new FormulaRef(source.Ref("A2")),
+                NameOverride: "values"),
+            new RowState(
+                new FormulaRef(source.Ref("B2")),
+                NameOverride: "values")
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        var names = result.Bindings.Select(b => b.Name).OrderBy(s => s).ToList();
+        Assert.Equal(new[] { "values", "values_2" }, names);
+
+        // The synthesised LET round-trips through LetParser — i.e., it
+        // really is a valid LET, not two bindings sharing a name.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(2, parsed.Bindings.Count);
+        Assert.NotEqual(parsed.Bindings[0].Name, parsed.Bindings[1].Name);
+    }
+
+    [Fact]
     public void Recompute_EmptyNameOverride_TreatedAsNoOverride()
     {
         // Defensive: a RowState with a blank NameOverride (the dialog

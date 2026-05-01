@@ -619,17 +619,20 @@ public static class GatherEngine
         // is locked in `used` before auto-derivation runs. An auto-derived
         // name that would have collided with an override now suffixes
         // around it instead — matching the spec's "user rename wins"
-        // intent. The dialog enforces no-collisions on overrides before
-        // sending them, so we trust whatever's in the dictionary; passing
-        // colliding overrides would produce duplicate names in the LET
-        // (caller's responsibility).
+        // intent. Two user overrides that share a name collide here too;
+        // the second one suffixes (<c>x</c> → <c>x_2</c>) so the LET
+        // stays valid even when the dialog hasn't (or can't) prevent the
+        // collision client-side. Iteration order picks the winner — for
+        // overrides on cells, that's topo order, so an upstream cell
+        // claims the bare name and downstream cells get the suffix.
         if (nameOverrides != null && nameOverrides.Count > 0)
         {
             foreach (var range in ranges)
                 if (nameOverrides.TryGetValue(range, out var overrideName))
                 {
-                    nameByRef[range] = overrideName;
-                    used.Add(overrideName);
+                    var resolved = ResolveCollision(overrideName, used);
+                    nameByRef[range] = resolved;
+                    used.Add(resolved);
                 }
 
             foreach (var cell in nonSink)
@@ -637,8 +640,9 @@ public static class GatherEngine
                 var fr = new FormulaRef(cell.Ref);
                 if (nameOverrides.TryGetValue(fr, out var overrideName))
                 {
-                    nameByRef[fr] = overrideName;
-                    used.Add(overrideName);
+                    var resolved = ResolveCollision(overrideName, used);
+                    nameByRef[fr] = resolved;
+                    used.Add(resolved);
                 }
             }
         }
