@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace LambdaBoss;
 
@@ -7,16 +6,13 @@ namespace LambdaBoss;
 ///     The top-level Gather entry point. Walks the precedent graph, names
 ///     each cell, classifies it as input or step, rewrites step formulas
 ///     to refer to bindings, and emits a single <c>=LET(...)</c> formula
-///     equivalent to the sink-rooted calculation graph. PR 1 scope: chain
-///     and branched DAGs of formula cells on a single sheet, with no
-///     ranges, spills, nested LETs, or cycle handling.
+///     equivalent to the sink-rooted calculation graph. PR 2 scope: PR 1's
+///     chain/branched DAG support plus full naming completeness — cell-above
+///     fallback to cell-left, sanitization via <see cref="LetNameSanitizer" />,
+///     and final-collision suffixing.
 /// </summary>
 public static class GatherEngine
 {
-    private static readonly Regex IdentifierPattern = new(
-        @"^[A-Za-z_][A-Za-z0-9_.]*$",
-        RegexOptions.CultureInvariant);
-
     /// <summary>
     ///     Runs the gather over <paramref name="sink" />. Returns null if
     ///     the sink has no formula — the caller (slash command) treats this
@@ -37,22 +33,7 @@ public static class GatherEngine
         // Name every cell except the sink. Sink contributes the LET body.
         var nonSink = walked.Where(w => !w.Ref.Equals(sink)).ToList();
 
-        var nameByRef = new Dictionary<CellRef, string>();
-        var fallbackCounter = 0;
-        foreach (var cell in nonSink)
-        {
-            string name;
-            if (cell.CellAboveText != null && IdentifierPattern.IsMatch(cell.CellAboveText))
-            {
-                name = cell.CellAboveText;
-            }
-            else
-            {
-                fallbackCounter++;
-                name = $"step_{fallbackCounter}";
-            }
-            nameByRef[cell.Ref] = name;
-        }
+        var nameByRef = AssignNames(nonSink);
 
         var bindings = new List<BindingRow>();
         var inputs = new List<BindingRow>();
@@ -96,6 +77,54 @@ public static class GatherEngine
             bodyText);
 
         return new GatherResult(sink, sinkFormula, bindings, sb.ToString());
+    }
+
+    /// <summary>
+    ///     Picks a binding name for each cell in topological order. Tries
+    ///     cell-above first, then cell-left, both routed through
+    ///     <see cref="LetNameSanitizer" />. Falls back to <c>step_N</c> only
+    ///     when both neighbours yield nothing usable. Final collisions —
+    ///     two cells producing the same name — are resolved by suffixing
+    ///     <c>_2</c>, <c>_3</c>, … in topological order.
+    /// </summary>
+    private static Dictionary<CellRef, string> AssignNames(IReadOnlyList<WalkedCell> nonSink)
+    {
+        var nameByRef = new Dictionary<CellRef, string>();
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var fallbackCounter = 0;
+
+        foreach (var cell in nonSink)
+        {
+            var baseName = LetNameSanitizer.Sanitize(cell.CellAboveText)
+                           ?? LetNameSanitizer.Sanitize(cell.CellLeftText);
+
+            string finalName;
+            if (baseName == null)
+            {
+                // No usable label — burn through step_N until we find a
+                // number that hasn't already been used by a sanitised label.
+                do
+                {
+                    fallbackCounter++;
+                    finalName = $"step_{fallbackCounter}";
+                } while (used.Contains(finalName));
+            }
+            else
+            {
+                finalName = baseName;
+                var suffix = 2;
+                while (used.Contains(finalName))
+                {
+                    finalName = $"{baseName}_{suffix}";
+                    suffix++;
+                }
+            }
+
+            used.Add(finalName);
+            nameByRef[cell.Ref] = finalName;
+        }
+
+        return nameByRef;
     }
 
     private static BindingRole ClassifyRole(WalkedCell cell, HashSet<CellRef> inScope)

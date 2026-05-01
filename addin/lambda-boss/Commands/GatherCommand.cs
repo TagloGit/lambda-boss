@@ -145,9 +145,21 @@ internal static class GatherCommand
         {
             if (cell.Row <= 1)
                 return null;
+            return ReadStringValue(cell.Row - 1, cell.Column, $"GetCellAboveText({cell.A1Address})");
+        }
+
+        public string? GetCellLeftText(CellRef cell)
+        {
+            if (cell.Column <= 1)
+                return null;
+            return ReadStringValue(cell.Row, cell.Column - 1, $"GetCellLeftText({cell.A1Address})");
+        }
+
+        private string? ReadStringValue(int row, int column, string context)
+        {
             try
             {
-                dynamic range = _worksheet.Cells[cell.Row - 1, cell.Column];
+                dynamic range = _worksheet.Cells[row, column];
                 var value = range.Value2;
                 if (value is string s && !string.IsNullOrEmpty(s))
                     return s;
@@ -155,7 +167,7 @@ internal static class GatherCommand
             }
             catch (Exception ex)
             {
-                Logger.Error($"Gather/GetCellAboveText({cell.A1Address})", ex);
+                Logger.Error($"Gather/{context}", ex);
                 return null;
             }
         }

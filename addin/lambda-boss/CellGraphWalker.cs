@@ -26,6 +26,7 @@ internal static class CellGraphWalker
 
             var formula = source.GetFormula(cell);
             var cellAbove = source.GetCellAboveText(cell);
+            var cellLeft = source.GetCellLeftText(cell);
 
             IReadOnlyList<CellRef> precedents;
             if (formula == null)
@@ -37,7 +38,7 @@ internal static class CellGraphWalker
                 precedents = CellRefExtractor.Extract(formula, source.SinkSheet);
             }
 
-            byRef[cell] = new WalkedCell(cell, formula, cellAbove, precedents);
+            byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents);
 
             foreach (var p in precedents)
             {
