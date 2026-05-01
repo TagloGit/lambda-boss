@@ -238,8 +238,9 @@ public sealed record BindingRow(
 /// <summary>
 ///     Per-row state passed to <see cref="GatherEngine.Recompute" /> by the
 ///     dialog. Carries the binding's <see cref="Source" /> — the ref the
-///     row represents — plus the user's Include choice (PR 10) and an
-///     optional role override (PR 11). PR 12 will add a name override.
+///     row represents — plus the user's Include choice (PR 10), an
+///     optional role override (PR 11), and an optional name override
+///     (PR 12).
 ///
 ///     A row state with <see cref="Include" /> = false drops the matching
 ///     ref from the LET: the binding disappears, any precedents reachable
@@ -263,11 +264,23 @@ public sealed record BindingRow(
 ///     binding row). Cells without a formula in the source ignore a
 ///     <c>Step</c> override defensively — there's no formula to render
 ///     as the RHS, so the dialog hides the toggle in those rows.
+///
+///     <see cref="NameOverride" /> replaces the engine's auto-derived
+///     binding name with the user's chosen one. Overrides are claimed
+///     before auto-derivation runs, so an auto-derived name that would
+///     have collided with the override suffixes around it (<c>x_2</c>)
+///     instead of the other way around. The dialog enforces that
+///     overrides are valid identifiers and don't collide with each
+///     other before passing them to <see cref="GatherEngine.Recompute" />,
+///     so the engine accepts them as authoritative — passing a
+///     collision-causing override produces an invalid LET (garbage in,
+///     garbage out).
 /// </summary>
 public sealed record RowState(
     FormulaRef Source,
     bool Include = true,
-    BindingRole? RoleOverride = null);
+    BindingRole? RoleOverride = null,
+    string? NameOverride = null);
 
 public enum BindingRole
 {

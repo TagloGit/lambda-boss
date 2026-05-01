@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -9,29 +10,55 @@ namespace LambdaBoss.UI;
 
 /// <summary>
 ///     Display of a <see cref="GatherResult" /> with the Include checkbox
-///     column (PR 10) and the role toggle (PR 11). Toggling either
-///     control calls back into <see cref="GatherEngine.Recompute" /> via
-///     <see cref="_recompute" />, then rebuilds the row list:
-///     re-included rows return as the engine surfaces them, explicitly-
-///     excluded rows are kept visible (greyed out, checkbox off) so the
-///     user can re-tick them, and rows the engine no longer surfaces
-///     because their only path ran through a cell the user demoted or
-///     excluded appear in a separate "Orphaned" section beneath the
-///     active bindings (issue #157, mirrors the excluded-row pattern).
-///     Role overrides persist across rebuilds via
-///     <see cref="_roleOverrides" /> so a user's promote/demote choice
-///     stays in effect through subsequent Include toggles. Save returns
-///     the synthesised LET text from the latest result so the caller
-///     writes that back to the sink.
+///     column (PR 10), the role toggle (PR 11), and live-editable binding
+///     names (PR 12). Toggling Include or Role calls back into
+///     <see cref="GatherEngine.Recompute" /> via <see cref="_recompute" />
+///     and rebuilds the row list: re-included rows return as the engine
+///     surfaces them, explicitly-excluded rows are kept visible (greyed
+///     out, checkbox off) so the user can re-tick them, and rows the
+///     engine no longer surfaces because their only path ran through a
+///     cell the user demoted or excluded appear in a separate "Orphaned"
+///     section beneath the active bindings (issue #157, mirrors the
+///     excluded-row pattern). Editing a name takes a different path:
+///     <see cref="RecomputeForNameOnly" /> runs the engine but updates
+///     each existing VM's <see cref="GatherRowVm.Rhs" /> in place rather
+///     than rebuilding the row list, so the focused TextBox keeps its
+///     caret position while the user types. Role overrides persist
+///     across rebuilds via <see cref="_roleOverrides" /> and name
+///     overrides via <see cref="_nameOverrides" />, so the user's
+///     choices stay in effect through subsequent unrelated toggles.
+///     Names are validated live: invalid (non-canonical or colliding)
+///     names disable the Save button and freeze the preview at the
+///     last valid state. Save returns the synthesised LET text from
+///     the latest valid result so the caller writes that back to the
+///     sink.
 /// </summary>
 public partial class GatherWindow
 {
+    private const string DefaultStatusText =
+        "Save writes the LET into the sink cell · Esc to cancel";
+
+    private const string InvalidNameStatusText =
+        "Fix invalid names before saving";
+
     // Snapshots of explicitly-excluded rows so they can re-appear in the
     // visible list after a Recompute (which only returns included
     // bindings). Stored as plain BindingRow data — no VM subscriptions to
     // manage across rebuilds. Re-checking removes the entry; the engine's
     // result is the source of truth for re-included rows.
     private readonly Dictionary<FormulaRef, BindingRow> _excluded = [];
+
+    // Name overrides — what the user has typed into the editable Name
+    // column (PR 12). The engine consumes only valid entries (dialog-
+    // side validation gates pass-through), but the dictionary itself
+    // mirrors the TextBox state including any in-progress invalid edit;
+    // a rebuild reads the dict to seed the new VM's Name regardless of
+    // validity, so the user's typed text survives unrelated Include or
+    // Role toggles. An empty string is removed instead of stored: an
+    // empty override is meaningless to the engine (no name = no
+    // binding), and persisting it would muddle the "this row has been
+    // user-edited" signal.
+    private readonly Dictionary<FormulaRef, string> _nameOverrides = [];
 
     private readonly ObservableCollection<GatherRowVm> _orphans = [];
 
@@ -51,6 +78,7 @@ public partial class GatherWindow
     // overrides into every Recompute so the engine sees a consistent
     // view of user intent.
     private readonly Dictionary<FormulaRef, BindingRole> _roleOverrides = [];
+
     private readonly ObservableCollection<GatherRowVm> _rows = [];
 
     private GatherResult _result;
@@ -77,8 +105,6 @@ public partial class GatherWindow
         BuildRowsFromBindings(initial.Bindings);
         BindingsList.ItemsSource = _rows;
         OrphansList.ItemsSource = _orphans;
-
-        StatusText.Text = "Save writes the LET into the sink cell · Esc to cancel";
     }
 
     /// <summary>Populated on Save; null when cancelled.</summary>
@@ -141,6 +167,39 @@ public partial class GatherWindow
         }
     }
 
+    /// <summary>
+    ///     Selects the entire Name when the TextBox gains focus — covers
+    ///     Tab navigation between rows so the user can immediately
+    ///     overtype each name without backspacing. The mouse-click path
+    ///     is hooked separately via
+    ///     <see cref="NameTextBox_PreviewMouseLeftButtonDown" /> because
+    ///     a click would otherwise position the caret and clear the
+    ///     selection right after this handler ran.
+    /// </summary>
+    private void NameTextBox_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox tb)
+            tb.SelectAll();
+    }
+
+    /// <summary>
+    ///     First click into a TextBox that doesn't yet have keyboard
+    ///     focus: hijack it to call <c>Focus()</c> ourselves and mark
+    ///     the event handled, so the default click-to-position-caret
+    ///     behavior never runs and the
+    ///     <see cref="NameTextBox_GotFocus" /> SelectAll sticks.
+    ///     Subsequent clicks (when the box already has focus) fall
+    ///     through normally so the user can place the caret to edit
+    ///     part of the name.
+    /// </summary>
+    private void NameTextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox tb) return;
+        if (tb.IsKeyboardFocusWithin) return;
+        tb.Focus();
+        e.Handled = true;
+    }
+
     private void BuildRowsFromBindings(IReadOnlyList<BindingRow> bindings)
     {
         _suppressRecompute = true;
@@ -158,6 +217,19 @@ public partial class GatherWindow
             foreach (var binding in bindings)
             {
                 var vm = new GatherRowVm(binding, true);
+                // Restore non-canonical user-typed names across rebuilds.
+                // Canonical overrides are already reflected in the engine's
+                // binding.Name (the engine consumed them and possibly
+                // collision-suffixed) so the constructor's
+                // <c>vm.Name = binding.Name</c> already matches; non-
+                // canonical overrides were filtered out by
+                // <see cref="BuildRowStates" /> so the engine produced an
+                // auto-derived name instead, and we re-apply the user's
+                // typed text here so they can see what they wrote and
+                // (with the red border) why Save is disabled. Inner-LET
+                // expansions share Source with their host and are skipped.
+                if (!binding.IsExpansion && HasNonCanonicalOverride(binding.Source))
+                    vm.Name = _nameOverrides[binding.Source];
                 vm.PropertyChanged += Row_PropertyChanged;
                 _rows.Add(vm);
                 surfaced.Add(binding.Source);
@@ -195,6 +267,12 @@ public partial class GatherWindow
         {
             _suppressRecompute = false;
         }
+
+        // Run validation outside the suppress block so each VM's
+        // IsNameValid lands with the right value (and so a non-canonical
+        // typed-name restored from <see cref="_nameOverrides" /> shows
+        // its red border immediately on rebuild).
+        UpdateSaveButtonEnabled(RevalidateNames());
 
         OrphansSection.Visibility =
             _orphans.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -246,6 +324,35 @@ public partial class GatherWindow
             }
 
             Recompute(causedBy);
+            return;
+        }
+
+        if (e.PropertyName == nameof(GatherRowVm.Name))
+        {
+            // Inner-LET expansions share Source with their host cell —
+            // their TextBox is read-only so users never reach this path,
+            // but defensively skip the override write so we don't
+            // corrupt the host cell's override slot.
+            if (vm.IsExpansion)
+                return;
+
+            // Mirror the TextBox into the override dict. Empty strings
+            // drop the entry entirely so an empty override (which would
+            // never be canonical) doesn't sit in the dictionary and clog
+            // up <see cref="BuildRowStates" />'s filtering.
+            if (string.IsNullOrEmpty(vm.Name))
+                _nameOverrides.Remove(vm.Source);
+            else
+                _nameOverrides[vm.Source] = vm.Name;
+
+            // Recompute always runs — non-canonical overrides are
+            // filtered out by <see cref="BuildRowStates" /> so the
+            // engine emits a valid LET regardless. Validation just
+            // gates the Save button (and lights the row's red border)
+            // because committing a LET that differs from the user's
+            // typed text would surprise them.
+            UpdateSaveButtonEnabled(RevalidateNames());
+            RecomputeForNameOnly();
             return;
         }
 
@@ -338,26 +445,7 @@ public partial class GatherWindow
                 vm.IsExpansion, vm.CanToggleRole);
         }
 
-        // Build RowState list from the visible bindings. Inner-LET rows
-        // are skipped because they share a Source with their host cell
-        // — the host's row owns the toggle, so passing the inner rows'
-        // state would double-flag their Source. Orphan rows are inert
-        // and live in a separate collection (_orphans), so they don't
-        // appear in this loop at all. Role overrides are layered on top
-        // of each row's Include flag so the engine sees a single
-        // consistent view of user intent.
-        var states = new List<RowState>(_rows.Count);
-        var seen = new HashSet<FormulaRef>();
-        foreach (var vm in _rows)
-        {
-            if (vm.IsExpansion) continue;
-            if (!seen.Add(vm.Source)) continue;
-            BindingRole? roleOverride = null;
-            if (_roleOverrides.TryGetValue(vm.Source, out var o))
-                roleOverride = o;
-            states.Add(new RowState(vm.Source, vm.Include, roleOverride));
-        }
-
+        var states = BuildRowStates();
         var newResult = _recompute(states);
         if (newResult == null || newResult.Diagnostic != null)
         {
@@ -384,20 +472,165 @@ public partial class GatherWindow
         PreviewText.Text = newResult.SynthesisedLet;
         BuildRowsFromBindings(newResult.Bindings);
     }
+
+    /// <summary>
+    ///     Builds the <see cref="RowState" /> list passed to the engine.
+    ///     Inner-LET expansion rows are skipped because they share a
+    ///     <see cref="GatherRowVm.Source" /> with their host cell — the
+    ///     host's row owns Include/Role/Name, so passing the inner rows'
+    ///     state would double-flag their Source. Orphan rows live in a
+    ///     separate collection (<see cref="_orphans" />) and are inert,
+    ///     so they don't appear here at all. Role and name overrides
+    ///     are layered onto each row's Include flag so the engine sees
+    ///     a single consistent view of user intent. Name overrides are
+    ///     filtered to canonical entries — an in-progress invalid edit
+    ///     in <see cref="_nameOverrides" /> is held back so the engine
+    ///     never sees a non-identifier as an override; the caller of
+    ///     <see cref="RecomputeForNameOnly" /> already gates on
+    ///     all-valid, but this filter also protects unrelated
+    ///     Include/Role <see cref="Recompute" /> calls when one row
+    ///     happens to be mid-edit.
+    /// </summary>
+    private List<RowState> BuildRowStates()
+    {
+        var states = new List<RowState>(_rows.Count);
+        var seen = new HashSet<FormulaRef>();
+        foreach (var vm in _rows)
+        {
+            if (vm.IsExpansion) continue;
+            if (!seen.Add(vm.Source)) continue;
+            BindingRole? roleOverride = null;
+            if (_roleOverrides.TryGetValue(vm.Source, out var o))
+                roleOverride = o;
+            string? nameOverride = null;
+            if (_nameOverrides.TryGetValue(vm.Source, out var n)
+                && GatherNameValidator.IsCanonical(n))
+                nameOverride = n;
+            states.Add(new RowState(vm.Source, vm.Include, roleOverride, nameOverride));
+        }
+
+        return states;
+    }
+
+    /// <summary>
+    ///     Re-runs the engine and updates each editable row's Name and
+    ///     Rhs in place rather than rebuilding the row VMs. Used for
+    ///     live name editing so the focused TextBox keeps its caret
+    ///     position while the user types — a full
+    ///     <see cref="BuildRowsFromBindings" /> would tear down the
+    ///     ItemsControl's children and lose focus on every keystroke.
+    ///     Topology is stable across name-only changes (Include and Role
+    ///     drive shape, not names), so the engine result's binding
+    ///     sequence matches the existing engine-surfaced rows in
+    ///     <see cref="_rows" /> 1:1.
+    ///
+    ///     Each row's Name is synced from the engine's
+    ///     <see cref="BindingRow.Name" /> so the dialog reflects the
+    ///     engine's collision-suffix resolution: when the user types
+    ///     <c>"values"</c> in B and another row was already <c>"values"</c>,
+    ///     the engine emits one as <c>"values_2"</c> and the
+    ///     suffixed row's TextBox updates to match. The exception is
+    ///     non-canonical user overrides (sanitiser-altered, empty,
+    ///     reserved, cell-ref-shape) — those are filtered out by
+    ///     <see cref="BuildRowStates" />, so the engine binds the row
+    ///     with an auto-derived name; we keep the user's typed text
+    ///     in the TextBox (with the red border via
+    ///     <see cref="GatherRowVm.IsNameValid" />) so they can see
+    ///     what they wrote and Save stays disabled until they fix it.
+    ///     Re-entrancy is guarded by <see cref="_suppressRecompute" />.
+    /// </summary>
+    private void RecomputeForNameOnly()
+    {
+        var states = BuildRowStates();
+        var newResult = _recompute(states);
+        if (newResult == null || newResult.Diagnostic != null)
+            return;
+
+        _suppressRecompute = true;
+        try
+        {
+            _result = newResult;
+            PreviewText.Text = newResult.SynthesisedLet;
+
+            var bindings = newResult.Bindings;
+            var n = Math.Min(bindings.Count, _rows.Count);
+            for (var i = 0; i < n; i++)
+            {
+                var vm = _rows[i];
+                var binding = bindings[i];
+                // Defensive: if positions diverge (shouldn't happen for
+                // name-only changes), skip the in-place update for this
+                // row rather than writing a mismatched Rhs onto the wrong
+                // cell. The user's next non-name action will trigger a
+                // full rebuild and resync everything.
+                if (!Equals(vm.Source, binding.Source))
+                    continue;
+                vm.Rhs = binding.Rhs;
+                if (!HasNonCanonicalOverride(vm.Source))
+                    vm.Name = binding.Name;
+            }
+        }
+        finally
+        {
+            _suppressRecompute = false;
+        }
+    }
+
+    private bool HasNonCanonicalOverride(FormulaRef source)
+    {
+        return _nameOverrides.TryGetValue(source, out var n)
+               && !GatherNameValidator.IsCanonical(n);
+    }
+
+    /// <summary>
+    ///     Stamps each editable row's <see cref="GatherRowVm.IsNameValid" />
+    ///     based on per-row canonicality, and returns true when every
+    ///     editable row's name is canonical. Cross-row collisions are
+    ///     <em>not</em> a validity concern — the engine resolves them
+    ///     by suffixing user overrides, and the dialog reflects the
+    ///     resolved name back into the row's TextBox. Save is gated
+    ///     only on canonicality: a name like <c>"Hello World"</c>
+    ///     can't be honored by the engine (the override is filtered
+    ///     out by <see cref="BuildRowStates" />), so the user's typed
+    ///     text would diverge from the LET — disabling Save until
+    ///     they pick a name the engine can use. Inner-LET expansions,
+    ///     orphan rows, and excluded rows skip the check: they don't
+    ///     drive bindings the user is committing to.
+    /// </summary>
+    private bool RevalidateNames()
+    {
+        var allValid = true;
+        foreach (var vm in _rows)
+        {
+            if (vm.IsExpansion || vm.IsOrphan) continue;
+            if (!vm.Include) continue;
+            var isValid = GatherNameValidator.IsCanonical(vm.Name);
+            vm.IsNameValid = isValid;
+            if (!isValid) allValid = false;
+        }
+        return allValid;
+    }
+
+    private void UpdateSaveButtonEnabled(bool allValid)
+    {
+        SaveButton.IsEnabled = allValid;
+        StatusText.Text = allValid ? DefaultStatusText : InvalidNameStatusText;
+    }
 }
 
 /// <summary>
 ///     Row view-model bound to <see cref="GatherWindow" />'s ItemsControl.
 ///     Carries the row's static identity (Source, IsExpansion,
-///     CanToggleRole) plus the mutable Include flag and IsStep toggle;
-///     engine-driven Name/Rhs are immutable per VM instance — a Recompute
-///     rebuilds the collection rather than mutating individual rows, so
-///     we don't need INPCC plumbing on those fields. Role flips through
-///     <see cref="IsStep" /> trigger an override that the dialog
-///     persists across rebuilds. Orphan rows (issue #157) reuse this VM
-///     with <see cref="OrphanedByAddress" /> set: the row stays visible
-///     in a separate section, hides its checkbox and role toggle (those
-///     don't apply to inert orphan rows), shows an "orphaned by &lt;addr&gt;"
+///     CanToggleRole) plus the mutable Include flag, IsStep toggle, and
+///     (PR 12) editable <see cref="Name" /> and <see cref="Rhs" />.
+///     Role flips through <see cref="IsStep" /> trigger an override that
+///     the dialog persists across rebuilds. Name edits flow through
+///     <see cref="Name" />'s setter, fire INPC for the dialog handler to
+///     pick up, and gate Save via <see cref="IsNameValid" />. Orphan
+///     rows (issue #157) reuse this VM with
+///     <see cref="OrphanedByAddress" /> set: the row stays visible in a
+///     separate section, hides its checkbox and role toggle (those don't
+///     apply to inert orphan rows), shows an "orphaned by &lt;addr&gt;"
 ///     hint, and stays muted regardless of the Include flag.
 /// </summary>
 public class GatherRowVm : INotifyPropertyChanged
@@ -417,15 +650,24 @@ public class GatherRowVm : INotifyPropertyChanged
     private static readonly Brush MutedBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6a6a6a"));
 
+    private static readonly Brush InvalidNameBorderBrush =
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f48771"));
+
+    private static readonly Brush DefaultNameBorderBrush =
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3e3e3e"));
+
     private bool _include;
+    private bool _isNameValid = true;
     private bool _isStep;
+    private string _name;
+    private string _rhs;
 
     public GatherRowVm(BindingRow binding, bool include, string? orphanedByAddress = null)
     {
         Source = binding.Source;
         RoleEnum = binding.Role;
-        Name = binding.Name;
-        Rhs = binding.Rhs;
+        _name = binding.Name;
+        _rhs = binding.Rhs;
         IsExpansion = binding.IsExpansion;
         CanToggleRole = binding.CanToggleRole;
         OrphanedByAddress = orphanedByAddress;
@@ -437,10 +679,88 @@ public class GatherRowVm : INotifyPropertyChanged
     public BindingRole RoleEnum { get; }
     public string Address => Source.A1Address;
     public string Role => RoleEnum == BindingRole.Input ? "input" : "step";
-    public string Name { get; }
-    public string Rhs { get; }
     public bool IsExpansion { get; }
     public bool CanToggleRole { get; }
+
+    /// <summary>
+    ///     The binding name as displayed in (and edited from) the dialog.
+    ///     Two-way bound to the Name TextBox; the setter fires INPC so
+    ///     <see cref="GatherWindow" /> can validate and recompute. Inner-
+    ///     LET expansion rows and orphan rows expose this read-only
+    ///     (<see cref="IsNameEditable" /> = false) — the engine owns
+    ///     their names and a user edit would corrupt the host's
+    ///     override slot.
+    /// </summary>
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            var v = value;
+            if (_name == v) return;
+            _name = v;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    ///     The binding's right-hand-side text. Mutable so
+    ///     <see cref="GatherWindow.RecomputeForNameOnly" /> can update
+    ///     it in place without rebuilding the row collection — that's
+    ///     what keeps focus stable during live name editing.
+    /// </summary>
+    public string Rhs
+    {
+        get => _rhs;
+        set
+        {
+            var v = value;
+            if (_rhs == v) return;
+            _rhs = v;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    ///     False when the user's typed <see cref="Name" /> isn't a
+    ///     canonical identifier (would be silently changed by the
+    ///     sanitizer or is empty after sanitization) or collides with
+    ///     another row's name. Drives the red-border style on the Name
+    ///     TextBox via <see cref="NameBorderBrush" /> and the Save
+    ///     button's enabled state at the dialog level. Defaults to true
+    ///     so engine-derived initial names (which are canonical by
+    ///     construction) display cleanly until the dialog runs its
+    ///     first validation pass.
+    /// </summary>
+    public bool IsNameValid
+    {
+        get => _isNameValid;
+        set
+        {
+            if (_isNameValid == value) return;
+            _isNameValid = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(NameBorderBrush));
+        }
+    }
+
+    /// <summary>
+    ///     Inner-LET expansion rows and orphan rows aren't user-editable:
+    ///     expansion rows share Source with their host (an edit would
+    ///     wrongly slot into the host's override key) and orphan rows
+    ///     are inert by definition. Editable rows render the Name as a
+    ///     plain TextBox with a TwoWay binding; non-editable rows render
+    ///     the same TextBox but IsReadOnly so the column layout stays
+    ///     consistent.
+    /// </summary>
+    public bool IsNameEditable => !IsExpansion && !IsOrphan;
+
+    /// <summary>
+    ///     Inverse of <see cref="IsNameEditable" /> for the TextBox's
+    ///     <c>IsReadOnly</c> binding — WPF doesn't have a built-in
+    ///     inverse converter, so the VM exposes the negated form.
+    /// </summary>
+    public bool IsNameReadOnly => !IsNameEditable;
 
     /// <summary>
     ///     Address of the cell whose demote-or-exclude orphaned this
@@ -527,6 +847,16 @@ public class GatherRowVm : INotifyPropertyChanged
     public Brush RoleBrush => Include && !IsOrphan ? ActiveRoleBrush : MutedBrush;
     public Brush NameBrush => Include && !IsOrphan ? ActiveNameBrush : MutedBrush;
     public Brush RhsBrush => Include && !IsOrphan ? ActiveRhsBrush : MutedBrush;
+
+    /// <summary>
+    ///     Border brush for the Name TextBox: red when
+    ///     <see cref="IsNameValid" /> is false to flag the bad input,
+    ///     the dialog's neutral border colour otherwise. The
+    ///     setter on <see cref="IsNameValid" /> fires INPC for this
+    ///     property too so the binding refreshes without an explicit
+    ///     trigger.
+    /// </summary>
+    public Brush NameBorderBrush => IsNameValid ? DefaultNameBorderBrush : InvalidNameBorderBrush;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

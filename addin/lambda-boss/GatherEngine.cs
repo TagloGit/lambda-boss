@@ -88,6 +88,7 @@ public static class GatherEngine
         ArgumentNullException.ThrowIfNull(rows);
         var excluded = new HashSet<FormulaRef>();
         Dictionary<FormulaRef, BindingRole>? roleOverrides = null;
+        Dictionary<FormulaRef, string>? nameOverrides = null;
         foreach (var r in rows)
         {
             if (!r.Include)
@@ -97,8 +98,13 @@ public static class GatherEngine
                 roleOverrides ??= new Dictionary<FormulaRef, BindingRole>();
                 roleOverrides[r.Source] = r.RoleOverride.Value;
             }
+            if (!string.IsNullOrEmpty(r.NameOverride))
+            {
+                nameOverrides ??= new Dictionary<FormulaRef, string>();
+                nameOverrides[r.Source] = r.NameOverride;
+            }
         }
-        return GatherInternal(sink, selection, source, excluded, roleOverrides);
+        return GatherInternal(sink, selection, source, excluded, roleOverrides, nameOverrides);
     }
 
     private static GatherResult? GatherInternal(
@@ -106,7 +112,8 @@ public static class GatherEngine
         IReadOnlyList<CellRef> selection,
         ICellSource source,
         IReadOnlySet<FormulaRef>? excluded,
-        IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides = null)
+        IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides = null,
+        IReadOnlyDictionary<FormulaRef, string>? nameOverrides = null)
     {
         ArgumentNullException.ThrowIfNull(sink);
         ArgumentNullException.ThrowIfNull(selection);
@@ -297,7 +304,10 @@ public static class GatherEngine
         // Names: ranges first (in encounter order), then cells (in topo
         // order). This keeps inputs grouped at the top of the LET — ranges
         // are always inputs — which matches the spec's dialog ordering.
-        var nameByRef = AssignNames(ranges, nonSink, source);
+        // PR 12: user name overrides are claimed first so auto-derived
+        // names suffix around them (<c>x_2</c>) rather than the other way
+        // around — an override is the user's authoritative choice.
+        var nameByRef = AssignNames(ranges, nonSink, source, nameOverrides);
 
         // Build the in-scope set used to classify each cell as input vs
         // step. A cell is a step iff at least one of its precedents has a
@@ -598,14 +608,48 @@ public static class GatherEngine
     private static Dictionary<FormulaRef, string> AssignNames(
         IReadOnlyList<FormulaRef> ranges,
         IReadOnlyList<WalkedCell> nonSink,
-        ICellSource source)
+        ICellSource source,
+        IReadOnlyDictionary<FormulaRef, string>? nameOverrides)
     {
         var nameByRef = new Dictionary<FormulaRef, string>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var fallbackCounter = 0;
 
+        // PR 12: claim every user-supplied override up front so the name
+        // is locked in `used` before auto-derivation runs. An auto-derived
+        // name that would have collided with an override now suffixes
+        // around it instead — matching the spec's "user rename wins"
+        // intent. Two user overrides that share a name collide here too;
+        // the second one suffixes (<c>x</c> → <c>x_2</c>) so the LET
+        // stays valid even when the dialog hasn't (or can't) prevent the
+        // collision client-side. Iteration order picks the winner — for
+        // overrides on cells, that's topo order, so an upstream cell
+        // claims the bare name and downstream cells get the suffix.
+        if (nameOverrides != null && nameOverrides.Count > 0)
+        {
+            foreach (var range in ranges)
+                if (nameOverrides.TryGetValue(range, out var overrideName))
+                {
+                    var resolved = ResolveCollision(overrideName, used);
+                    nameByRef[range] = resolved;
+                    used.Add(resolved);
+                }
+
+            foreach (var cell in nonSink)
+            {
+                var fr = new FormulaRef(cell.Ref);
+                if (nameOverrides.TryGetValue(fr, out var overrideName))
+                {
+                    var resolved = ResolveCollision(overrideName, used);
+                    nameByRef[fr] = resolved;
+                    used.Add(resolved);
+                }
+            }
+        }
+
         foreach (var range in ranges)
         {
+            if (nameByRef.ContainsKey(range)) continue;
             // Use the range Start cell's neighbours for the label hint —
             // ranges typically have a header above their top-left corner.
             var aboveText = range.IsExternal ? null : SafeAbove(source, range.Start);
@@ -617,9 +661,11 @@ public static class GatherEngine
 
         foreach (var cell in nonSink)
         {
+            var fr = new FormulaRef(cell.Ref);
+            if (nameByRef.ContainsKey(fr)) continue;
             var baseName = LetNameSanitizer.Sanitize(cell.CellAboveText)
                            ?? LetNameSanitizer.Sanitize(cell.CellLeftText);
-            nameByRef[new FormulaRef(cell.Ref)] = AssignOne(baseName, used, ref fallbackCounter);
+            nameByRef[fr] = AssignOne(baseName, used, ref fallbackCounter);
         }
 
         return nameByRef;
