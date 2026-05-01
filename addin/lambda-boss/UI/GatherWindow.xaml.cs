@@ -47,6 +47,18 @@ public partial class GatherWindow
     // result is the source of truth for re-included rows.
     private readonly Dictionary<FormulaRef, BindingRow> _excluded = [];
 
+    // Name overrides — what the user has typed into the editable Name
+    // column (PR 12). The engine consumes only valid entries (dialog-
+    // side validation gates pass-through), but the dictionary itself
+    // mirrors the TextBox state including any in-progress invalid edit;
+    // a rebuild reads the dict to seed the new VM's Name regardless of
+    // validity, so the user's typed text survives unrelated Include or
+    // Role toggles. An empty string is removed instead of stored: an
+    // empty override is meaningless to the engine (no name = no
+    // binding), and persisting it would muddle the "this row has been
+    // user-edited" signal.
+    private readonly Dictionary<FormulaRef, string> _nameOverrides = [];
+
     private readonly ObservableCollection<GatherRowVm> _orphans = [];
 
     // Orphan tracker: precedents that fell out of the active list because
@@ -65,18 +77,6 @@ public partial class GatherWindow
     // overrides into every Recompute so the engine sees a consistent
     // view of user intent.
     private readonly Dictionary<FormulaRef, BindingRole> _roleOverrides = [];
-
-    // Name overrides — what the user has typed into the editable Name
-    // column (PR 12). The engine consumes only valid entries (dialog-
-    // side validation gates pass-through), but the dictionary itself
-    // mirrors the TextBox state including any in-progress invalid edit;
-    // a rebuild reads the dict to seed the new VM's Name regardless of
-    // validity, so the user's typed text survives unrelated Include or
-    // Role toggles. An empty string is removed instead of stored: an
-    // empty override is meaningless to the engine (no name = no
-    // binding), and persisting it would muddle the "this row has been
-    // user-edited" signal.
-    private readonly Dictionary<FormulaRef, string> _nameOverrides = [];
 
     private readonly ObservableCollection<GatherRowVm> _rows = [];
 
@@ -291,6 +291,8 @@ public partial class GatherWindow
                 causedBy = FindCurrentBlocker();
             }
 
+            if (!RevalidateForRecompute())
+                return;
             Recompute(causedBy);
             return;
         }
@@ -314,17 +316,13 @@ public partial class GatherWindow
             else
                 _nameOverrides[vm.Source] = vm.Name;
 
-            // Validate the whole row collection — collisions are pairwise,
-            // so editing one row may flip another row's IsNameValid.
-            var allValid = ValidateRowNames();
-            UpdateSaveButtonEnabled(allValid);
-
-            // Skip the Recompute round-trip when anything is invalid:
-            // the preview should freeze at the last valid state, and
-            // passing an invalid name as an override would emit broken
-            // LET text. Save is also disabled, so the user can keep
-            // typing without committing junk to the sink.
-            if (!allValid)
+            // Validation runs across the whole row collection — collisions
+            // are pairwise, so editing one row may flip another row's
+            // IsNameValid. Skip the Recompute round-trip when anything is
+            // invalid: the preview freezes at the last all-valid state, so
+            // the user can keep typing without the boxes drifting out of
+            // sync with the LET.
+            if (!RevalidateForRecompute())
                 return;
 
             RecomputeForNameOnly();
@@ -368,8 +366,31 @@ public partial class GatherWindow
                     causedBy = vm.Source;
             }
 
+            if (!RevalidateForRecompute())
+                return;
             Recompute(causedBy);
         }
+    }
+
+    /// <summary>
+    ///     Re-runs name validation and updates the Save button's enabled
+    ///     state. Returns true when every editable, included row's name
+    ///     is canonical and unique, so the Include/Role caller can
+    ///     proceed with the engine recompute. Returns false when any
+    ///     name is invalid (non-canonical or colliding) — in that case
+    ///     the caller must skip the recompute and leave the engine
+    ///     state frozen at the last all-valid result. Without this
+    ///     gate, an Include or Role toggle during a name collision
+    ///     would push both colliding overrides through to the engine,
+    ///     which would either alias-eliminate one row silently or
+    ///     emit a LET with two bindings sharing a name — both leave
+    ///     the dialog's TextBoxes out of sync with the preview.
+    /// </summary>
+    private bool RevalidateForRecompute()
+    {
+        var allValid = ValidateRowNames();
+        UpdateSaveButtonEnabled(allValid);
+        return allValid;
     }
 
     /// <summary>
@@ -483,6 +504,7 @@ public partial class GatherWindow
                 nameOverride = n;
             states.Add(new RowState(vm.Source, vm.Include, roleOverride, nameOverride));
         }
+
         return states;
     }
 
@@ -551,10 +573,14 @@ public partial class GatherWindow
     ///     Re-runs the canonical/collision rules over every editable row
     ///     and stamps each VM's <see cref="GatherRowVm.IsNameValid" />
     ///     accordingly. Returns true when every editable row is valid,
-    ///     so the caller can gate Save and pass-through to the engine.
-    ///     Inner-LET expansions and orphan rows are non-editable and
-    ///     skipped — their names come from the engine's own collision
-    ///     handling and can't go invalid via user action.
+    ///     so the caller can gate Save and any engine recompute on a
+    ///     consistent dialog state. Inner-LET expansions and orphan
+    ///     rows are non-editable and skipped — their names come from
+    ///     the engine's own collision handling. Excluded rows are also
+    ///     skipped: they don't appear in the LET, so their name can't
+    ///     collide with anything that does, and the user must be able
+    ///     to resolve a collision by ticking off one of the colliding
+    ///     rows.
     /// </summary>
     private bool ValidateRowNames()
     {
@@ -563,6 +589,7 @@ public partial class GatherWindow
         foreach (var vm in _rows)
         {
             if (vm.IsExpansion || vm.IsOrphan) continue;
+            if (!vm.Include) continue;
             editable.Add(vm);
             names.Add(vm.Name);
         }
@@ -574,6 +601,7 @@ public partial class GatherWindow
             editable[i].IsNameValid = validity[i];
             if (!validity[i]) allValid = false;
         }
+
         return allValid;
     }
 
@@ -662,7 +690,7 @@ public class GatherRowVm : INotifyPropertyChanged
         get => _name;
         set
         {
-            var v = value ?? string.Empty;
+            var v = value;
             if (_name == v) return;
             _name = v;
             OnPropertyChanged();
@@ -680,7 +708,7 @@ public class GatherRowVm : INotifyPropertyChanged
         get => _rhs;
         set
         {
-            var v = value ?? string.Empty;
+            var v = value;
             if (_rhs == v) return;
             _rhs = v;
             OnPropertyChanged();
