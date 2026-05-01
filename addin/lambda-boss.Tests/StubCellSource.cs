@@ -42,6 +42,14 @@ internal sealed class StubCellSource : ICellSource
         return _labels.TryGetValue(aboveAddress, out var l) ? l : null;
     }
 
+    public string? GetCellLeftText(CellRef cell)
+    {
+        if (cell.Column <= 1)
+            return null;
+        var leftAddress = $"{CellRef.ColumnLetters(cell.Column - 1)}{cell.Row}";
+        return _labels.TryGetValue(leftAddress, out var l) ? l : null;
+    }
+
     public CellRef Ref(string a1)
     {
         var (col, row) = ParseA1(a1);

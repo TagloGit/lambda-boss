@@ -29,19 +29,20 @@ public class GatherEngineTests
         Assert.NotNull(result);
         Assert.Equal("=B2+1", result.OriginalFormula);
 
-        // A2 is an input named "Numbers" (cell-above A1 is "Numbers"),
-        // B2 is a step named step_1 (cell-above B1 is empty).
+        // A2 is an input named "numbers" (cell-above A1 is "Numbers", which
+        // sanitises to lowercase initial); B2 is a step named step_1 (cell-
+        // above B1 is empty, no cell-left either).
         Assert.Equal(2, result.Bindings.Count);
 
         var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A2");
         Assert.Equal(BindingRole.Input, aRow.Role);
-        Assert.Equal("Numbers", aRow.Name);
+        Assert.Equal("numbers", aRow.Name);
         Assert.Equal("A2", aRow.Rhs);
 
         var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
         Assert.Equal(BindingRole.Step, bRow.Role);
         Assert.Equal("step_1", bRow.Name);
-        Assert.Equal("Numbers*2", bRow.Rhs);
+        Assert.Equal("numbers*2", bRow.Rhs);
 
         // Inputs come before steps.
         var bindings = result.Bindings.ToList();
@@ -50,10 +51,10 @@ public class GatherEngineTests
         // The synthesised LET round-trips through LetParser.
         var parsed = LetParser.Parse(result.SynthesisedLet);
         Assert.Equal(2, parsed.Bindings.Count);
-        Assert.Equal("Numbers", parsed.Bindings[0].Name);
+        Assert.Equal("numbers", parsed.Bindings[0].Name);
         Assert.Equal("A2", parsed.Bindings[0].RhsText);
         Assert.Equal("step_1", parsed.Bindings[1].Name);
-        Assert.Equal("Numbers*2", parsed.Bindings[1].RhsText);
+        Assert.Equal("numbers*2", parsed.Bindings[1].RhsText);
         Assert.Equal("step_1+1", parsed.Body);
     }
 
@@ -94,11 +95,10 @@ public class GatherEngineTests
     }
 
     [Fact]
-    public void Gather_NonIdentifierLabel_FallsBackToStepN()
+    public void Gather_LabelWithSpaces_SanitizedToCamelCase()
     {
-        // Cell-above "Customer ID" has a space so doesn't match the
-        // identifier regex; PR 1 falls through to step_N. Sanitizer
-        // (which would convert "Customer ID" → "customerId") lands in PR 2.
+        // "Customer ID" sanitises to camelCase rather than falling through
+        // to step_N (PR 1 fell through; PR 2 wires the sanitizer in).
         var source = new StubCellSource()
             .WithLabel("A1", "Customer ID")
             .WithFormula("B2", "=A2*2");
@@ -106,7 +106,7 @@ public class GatherEngineTests
         var result = GatherEngine.Gather(source.Ref("B2"), source)!;
 
         Assert.Single(result.Bindings);
-        Assert.Equal("step_1", result.Bindings[0].Name);
+        Assert.Equal("customerId", result.Bindings[0].Name);
     }
 
     [Fact]
@@ -127,11 +127,27 @@ public class GatherEngineTests
     }
 
     [Fact]
-    public void Gather_NumericLabel_FallsBackToStepN()
+    public void Gather_LabelStartingWithDigit_PrefixedWithUnderscore()
     {
-        // Label "30" doesn't match the identifier regex (starts with digit).
+        // A leading digit can't begin an Excel name; the sanitizer prefixes
+        // with `_` so the result is still usable.
         var source = new StubCellSource()
             .WithLabel("A1", "30")
+            .WithFormula("B2", "=A2*2");
+
+        var result = GatherEngine.Gather(source.Ref("B2"), source)!;
+
+        Assert.Equal("_30", result.Bindings[0].Name);
+    }
+
+    [Fact]
+    public void Gather_LabelWithOnlyPunctuation_FallsBackToStepN()
+    {
+        // No identifier characters at all — sanitizer returns null, so the
+        // engine falls through to the next naming level (cell-left here is
+        // also empty) and finally to step_N.
+        var source = new StubCellSource()
+            .WithLabel("A1", "!!!")
             .WithFormula("B2", "=A2*2");
 
         var result = GatherEngine.Gather(source.Ref("B2"), source)!;
@@ -167,5 +183,138 @@ public class GatherEngineTests
         var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
         Assert.Equal(BindingRole.Input, bRow.Role);
         Assert.Equal("B1", bRow.Rhs);
+    }
+
+    [Fact]
+    public void Gather_CellLeftLabel_UsedWhenCellAboveEmpty()
+    {
+        // A2 holds the label "Numbers"; B2 is the input (no cell-above text).
+        // The naming chain falls through to cell-left.
+        var source = new StubCellSource()
+            .WithLabel("A2", "Numbers")
+            .WithFormula("C2", "=B2*2");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        Assert.Equal("numbers", bRow.Name);
+    }
+
+    [Fact]
+    public void Gather_CellAbovePreferredOverCellLeft()
+    {
+        // Both neighbours have a label; cell-above wins.
+        var source = new StubCellSource()
+            .WithLabel("B1", "Above")
+            .WithLabel("A2", "Left")
+            .WithFormula("C2", "=B2*2");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        Assert.Equal("above", bRow.Name);
+    }
+
+    [Fact]
+    public void Gather_CellAbovePunctuationOnly_FallsThroughToCellLeft()
+    {
+        // Cell-above sanitises to null (no identifier chars), so cell-left
+        // gets a turn before step_N.
+        var source = new StubCellSource()
+            .WithLabel("B1", "!!!")
+            .WithLabel("A2", "Numbers")
+            .WithFormula("C2", "=B2*2");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        Assert.Equal("numbers", bRow.Name);
+    }
+
+    [Fact]
+    public void Gather_CollidingSanitizedNames_DisambiguatedWithSuffix()
+    {
+        // A1 and A2 both labelled "Sales"; their cells (B1, B2) both want
+        // the binding name `sales`. Topological order picks B1 first, so
+        // B2 gets `sales_2`.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Sales")
+            .WithLabel("A2", "Sales")
+            .WithFormula("C1", "=B1+B2");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var b1 = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
+        var b2 = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        var names = new[] { b1.Name, b2.Name }.OrderBy(n => n).ToList();
+        Assert.Equal(new[] { "sales", "sales_2" }, names);
+    }
+
+    [Fact]
+    public void Gather_ThreeWayCollision_SuffixesIncrement()
+    {
+        // Three cells whose labels all sanitise to `x` should produce
+        // `x`, `x_2`, `x_3` in topological order.
+        var source = new StubCellSource()
+            .WithLabel("A1", "X")
+            .WithLabel("A2", "X")
+            .WithLabel("A3", "X")
+            .WithFormula("D1", "=B1+B2+B3");
+
+        var result = GatherEngine.Gather(source.Ref("D1"), source)!;
+
+        var names = new[] { "B1", "B2", "B3" }
+            .Select(addr => result.Bindings.Single(b => b.CellRef.A1Address == addr).Name)
+            .OrderBy(n => n)
+            .ToList();
+        Assert.Equal(new[] { "x", "x_2", "x_3" }, names);
+    }
+
+    [Fact]
+    public void Gather_FallbackSkipsNamesAlreadyUsedByLabels()
+    {
+        // A label sanitises to "step_1"; the next unlabelled cell that
+        // would otherwise grab `step_1` should skip to `step_2`.
+        var source = new StubCellSource()
+            .WithLabel("A1", "step_1")
+            .WithFormula("C1", "=B1+B2");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var b1 = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
+        var b2 = result.Bindings.Single(b => b.CellRef.A1Address == "B2");
+        Assert.Equal("step_1", b1.Name);
+        Assert.Equal("step_2", b2.Name);
+    }
+
+    [Fact]
+    public void Gather_NamingMatchesIssueManualTestScenario()
+    {
+        // From issue 132 acceptance — combines sanitizer, cell-left, and
+        // collision suffixing in one walk:
+        //   A1=Sales,    B1=100
+        //   A2=Sales,    B2=200
+        //   A3=Tax Rate, B3=0.1
+        //   A4=Total,    B4=B1*B3 + B2*B3
+        //   C4 = B4+1                       ← sink
+        var source = new StubCellSource()
+            .WithLabel("A1", "Sales")
+            .WithLabel("A2", "Sales")
+            .WithLabel("A3", "Tax Rate")
+            .WithLabel("A4", "Total")
+            .WithFormula("B4", "=B1*B3 + B2*B3")
+            .WithFormula("C4", "=B4+1");
+
+        var result = GatherEngine.Gather(source.Ref("C4"), source)!;
+
+        Assert.Equal("sales",   result.Bindings.Single(b => b.CellRef.A1Address == "B1").Name);
+        Assert.Equal("sales_2", result.Bindings.Single(b => b.CellRef.A1Address == "B2").Name);
+        Assert.Equal("taxRate", result.Bindings.Single(b => b.CellRef.A1Address == "B3").Name);
+        Assert.Equal("total",   result.Bindings.Single(b => b.CellRef.A1Address == "B4").Name);
+
+        // Sanity: synthesised LET round-trips and the body uses the step
+        // binding name rather than the cell ref.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("total+1", parsed.Body);
     }
 }

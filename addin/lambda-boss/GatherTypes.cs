@@ -47,14 +47,16 @@ public sealed record CellRef(string Sheet, int Column, int Row)
 /// <summary>
 ///     A cell discovered by <see cref="CellGraphWalker" />. The
 ///     <see cref="Formula" /> is null when the cell holds a literal value
-///     (treated as a leaf input). <see cref="CellAboveText" /> is the text
-///     of the cell directly above (used for binding-name derivation), or
-///     null when the cell is in row 1 or the cell above is empty.
+///     (treated as a leaf input). <see cref="CellAboveText" /> and
+///     <see cref="CellLeftText" /> are the text of the cells directly above
+///     and to the left (checked in that order during binding-name derivation),
+///     null when the neighbour is out of range, empty, or non-string.
 /// </summary>
 public sealed record WalkedCell(
     CellRef Ref,
     string? Formula,
     string? CellAboveText,
+    string? CellLeftText,
     IReadOnlyList<CellRef> Precedents);
 
 /// <summary>
@@ -102,8 +104,15 @@ public interface ICellSource
 
     /// <summary>
     ///     Returns the displayed text of the cell directly above
-    ///     <paramref name="cell" />, or null if that cell is empty or
-    ///     <paramref name="cell" /> is in row 1.
+    ///     <paramref name="cell" />, or null if that cell is empty,
+    ///     non-string, or <paramref name="cell" /> is in row 1.
     /// </summary>
     string? GetCellAboveText(CellRef cell);
+
+    /// <summary>
+    ///     Returns the displayed text of the cell directly to the left of
+    ///     <paramref name="cell" />, or null if that cell is empty,
+    ///     non-string, or <paramref name="cell" /> is in column 1.
+    /// </summary>
+    string? GetCellLeftText(CellRef cell);
 }
