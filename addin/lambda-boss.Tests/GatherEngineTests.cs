@@ -1611,7 +1611,7 @@ public class GatherEngineTests
 
         var initial = GatherEngine.Gather(source.Ref("C1"), source)!;
         var states = initial.Bindings
-            .Select(b => new RowState(b.Source, true))
+            .Select(b => new RowState(b.Source))
             .ToList();
 
         var recomputed = GatherEngine.Recompute(
@@ -1637,8 +1637,8 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1")), false),
+            new RowState(new FormulaRef(source.Ref("B1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -1668,8 +1668,8 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false)
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -1698,10 +1698,10 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("D1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false),
+            new RowState(new FormulaRef(source.Ref("C1"))),
+            new RowState(new FormulaRef(source.Ref("D1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("E1"), new[] { source.Ref("E1") }, source, states)!;
@@ -1749,8 +1749,8 @@ public class GatherEngineTests
         // still rendered (the dialog snapshot keeps it visible).
         var dropped = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false)
         })!;
         Assert.Empty(dropped.Bindings);
 
@@ -1758,8 +1758,8 @@ public class GatherEngineTests
         // else is excluded. Bindings come back in topological order.
         var restored = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")))
         })!;
 
         Assert.Equal(initial.SynthesisedLet, restored.SynthesisedLet);
@@ -1783,9 +1783,9 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false),
+            new RowState(new FormulaRef(source.Ref("C1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("D1"), new[] { source.Ref("D1") }, source, states)!;
@@ -1818,8 +1818,8 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1")), false),
+            new RowState(new FormulaRef(source.Ref("B1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -1841,7 +1841,7 @@ public class GatherEngineTests
         var rangeRef = new FormulaRef(source.Ref("A1"), source.Ref("A3"));
         var states = new[]
         {
-            new RowState(rangeRef, Include: false),
+            new RowState(rangeRef, false)
         };
         var result = GatherEngine.Recompute(
             source.Ref("B1"), new[] { source.Ref("B1") }, source, states)!;
@@ -1867,9 +1867,9 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false),
+            new RowState(new FormulaRef(source.Ref("C1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("D1"), new[] { source.Ref("D1") }, source, states)!;
@@ -1966,8 +1966,8 @@ public class GatherEngineTests
         {
             new RowState(
                 new FormulaRef(source.Ref("A1")),
-                Include: true,
-                RoleOverride: BindingRole.Step),
+                true,
+                BindingRole.Step)
         };
         var promoted = GatherEngine.Recompute(sink, selection, source, states)!;
 
@@ -1999,11 +1999,11 @@ public class GatherEngineTests
 
         var demoted = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Input),
+                true,
+                BindingRole.Input)
         })!;
         // Sanity: B1 demoted → A1 orphaned, no longer in bindings.
         Assert.DoesNotContain(demoted.Bindings, b => b.Source.A1Address == "A1");
@@ -2014,11 +2014,11 @@ public class GatherEngineTests
         // a leaf input because B1's formula references it.
         var promoted = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Step),
+                true,
+                BindingRole.Step)
         })!;
         var bPromoted = promoted.Bindings.Single(b => b.Source.A1Address == "B1");
         Assert.Equal(BindingRole.Step, bPromoted.Role);
@@ -2045,11 +2045,11 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Input),
+                true,
+                BindingRole.Input)
         };
         var result = GatherEngine.Recompute(sink, selection, source, states)!;
 
@@ -2079,12 +2079,12 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("C1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Input),
+                true,
+                BindingRole.Input)
         };
         var result = GatherEngine.Recompute(sink, selection, source, states)!;
 
@@ -2114,11 +2114,11 @@ public class GatherEngineTests
         // Demote B1 to input.
         var demoted = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Input),
+                true,
+                BindingRole.Input)
         })!;
         Assert.DoesNotContain(demoted.Bindings, b => b.Source.A1Address == "A1");
         Assert.Equal(BindingRole.Input,
@@ -2127,11 +2127,11 @@ public class GatherEngineTests
         // Promote B1 back to step. The override override flips to Step.
         var restored = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Step),
+                true,
+                BindingRole.Step)
         })!;
 
         // Round-trip restored: same LET, same binding count, same
@@ -2155,11 +2155,11 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
             new RowState(
                 new FormulaRef(source.Ref("B1")),
-                Include: true,
-                RoleOverride: BindingRole.Input),
+                true,
+                BindingRole.Input)
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -2182,8 +2182,8 @@ public class GatherEngineTests
         {
             new RowState(
                 new FormulaRef(source.Ref("A1")),
-                Include: true,
-                RoleOverride: BindingRole.Step),
+                true,
+                BindingRole.Step)
         };
         var result = GatherEngine.Recompute(
             source.Ref("B1"), new[] { source.Ref("B1") }, source, states)!;
@@ -2211,8 +2211,8 @@ public class GatherEngineTests
         {
             new RowState(
                 new FormulaRef(source.Ref("A1")),
-                Include: true,
-                RoleOverride: BindingRole.Step),
+                true,
+                BindingRole.Step)
         };
         var result = GatherEngine.Recompute(sink, selection, source, states)!;
 
