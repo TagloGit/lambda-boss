@@ -248,6 +248,26 @@ internal static class GatherCommand
             }
         }
 
+        public bool IsLambdaName(string name)
+        {
+            if (string.IsNullOrEmpty(name))
+                return false;
+            try
+            {
+                dynamic? n = _workbook.Names.Item(name);
+                var refersTo = n?.RefersTo as string;
+                return LambdaSignatureParser.IsLambdaFormula(refersTo);
+            }
+            catch
+            {
+                // Names.Item throws on missing names — that's the cheapest
+                // existence probe. Built-in functions like SUM aren't in
+                // the Names collection so they land here as "not a LAMBDA",
+                // which is exactly what PR 8 needs.
+                return false;
+            }
+        }
+
         private string? ReadStringValue(string sheetName, int row, int column, string context)
         {
             var sheet = TryGetWorksheet(sheetName);

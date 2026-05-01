@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
+using LambdaBoss.Commands;
+
 namespace LambdaBoss;
 
 /// <summary>
@@ -53,6 +55,21 @@ public static class GatherEngine
         var sinkFormula = source.GetFormula(sink);
         if (sinkFormula == null)
             return null;
+
+        // Pure-LAMBDA-call sink check (PR 8). A formula like
+        // `=Foo(A1, B1)` where Foo is a registered LAMBDA can't be
+        // gathered — the cell already IS a LAMBDA invocation, so the
+        // author should expand it via /EditLambda first and then re-run
+        // /Gather on the resulting LET. TryParseLambdaCall returns
+        // non-null only when the whole formula is a single call (modulo
+        // trailing whitespace), so wrapped calls like `=Foo(A1) + 1`
+        // slip through and walk normally. The IsLambdaName check
+        // distinguishes a registered LAMBDA from a built-in like
+        // `=SUM(A1, B1)` — built-ins aren't workbook names so they
+        // also walk normally.
+        var lambdaCallDiagnostic = CheckLambdaCallSink(sink, sinkFormula, source);
+        if (lambdaCallDiagnostic != null)
+            return lambdaCallDiagnostic;
 
         // Multi-sink check uses the cycle-aware walker on each selected
         // cell. If any walk hits a cycle, surface that cycle diagnostic
@@ -257,6 +274,39 @@ public static class GatherEngine
             bodyText);
 
         return new GatherResult(sink, sinkFormula, bindings, sb.ToString());
+    }
+
+    /// <summary>
+    ///     Pure-LAMBDA-call sink check (PR 8). Returns a refusal result
+    ///     when the sink's formula is exactly a call to a registered
+    ///     LAMBDA (e.g. <c>=Foo(A1, B1)</c>); the message points the
+    ///     author at <c>/EditLambda</c>. Reuses
+    ///     <see cref="EditLambdaCommand.TryParseLambdaCall" /> which
+    ///     enforces the "no trailing content" rule, so wrapped calls
+    ///     like <c>=Foo(A1) + 1</c> walk normally. The
+    ///     <see cref="ICellSource.IsLambdaName" /> probe distinguishes a
+    ///     registered LAMBDA from a built-in function call (a built-in
+    ///     like SUM isn't a workbook name) and from the engine's own
+    ///     pure-<c>=LET(...)</c> sink path (LET isn't a workbook name
+    ///     either, so the engine still expands it inline).
+    /// </summary>
+    private static GatherResult? CheckLambdaCallSink(
+        CellRef sink, string sinkFormula, ICellSource source)
+    {
+        var call = EditLambdaCommand.TryParseLambdaCall(sinkFormula);
+        if (call == null)
+            return null;
+        if (!source.IsLambdaName(call.Name))
+            return null;
+
+        var diagnostic = new GatherDiagnostic(
+            GatherDiagnosticKind.LambdaCallSink,
+            "This cell is a LAMBDA call. Run /EditLambda first to expand it " +
+            "into a LET, then re-run /Gather.",
+            new[] { sink });
+
+        return new GatherResult(
+            sink, sinkFormula, Array.Empty<BindingRow>(), string.Empty, diagnostic);
     }
 
     /// <summary>
