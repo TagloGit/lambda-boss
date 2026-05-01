@@ -10,11 +10,15 @@ namespace LambdaBoss;
 ///     promote each unique range to a leaf input and drop walked cells that
 ///     fall inside any promoted range. The returned cells are in topological
 ///     order (precedents before dependents) with the sink as the final
-///     entry. PR 7 layers cycle detection on top.
+///     entry. PR 7 adds DFS-coloured cycle detection during the topological
+///     pass — on a back-edge to a grey ancestor the walker returns a
+///     <see cref="WalkOutcome" /> carrying the cycle's cells in path order
+///     so the engine can refuse with a clear diagnostic instead of
+///     spinning forever.
 /// </summary>
 internal static class CellGraphWalker
 {
-    public static IReadOnlyList<WalkedCell> Walk(CellRef sink, ICellSource source)
+    public static WalkOutcome Walk(CellRef sink, ICellSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -63,20 +67,29 @@ internal static class CellGraphWalker
             }
         }
 
-        return TopoSort(sink, byRef);
+        return CycleAwareTopoSort(sink, byRef);
     }
 
     /// <summary>
-    ///     Iterative DFS post-order: precedents emitted before dependents,
-    ///     sink last. PR 1 assumes no cycles, so we don't track grey-state
-    ///     here — that machinery lands in PR 7.
+    ///     Iterative DFS post-order with grey/black colouring. A child
+    ///     already on the DFS path (grey) means a back-edge — i.e. a
+    ///     cycle. The cycle's cells are extracted from the path stack in
+    ///     topological order (the back-edge target first, then each
+    ///     ancestor up to the cell that closed the loop) and surfaced via
+    ///     <see cref="WalkOutcome" />. Discovery (Walk's first phase)
+    ///     terminates fine in the presence of cycles thanks to the
+    ///     <c>byRef.ContainsKey</c> guard, but topo sort would otherwise
+    ///     spin forever pushing back and forth between the cycle's cells.
     /// </summary>
-    private static List<WalkedCell> TopoSort(CellRef sink, Dictionary<CellRef, WalkedCell> byRef)
+    private static WalkOutcome CycleAwareTopoSort(
+        CellRef sink, Dictionary<CellRef, WalkedCell> byRef)
     {
         var ordered = new List<WalkedCell>(byRef.Count);
         var visited = new HashSet<CellRef>();
+        var onPath = new HashSet<CellRef>();
         var stack = new Stack<(CellRef Cell, int NextChild)>();
         stack.Push((sink, 0));
+        onPath.Add(sink);
 
         while (stack.Count > 0)
         {
@@ -89,15 +102,71 @@ internal static class CellGraphWalker
                 if (pre.IsRange)
                     continue;
                 var child = pre.Start;
-                if (!visited.Contains(child) && byRef.ContainsKey(child))
+                if (!byRef.ContainsKey(child))
+                    continue;
+                if (onPath.Contains(child))
+                    return WalkOutcome.WithCycle(ExtractCycle(stack, child));
+                if (!visited.Contains(child))
+                {
                     stack.Push((child, 0));
+                    onPath.Add(child);
+                }
             }
             else if (visited.Add(cell))
             {
+                onPath.Remove(cell);
                 ordered.Add(node);
             }
         }
 
-        return ordered;
+        return WalkOutcome.Success(ordered);
     }
+
+    /// <summary>
+    ///     Builds the cycle's cell list from the DFS path stack at the
+    ///     moment a back-edge is detected. The stack iterates top-to-
+    ///     bottom and at this point holds the current cell at the top
+    ///     followed by each ancestor down to the sink. We collect from
+    ///     top (current cell) until we hit <paramref name="target" /> (the
+    ///     back-edge destination) and reverse so the result reads from
+    ///     <paramref name="target" /> through to the cell that closed the
+    ///     loop.
+    /// </summary>
+    private static List<CellRef> ExtractCycle(
+        Stack<(CellRef Cell, int NextChild)> stack, CellRef target)
+    {
+        var path = new List<CellRef>();
+        foreach (var (c, _) in stack)
+        {
+            path.Add(c);
+            if (c.Equals(target))
+                break;
+        }
+
+        path.Reverse();
+        return path;
+    }
+}
+
+/// <summary>
+///     Result of <see cref="CellGraphWalker.Walk" />: either a topo-ordered
+///     list of cells or a cycle's cell list. Exactly one of
+///     <see cref="Cells" /> and <see cref="Cycle" /> is non-null.
+/// </summary>
+internal readonly struct WalkOutcome
+{
+    private WalkOutcome(IReadOnlyList<WalkedCell>? cells, IReadOnlyList<CellRef>? cycle)
+    {
+        Cells = cells;
+        Cycle = cycle;
+    }
+
+    public IReadOnlyList<WalkedCell>? Cells { get; }
+    public IReadOnlyList<CellRef>? Cycle { get; }
+
+    public bool IsCycle => Cycle != null;
+
+    public static WalkOutcome Success(IReadOnlyList<WalkedCell> cells) => new(cells, null);
+
+    public static WalkOutcome WithCycle(IReadOnlyList<CellRef> cycle) => new(null, cycle);
 }

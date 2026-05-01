@@ -12,7 +12,7 @@ public class CellGraphWalkerTests
             .WithFormula("B1", "=A1*2")
             .WithFormula("C1", "=B1+1");
 
-        var walked = CellGraphWalker.Walk(source.Ref("C1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("C1"), source).Cells!;
         var order = walked.Select(w => w.Ref.A1Address).ToList();
 
         Assert.Equal(new[] { "A1", "B1", "C1" }, order);
@@ -24,7 +24,7 @@ public class CellGraphWalkerTests
         var source = new StubCellSource()
             .WithFormula("B1", "=A1*2");
 
-        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source).Cells!;
 
         var leaf = walked.Single(w => w.Ref.A1Address == "A1");
         Assert.Null(leaf.Formula);
@@ -38,7 +38,7 @@ public class CellGraphWalkerTests
         var source = new StubCellSource()
             .WithFormula("C1", "=A1+B1");
 
-        var walked = CellGraphWalker.Walk(source.Ref("C1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("C1"), source).Cells!;
         var addresses = walked.Select(w => w.Ref.A1Address).ToHashSet();
 
         Assert.Contains("A1", addresses);
@@ -57,7 +57,7 @@ public class CellGraphWalkerTests
             .WithFormula("C1", "=A1*2")
             .WithFormula("D1", "=B1+C1");
 
-        var walked = CellGraphWalker.Walk(source.Ref("D1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("D1"), source).Cells!;
         var addresses = walked.Select(w => w.Ref.A1Address).ToList();
 
         Assert.Equal(4, addresses.Count);
@@ -78,7 +78,7 @@ public class CellGraphWalkerTests
         // does. Walking a leaf-only sink just returns the sink as a leaf.
         var source = new StubCellSource();
 
-        var walked = CellGraphWalker.Walk(source.Ref("A1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("A1"), source).Cells!;
 
         Assert.Single(walked);
         Assert.Null(walked[0].Formula);
@@ -93,7 +93,7 @@ public class CellGraphWalkerTests
         var source = new StubCellSource("Sheet2")
             .WithFormula("Sheet2!B1", "=Sheet1!A1*2");
 
-        var walked = CellGraphWalker.Walk(source.Ref("Sheet2!B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("Sheet2!B1"), source).Cells!;
 
         Assert.Equal(2, walked.Count);
         Assert.Equal("Sheet1", walked[0].Ref.Sheet);
@@ -112,7 +112,7 @@ public class CellGraphWalkerTests
             .WithFormula("Sheet1!B1", "=A1*2")
             .WithFormula("Sheet2!C1", "=Sheet1!B1+1");
 
-        var walked = CellGraphWalker.Walk(source.Ref("Sheet2!C1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("Sheet2!C1"), source).Cells!;
 
         var leaf = walked.Single(w => w.Ref.A1Address == "A1");
         Assert.Equal("Sheet1", leaf.Sheet());
@@ -130,7 +130,7 @@ public class CellGraphWalkerTests
         var source = new StubCellSource()
             .WithFormula("Sheet1!B1", "=[Other.xlsx]Sheet1!A1+1");
 
-        var walked = CellGraphWalker.Walk(source.Ref("Sheet1!B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("Sheet1!B1"), source).Cells!;
 
         var external = walked.Single(w => w.Ref.IsExternal);
         Assert.Equal("Other.xlsx", external.Ref.ExternalWorkbook);
@@ -153,7 +153,7 @@ public class CellGraphWalkerTests
             .WithFormula("A3", "=RAND()")
             .WithFormula("B1", "=SUM(A1:A3)");
 
-        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source).Cells!;
 
         Assert.Single(walked);
         Assert.Equal("B1", walked[0].Ref.A1Address);
@@ -173,7 +173,7 @@ public class CellGraphWalkerTests
         var source = new StubCellSource()
             .WithFormula("B1", "=SUM(A1:A3) + A4");
 
-        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source).Cells!;
         var addresses = walked.Select(w => w.Ref.A1Address).OrderBy(a => a).ToList();
 
         Assert.Equal(new[] { "A4", "B1" }, addresses);
@@ -194,7 +194,7 @@ public class CellGraphWalkerTests
             .WithSpill("A1")
             .WithFormula("B1", "=SUM(A1#)");
 
-        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source).Cells!;
         var addresses = walked.Select(w => w.Ref.A1Address).ToList();
 
         Assert.Equal(new[] { "A1", "B1" }, addresses);
@@ -216,7 +216,7 @@ public class CellGraphWalkerTests
             .WithSpill("B2")
             .WithFormula("C2", "=SUM(B2#)");
 
-        var walked = CellGraphWalker.Walk(source.Ref("C2"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("C2"), source).Cells!;
         var addresses = walked.Select(w => w.Ref.A1Address).ToList();
 
         Assert.Equal(new[] { "A2", "B2", "C2" }, addresses);
@@ -233,9 +233,82 @@ public class CellGraphWalkerTests
         var source = new StubCellSource()
             .WithFormula("B1", "=A1*2");
 
-        var walked = CellGraphWalker.Walk(source.Ref("B1"), source);
+        var walked = CellGraphWalker.Walk(source.Ref("B1"), source).Cells!;
 
         Assert.All(walked, w => Assert.False(w.HasSpill));
+    }
+
+    [Fact]
+    public void Walk_TwoCycle_ReturnsCycleOutcome()
+    {
+        // PR 7: A1 = =B1+1, B1 = =A1+1 — sink A1. The walker discovers
+        // both cells and then surfaces the back-edge during topo sort
+        // instead of spinning forever in the iterative DFS.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=A1+1");
+
+        var outcome = CellGraphWalker.Walk(source.Ref("A1"), source);
+
+        Assert.True(outcome.IsCycle);
+        Assert.Null(outcome.Cells);
+        var addresses = outcome.Cycle!.Select(c => c.A1Address).ToHashSet();
+        Assert.Equal(new HashSet<string> { "A1", "B1" }, addresses);
+    }
+
+    [Fact]
+    public void Walk_ThreeCycle_ReturnsAllThreeCellsInOrder()
+    {
+        // A1 → B1 → C1 → A1 — the cycle list reads in path order from
+        // the back-edge target through to the cell that closed the loop.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=C1+1")
+            .WithFormula("C1", "=A1+1");
+
+        var outcome = CellGraphWalker.Walk(source.Ref("A1"), source);
+
+        Assert.True(outcome.IsCycle);
+        var addresses = outcome.Cycle!.Select(c => c.A1Address).ToList();
+        Assert.Equal(3, addresses.Count);
+        Assert.Equal(new[] { "A1", "B1", "C1" }, addresses);
+    }
+
+    [Fact]
+    public void Walk_CycleNotIncludingSink_StillDetected()
+    {
+        // Sink C1 → B1 ↔ A1 (the cycle excludes the sink). The walker
+        // still surfaces the cycle because phase-2 DFS walks into it
+        // from C1; nothing about cycle detection requires the sink to
+        // be on the cycle.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=B1+1")
+            .WithFormula("B1", "=A1+1")
+            .WithFormula("C1", "=B1+1");
+
+        var outcome = CellGraphWalker.Walk(source.Ref("C1"), source);
+
+        Assert.True(outcome.IsCycle);
+        var addresses = outcome.Cycle!.Select(c => c.A1Address).ToHashSet();
+        Assert.Contains("A1", addresses);
+        Assert.Contains("B1", addresses);
+        Assert.DoesNotContain("C1", addresses);
+    }
+
+    [Fact]
+    public void Walk_AcyclicGraph_HasNoCycle()
+    {
+        // Regression guard: a normal acyclic walk surfaces Cells, not
+        // a cycle outcome.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var outcome = CellGraphWalker.Walk(source.Ref("C1"), source);
+
+        Assert.False(outcome.IsCycle);
+        Assert.NotNull(outcome.Cells);
+        Assert.Null(outcome.Cycle);
     }
 }
 

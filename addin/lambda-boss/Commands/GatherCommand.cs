@@ -10,12 +10,12 @@ using Taglo.Excel.Common;
 namespace LambdaBoss.Commands;
 
 /// <summary>
-///     Slash-command handler for <c>/Gather</c>. Reads the active cell,
-///     synthesises a single <c>=LET(...)</c> formula equivalent to the
-///     calculation graph rooted there, and on Save writes the LET back to
-///     the sink. PR 3 scope: cross-sheet precedents are walked normally,
-///     external-workbook refs surface as leaf inputs whose RHS is the
-///     workbook-qualified address.
+///     Slash-command handler for <c>/Gather</c>. Reads the active cell and
+///     the multi-selection (PR 7), synthesises a single <c>=LET(...)</c>
+///     formula equivalent to the calculation graph rooted at the active
+///     cell, and on Save writes the LET back to the sink. PR 7 also routes
+///     refusals (cycle in the graph, multi-sink selection) into a
+///     <c>MessageBox</c> rather than opening the dialog.
 /// </summary>
 internal static class GatherCommand
 {
@@ -43,11 +43,12 @@ internal static class GatherCommand
 
             var sink = new CellRef(sheetName, sinkColumn, sinkRow);
             var source = new LiveCellSource(workbook, sheetName);
+            var selection = ReadSelection(app, sheetName, sink);
 
             GatherResult? result;
             try
             {
-                result = GatherEngine.Gather(sink, source);
+                result = GatherEngine.Gather(sink, selection, source);
             }
             catch (Exception ex)
             {
@@ -58,6 +59,13 @@ internal static class GatherCommand
 
             if (result == null)
                 return;
+
+            if (result.Diagnostic != null)
+            {
+                Logger.Info($"Gather: refused — {result.Diagnostic.Kind}");
+                ShowError(result.Diagnostic.Message);
+                return;
+            }
 
             var excelHwnd = new IntPtr(app.Hwnd);
 
@@ -109,6 +117,53 @@ internal static class GatherCommand
         catch
         {
             Logger.Info($"ShowError: {message}");
+        }
+    }
+
+    /// <summary>
+    ///     Enumerates every cell in <c>Application.Selection</c> on the
+    ///     active sheet, including each disjoint area when the user has
+    ///     Ctrl-clicked a multi-area range. Falls back to the sink alone
+    ///     if the selection can't be read for any reason — the engine's
+    ///     multi-sink check short-circuits on a single-cell list, so this
+    ///     keeps the command working even when the COM call surface
+    ///     misbehaves. Selections are restricted to the active sheet; we
+    ///     don't currently model multi-sheet selections (which Excel
+    ///     allows via Ctrl-click on a sheet tab) — those would surface as
+    ///     a single-area Selection on the active sheet here, and the
+    ///     multi-sink check operates on that subset.
+    /// </summary>
+    private static List<CellRef> ReadSelection(dynamic app, string sheetName, CellRef sink)
+    {
+        try
+        {
+            dynamic? selection = app.Selection;
+            if (selection == null)
+                return new List<CellRef> { sink };
+
+            var cells = new List<CellRef>();
+            dynamic areas = selection.Areas;
+            int areaCount = (int)areas.Count;
+            for (var a = 1; a <= areaCount; a++)
+            {
+                dynamic area = areas[a];
+                int firstRow = (int)area.Row;
+                int firstCol = (int)area.Column;
+                int rowCount = (int)area.Rows.Count;
+                int colCount = (int)area.Columns.Count;
+                for (var r = 0; r < rowCount; r++)
+                for (var c = 0; c < colCount; c++)
+                    cells.Add(new CellRef(sheetName, firstCol + c, firstRow + r));
+            }
+
+            if (cells.Count == 0)
+                cells.Add(sink);
+            return cells;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Gather/ReadSelection", ex);
+            return new List<CellRef> { sink };
         }
     }
 
