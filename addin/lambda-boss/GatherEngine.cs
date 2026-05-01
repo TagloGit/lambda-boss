@@ -125,8 +125,30 @@ public static class GatherEngine
             // own sheet as the default for unqualified refs.
             var formulaText = cell.Formula!;
             string stepRhs;
+            // True when we tentatively free the cell's outer name so
+            // the inner LET can claim it; we re-reserve below if the
+            // cell turns out not to alias after all.
+            var freedOuterName = false;
             if (IsPureLetFormula(formulaText))
             {
+                // If the LET's body is a bare identifier, the outer
+                // step row is going to alias-eliminate (the body, after
+                // rewrites, will be a single binding name). In that
+                // case the cell's outer name is never actually used as
+                // a binding label, so freeing it before expansion lets
+                // the inner LET's bindings claim it without the
+                // collision-suffix dance — e.g. cell labelled `y` with
+                // formula `=LET(x, J6, y, x+5, y)` keeps the inner `y`
+                // unsuffixed instead of forcing it to `y_2`. Bodies
+                // that are calculations (`y+1`, `f(y)`) take the
+                // original PR 6 path: outer name stays reserved, inner
+                // collisions suffix.
+                if (TryGetBareIdentifier(LetParser.Parse(formulaText).Body) != null)
+                {
+                    used.Remove(name);
+                    freedOuterName = true;
+                }
+
                 var (innerRows, body) = ExpandNestedLet(
                     formulaText, cellFormulaRef, cell.Ref.Sheet, used, nameByRef);
                 stepRows.AddRange(innerRows);
@@ -143,14 +165,25 @@ public static class GatherEngine
             // `numbers` when A1 already binds to `numbers`) is a no-op
             // rebind. Drop the row and redirect this cell's outer name
             // to the alias target so downstream cells (and the sink
-            // body) rewrite their refs straight through. The cell's
-            // original name remains in `used` — harmless, just ensures
-            // it can't be claimed by a later inner-LET binding.
+            // body) rewrite their refs straight through.
             var stepAlias = TryGetBareIdentifier(stepRhs);
             if (stepAlias != null && used.Contains(stepAlias))
             {
                 nameByRef[cellFormulaRef] = stepAlias;
                 continue;
+            }
+
+            // Not aliased after all — re-reserve the cell's name we
+            // tentatively freed. If an inner binding has since claimed
+            // it, suffix.
+            if (freedOuterName)
+            {
+                if (used.Contains(name))
+                {
+                    name = ResolveCollision(name, used);
+                    nameByRef[cellFormulaRef] = name;
+                }
+                used.Add(name);
             }
 
             stepRows.Add(new BindingRow(cellFormulaRef, BindingRole.Step, name, stepRhs));

@@ -1054,6 +1054,63 @@ public class GatherEngineTests
     }
 
     [Fact]
+    public void Gather_StepLetCellAliasesItsLastBinding_NameLabelDoesNotForceInnerSuffix()
+    {
+        // The cell label gives K6 the outer name `y`, but K6's formula
+        // `=LET(x, J6, y, x+5, y)` returns its last binding `y` directly
+        // — the cell aliases its inner `y`, so K6's outer name is never
+        // emitted as a binding row. Reserving `y` upfront would force
+        // the inner `y` to suffix to `y_2` for no benefit. Detect the
+        // bare-identifier body, free the outer name before expansion,
+        // and let the inner binding keep `y`. Adapted from issue #136
+        // follow-up feedback.
+        var source = new StubCellSource()
+            .WithLabel("J5", "x")
+            .WithLabel("K5", "y")
+            .WithFormula("K6", "=LET(x, J6, y, x+5, y)")
+            .WithFormula("L6", "=K6");
+
+        var result = GatherEngine.Gather(source.Ref("L6"), source)!;
+
+        // No `y_2` — the inner `y` kept the unsuffixed name.
+        Assert.DoesNotContain(result.Bindings, b => b.Name == "y_2");
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(2, parsed.Bindings.Count);
+        Assert.Equal("x", parsed.Bindings[0].Name);
+        Assert.Equal("J6", parsed.Bindings[0].RhsText);
+        Assert.Equal("y", parsed.Bindings[1].Name);
+        Assert.Equal("x+5", parsed.Bindings[1].RhsText);
+        Assert.Equal("y", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_StepLetCellWithCalcBody_KeepsLabelOnOuter()
+    {
+        // Counterpart to the alias case: when the cell's LET body is a
+        // calculation (`doubled+1`), the outer step row IS emitted, so
+        // the cell's label-derived name `doubled` should win and the
+        // inner colliding `doubled` suffixes to `doubled_2`. Guards
+        // against regressing the original PR 6 behaviour.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithLabel("B1", "Doubled")
+            .WithFormula("B2", "=LET(doubled, A2*2, doubled+1)")
+            .WithFormula("C2", "=B2+5");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        // Outer `doubled` row exists with the cell's preferred name;
+        // the inner colliding binding got `doubled_2`.
+        var outerDoubled = result.Bindings.Single(
+            b => b.Source.A1Address == "B2" && b.Name == "doubled");
+        Assert.Equal("doubled_2+1", outerDoubled.Rhs);
+
+        var innerDoubled2 = result.Bindings.Single(b => b.Name == "doubled_2");
+        Assert.Equal("numbers*2", innerDoubled2.Rhs);
+    }
+
+    [Fact]
     public void Gather_NestedLet_RoundTripsThroughLetParser()
     {
         // PR 6 acceptance: round-trip safety. Synthesised LET parses
