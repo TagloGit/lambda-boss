@@ -83,4 +83,65 @@ public class CellGraphWalkerTests
         Assert.Single(walked);
         Assert.Null(walked[0].Formula);
     }
+
+    [Fact]
+    public void Walk_CrossSheetPrecedent_WalkedNormally()
+    {
+        // Sheet2!B1 = =Sheet1!A1*2; Sheet1!A1 is a literal on the other
+        // sheet. The walker should reach across, identify A1 as a leaf,
+        // and emit it before B1.
+        var source = new StubCellSource("Sheet2")
+            .WithFormula("Sheet2!B1", "=Sheet1!A1*2");
+
+        var walked = CellGraphWalker.Walk(source.Ref("Sheet2!B1"), source);
+
+        Assert.Equal(2, walked.Count);
+        Assert.Equal("Sheet1", walked[0].Ref.Sheet);
+        Assert.Equal("A1", walked[0].Ref.A1Address);
+        Assert.Null(walked[0].Formula);
+        Assert.Equal("Sheet2", walked[1].Ref.Sheet);
+        Assert.Equal("B1", walked[1].Ref.A1Address);
+    }
+
+    [Fact]
+    public void Walk_CrossSheetStep_PrecedentResolvedOnTargetSheet()
+    {
+        // Sheet2!C1 = =Sheet1!B1+1; Sheet1!B1 = =A1*2 (unqualified A1
+        // refers to Sheet1!A1, NOT Sheet2!A1).
+        var source = new StubCellSource("Sheet2")
+            .WithFormula("Sheet1!B1", "=A1*2")
+            .WithFormula("Sheet2!C1", "=Sheet1!B1+1");
+
+        var walked = CellGraphWalker.Walk(source.Ref("Sheet2!C1"), source);
+
+        var leaf = walked.Single(w => w.Ref.A1Address == "A1");
+        Assert.Equal("Sheet1", leaf.Sheet());
+        var step = walked.Single(w => w.Ref.A1Address == "B1");
+        Assert.Equal("Sheet1", step.Sheet());
+        Assert.Equal("=A1*2", step.Formula);
+    }
+
+    [Fact]
+    public void Walk_ExternalRef_TreatedAsLeaf()
+    {
+        // External ref reaches the walker as a CellRef with ExternalWorkbook
+        // set. The stub returns null for GetFormula on externals, so it
+        // surfaces as a leaf with no precedents of its own.
+        var source = new StubCellSource("Sheet1")
+            .WithFormula("Sheet1!B1", "=[Other.xlsx]Sheet1!A1+1");
+
+        var walked = CellGraphWalker.Walk(source.Ref("Sheet1!B1"), source);
+
+        var external = walked.Single(w => w.Ref.IsExternal);
+        Assert.Equal("Other.xlsx", external.Ref.ExternalWorkbook);
+        Assert.Equal("Sheet1", external.Ref.Sheet);
+        Assert.Equal("A1", external.Ref.A1Address);
+        Assert.Null(external.Formula);
+        Assert.Empty(external.Precedents);
+    }
+}
+
+internal static class WalkedCellExtensions
+{
+    public static string Sheet(this WalkedCell cell) => cell.Ref.Sheet;
 }

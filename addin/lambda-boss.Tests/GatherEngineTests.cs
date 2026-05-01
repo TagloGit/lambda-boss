@@ -288,6 +288,106 @@ public class GatherEngineTests
     }
 
     [Fact]
+    public void Gather_CrossSheetSink_RhsUsesSheetQualifiedAddress()
+    {
+        // Sheet2!C1 = =Sheet1!A1*2. The Sheet1!A1 binding must keep the
+        // sheet qualifier in its RHS since the LET lives on Sheet2.
+        var source = new StubCellSource("Sheet2")
+            .WithFormula("Sheet2!C1", "=Sheet1!A1*2");
+
+        var result = GatherEngine.Gather(source.Ref("Sheet2!C1"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.Equal("Sheet1!A1", aRow.Rhs);
+
+        // Body refers to the binding name, not the cross-sheet ref.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("Sheet1!A1", parsed.Bindings[0].RhsText);
+        Assert.Equal($"{aRow.Name}*2", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_CrossSheetStep_RewritesRefToBindingName()
+    {
+        // Sheet2!C1 = =Sheet1!B1+1; Sheet1!B1 = =A1*2 (Sheet1's A1).
+        // The step's RHS should rewrite both Sheet1!B1 (in C1) and A1 (in
+        // B1) — the latter uses Sheet1 as default since the formula lives
+        // on Sheet1.
+        var source = new StubCellSource("Sheet2")
+            .WithLabel("Sheet1!A1", "Numbers")
+            .WithFormula("Sheet1!B1", "=A1*2")
+            .WithFormula("Sheet2!C1", "=Sheet1!B1+1");
+
+        var result = GatherEngine.Gather(source.Ref("Sheet2!C1"), source)!;
+
+        var bRow = result.Bindings.Single(b => b.CellRef.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+        // The step's RHS uses the leaf binding name, not the cross-sheet
+        // form `Sheet1!A1` it had in the source formula.
+        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
+        Assert.Equal($"{aRow.Name}*2", bRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal($"{bRow.Name}+1", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_QuotedSheetName_PreservedInBindingRhs()
+    {
+        // Sheet name with a space forces quoting in the synthesised LET.
+        var source = new StubCellSource("Sheet2")
+            .WithFormula("Sheet2!B1", "='My Sheet'!A1*2");
+
+        var result = GatherEngine.Gather(source.Ref("Sheet2!B1"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.CellRef.A1Address == "A1");
+        Assert.Equal("My Sheet", aRow.CellRef.Sheet);
+        Assert.Equal("'My Sheet'!A1", aRow.Rhs);
+
+        // Round-trips through LetParser despite the spaced sheet name —
+        // the parser's bracket-aware comma splitter ignores the bang and
+        // single-quote pair inside the RHS.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("'My Sheet'!A1", parsed.Bindings[0].RhsText);
+    }
+
+    [Fact]
+    public void Gather_ExternalRef_LeftAsLeafInputWithWorkbookTag()
+    {
+        // External-workbook ref shows up as an input — we never reach into
+        // the other workbook — and its RHS is the workbook-qualified
+        // address, ready to evaluate when Excel rebinds it.
+        var source = new StubCellSource("Sheet1")
+            .WithFormula("Sheet1!B1", "=[Other.xlsx]Sheet1!A1+1");
+
+        var result = GatherEngine.Gather(source.Ref("Sheet1!B1"), source)!;
+
+        var ext = result.Bindings.Single(b => b.CellRef.IsExternal);
+        Assert.Equal(BindingRole.Input, ext.Role);
+        Assert.Equal("[Other.xlsx]Sheet1!A1", ext.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        // The body still references the binding name, not the original
+        // external ref text — the external sub-tree is just an input.
+        Assert.Equal($"{ext.Name}+1", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_QuotedExternalRef_RhsRoundTripsAsQualifiedForm()
+    {
+        // External + spaced sheet → quoted entire qualifier on emit.
+        var source = new StubCellSource("Sheet1")
+            .WithFormula("Sheet1!B1", "='[Other.xlsx]My Sheet'!A1+1");
+
+        var result = GatherEngine.Gather(source.Ref("Sheet1!B1"), source)!;
+
+        var ext = result.Bindings.Single(b => b.CellRef.IsExternal);
+        Assert.Equal("'[Other.xlsx]My Sheet'!A1", ext.Rhs);
+    }
+
+    [Fact]
     public void Gather_NamingMatchesIssueManualTestScenario()
     {
         // From issue 132 acceptance — combines sanitizer, cell-left, and

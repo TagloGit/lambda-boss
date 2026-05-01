@@ -6,10 +6,10 @@ namespace LambdaBoss;
 ///     The top-level Gather entry point. Walks the precedent graph, names
 ///     each cell, classifies it as input or step, rewrites step formulas
 ///     to refer to bindings, and emits a single <c>=LET(...)</c> formula
-///     equivalent to the sink-rooted calculation graph. PR 2 scope: PR 1's
-///     chain/branched DAG support plus full naming completeness — cell-above
-///     fallback to cell-left, sanitization via <see cref="LetNameSanitizer" />,
-///     and final-collision suffixing.
+///     equivalent to the sink-rooted calculation graph. PR 3 widens scope
+///     to cross-sheet and external-workbook refs: cross-sheet inputs render
+///     their RHS as a sheet-qualified address; external refs render their
+///     workbook tag and never recurse.
 /// </summary>
 public static class GatherEngine
 {
@@ -46,11 +46,17 @@ public static class GatherEngine
             string rhs;
             if (role == BindingRole.Input)
             {
-                rhs = cell.Ref.A1Address;
+                // Bare A1 for in-sheet refs, sheet-qualified otherwise,
+                // workbook-qualified for externals — DisplayAddress handles
+                // the quoting rules so the RHS round-trips cleanly.
+                rhs = cell.Ref.DisplayAddress(source.SinkSheet);
             }
             else
             {
-                rhs = CellRefExtractor.Rewrite(StripLeadingEquals(cell.Formula!), source.SinkSheet, nameByRef);
+                // The step's formula was extracted using its own sheet as
+                // the default; the rewrite needs that same default so refs
+                // resolve to the same CellRef keys the walker built.
+                rhs = CellRefExtractor.Rewrite(StripLeadingEquals(cell.Formula!), cell.Ref.Sheet, nameByRef);
             }
 
             var row = new BindingRow(cell.Ref, role, name, rhs);
@@ -129,6 +135,9 @@ public static class GatherEngine
 
     private static BindingRole ClassifyRole(WalkedCell cell, HashSet<CellRef> inScope)
     {
+        // External refs and missing-sheet refs surface here as null-formula
+        // cells (the source can't reach them) and so naturally classify as
+        // input — exactly what we want.
         if (cell.Formula == null)
             return BindingRole.Input;
         // A formula cell whose precedents are all out of scope (none of the
