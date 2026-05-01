@@ -900,8 +900,7 @@ public class GatherEngineTests
         // ref producing `a` wouldn't get caught).
         Assert.Equal("a_2*3", innerB.Rhs);
 
-        var stepB2 = result.Bindings.Single(
-            b => b.Source.A1Address == "B2" && b.Name != "a_2" && b.Name != "b");
+        var stepB2 = result.Bindings.Single(b => b.Source.A1Address == "B2" && b.Name != "a_2" && b.Name != "b");
         Assert.Equal("b+1", stepB2.Rhs);
 
         var parsed = LetParser.Parse(result.SynthesisedLet);
@@ -1102,8 +1101,7 @@ public class GatherEngineTests
 
         // Outer `doubled` row exists with the cell's preferred name;
         // the inner colliding binding got `doubled_2`.
-        var outerDoubled = result.Bindings.Single(
-            b => b.Source.A1Address == "B2" && b.Name == "doubled");
+        var outerDoubled = result.Bindings.Single(b => b.Source.A1Address == "B2" && b.Name == "doubled");
         Assert.Equal("doubled_2+1", outerDoubled.Rhs);
 
         var innerDoubled2 = result.Bindings.Single(b => b.Name == "doubled_2");
@@ -1141,12 +1139,12 @@ public class GatherEngineTests
         var result = GatherEngine.Gather(source.Ref("A1"), source);
 
         Assert.NotNull(result);
-        Assert.NotNull(result!.Diagnostic);
+        Assert.NotNull(result.Diagnostic);
         Assert.Equal(GatherDiagnosticKind.Cycle, result.Diagnostic!.Kind);
         Assert.Empty(result.Bindings);
         Assert.Empty(result.SynthesisedLet);
         var addresses = result.Diagnostic.Cells.Select(c => c.A1Address).ToHashSet();
-        Assert.Equal(new HashSet<string> { "A1", "B1" }, addresses);
+        Assert.Equal(["A1", "B1"], addresses);
     }
 
     [Fact]
@@ -1254,7 +1252,7 @@ public class GatherEngineTests
             source);
 
         Assert.NotNull(result);
-        Assert.NotNull(result!.Diagnostic);
+        Assert.NotNull(result.Diagnostic);
         Assert.Equal(GatherDiagnosticKind.MultipleSinks, result.Diagnostic!.Kind);
         Assert.Empty(result.Bindings);
         Assert.Empty(result.SynthesisedLet);
@@ -1277,7 +1275,7 @@ public class GatherEngineTests
             source);
 
         Assert.NotNull(result);
-        Assert.Null(result!.Diagnostic);
+        Assert.Null(result.Diagnostic);
         Assert.NotEmpty(result.Bindings);
     }
 
@@ -1296,7 +1294,7 @@ public class GatherEngineTests
             source);
 
         Assert.NotNull(result);
-        Assert.Null(result!.Diagnostic);
+        Assert.Null(result.Diagnostic);
     }
 
     [Fact]
