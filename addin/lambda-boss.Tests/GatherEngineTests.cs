@@ -1611,7 +1611,7 @@ public class GatherEngineTests
 
         var initial = GatherEngine.Gather(source.Ref("C1"), source)!;
         var states = initial.Bindings
-            .Select(b => new RowState(b.Source, true))
+            .Select(b => new RowState(b.Source))
             .ToList();
 
         var recomputed = GatherEngine.Recompute(
@@ -1637,8 +1637,8 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1")), false),
+            new RowState(new FormulaRef(source.Ref("B1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -1668,8 +1668,8 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false)
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -1698,10 +1698,10 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("D1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false),
+            new RowState(new FormulaRef(source.Ref("C1"))),
+            new RowState(new FormulaRef(source.Ref("D1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("E1"), new[] { source.Ref("E1") }, source, states)!;
@@ -1749,8 +1749,8 @@ public class GatherEngineTests
         // still rendered (the dialog snapshot keeps it visible).
         var dropped = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false)
         })!;
         Assert.Empty(dropped.Bindings);
 
@@ -1758,8 +1758,8 @@ public class GatherEngineTests
         // else is excluded. Bindings come back in topological order.
         var restored = GatherEngine.Recompute(sink, selection, source, new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")))
         })!;
 
         Assert.Equal(initial.SynthesisedLet, restored.SynthesisedLet);
@@ -1783,9 +1783,9 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false),
+            new RowState(new FormulaRef(source.Ref("C1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("D1"), new[] { source.Ref("D1") }, source, states)!;
@@ -1818,8 +1818,8 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1")), false),
+            new RowState(new FormulaRef(source.Ref("B1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
@@ -1841,7 +1841,7 @@ public class GatherEngineTests
         var rangeRef = new FormulaRef(source.Ref("A1"), source.Ref("A3"));
         var states = new[]
         {
-            new RowState(rangeRef, Include: false),
+            new RowState(rangeRef, false)
         };
         var result = GatherEngine.Recompute(
             source.Ref("B1"), new[] { source.Ref("B1") }, source, states)!;
@@ -1867,14 +1867,357 @@ public class GatherEngineTests
 
         var states = new[]
         {
-            new RowState(new FormulaRef(source.Ref("A1")), Include: true),
-            new RowState(new FormulaRef(source.Ref("B1")), Include: false),
-            new RowState(new FormulaRef(source.Ref("C1")), Include: true),
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("B1")), false),
+            new RowState(new FormulaRef(source.Ref("C1")))
         };
         var result = GatherEngine.Recompute(
             source.Ref("D1"), new[] { source.Ref("D1") }, source, states)!;
 
         var parsed = LetParser.Parse(result.SynthesisedLet);
         Assert.NotEmpty(parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_LeafInputWithFormula_HasCanToggleRoleTrue()
+    {
+        // A1 = =SEQUENCE(30) (no in-scope refs) → naturally an Input
+        // binding. The cell HAS a formula, so the dialog should expose
+        // the role toggle (CanToggleRole=true) for promote-to-step.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(30)")
+            .WithFormula("B1", "=SUM(A1)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.True(aRow.CanToggleRole);
+    }
+
+    [Fact]
+    public void Gather_LiteralLeafInput_HasCanToggleRoleFalse()
+    {
+        // A1 has no formula (literal value or empty cell) → naturally an
+        // Input binding. There's nothing to bake into a step RHS, so
+        // CanToggleRole must be false and the dialog hides the toggle.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.False(aRow.CanToggleRole);
+    }
+
+    [Fact]
+    public void Gather_StepRow_HasCanToggleRoleTrue()
+    {
+        // A step row by definition has a formula — the toggle is always
+        // available so the user can demote to input.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, bRow.Role);
+        Assert.True(bRow.CanToggleRole);
+    }
+
+    [Fact]
+    public void Gather_RangeBinding_CannotToggleRole()
+    {
+        // Range-promoted inputs have no formula behind them — promotion
+        // is meaningless. CanToggleRole stays false so the dialog hides
+        // the toggle for range rows.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=SUM(A1:A3)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        var rangeRow = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal(BindingRole.Input, rangeRow.Role);
+        Assert.False(rangeRow.CanToggleRole);
+    }
+
+    [Fact]
+    public void Recompute_PromoteLeafInputWithStandaloneFormula_RhsBecomesFormula()
+    {
+        // Acceptance scenario: a leaf input whose formula has no in-scope
+        // refs (=SEQUENCE(30)) gets promoted. The binding's RHS flips
+        // from the cell-ref to the rewritten formula; nothing new is
+        // pulled into the walk because the formula has no cell refs to
+        // chase.
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(30)")
+            .WithFormula("B1", "=SUM(A1)");
+        var sink = source.Ref("B1");
+        var selection = new[] { sink };
+
+        var initial = GatherEngine.Gather(sink, source)!;
+        var aRowInitial = initial.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRowInitial.Role);
+        Assert.Equal("A1", aRowInitial.Rhs);
+
+        var states = new[]
+        {
+            new RowState(
+                new FormulaRef(source.Ref("A1")),
+                true,
+                BindingRole.Step)
+        };
+        var promoted = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        var aRow = promoted.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Step, aRow.Role);
+        Assert.Equal("SEQUENCE(30)", aRow.Rhs);
+        // Single binding: A1 (now a step). No new precedents pulled in.
+        Assert.Single(promoted.Bindings);
+
+        var parsed = LetParser.Parse(promoted.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("SEQUENCE(30)", parsed.Bindings[0].RhsText);
+    }
+
+    [Fact]
+    public void Recompute_PromoteLeafInputWithCellRef_PullsInPrecedent()
+    {
+        // Acceptance scenario: promote a leaf input whose formula
+        // references a cell that wasn't in the walk. The walker pulls
+        // the new cell in as an additional input row. We set this up by
+        // first demoting B1 (which orphans A1), then promoting B1 — A1
+        // reappears as a fresh input via the re-walk through B1's
+        // formula refs.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=SEQUENCE(A1)")
+            .WithFormula("C1", "=SUM(B1)");
+        var sink = source.Ref("C1");
+        var selection = new[] { sink };
+
+        var demoted = GatherEngine.Recompute(sink, selection, source, new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Input)
+        })!;
+        // Sanity: B1 demoted → A1 orphaned, no longer in bindings.
+        Assert.DoesNotContain(demoted.Bindings, b => b.Source.A1Address == "A1");
+        var bDemoted = demoted.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Input, bDemoted.Role);
+
+        // Now promote B1 back to step — A1 should re-enter the walk as
+        // a leaf input because B1's formula references it.
+        var promoted = GatherEngine.Recompute(sink, selection, source, new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Step)
+        })!;
+        var bPromoted = promoted.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Step, bPromoted.Role);
+        // A1 is back as a fresh input — the promotion walked into B1's
+        // formula refs and pulled A1 into scope.
+        var aRow = promoted.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        // B1's RHS rewrites the bare A1 ref to A1's binding name.
+        Assert.Equal($"SEQUENCE({aRow.Name})", bPromoted.Rhs);
+    }
+
+    [Fact]
+    public void Recompute_DemoteStepWithOnePrecedent_OrphansPrecedent()
+    {
+        // Acceptance scenario: A1 (literal) → B1=A1*2 → C1=B1+1 (sink).
+        // Demoting B1 to input drops A1 (orphan, only reachable via B1).
+        // B1's RHS becomes the bare cell-ref; the sink body still uses
+        // B1's binding name.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+        var sink = source.Ref("C1");
+        var selection = new[] { sink };
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Input)
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        Assert.DoesNotContain(result.Bindings, b => b.Source.A1Address == "A1");
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Input, bRow.Role);
+        Assert.Equal("B1", bRow.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal(bRow.Name, parsed.Bindings[0].Name);
+        Assert.Equal("B1", parsed.Bindings[0].RhsText);
+        Assert.Equal($"{bRow.Name}+1", parsed.Body);
+    }
+
+    [Fact]
+    public void Recompute_DemoteStepWithTwoPrecedents_OrphansBoth()
+    {
+        // Acceptance scenario: A1 + C1 (literals) feed B1 = A1+C1, B1
+        // feeds D1 (sink). Demoting B1 to input drops both A1 and C1
+        // (both reachable only via B1).
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1+C1")
+            .WithFormula("D1", "=B1*10");
+        var sink = source.Ref("D1");
+        var selection = new[] { sink };
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(new FormulaRef(source.Ref("C1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Input)
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        var addrs = result.Bindings.Select(b => b.Source.A1Address).ToHashSet();
+        Assert.DoesNotContain("A1", addrs);
+        Assert.DoesNotContain("C1", addrs);
+        var bRow = result.Bindings.Single(b => b.Source.A1Address == "B1");
+        Assert.Equal(BindingRole.Input, bRow.Role);
+        Assert.Equal("B1", bRow.Rhs);
+    }
+
+    [Fact]
+    public void Recompute_PromoteThenDemote_RoundTripRestoresOriginalState()
+    {
+        // Promote B1 to step (was Step naturally, so this is a no-op
+        // override), then demote it back. The final state should match
+        // the original Gather output. Verifies role overrides compose
+        // statelessly via Recompute.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+1");
+        var sink = source.Ref("C1");
+        var selection = new[] { sink };
+
+        var initial = GatherEngine.Gather(sink, source)!;
+
+        // Demote B1 to input.
+        var demoted = GatherEngine.Recompute(sink, selection, source, new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Input)
+        })!;
+        Assert.DoesNotContain(demoted.Bindings, b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input,
+            demoted.Bindings.Single(b => b.Source.A1Address == "B1").Role);
+
+        // Promote B1 back to step. The override override flips to Step.
+        var restored = GatherEngine.Recompute(sink, selection, source, new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Step)
+        })!;
+
+        // Round-trip restored: same LET, same binding count, same
+        // address set as the initial gather.
+        Assert.Equal(initial.SynthesisedLet, restored.SynthesisedLet);
+        var initialAddrs = initial.Bindings
+            .Select(b => b.Source.A1Address).OrderBy(s => s).ToList();
+        var restoredAddrs = restored.Bindings
+            .Select(b => b.Source.A1Address).OrderBy(s => s).ToList();
+        Assert.Equal(initialAddrs, restoredAddrs);
+    }
+
+    [Fact]
+    public void Recompute_DemoteStep_LetRoundTripsThroughLetParser()
+    {
+        // Round-trip safety on the demote path: the synthesised LET must
+        // still parse cleanly even when a step has been demoted to input.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2")
+            .WithFormula("C1", "=B1+10");
+
+        var states = new[]
+        {
+            new RowState(new FormulaRef(source.Ref("A1"))),
+            new RowState(
+                new FormulaRef(source.Ref("B1")),
+                true,
+                BindingRole.Input)
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("C1"), new[] { source.Ref("C1") }, source, states)!;
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.NotEmpty(parsed.Body);
+    }
+
+    [Fact]
+    public void Recompute_PromoteOverrideOnLiteralCell_IgnoredDefensively()
+    {
+        // A1 has no formula in the source (literal). The dialog should
+        // never offer the promote toggle — CanToggleRole=false — but if
+        // a stale RowState arrives with RoleOverride=Step, the engine
+        // ignores it rather than emitting an empty RHS.
+        var source = new StubCellSource()
+            .WithFormula("B1", "=A1*2");
+
+        var states = new[]
+        {
+            new RowState(
+                new FormulaRef(source.Ref("A1")),
+                true,
+                BindingRole.Step)
+        };
+        var result = GatherEngine.Recompute(
+            source.Ref("B1"), new[] { source.Ref("B1") }, source, states)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Input, aRow.Role);
+        Assert.Equal("A1", aRow.Rhs);
+    }
+
+    [Fact]
+    public void Recompute_PromoteSpillingLeafInput_RhsBecomesFormula()
+    {
+        // A1 = =SEQUENCE(5) (spilling), B1 = =SUM(A1#) (sink). A1 is
+        // naturally an Input with RHS `A1#`. Promoting A1 bakes the
+        // formula in: RHS becomes `SEQUENCE(5)` (no `#` — array
+        // semantics flow through the formula itself).
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(5)")
+            .WithSpill("A1")
+            .WithFormula("B1", "=SUM(A1#)");
+        var sink = source.Ref("B1");
+        var selection = new[] { sink };
+
+        var states = new[]
+        {
+            new RowState(
+                new FormulaRef(source.Ref("A1")),
+                true,
+                BindingRole.Step)
+        };
+        var result = GatherEngine.Recompute(sink, selection, source, states)!;
+
+        var aRow = result.Bindings.Single(b => b.Source.A1Address == "A1");
+        Assert.Equal(BindingRole.Step, aRow.Role);
+        Assert.Equal("SEQUENCE(5)", aRow.Rhs);
     }
 }

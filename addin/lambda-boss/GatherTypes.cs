@@ -182,19 +182,26 @@ public sealed record FormulaRef(CellRef Start, CellRef? End = null)
 
 /// <summary>
 ///     A cell discovered by <see cref="CellGraphWalker" />. The
-///     <see cref="Formula" /> is null when the cell holds a literal value or
-///     is unreachable (external workbook ref, missing sheet) — both treated
-///     as leaf inputs. <see cref="CellAboveText" /> and
-///     <see cref="CellLeftText" /> are the text of the cells directly above
-///     and to the left on the cell's own sheet, null when out of range,
-///     empty, or non-string. <see cref="Precedents" /> mixes single-cell and
-///     range refs; the walker only recurses into single-cell precedents.
-///     <see cref="HasSpill" /> reflects <see cref="ICellSource.HasSpill" />
-///     for the cell's own anchor — true when the formula spills into a
-///     dynamic-array range. The engine uses it only to suffix <c>#</c> on
-///     the RHS of a spilling input so the binding represents the whole
-///     array; spilling cells with in-scope precedents are still steps
-///     whose RHS is the rewritten formula.
+///     <see cref="Formula" /> is null when the cell holds a literal value,
+///     is unreachable (external workbook ref, missing sheet), or has been
+///     leaf-restricted by the selection (PR 9) or demoted by the user (PR
+///     11) — all treated as leaf inputs in the immediate walk.
+///     <see cref="HasSourceFormula" /> reports the underlying source state
+///     independent of restriction or demotion: true iff the cell has a
+///     formula in the workbook. The engine uses it (PR 11) to flag cells
+///     that can't be promoted to step (no formula → no RHS to bake) so
+///     the dialog can hide the role toggle. <see cref="CellAboveText" />
+///     and <see cref="CellLeftText" /> are the text of the cells directly
+///     above and to the left on the cell's own sheet, null when out of
+///     range, empty, or non-string. <see cref="Precedents" /> mixes
+///     single-cell and range refs; the walker only recurses into
+///     single-cell precedents. <see cref="HasSpill" /> reflects
+///     <see cref="ICellSource.HasSpill" /> for the cell's own anchor —
+///     true when the formula spills into a dynamic-array range. The
+///     engine uses it only to suffix <c>#</c> on the RHS of a spilling
+///     input so the binding represents the whole array; spilling cells
+///     with in-scope precedents are still steps whose RHS is the
+///     rewritten formula.
 /// </summary>
 public sealed record WalkedCell(
     CellRef Ref,
@@ -202,32 +209,37 @@ public sealed record WalkedCell(
     string? CellAboveText,
     string? CellLeftText,
     IReadOnlyList<FormulaRef> Precedents,
-    bool HasSpill = false);
+    bool HasSpill = false,
+    bool HasSourceFormula = false);
 
 /// <summary>
-///     A finalised LET binding row in PR 1's read-only dialog. PR 2 onwards
-///     will allow the user to edit <see cref="Name" /> and toggle role. The
-///     <see cref="Source" /> is a single cell for cell-derived bindings and
-///     a range for range-promoted leaves (PR 4). PR 10 adds
-///     <see cref="IsExpansion" />: rows produced by inlining an inner
-///     <c>=LET(...)</c> share their host cell's <see cref="Source" />, so
-///     they're indistinguishable from the host's own row by source alone —
-///     this flag lets the dialog hide the Include checkbox on the inner
-///     rows (the user toggles the host cell, and its inner rows follow).
+///     A finalised LET binding row. The <see cref="Source" /> is a single
+///     cell for cell-derived bindings and a range for range-promoted
+///     leaves (PR 4). PR 10 adds <see cref="IsExpansion" />: rows produced
+///     by inlining an inner <c>=LET(...)</c> share their host cell's
+///     <see cref="Source" />, so they're indistinguishable from the host's
+///     own row by source alone — this flag lets the dialog hide the
+///     Include checkbox on the inner rows (the user toggles the host
+///     cell, and its inner rows follow). PR 11 adds
+///     <see cref="CanToggleRole" />: false for ranges (no formula to
+///     bake), inner-LET expansions (host owns the role), and inputs whose
+///     underlying cell has no formula in the source (literal value);
+///     true for everything else, where the dialog renders the
+///     promote/demote toggle.
 /// </summary>
 public sealed record BindingRow(
     FormulaRef Source,
     BindingRole Role,
     string Name,
     string Rhs,
-    bool IsExpansion = false);
+    bool IsExpansion = false,
+    bool CanToggleRole = false);
 
 /// <summary>
 ///     Per-row state passed to <see cref="GatherEngine.Recompute" /> by the
-///     dialog (PR 10). Carries the binding's <see cref="Source" /> — the
-///     ref the row represents — plus the user's Include choice. PR 11/12
-///     will extend this with role and name overrides; for now Include is
-///     the only field that affects engine output.
+///     dialog. Carries the binding's <see cref="Source" /> — the ref the
+///     row represents — plus the user's Include choice (PR 10) and an
+///     optional role override (PR 11). PR 12 will add a name override.
 ///
 ///     A row state with <see cref="Include" /> = false drops the matching
 ///     ref from the LET: the binding disappears, any precedents reachable
@@ -235,8 +247,27 @@ public sealed record BindingRow(
 ///     cell in any calling step's formula stay as literal cell-refs (the
 ///     <see cref="CellRefExtractor.Rewrite" /> path leaves unmapped refs
 ///     untouched, which is exactly the spec behaviour).
+///
+///     <see cref="RoleOverride" /> forces the row's classification when
+///     non-null, overriding the engine's natural input/step decision.
+///     <c>Step</c> on a cell that would naturally be an input promotes it:
+///     the cell's formula becomes the binding's RHS (with in-scope refs
+///     rewritten) and any precedents the formula references are pulled
+///     into the walk — including ones that were previously leaf-restricted
+///     by the selection. <c>Input</c> on a cell that would naturally be a
+///     step demotes it: the binding's RHS becomes the cell's address and
+///     the walker stops descending into the cell's precedents, so any
+///     precedents that were only reachable through this cell drop as
+///     orphans. Range refs and the sink itself ignore the override
+///     (ranges have no formula to bake; the sink is the LET body, not a
+///     binding row). Cells without a formula in the source ignore a
+///     <c>Step</c> override defensively — there's no formula to render
+///     as the RHS, so the dialog hides the toggle in those rows.
 /// </summary>
-public sealed record RowState(FormulaRef Source, bool Include);
+public sealed record RowState(
+    FormulaRef Source,
+    bool Include = true,
+    BindingRole? RoleOverride = null);
 
 public enum BindingRole
 {
