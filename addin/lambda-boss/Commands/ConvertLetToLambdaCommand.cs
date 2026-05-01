@@ -28,7 +28,7 @@ internal static class ConvertLetToLambdaCommand
             }
 
             dynamic activeCell = app.ActiveCell;
-            string? formula = activeCell?.Formula as string;
+            string? formula = activeCell?.Formula2 as string;
 
             if (!LetParser.IsLetFormula(formula))
             {
