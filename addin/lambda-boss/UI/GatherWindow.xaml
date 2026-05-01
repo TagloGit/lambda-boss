@@ -79,42 +79,48 @@
                 Background="#252526"
                 BorderBrush="#3e3e3e"
                 BorderThickness="1"
-                MaxHeight="160">
+                MaxHeight="200">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="BindingsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="6,3">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="28" />
                                     <ColumnDefinition Width="56" />
                                     <ColumnDefinition Width="60" />
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
-                                <TextBlock Grid.Column="0"
+                                <CheckBox Grid.Column="0"
+                                          IsChecked="{Binding Include, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Visibility="{Binding IncludeCheckboxVisibility}"
+                                          VerticalAlignment="Center"
+                                          ToolTip="Include in the synthesised LET" />
+                                <TextBlock Grid.Column="1"
                                            Text="{Binding Address}"
                                            FontFamily="Consolas"
                                            FontSize="12"
-                                           Foreground="#9cdcfe"
+                                           Foreground="{Binding AddressBrush}"
                                            VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1"
+                                <TextBlock Grid.Column="2"
                                            Text="{Binding Role}"
                                            FontFamily="Consolas"
                                            FontSize="11"
-                                           Foreground="#808080"
+                                           Foreground="{Binding RoleBrush}"
                                            VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2"
+                                <TextBlock Grid.Column="3"
                                            Text="{Binding Name}"
                                            FontFamily="Consolas"
                                            FontSize="13"
-                                           Foreground="#dcdcaa"
+                                           Foreground="{Binding NameBrush}"
                                            VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="3"
+                                <TextBlock Grid.Column="4"
                                            Text="{Binding Rhs}"
                                            FontFamily="Consolas"
                                            FontSize="12"
-                                           Foreground="#cccccc"
+                                           Foreground="{Binding RhsBrush}"
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            ToolTip="{Binding Rhs}" />

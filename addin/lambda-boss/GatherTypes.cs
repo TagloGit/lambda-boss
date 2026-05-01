@@ -208,13 +208,35 @@ public sealed record WalkedCell(
 ///     A finalised LET binding row in PR 1's read-only dialog. PR 2 onwards
 ///     will allow the user to edit <see cref="Name" /> and toggle role. The
 ///     <see cref="Source" /> is a single cell for cell-derived bindings and
-///     a range for range-promoted leaves (PR 4).
+///     a range for range-promoted leaves (PR 4). PR 10 adds
+///     <see cref="IsExpansion" />: rows produced by inlining an inner
+///     <c>=LET(...)</c> share their host cell's <see cref="Source" />, so
+///     they're indistinguishable from the host's own row by source alone —
+///     this flag lets the dialog hide the Include checkbox on the inner
+///     rows (the user toggles the host cell, and its inner rows follow).
 /// </summary>
 public sealed record BindingRow(
     FormulaRef Source,
     BindingRole Role,
     string Name,
-    string Rhs);
+    string Rhs,
+    bool IsExpansion = false);
+
+/// <summary>
+///     Per-row state passed to <see cref="GatherEngine.Recompute" /> by the
+///     dialog (PR 10). Carries the binding's <see cref="Source" /> — the
+///     ref the row represents — plus the user's Include choice. PR 11/12
+///     will extend this with role and name overrides; for now Include is
+///     the only field that affects engine output.
+///
+///     A row state with <see cref="Include" /> = false drops the matching
+///     ref from the LET: the binding disappears, any precedents reachable
+///     only via the dropped cell also drop, and references to the dropped
+///     cell in any calling step's formula stay as literal cell-refs (the
+///     <see cref="CellRefExtractor.Rewrite" /> path leaves unmapped refs
+///     untouched, which is exactly the spec behaviour).
+/// </summary>
+public sealed record RowState(FormulaRef Source, bool Include);
 
 public enum BindingRole
 {

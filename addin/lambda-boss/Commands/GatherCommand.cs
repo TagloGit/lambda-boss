@@ -75,7 +75,25 @@ internal static class GatherCommand
 
                 dispatcher.Invoke(() =>
                 {
-                    var window = new GatherWindow(result);
+                    // Captured closure: PR 10's Recompute reuses the same
+                    // sink/selection/source that produced the initial
+                    // result, so the dialog only has to pass row state.
+                    // The closure runs on the UI thread alongside the
+                    // dialog (no thread marshalling needed).
+                    GatherResult? Recompute(IReadOnlyList<RowState> rows)
+                    {
+                        try
+                        {
+                            return GatherEngine.Recompute(sink, selection, source, rows);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error("Gather/Recompute", ex);
+                            return null;
+                        }
+                    }
+
+                    var window = new GatherWindow(result, Recompute);
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
 
