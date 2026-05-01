@@ -13,9 +13,9 @@ namespace LambdaBoss.Commands;
 ///     Slash-command handler for <c>/Gather</c>. Reads the active cell,
 ///     synthesises a single <c>=LET(...)</c> formula equivalent to the
 ///     calculation graph rooted there, and on Save writes the LET back to
-///     the sink. PR 1 scope: silent no-op when the active cell has no
-///     formula; chains and branched DAGs of formula cells on the sink's
-///     sheet supported.
+///     the sink. PR 3 scope: cross-sheet precedents are walked normally,
+///     external-workbook refs surface as leaf inputs whose RHS is the
+///     workbook-qualified address.
 /// </summary>
 internal static class GatherCommand
 {
@@ -42,7 +42,7 @@ internal static class GatherCommand
                 return;
 
             var sink = new CellRef(sheetName, sinkColumn, sinkRow);
-            var source = new LiveCellSource(worksheet, sheetName);
+            var source = new LiveCellSource(workbook, sheetName);
 
             GatherResult? result;
             try
@@ -109,17 +109,20 @@ internal static class GatherCommand
     }
 
     /// <summary>
-    ///     Live adapter over a single worksheet. PR 1 reads only from the
-    ///     sink's sheet — cross-sheet support lands in PR 3, where this
-    ///     adapter will need a workbook-scoped variant.
+    ///     Live adapter over the active workbook. Resolves
+    ///     <see cref="CellRef.Sheet" /> case-insensitively against the
+    ///     workbook's worksheets and returns null for external-workbook
+    ///     refs (we never reach into other workbooks) and for refs into
+    ///     sheets that aren't part of this workbook — both classify as
+    ///     leaf inputs upstream.
     /// </summary>
     private sealed class LiveCellSource : ICellSource
     {
-        private readonly dynamic _worksheet;
+        private readonly dynamic _workbook;
 
-        public LiveCellSource(dynamic worksheet, string sinkSheet)
+        public LiveCellSource(dynamic workbook, string sinkSheet)
         {
-            _worksheet = worksheet;
+            _workbook = workbook;
             SinkSheet = sinkSheet;
         }
 
@@ -127,39 +130,49 @@ internal static class GatherCommand
 
         public string? GetFormula(CellRef cell)
         {
+            if (cell.IsExternal)
+                return null;
+            var sheet = TryGetWorksheet(cell.Sheet);
+            if (sheet == null)
+                return null;
             try
             {
-                dynamic range = _worksheet.Cells[cell.Row, cell.Column];
+                dynamic range = sheet.Cells[cell.Row, cell.Column];
                 if ((bool)range.HasFormula)
                     return (string)range.Formula;
                 return null;
             }
             catch (Exception ex)
             {
-                Logger.Error($"Gather/GetFormula({cell.A1Address})", ex);
+                Logger.Error($"Gather/GetFormula({cell.Sheet}!{cell.A1Address})", ex);
                 return null;
             }
         }
 
         public string? GetCellAboveText(CellRef cell)
         {
-            if (cell.Row <= 1)
+            if (cell.IsExternal || cell.Row <= 1)
                 return null;
-            return ReadStringValue(cell.Row - 1, cell.Column, $"GetCellAboveText({cell.A1Address})");
+            return ReadStringValue(cell.Sheet, cell.Row - 1, cell.Column,
+                $"GetCellAboveText({cell.Sheet}!{cell.A1Address})");
         }
 
         public string? GetCellLeftText(CellRef cell)
         {
-            if (cell.Column <= 1)
+            if (cell.IsExternal || cell.Column <= 1)
                 return null;
-            return ReadStringValue(cell.Row, cell.Column - 1, $"GetCellLeftText({cell.A1Address})");
+            return ReadStringValue(cell.Sheet, cell.Row, cell.Column - 1,
+                $"GetCellLeftText({cell.Sheet}!{cell.A1Address})");
         }
 
-        private string? ReadStringValue(int row, int column, string context)
+        private string? ReadStringValue(string sheetName, int row, int column, string context)
         {
+            var sheet = TryGetWorksheet(sheetName);
+            if (sheet == null)
+                return null;
             try
             {
-                dynamic range = _worksheet.Cells[row, column];
+                dynamic range = sheet.Cells[row, column];
                 var value = range.Value2;
                 if (value is string s && !string.IsNullOrEmpty(s))
                     return s;
@@ -168,6 +181,22 @@ internal static class GatherCommand
             catch (Exception ex)
             {
                 Logger.Error($"Gather/{context}", ex);
+                return null;
+            }
+        }
+
+        // The COM Worksheets[name] indexer throws when the name is missing;
+        // catching the exception is the cheapest "does this sheet exist?"
+        // probe. Walking the collection by index is also valid but pays a
+        // round-trip per sheet.
+        private dynamic? TryGetWorksheet(string sheetName)
+        {
+            try
+            {
+                return _workbook.Worksheets[sheetName];
+            }
+            catch
+            {
                 return null;
             }
         }

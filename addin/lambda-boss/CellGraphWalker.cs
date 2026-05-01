@@ -4,9 +4,12 @@ namespace LambdaBoss;
 ///     Walks the precedent graph rooted at a sink cell. Discovery uses
 ///     <see cref="ICellSource" /> for cell-shape lookups and
 ///     <see cref="CellRefExtractor" /> to find precedents inside formulas.
-///     PR 1 scope: single sheet, no ranges, no spills, no cycle handling.
+///     PR 3 widens scope to all sheets in the active workbook: cross-sheet
+///     refs are walked normally; external-workbook refs surface as leaves
+///     because <see cref="ICellSource.GetFormula" /> returns null for them.
 ///     The returned cells are in topological order (precedents before
-///     dependents) with the sink as the final entry.
+///     dependents) with the sink as the final entry. PR 7 layers cycle
+///     detection on top.
 /// </summary>
 internal static class CellGraphWalker
 {
@@ -35,7 +38,11 @@ internal static class CellGraphWalker
             }
             else
             {
-                precedents = CellRefExtractor.Extract(formula, source.SinkSheet);
+                // Unqualified refs in this cell's formula resolve against
+                // its OWN sheet, not the sink's — otherwise crossing into
+                // Sheet1 from a sink on Sheet2 would mis-route Sheet1's
+                // internal `B1` references back to Sheet2.
+                precedents = CellRefExtractor.Extract(formula, cell.Sheet);
             }
 
             byRef[cell] = new WalkedCell(cell, formula, cellAbove, cellLeft, precedents);
