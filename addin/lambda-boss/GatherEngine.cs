@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace LambdaBoss;
 
@@ -137,6 +138,21 @@ public static class GatherEngine
                     StripLeadingEquals(formulaText), cell.Ref.Sheet, nameByRef);
             }
 
+            // Alias elimination: a step whose rewritten RHS is just a
+            // bare existing binding name (e.g. `=A1` rewrites to
+            // `numbers` when A1 already binds to `numbers`) is a no-op
+            // rebind. Drop the row and redirect this cell's outer name
+            // to the alias target so downstream cells (and the sink
+            // body) rewrite their refs straight through. The cell's
+            // original name remains in `used` — harmless, just ensures
+            // it can't be claimed by a later inner-LET binding.
+            var stepAlias = TryGetBareIdentifier(stepRhs);
+            if (stepAlias != null && used.Contains(stepAlias))
+            {
+                nameByRef[cellFormulaRef] = stepAlias;
+                continue;
+            }
+
             stepRows.Add(new BindingRow(cellFormulaRef, BindingRole.Step, name, stepRhs));
         }
 
@@ -145,8 +161,25 @@ public static class GatherEngine
         // synthesised LET.
         bindings.AddRange(stepRows);
 
-        var bodyText = CellRefExtractor.Rewrite(
-            StripLeadingEquals(sinkFormula), source.SinkSheet, nameByRef);
+        // Sink itself can be a LET. Expand it inline — its bindings
+        // splice in after the step rows and its inner body becomes the
+        // outer LET's body. Without this, a `=LET(...)` sink would emit
+        // the inner LET nested inside the synthesised outer LET, which
+        // works but defeats the point of gathering. Same alias-elimination
+        // rules apply via ExpandNestedLet.
+        string bodyText;
+        if (IsPureLetFormula(sinkFormula))
+        {
+            var (sinkInnerRows, innerBody) = ExpandNestedLet(
+                sinkFormula, new FormulaRef(sink), sink.Sheet, used, nameByRef);
+            bindings.AddRange(sinkInnerRows);
+            bodyText = innerBody;
+        }
+        else
+        {
+            bodyText = CellRefExtractor.Rewrite(
+                StripLeadingEquals(sinkFormula), source.SinkSheet, nameByRef);
+        }
 
         var sb = new StringBuilder();
         sb.Append('=');
@@ -326,16 +359,29 @@ public static class GatherEngine
 
         foreach (var binding in parsed.Bindings)
         {
-            var finalName = ResolveCollision(binding.Name, used);
-            if (!string.Equals(finalName, binding.Name, StringComparison.OrdinalIgnoreCase))
-                innerRenames[binding.Name] = finalName;
-            used.Add(finalName);
-
             // Apply inner renames first so a later cell-rewrite that
             // produces a token coincidentally matching an inner name isn't
             // captured by the rename pass.
             var rhs = ApplyInnerRenames(binding.RhsText, innerRenames);
             rhs = CellRefExtractor.Rewrite(rhs, defaultSheet, nameByRef);
+
+            // Alias elimination: if the rewritten RHS is exactly an
+            // existing outer binding name, the inner binding is a no-op
+            // rebind. Skip emitting a row and propagate the alias via
+            // the rename map so subsequent inner RHSes and the body
+            // collapse straight to the target name. Don't claim the
+            // original inner name in `used` — it's not a binding anymore.
+            var alias = TryGetBareIdentifier(rhs);
+            if (alias != null && used.Contains(alias))
+            {
+                innerRenames[binding.Name] = alias;
+                continue;
+            }
+
+            var finalName = ResolveCollision(binding.Name, used);
+            if (!string.Equals(finalName, binding.Name, StringComparison.OrdinalIgnoreCase))
+                innerRenames[binding.Name] = finalName;
+            used.Add(finalName);
 
             // The inner binding's role mirrors its RHS shape: a pure
             // value/reference is an input, a calculation is a step.
@@ -359,6 +405,28 @@ public static class GatherEngine
         while (used.Contains($"{baseName}_{suffix}"))
             suffix++;
         return $"{baseName}_{suffix}";
+    }
+
+    private static readonly Regex BareIdentifierPattern = new(
+        @"^[A-Za-z_][A-Za-z0-9_.]*$",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     Returns the trimmed text if it is exactly a bare Excel-name
+    ///     identifier (the same shape <see cref="LetParser" /> validates
+    ///     binding names against); otherwise null. Used by the alias-
+    ///     elimination passes — a binding/step whose RHS reduces to a
+    ///     single existing binding name is a no-op rebind that the
+    ///     engine collapses by propagating the rename.
+    /// </summary>
+    private static string? TryGetBareIdentifier(string text)
+    {
+        if (string.IsNullOrEmpty(text))
+            return null;
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0)
+            return null;
+        return BareIdentifierPattern.IsMatch(trimmed) ? trimmed : null;
     }
 
     /// <summary>

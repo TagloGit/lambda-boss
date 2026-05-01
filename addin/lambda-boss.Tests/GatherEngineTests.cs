@@ -932,6 +932,128 @@ public class GatherEngineTests
     }
 
     [Fact]
+    public void Gather_SinkIsLet_InlinedRatherThanNested()
+    {
+        // The sink itself is a `=LET(...)`. The synthesised outer LET
+        // must splice the inner bindings in and use the inner body —
+        // NOT emit the sink's LET nested inside the outer body. (Naive
+        // implementations leave the sink LET verbatim because the body
+        // path only does cell-ref rewriting.)
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B1", "=LET(doubled, A2*2, doubled+1)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        // The body of the synthesised LET must be `doubled+1`, not the
+        // original nested `LET(doubled, ...)` text.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("doubled+1", parsed.Body);
+
+        // Bindings: numbers (input from A2), doubled (inner step from
+        // sink LET, with A2 rewritten to `numbers`).
+        Assert.Equal(2, parsed.Bindings.Count);
+        Assert.Equal("numbers", parsed.Bindings[0].Name);
+        Assert.Equal("A2", parsed.Bindings[0].RhsText);
+        Assert.Equal("doubled", parsed.Bindings[1].Name);
+        Assert.Equal("numbers*2", parsed.Bindings[1].RhsText);
+    }
+
+    [Fact]
+    public void Gather_SinkLetWithCollidingInnerName_AutoSuffixed()
+    {
+        // Sink LET's inner binding `numbers` collides with outer A2's
+        // `numbers` and renames to `numbers_2`.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B1", "=LET(numbers, A2*2, numbers+1)");
+
+        var result = GatherEngine.Gather(source.Ref("B1"), source)!;
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("numbers", parsed.Bindings[0].Name);
+        Assert.Equal("numbers_2", parsed.Bindings[1].Name);
+        Assert.Equal("numbers*2", parsed.Bindings[1].RhsText);
+        Assert.Equal("numbers_2+1", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_NestedLetBindingIsBareCellRef_NoOpAliasEliminated()
+    {
+        // Inner LET `=LET(in, A2, in*2)` aliases `in` to A2. After
+        // rewriting `A2` to its outer binding name `numbers`, the inner
+        // `in` row would be `in, numbers` — a no-op rebind. The engine
+        // drops the row and propagates `in` → `numbers` through the
+        // body so the synthesised LET stays terse.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithFormula("B2", "=LET(in, A2, in*2)")
+            .WithFormula("C2", "=B2+1");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        // No `in` row in the result.
+        Assert.DoesNotContain(result.Bindings, b => b.Name == "in");
+
+        // The step row for B2 inlines `numbers*2` directly.
+        var stepB2 = result.Bindings.Single(b => b.Source.A1Address == "B2");
+        Assert.Equal("numbers*2", stepB2.Rhs);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.DoesNotContain(parsed.Bindings, b => b.Name == "in");
+    }
+
+    [Fact]
+    public void Gather_StepFormulaIsBareCellRef_NoOpAliasEliminated()
+    {
+        // Outer step cell whose formula is just `=A2` — a bare cell-ref
+        // alias. After rewriting, the step's RHS is `numbers` (A2's
+        // outer binding), making the row a no-op rebind. Drop the row
+        // and redirect downstream references to `numbers` directly.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithLabel("B1", "Alias")
+            .WithFormula("B2", "=A2")
+            .WithFormula("C2", "=B2+10");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source)!;
+
+        // No `alias` row — eliminated.
+        Assert.DoesNotContain(result.Bindings, b => b.Name == "alias");
+
+        // Body references `numbers` directly, skipping the indirection.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("numbers+10", parsed.Body);
+    }
+
+    [Fact]
+    public void Gather_ChainedAliasSteps_AllCollapseToOriginalBinding()
+    {
+        // A chain of pure-alias steps should all collapse: B2=A2,
+        // C2=B2, D2=C2+1 (sink). Both intermediate aliases drop and
+        // the body rewrites D2's reference to C2 straight to `numbers`.
+        var source = new StubCellSource()
+            .WithLabel("A1", "Numbers")
+            .WithLabel("B1", "First")
+            .WithLabel("C1", "Second")
+            .WithFormula("B2", "=A2")
+            .WithFormula("C2", "=B2")
+            .WithFormula("D2", "=C2+1");
+
+        var result = GatherEngine.Gather(source.Ref("D2"), source)!;
+
+        // Only the `numbers` input remains; `first` and `second` were
+        // alias-eliminated.
+        Assert.DoesNotContain(result.Bindings, b => b.Name == "first");
+        Assert.DoesNotContain(result.Bindings, b => b.Name == "second");
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Single(parsed.Bindings);
+        Assert.Equal("numbers", parsed.Bindings[0].Name);
+        Assert.Equal("numbers+1", parsed.Body);
+    }
+
+    [Fact]
     public void Gather_NestedLet_RoundTripsThroughLetParser()
     {
         // PR 6 acceptance: round-trip safety. Synthesised LET parses
