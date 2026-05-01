@@ -17,6 +17,15 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
     /// <summary>True for refs into an external workbook.</summary>
     public bool IsExternal => ExternalWorkbook != null;
 
+    public bool Equals(CellRef? other)
+    {
+        return other is not null
+               && string.Equals(Sheet, other.Sheet, StringComparison.OrdinalIgnoreCase)
+               && Column == other.Column
+               && Row == other.Row
+               && string.Equals(ExternalWorkbook, other.ExternalWorkbook, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     ///     The form to emit as a LET binding RHS when the LET lives on
     ///     <paramref name="hostSheet" />. In-sheet refs render bare;
@@ -27,7 +36,6 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
     {
         if (IsExternal)
         {
-            var sheetPart = SheetPartForQualifiedRef(Sheet);
             var wb = ExternalWorkbook!;
             // If either the workbook or sheet needs quoting, the entire
             // qualifier goes inside one set of single quotes around
@@ -36,6 +44,7 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
                 return $"'[{wb}]{EscapeQuotes(Sheet)}'!{A1Address}";
             return $"[{wb}]{Sheet}!{A1Address}";
         }
+
         if (string.Equals(Sheet, hostSheet, StringComparison.OrdinalIgnoreCase))
             return A1Address;
         if (NeedsQuotes(Sheet))
@@ -43,14 +52,10 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
         return $"{Sheet}!{A1Address}";
     }
 
-    public override string ToString() => A1Address;
-
-    public bool Equals(CellRef? other) =>
-        other is not null
-        && string.Equals(Sheet, other.Sheet, StringComparison.OrdinalIgnoreCase)
-        && Column == other.Column
-        && Row == other.Row
-        && string.Equals(ExternalWorkbook, other.ExternalWorkbook, StringComparison.OrdinalIgnoreCase);
+    public override string ToString()
+    {
+        return A1Address;
+    }
 
     public override int GetHashCode()
     {
@@ -74,6 +79,7 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
             letters = (char)('A' + n % 26) + letters;
             n /= 26;
         }
+
         return letters;
     }
 
@@ -86,8 +92,9 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
         {
             if (!char.IsLetter(c))
                 throw new ArgumentException($"Invalid column letter: '{c}'.", nameof(letters));
-            col = col * 26 + (char.ToUpperInvariant(c) - 'A' + 1);
+            col = col * 26 + (char.ToUpperInvariant(c) - 'A') + 1;
         }
+
         return col;
     }
 
@@ -106,17 +113,15 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
         if (char.IsDigit(name[0]))
             return true;
         foreach (var c in name)
-        {
             if (!char.IsLetterOrDigit(c) && c != '_' && c != '.')
                 return true;
-        }
         return false;
     }
 
-    private static string EscapeQuotes(string name) => name.Replace("'", "''");
-
-    private static string SheetPartForQualifiedRef(string sheet) =>
-        NeedsQuotes(sheet) ? EscapeQuotes(sheet) : sheet;
+    private static string EscapeQuotes(string name)
+    {
+        return name.Replace("'", "''");
+    }
 }
 
 /// <summary>
@@ -148,7 +153,7 @@ public sealed record BindingRow(
 public enum BindingRole
 {
     Input,
-    Step,
+    Step
 }
 
 /// <summary>

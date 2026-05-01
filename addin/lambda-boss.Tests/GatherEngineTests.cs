@@ -359,7 +359,7 @@ public class GatherEngineTests
         // External-workbook ref shows up as an input — we never reach into
         // the other workbook — and its RHS is the workbook-qualified
         // address, ready to evaluate when Excel rebinds it.
-        var source = new StubCellSource("Sheet1")
+        var source = new StubCellSource()
             .WithFormula("Sheet1!B1", "=[Other.xlsx]Sheet1!A1+1");
 
         var result = GatherEngine.Gather(source.Ref("Sheet1!B1"), source)!;
@@ -378,7 +378,7 @@ public class GatherEngineTests
     public void Gather_QuotedExternalRef_RhsRoundTripsAsQualifiedForm()
     {
         // External + spaced sheet → quoted entire qualifier on emit.
-        var source = new StubCellSource("Sheet1")
+        var source = new StubCellSource()
             .WithFormula("Sheet1!B1", "='[Other.xlsx]My Sheet'!A1+1");
 
         var result = GatherEngine.Gather(source.Ref("Sheet1!B1"), source)!;
@@ -407,10 +407,10 @@ public class GatherEngineTests
 
         var result = GatherEngine.Gather(source.Ref("C4"), source)!;
 
-        Assert.Equal("sales",   result.Bindings.Single(b => b.CellRef.A1Address == "B1").Name);
+        Assert.Equal("sales", result.Bindings.Single(b => b.CellRef.A1Address == "B1").Name);
         Assert.Equal("sales_2", result.Bindings.Single(b => b.CellRef.A1Address == "B2").Name);
         Assert.Equal("taxRate", result.Bindings.Single(b => b.CellRef.A1Address == "B3").Name);
-        Assert.Equal("total",   result.Bindings.Single(b => b.CellRef.A1Address == "B4").Name);
+        Assert.Equal("total", result.Bindings.Single(b => b.CellRef.A1Address == "B4").Name);
 
         // Sanity: synthesised LET round-trips and the body uses the step
         // binding name rather than the cell ref.

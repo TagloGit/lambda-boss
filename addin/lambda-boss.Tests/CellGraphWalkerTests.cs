@@ -127,7 +127,7 @@ public class CellGraphWalkerTests
         // External ref reaches the walker as a CellRef with ExternalWorkbook
         // set. The stub returns null for GetFormula on externals, so it
         // surfaces as a leaf with no precedents of its own.
-        var source = new StubCellSource("Sheet1")
+        var source = new StubCellSource()
             .WithFormula("Sheet1!B1", "=[Other.xlsx]Sheet1!A1+1");
 
         var walked = CellGraphWalker.Walk(source.Ref("Sheet1!B1"), source);
@@ -143,5 +143,8 @@ public class CellGraphWalkerTests
 
 internal static class WalkedCellExtensions
 {
-    public static string Sheet(this WalkedCell cell) => cell.Ref.Sheet;
+    public static string Sheet(this WalkedCell cell)
+    {
+        return cell.Ref.Sheet;
+    }
 }
