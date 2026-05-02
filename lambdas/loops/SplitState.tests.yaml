@@ -39,6 +39,27 @@ tests:
     args: ['=NewState()']
     expected: "(empty)"
 
+  - name: include headers prepends variable names row
+    args: ['=SetVars("cur", 1, "best", 5)', "=TRUE"]
+    expected:
+      - ["cur", "best"]
+      - [1, 5]
+
+  - name: include headers with column of states
+    args:
+      [
+        '=VSTACK(SetVars("a", 1, "b", 2), SetVars("a", 3, "b", 4))',
+        "=TRUE",
+      ]
+    expected:
+      - ["a", "b"]
+      - [1, 2]
+      - [3, 4]
+
+  - name: include headers FALSE matches default behaviour
+    args: ['=SetVars("cur", 1, "best", 5)', "=FALSE"]
+    expected: [[1, 5]]
+
   - name: help text
     args: []
     expected_type: array
