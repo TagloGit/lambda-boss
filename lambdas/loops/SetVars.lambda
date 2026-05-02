@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      SetVars
-    DESCRIPTION:*//**Builds a fresh state holding up to 5 named variables. Alternating positional pairs.*/
+    DESCRIPTION:*//**Builds a fresh state holding up to 10 named variables. Alternating positional pairs.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
+                        2026-05-02  Claude      Extend pair capacity from 5 to 10
 */
 SetVars = LAMBDA(
 //  Parameter Declarations
@@ -15,14 +16,24 @@ SetVars = LAMBDA(
     [v_4],
     [n_5],
     [v_5],
+    [n_6],
+    [v_6],
+    [n_7],
+    [v_7],
+    [n_8],
+    [v_8],
+    [n_9],
+    [v_9],
+    [n_10],
+    [v_10],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], [n_3], [v_3], [n_4], [v_4], [n_5], [v_5])¶" &
-                "DESCRIPTION:   →Builds a fresh state holding up to 5 named variables. Alternating positional pairs.¶" &
-                "VERSION:       →Apr 27 2026¶" &
+                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], ..., [n_10], [v_10])¶" &
+                "DESCRIPTION:   →Builds a fresh state holding up to 10 named variables. Alternating positional pairs.¶" &
+                "VERSION:       →May 02 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   n_1, v_1       →(Required) First name and value pair.¶" &
-                "   n_2..v_5       →(Optional) Up to four more name/value pairs.¶" &
+                "   n_2..v_10      →(Optional) Up to nine more name/value pairs.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=SetVars(""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
                 "Result         →state holding cur=1, best=1, ends=1¶" &
@@ -37,7 +48,12 @@ SetVars = LAMBDA(
         s_3, IF(ISOMITTED(n_3), s_2, SetVar(s_2, n_3, v_3)),
         s_4, IF(ISOMITTED(n_4), s_3, SetVar(s_3, n_4, v_4)),
         s_5, IF(ISOMITTED(n_5), s_4, SetVar(s_4, n_5, v_5)),
-        result, s_5,
+        s_6, IF(ISOMITTED(n_6), s_5, SetVar(s_5, n_6, v_6)),
+        s_7, IF(ISOMITTED(n_7), s_6, SetVar(s_6, n_7, v_7)),
+        s_8, IF(ISOMITTED(n_8), s_7, SetVar(s_7, n_8, v_8)),
+        s_9, IF(ISOMITTED(n_9), s_8, SetVar(s_8, n_9, v_9)),
+        s_10, IF(ISOMITTED(n_10), s_9, SetVar(s_9, n_10, v_10)),
+        result, s_10,
         IF(Help?, Help, result)
 )
 );

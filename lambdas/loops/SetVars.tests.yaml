@@ -11,6 +11,10 @@ tests:
     args: ["a", "=1", "b", "=2", "c", "=3", "d", "=4", "e", "=5"]
     expected: "a\x1En\x1E1\x1Fb\x1En\x1E2\x1Fc\x1En\x1E3\x1Fd\x1En\x1E4\x1Fe\x1En\x1E5"
 
+  - name: ten numeric pairs
+    args: ["a", "=1", "b", "=2", "c", "=3", "d", "=4", "e", "=5", "f", "=6", "g", "=7", "h", "=8", "i", "=9", "j", "=10"]
+    expected: "a\x1En\x1E1\x1Fb\x1En\x1E2\x1Fc\x1En\x1E3\x1Fd\x1En\x1E4\x1Fe\x1En\x1E5\x1Ff\x1En\x1E6\x1Fg\x1En\x1E7\x1Fh\x1En\x1E8\x1Fi\x1En\x1E9\x1Fj\x1En\x1E10"
+
   - name: numeric array uses gs separator
     args: ["arr", "={10;20;30}"]
     expected: "arr\x1En\x1E10\x1D20\x1D30"
