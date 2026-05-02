@@ -1,0 +1,48 @@
+/*  FUNCTION NAME:      REDUCEUNTIL
+    DESCRIPTION:*//**REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. fn signature: LAMBDA(state, current, i). stop signature: LAMBDA(state, i). Pairs with SetVars/GetVar for multi-variable accumulators.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+REDUCEUNTIL = LAMBDA(
+//  Parameter Declarations
+    [seed],
+    [cases],
+    [fn],
+    [stop],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →REDUCEUNTIL(seed, cases, fn, [stop])¶" &
+                "DESCRIPTION:   →REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. Returns the final state.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
+                "   cases          →(Required) Vertical array to iterate over.¶" &
+                "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
+                "   stop           →(Optional) LAMBDA(state, i) returning TRUE to halt. Default never stops (= REDUCEI).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetVar(REDUCEUNTIL(SetVars(""sum"", 0), {1;2;3;4;5}, LAMBDA(s, cur, i, SetVar(s, ""sum"", GetVar(s, ""sum"") + cur)), LAMBDA(s, i, GetVar(s, ""sum"") >= 6)), ""sum"")¶" &
+                "Result         →6 (stops after iteration 3 once sum hits 6)¶" &
+                "NOTE:          →Excel REDUCE has no real short-circuit — all n iterations execute, but pass through unchanged once BREAK is set. The current iteration index is also written to the state's meta block, accessible via GetIndex(finalState).",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        realStop, IF(ISOMITTED(stop), LAMBDA(s, i, FALSE), stop),
+        seedWithIdx, SetIndex(seed, 0),
+        result, REDUCE(seedWithIdx, cases, LAMBDA(state, current,
+                    LET(
+                        break?, GetBreak(state),
+                        IF(break?, state,
+                           LET(
+                               iter, GetIndex(state) + 1,
+                               sIdx, SetIndex(state, iter),
+                               newState, fn(sIdx, current, iter),
+                               IF(realStop(newState, iter), SetBreak(newState, TRUE), newState)
+                           )
+                        )
+                    )
+                )),
+        IF(Help?, Help, result)
+)
+);

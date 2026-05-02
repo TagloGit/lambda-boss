@@ -1,0 +1,35 @@
+/*  FUNCTION NAME:      SetBreak
+    DESCRIPTION:*//**Sets the helper-internal BREAK flag on a state's meta block. Creates the meta block if absent. Used by REDUCEUNTIL / REDUCEWHILE to halt iteration.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+SetBreak = LAMBDA(
+//  Parameter Declarations
+    [state],
+    [value],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SetBreak(state, value)¶" &
+                "DESCRIPTION:   →Sets the helper-internal BREAK flag on a state's meta block. Creates the meta block if absent.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string. May or may not already have a meta block.¶" &
+                "   value          →(Required) Boolean BREAK value. TRUE halts subsequent iterations in REDUCEUNTIL/WHILE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SetBreak(SetVars(""x"", 5), TRUE)¶" &
+                "Result         →state with BREAK=TRUE in the meta block; user variables unchanged¶" &
+                "NOTE:          →Internal helper used by REDUCEUNTIL / REDUCEWHILE. Users should not normally call this directly.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        fs, CHAR(28),
+        fsPos, IFERROR(FIND(fs, state), 0),
+        metaPart, IF(fsPos = 0, "", LEFT(state, fsPos - 1)),
+        userPart, IF(fsPos = 0, state, MID(state, fsPos + 1, LEN(state))),
+        newMeta, SetVar(metaPart, "BREAK", value),
+        result, newMeta & fs & userPart,
+        IF(Help?, Help, result)
+)
+);

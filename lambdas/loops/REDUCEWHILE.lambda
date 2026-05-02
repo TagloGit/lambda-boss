@@ -1,0 +1,34 @@
+/*  FUNCTION NAME:      REDUCEWHILE
+    DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. fn signature: LAMBDA(state, current, i). continue signature: LAMBDA(state, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+REDUCEWHILE = LAMBDA(
+//  Parameter Declarations
+    [seed],
+    [cases],
+    [fn],
+    [continue],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →REDUCEWHILE(seed, cases, fn, continue)¶" &
+                "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. Returns the final state.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
+                "   cases          →(Required) Vertical array to iterate over.¶" &
+                "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
+                "   continue       →(Required) LAMBDA(state, i) returning TRUE to keep going, FALSE to halt.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetVar(REDUCEWHILE(SetVars(""sum"", 0), {1;2;3;4;5}, LAMBDA(s, cur, i, SetVar(s, ""sum"", GetVar(s, ""sum"") + cur)), LAMBDA(s, i, GetVar(s, ""sum"") < 6)), ""sum"")¶" &
+                "Result         →6 (stops after iteration 3 once sum reaches 6)¶" &
+                "NOTE:          →Mechanically equivalent to REDUCEUNTIL with the predicate negated. Use whichever phrasing reads more naturally.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        result, REDUCEUNTIL(seed, cases, fn, LAMBDA(s, i, NOT(continue(s, i)))),
+        IF(Help?, Help, result)
+)
+);

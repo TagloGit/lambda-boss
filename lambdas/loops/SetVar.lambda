@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
                         2026-04-29  Claude      Add per-entry type tag (n/b/t)
+                        2026-05-02  Claude      Preserve helper meta block (FS-prefixed) when present
 */
 SetVar = LAMBDA(
 //  Parameter Declarations
@@ -13,7 +14,7 @@ SetVar = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →SetVar(state, name, value)¶" &
                 "DESCRIPTION:   →Sets or replaces a named variable (scalar or 1-D array) in a state string. Records the element type so GetVar returns native types.¶" &
-                "VERSION:       →Apr 29 2026¶" &
+                "VERSION:       →May 02 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   state          →(Required) Current state string. Use NewState() to start fresh.¶" &
                 "   name           →(Required) Variable name. Cannot contain CHAR(30).¶" &
@@ -21,7 +22,7 @@ SetVar = LAMBDA(
                 "EXAMPLE:       →¶" &
                 "Formula        →=SetVar(NewState(), ""best"", 5)¶" &
                 "Result         →state string holding best=5 (tagged as number)¶" &
-                "NOTE:          →All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element.",
+                "NOTE:          →All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element. If state has a helper meta block prefix (FS-separated), the meta block is preserved untouched.",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -30,19 +31,24 @@ SetVar = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
+        fs, CHAR(28),
+        fsPos, IFERROR(FIND(fs, state), 0),
+        metaPart, IF(fsPos = 0, "", LEFT(state, fsPos - 1)),
+        userPart, IF(fsPos = 0, state, MID(state, fsPos + 1, LEN(state))),
         firstVal, INDEX(value, 1, 1),
         typeCode, TYPE(firstVal),
         tag, IF(typeCode = 1, "n", IF(typeCode = 4, "b", "t")),
         encoded, IF(ROWS(value) * COLUMNS(value) > 1, TEXTJOIN(gs, FALSE, value), value & ""),
         newPair, name & rs & tag & rs & encoded,
-        cleaned, IF(state = "", "",
+        cleaned, IF(userPart = "", "",
                     LET(
-                        parts, TEXTSPLIT(state, us),
+                        parts, TEXTSPLIT(userPart, us),
                         keep, FILTER(parts, LEFT(parts, LEN(name) + 1) <> name & rs, ""),
                         IF(@keep = "", "", TEXTJOIN(us, TRUE, keep))
                     )
                 ),
-        result, IF(cleaned = "", newPair, cleaned & us & newPair),
+        newUser, IF(cleaned = "", newPair, cleaned & us & newPair),
+        result, IF(fsPos = 0, newUser, metaPart & fs & newUser),
         IF(Help?, Help, result)
 )
 );

@@ -5,6 +5,7 @@
                         2026-04-29  Claude      Skip past per-entry type tag when extracting payload
                         2026-04-29  Claude      Coerce scalar payloads to native types via tag
                         2026-05-02  Claude      Add IncludeHeaders to prepend a row of variable names
+                        2026-05-02  Claude      Strip helper meta block (FS-prefixed) before splitting
 */
 SplitState = LAMBDA(
 //  Parameter Declarations
@@ -21,7 +22,7 @@ SplitState = LAMBDA(
                 "EXAMPLE:       →¶" &
                 "Formula        →=SplitState(SCAN(SetState(0,0), SEQUENCE(5), reducer), TRUE)¶" &
                 "Result         →(5+1)xN table: header row of variable names, then one row per iteration¶" &
-                "NOTE:          →Pair with SCAN to inspect REDUCE state at every iteration. Column order matches insertion order. Array slots are flattened to a [a, b, c] text preview because a 2D output cell can't hold a nested array.",
+                "NOTE:          →Pair with SCAN to inspect REDUCE state at every iteration. Column order matches insertion order. Array slots are flattened to a [a, b, c] text preview because a 2D output cell can't hold a nested array. The helper meta block (FS-prefixed) is hidden from the output.",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -30,13 +31,19 @@ SplitState = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
+        fs, CHAR(28),
+        stripFs, LAMBDA(s,
+                    LET(
+                        pos, IFERROR(FIND(fs, s), 0),
+                        IF(pos = 0, s, MID(s, pos + 1, LEN(s)))
+                    )),
         n, ROWS(state),
-        firstState, INDEX(state, 1, 1),
+        firstState, stripFs(INDEX(state, 1, 1)),
         firstParts, IF(firstState = "", "(empty)", TEXTSPLIT(firstState, us)),
         numVars, COLUMNS(firstParts),
         body, MAKEARRAY(n, numVars, LAMBDA(r, c,
                     LET(
-                        s, INDEX(state, r, 1),
+                        s, stripFs(INDEX(state, r, 1)),
                         IF(s = "", "(empty)",
                             LET(
                                 parts, TEXTSPLIT(s, us),

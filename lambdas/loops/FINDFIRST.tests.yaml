@@ -1,0 +1,28 @@
+tests:
+  - name: first matching case returns its answer
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(cur="b", "found-" & i, ""))']
+    expected: "found-2"
+
+  - name: no match returns default empty string
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")']
+    expected: ""
+
+  - name: no match with custom no_match value
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")', "nope"]
+    expected: "nope"
+
+  - name: first of multiple matches wins
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(LEN(cur)>0, cur & "-" & i, ""))']
+    expected: "a-1"
+
+  - name: predicate uses index in answer
+    args: ['={10;20;30}', '=LAMBDA(cur, i, IF(cur=20, i, ""))']
+    expected: 2
+
+  - name: numeric answer round-trips
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur>1, cur*10, ""))']
+    expected: 20
+
+  - name: help text
+    args: []
+    expected_type: array

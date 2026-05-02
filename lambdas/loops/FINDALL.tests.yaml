@@ -1,0 +1,24 @@
+tests:
+  - name: all matches returned in case order
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(cur<>"b", cur & i, ""))']
+    expected: [["a1"], ["c3"]]
+
+  - name: every case matches
+    args: ['={1;2;3}', '=LAMBDA(cur, i, cur*10)']
+    expected: [[10], [20], [30]]
+
+  - name: no matches returns empty string
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")']
+    expected: ""
+
+  - name: single match returns single-row array (collapses to scalar)
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(cur="b", "got-" & i, ""))']
+    expected: "got-2"
+
+  - name: numeric matches round-trip
+    args: ['={1;2;3;4;5}', '=LAMBDA(cur, i, IF(MOD(cur, 2)=0, cur, ""))']
+    expected: [[2], [4]]
+
+  - name: help text
+    args: []
+    expected_type: array

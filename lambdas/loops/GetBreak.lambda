@@ -1,0 +1,34 @@
+/*  FUNCTION NAME:      GetBreak
+    DESCRIPTION:*//**Reads the helper-internal BREAK flag from a state's meta block. Returns FALSE if no meta block exists. Used by REDUCEUNTIL / REDUCEWHILE to short-circuit iteration.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+GetBreak = LAMBDA(
+//  Parameter Declarations
+    [state],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GetBreak(state)¶" &
+                "DESCRIPTION:   →Reads the helper-internal BREAK flag from a state's meta block. Returns FALSE if no meta block exists.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string, possibly carrying a helper meta block (FS-prefixed).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetBreak(SetBreak(NewState(), TRUE))¶" &
+                "Result         →TRUE¶" &
+                "NOTE:          →Internal helper used by REDUCEUNTIL / REDUCEWHILE. Users should not normally call this directly — the loop helpers manage the BREAK flag automatically.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        fs, CHAR(28),
+        fsPos, IFERROR(FIND(fs, state), 0),
+        result, IF(fsPos = 0, FALSE,
+                   LET(
+                       metaPart, LEFT(state, fsPos - 1),
+                       IFNA(GetVar(metaPart, "BREAK"), FALSE)
+                   )),
+        IF(Help?, Help, result)
+)
+);

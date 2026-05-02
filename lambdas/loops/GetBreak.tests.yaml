@@ -1,0 +1,24 @@
+tests:
+  - name: empty state has no meta block, returns FALSE
+    args: ['=NewState()']
+    expected: False
+
+  - name: state without meta block returns FALSE
+    args: ['=SetVars("x", 5)']
+    expected: False
+
+  - name: state with BREAK=TRUE returns TRUE
+    args: ['=SetBreak(NewState(), TRUE)']
+    expected: True
+
+  - name: state with BREAK=FALSE returns FALSE
+    args: ['=SetBreak(NewState(), FALSE)']
+    expected: False
+
+  - name: BREAK survives user SetVar after SetBreak
+    args: ['=SetVar(SetBreak(NewState(), TRUE), "x", 5)']
+    expected: True
+
+  - name: help text
+    args: []
+    expected_type: array

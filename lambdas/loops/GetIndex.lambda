@@ -1,0 +1,34 @@
+/*  FUNCTION NAME:      GetIndex
+    DESCRIPTION:*//**Reads the helper-internal INDEX (iteration counter) from a state's meta block. Returns 0 if no meta block exists. Set by REDUCEUNTIL / REDUCEWHILE before each iteration.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+GetIndex = LAMBDA(
+//  Parameter Declarations
+    [state],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GetIndex(state)¶" &
+                "DESCRIPTION:   →Reads the helper-internal INDEX (iteration counter) from a state's meta block. Returns 0 if no meta block exists.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) State string, possibly carrying a helper meta block (FS-prefixed).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GetIndex(SetIndex(NewState(), 3))¶" &
+                "Result         →3¶" &
+                "NOTE:          →Internal helper used by REDUCEUNTIL / REDUCEWHILE. The fn parameter `i` already exposes the index — calling GetIndex on the final state lets you check how many iterations actually ran (useful when stop terminates early).",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        fs, CHAR(28),
+        fsPos, IFERROR(FIND(fs, state), 0),
+        result, IF(fsPos = 0, 0,
+                   LET(
+                       metaPart, LEFT(state, fsPos - 1),
+                       IFNA(GetVar(metaPart, "INDEX"), 0)
+                   )),
+        IF(Help?, Help, result)
+)
+);

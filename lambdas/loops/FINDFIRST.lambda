@@ -1,0 +1,37 @@
+/*  FUNCTION NAME:      FINDFIRST
+    DESCRIPTION:*//**Returns the first non-empty answer from applying a predicate to each case. Predicate signature: LAMBDA(case, i) returning the answer or "" for no match.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+FINDFIRST = LAMBDA(
+//  Parameter Declarations
+    [cases],
+    [predicate],
+    [no_match],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →FINDFIRST(cases, predicate, [no_match])¶" &
+                "DESCRIPTION:   →Returns the first non-empty answer from applying predicate to each case.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   cases          →(Required) Vertical array of case tokens.¶" &
+                "   predicate      →(Required) LAMBDA(case, i) returning the answer, or """" for no match. i is 1-based.¶" &
+                "   no_match       →(Optional) Value to return if nothing matches. Defaults to """".¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=FINDFIRST({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur=""b"", ""found-"" & i, """")))¶" &
+                "Result         →""found-2""¶" &
+                "NOTE:          →Excel REDUCE has no real short-circuit, so all predicates are evaluated regardless. Use FINDFIRST when ""first match"" is the intent — it documents that and reads cleaner than MAP+FILTER+INDEX.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(cases),
+    //  Procedure
+        nm, IF(ISOMITTED(no_match), "", no_match),
+        n, ROWS(cases),
+        answers, MAP(cases, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
+        matches, IFERROR(FILTER(answers, answers <> "", ""), ""),
+        first, INDEX(matches, 1),
+        result, IF(@first = "", nm, first),
+        IF(Help?, Help, result)
+)
+);

@@ -1,0 +1,32 @@
+/*  FUNCTION NAME:      FINDALL
+    DESCRIPTION:*//**Returns a column of all non-empty answers from applying a predicate to each case. Predicate signature: LAMBDA(case, i) returning the answer or "" for no match.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-02  Claude      Initial version
+*/
+FINDALL = LAMBDA(
+//  Parameter Declarations
+    [cases],
+    [predicate],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →FINDALL(cases, predicate)¶" &
+                "DESCRIPTION:   →Returns a column of all non-empty answers from applying predicate to each case.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   cases          →(Required) Vertical array of case tokens.¶" &
+                "   predicate      →(Required) LAMBDA(case, i) returning the answer, or """" for no match. i is 1-based.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=FINDALL({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur<>""b"", cur & i, """")))¶" &
+                "Result         →{""a1""; ""c3""}¶" &
+                "NOTE:          →Returns """" if no cases match. Order of returned answers matches case order.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(cases),
+    //  Procedure
+        n, ROWS(cases),
+        answers, MAP(cases, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
+        result, IFERROR(FILTER(answers, answers <> "", ""), ""),
+        IF(Help?, Help, result)
+)
+);

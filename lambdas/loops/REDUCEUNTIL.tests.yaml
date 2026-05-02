@@ -1,0 +1,24 @@
+tests:
+  - name: full traversal with no stop accumulates sum and final INDEX
+    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
+    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+
+  - name: stop fires when sum >= 6 - no further updates after iter 3
+    args: ['=SetVars("sum", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, GetVar(s, "sum") >= 6)']
+    expected: "INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"
+
+  - name: stop never fires - traverses all cases
+    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, FALSE)']
+    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+
+  - name: stop fires immediately on iter 1
+    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
+    expected: "INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"
+
+  - name: fn receives correct iteration index
+    args: ['=SetVars("last_i", 0)', '={10;20;30}', '=LAMBDA(s, cur, i, SetVar(s, "last_i", i))']
+    expected: "INDEX\x1En\x1E3\x1Clast_i\x1En\x1E3"
+
+  - name: help text
+    args: []
+    expected_type: array
