@@ -11,6 +11,10 @@ tests:
     args: ["=1", "=2", "=3", "=4", "=5"]
     expected: "1\x1En\x1E1\x1F2\x1En\x1E2\x1F3\x1En\x1E3\x1F4\x1En\x1E4\x1F5\x1En\x1E5"
 
+  - name: ten numeric values
+    args: ["=1", "=2", "=3", "=4", "=5", "=6", "=7", "=8", "=9", "=10"]
+    expected: "1\x1En\x1E1\x1F2\x1En\x1E2\x1F3\x1En\x1E3\x1F4\x1En\x1E4\x1F5\x1En\x1E5\x1F6\x1En\x1E6\x1F7\x1En\x1E7\x1F8\x1En\x1E8\x1F9\x1En\x1E9\x1F10\x1En\x1E10"
+
   - name: numeric array value at slot 3
     args: ["=1", "=2", "={10;20;30}"]
     expected: "1\x1En\x1E1\x1F2\x1En\x1E2\x1F3\x1En\x1E10\x1D20\x1D30"
