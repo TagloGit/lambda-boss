@@ -35,6 +35,14 @@ tests:
     args: ['={1;2;3;4;5}', '=LAMBDA(cur, i, IF(MOD(cur, 2)=0, cur, ""))']
     expected: [[2], [4]]
 
+  - name: error in predicate is treated as a miss - good results still returned
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur=2, 1/0, cur*10))']
+    expected: [[10], [30]]
+
+  - name: all predicate errors return if_not_found
+    args: ['={1;2;3}', '=LAMBDA(cur, i, 1/0)', "all errored"]
+    expected: "all errored"
+
   - name: help text
     args: []
     expected_type: array

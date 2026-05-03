@@ -4,6 +4,7 @@
                         2026-05-02  Claude      Initial version
                         2026-05-03  Claude      Make sentinel customisable (no_match) + add if_not_found return; accept horizontal or vertical cases
                         2026-05-03  Claude      Swap arg order: if_not_found before no_match (more commonly customised)
+                        2026-05-03  Claude      Treat predicate errors as a miss instead of poisoning the whole result
 */
 FINDALL = LAMBDA(
 //  Parameter Declarations
@@ -24,7 +25,7 @@ FINDALL = LAMBDA(
                 "EXAMPLE:       →¶" &
                 "Formula        →=FINDALL({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur<>""b"", cur & i, """")))¶" &
                 "Result         →{""a1""; ""c3""}¶" &
-                "NOTE:          →Order of returned answers matches case order. The sentinel is compared with `<>` so it must be a comparable value (text, number, boolean) — not NA() or another error.",
+                "NOTE:          →Order of returned answers matches case order. The sentinel is compared with `<>` so it must be a comparable value (text, number, boolean) — not NA() or another error. Errors thrown inside the predicate are caught and treated as a miss.",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -34,7 +35,7 @@ FINDALL = LAMBDA(
         notFound, IF(ISOMITTED(if_not_found), sentinel, if_not_found),
         flat, TOCOL(cases),
         n, ROWS(flat),
-        answers, MAP(flat, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
+        answers, MAP(flat, SEQUENCE(n), LAMBDA(cur, i, IFERROR(predicate(cur, i), sentinel))),
         result, IFERROR(FILTER(answers, answers <> sentinel, notFound), notFound),
         IF(Help?, Help, result)
 )

@@ -35,6 +35,18 @@ tests:
     args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur>1, cur*10, ""))']
     expected: 20
 
+  - name: error in predicate is treated as a miss - other matches still found
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur=2, 1/0, IF(cur=3, "got-" & i, "")))']
+    expected: "got-3"
+
+  - name: error in first case does not poison later matches
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur=1, 1/0, "hit-" & i))']
+    expected: "hit-2"
+
+  - name: all predicate errors return if_not_found
+    args: ['={1;2;3}', '=LAMBDA(cur, i, 1/0)', "all errored"]
+    expected: "all errored"
+
   - name: help text
     args: []
     expected_type: array
