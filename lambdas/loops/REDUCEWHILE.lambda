@@ -2,6 +2,7 @@
     DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. fn signature: LAMBDA(state, current, i). continue signature: LAMBDA(state, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
+                        2026-05-03  Claude      Accept horizontal or vertical cases (inherits from REDUCEUNTIL)
 */
 REDUCEWHILE = LAMBDA(
 //  Parameter Declarations
@@ -13,10 +14,10 @@ REDUCEWHILE = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REDUCEWHILE(seed, cases, fn, continue)¶" &
                 "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. Returns the final state.¶" &
-                "VERSION:       →May 02 2026¶" &
+                "VERSION:       →May 03 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
-                "   cases          →(Required) Vertical array to iterate over.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
                 "   continue       →(Required) LAMBDA(state, i) returning TRUE to keep going, FALSE to halt.¶" &
                 "EXAMPLE:       →¶" &

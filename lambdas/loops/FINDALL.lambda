@@ -1,32 +1,40 @@
 /*  FUNCTION NAME:      FINDALL
-    DESCRIPTION:*//**Returns a column of all non-empty answers from applying a predicate to each case. Predicate signature: LAMBDA(case, i) returning the answer or "" for no match.*/
+    DESCRIPTION:*//**Returns a column of all non-sentinel answers from applying a predicate to each case. Predicate signature: LAMBDA(case, i) returning the answer, or the sentinel for no match.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
+                        2026-05-03  Claude      Make sentinel customisable (no_match) + add if_not_found return; accept horizontal or vertical cases
 */
 FINDALL = LAMBDA(
 //  Parameter Declarations
     [cases],
     [predicate],
+    [no_match],
+    [if_not_found],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →FINDALL(cases, predicate)¶" &
-                "DESCRIPTION:   →Returns a column of all non-empty answers from applying predicate to each case.¶" &
-                "VERSION:       →May 02 2026¶" &
+                "FUNCTION:      →FINDALL(cases, predicate, [no_match], [if_not_found])¶" &
+                "DESCRIPTION:   →Returns a column of all non-sentinel answers from applying predicate to each case.¶" &
+                "VERSION:       →May 03 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cases          →(Required) Vertical array of case tokens.¶" &
-                "   predicate      →(Required) LAMBDA(case, i) returning the answer, or """" for no match. i is 1-based.¶" &
+                "   cases          →(Required) Array of case tokens. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   predicate      →(Required) LAMBDA(case, i) returning the answer, or no_match for a miss. i is 1-based.¶" &
+                "   no_match       →(Optional) Sentinel value the predicate returns for no-match. Defaults to """". Override when """" is a valid answer.¶" &
+                "   if_not_found   →(Optional) Value to return when zero cases matched. Defaults to no_match.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=FINDALL({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur<>""b"", cur & i, """")))¶" &
                 "Result         →{""a1""; ""c3""}¶" &
-                "NOTE:          →Returns """" if no cases match. Order of returned answers matches case order.",
+                "NOTE:          →Order of returned answers matches case order. The sentinel is compared with `<>` so it must be a comparable value (text, number, boolean) — not NA() or another error.",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(cases),
     //  Procedure
-        n, ROWS(cases),
-        answers, MAP(cases, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
-        result, IFERROR(FILTER(answers, answers <> "", ""), ""),
+        sentinel, IF(ISOMITTED(no_match), "", no_match),
+        notFound, IF(ISOMITTED(if_not_found), sentinel, if_not_found),
+        flat, TOCOL(cases),
+        n, ROWS(flat),
+        answers, MAP(flat, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
+        result, IFERROR(FILTER(answers, answers <> sentinel, notFound), notFound),
         IF(Help?, Help, result)
 )
 );

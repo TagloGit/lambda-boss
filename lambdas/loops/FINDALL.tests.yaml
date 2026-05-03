@@ -7,9 +7,29 @@ tests:
     args: ['={1;2;3}', '=LAMBDA(cur, i, cur*10)']
     expected: [[10], [20], [30]]
 
-  - name: no matches returns empty string
+  - name: no matches returns default sentinel
     args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")']
     expected: ""
+
+  - name: no matches with custom if_not_found
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")', '=""', "no hits"]
+    expected: "no hits"
+
+  - name: custom sentinel NULL preserves empty-string answers
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, IF(cur="y", "", "NULL"))', "NULL"]
+    expected: ""
+
+  - name: custom sentinel + no matches returns sentinel by default
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, "NULL")', "NULL"]
+    expected: "NULL"
+
+  - name: custom sentinel + custom if_not_found
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, "NULL")', "NULL", "none"]
+    expected: "none"
+
+  - name: horizontal cases work the same as vertical
+    args: ['={"a","b","c"}', '=LAMBDA(cur, i, IF(cur<>"b", cur & i, ""))']
+    expected: [["a1"], ["c3"]]
 
   - name: single match returns single-row array (collapses to scalar)
     args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(cur="b", "got-" & i, ""))']

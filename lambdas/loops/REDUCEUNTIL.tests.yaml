@@ -19,6 +19,10 @@ tests:
     args: ['=SetVars("last_i", 0)', '={10;20;30}', '=LAMBDA(s, cur, i, SetVar(s, "last_i", i))']
     expected: "INDEX\x1En\x1E3\x1Clast_i\x1En\x1E3"
 
+  - name: horizontal cases array works the same as vertical
+    args: ['=SetVars("sum", 0)', '={1,2,3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
+    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+
   - name: help text
     args: []
     expected_type: array

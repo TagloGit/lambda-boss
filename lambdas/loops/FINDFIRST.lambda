@@ -1,37 +1,42 @@
 /*  FUNCTION NAME:      FINDFIRST
-    DESCRIPTION:*//**Returns the first non-empty answer from applying a predicate to each case. Predicate signature: LAMBDA(case, i) returning the answer or "" for no match.*/
+    DESCRIPTION:*//**Returns the first non-sentinel answer from applying a predicate to each case. Predicate signature: LAMBDA(case, i) returning the answer, or the sentinel for no match.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
+                        2026-05-03  Claude      Make sentinel customisable (no_match) + add if_not_found return; accept horizontal or vertical cases
 */
 FINDFIRST = LAMBDA(
 //  Parameter Declarations
     [cases],
     [predicate],
     [no_match],
+    [if_not_found],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →FINDFIRST(cases, predicate, [no_match])¶" &
-                "DESCRIPTION:   →Returns the first non-empty answer from applying predicate to each case.¶" &
-                "VERSION:       →May 02 2026¶" &
+                "FUNCTION:      →FINDFIRST(cases, predicate, [no_match], [if_not_found])¶" &
+                "DESCRIPTION:   →Returns the first non-sentinel answer from applying predicate to each case.¶" &
+                "VERSION:       →May 03 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cases          →(Required) Vertical array of case tokens.¶" &
-                "   predicate      →(Required) LAMBDA(case, i) returning the answer, or """" for no match. i is 1-based.¶" &
-                "   no_match       →(Optional) Value to return if nothing matches. Defaults to """".¶" &
+                "   cases          →(Required) Array of case tokens. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   predicate      →(Required) LAMBDA(case, i) returning the answer, or no_match for a miss. i is 1-based.¶" &
+                "   no_match       →(Optional) Sentinel value the predicate returns for no-match. Defaults to """". Override when """" is a valid answer.¶" &
+                "   if_not_found   →(Optional) Value to return when every case missed. Defaults to no_match.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=FINDFIRST({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur=""b"", ""found-"" & i, """")))¶" &
                 "Result         →""found-2""¶" &
-                "NOTE:          →Excel REDUCE has no real short-circuit, so all predicates are evaluated regardless. Use FINDFIRST when ""first match"" is the intent — it documents that and reads cleaner than MAP+FILTER+INDEX.",
+                "NOTE:          →Excel REDUCE has no real short-circuit, so all predicates are evaluated regardless. The sentinel is compared with `<>` so it must be a comparable value (text, number, boolean) — not NA() or another error.",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(cases),
     //  Procedure
-        nm, IF(ISOMITTED(no_match), "", no_match),
-        n, ROWS(cases),
-        answers, MAP(cases, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
-        matches, IFERROR(FILTER(answers, answers <> "", ""), ""),
+        sentinel, IF(ISOMITTED(no_match), "", no_match),
+        notFound, IF(ISOMITTED(if_not_found), sentinel, if_not_found),
+        flat, TOCOL(cases),
+        n, ROWS(flat),
+        answers, MAP(flat, SEQUENCE(n), LAMBDA(cur, i, predicate(cur, i))),
+        matches, IFERROR(FILTER(answers, answers <> sentinel, sentinel), sentinel),
         first, INDEX(matches, 1),
-        result, IF(@first = "", nm, first),
+        result, IF(@first = sentinel, notFound, first),
         IF(Help?, Help, result)
 )
 );

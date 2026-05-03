@@ -2,6 +2,7 @@
     DESCRIPTION:*//**REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. fn signature: LAMBDA(state, current, i). stop signature: LAMBDA(state, i). Pairs with SetVars/GetVar for multi-variable accumulators.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
+                        2026-05-03  Claude      Accept horizontal or vertical cases (TOCOL up front)
 */
 REDUCEUNTIL = LAMBDA(
 //  Parameter Declarations
@@ -13,10 +14,10 @@ REDUCEUNTIL = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REDUCEUNTIL(seed, cases, fn, [stop])¶" &
                 "DESCRIPTION:   →REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. Returns the final state.¶" &
-                "VERSION:       →May 02 2026¶" &
+                "VERSION:       →May 03 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
-                "   cases          →(Required) Vertical array to iterate over.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
                 "   stop           →(Optional) LAMBDA(state, i) returning TRUE to halt. Default never stops (= REDUCEI).¶" &
                 "EXAMPLE:       →¶" &
@@ -29,8 +30,9 @@ REDUCEUNTIL = LAMBDA(
         Help?, ISOMITTED(seed),
     //  Procedure
         realStop, IF(ISOMITTED(stop), LAMBDA(s, i, FALSE), stop),
+        flat, TOCOL(cases),
         seedWithIdx, SetIndex(seed, 0),
-        result, REDUCE(seedWithIdx, cases, LAMBDA(state, current,
+        result, REDUCE(seedWithIdx, flat, LAMBDA(state, current,
                     LET(
                         break?, GetBreak(state),
                         IF(break?, state,
