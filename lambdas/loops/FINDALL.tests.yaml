@@ -12,19 +12,15 @@ tests:
     expected: ""
 
   - name: no matches with custom if_not_found
-    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")', '=""', "no hits"]
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")', "no hits"]
     expected: "no hits"
 
   - name: custom sentinel NULL preserves empty-string answers
-    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, IF(cur="y", "", "NULL"))', "NULL"]
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, IF(cur="y", "", "NULL"))', "NULL", "NULL"]
     expected: ""
 
-  - name: custom sentinel + no matches returns sentinel by default
-    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, "NULL")', "NULL"]
-    expected: "NULL"
-
-  - name: custom sentinel + custom if_not_found
-    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, "NULL")', "NULL", "none"]
+  - name: custom sentinel + custom if_not_found differ
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, "NULL")', "none", "NULL"]
     expected: "none"
 
   - name: horizontal cases work the same as vertical

@@ -3,23 +3,24 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
                         2026-05-03  Claude      Make sentinel customisable (no_match) + add if_not_found return; accept horizontal or vertical cases
+                        2026-05-03  Claude      Swap arg order: if_not_found before no_match (more commonly customised)
 */
 FINDFIRST = LAMBDA(
 //  Parameter Declarations
     [cases],
     [predicate],
-    [no_match],
     [if_not_found],
+    [no_match],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →FINDFIRST(cases, predicate, [no_match], [if_not_found])¶" &
+                "FUNCTION:      →FINDFIRST(cases, predicate, [if_not_found], [no_match])¶" &
                 "DESCRIPTION:   →Returns the first non-sentinel answer from applying predicate to each case.¶" &
                 "VERSION:       →May 03 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   cases          →(Required) Array of case tokens. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   predicate      →(Required) LAMBDA(case, i) returning the answer, or no_match for a miss. i is 1-based.¶" &
-                "   no_match       →(Optional) Sentinel value the predicate returns for no-match. Defaults to """". Override when """" is a valid answer.¶" &
                 "   if_not_found   →(Optional) Value to return when every case missed. Defaults to no_match.¶" &
+                "   no_match       →(Optional) Sentinel value the predicate returns for no-match. Defaults to """". Override when """" is a valid answer.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=FINDFIRST({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur=""b"", ""found-"" & i, """")))¶" &
                 "Result         →""found-2""¶" &
