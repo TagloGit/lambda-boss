@@ -5,6 +5,7 @@
                         2026-05-03  Claude      Make sentinel customisable (no_match) + add if_not_found return; accept horizontal or vertical cases
                         2026-05-03  Claude      Swap arg order: if_not_found before no_match (more commonly customised)
                         2026-05-03  Claude      Treat predicate errors as a miss instead of poisoning the whole result
+                        2026-05-03  Claude      Add DEBUGGING help line calling out the 2-arg predicate gotcha
 */
 FINDALL = LAMBDA(
 //  Parameter Declarations
@@ -25,6 +26,7 @@ FINDALL = LAMBDA(
                 "EXAMPLE:       →¶" &
                 "Formula        →=FINDALL({""a"";""b"";""c""}, LAMBDA(cur, i, IF(cur<>""b"", cur & i, """")))¶" &
                 "Result         →{""a1""; ""c3""}¶" &
+                "DEBUGGING:     →Predicate must take exactly two args — LAMBDA(case, i) — even if i is unused. A one-arg predicate silently returns no matches because every call errors and is caught as a miss. To diagnose, MAP the predicate over the cases yourself and look for #VALUE! in every row.¶" &
                 "NOTE:          →Order of returned answers matches case order. The sentinel is compared with `<>` so it must be a comparable value (text, number, boolean) — not NA() or another error. Errors thrown inside the predicate are caught and treated as a miss.",
                 "→", "¶"
                 ),
