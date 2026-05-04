@@ -4,7 +4,6 @@
                         2026-04-27  Claude      Initial version
                         2026-04-29  Claude      Read per-entry tag and coerce to native type
                         2026-04-29  Claude      Broadcast over a column of states via MAP
-                        2026-05-02  Claude      Skip helper meta block (FS-prefixed) when present
 */
 GetVar = LAMBDA(
 //  Parameter Declarations
@@ -14,14 +13,14 @@ GetVar = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →GetVar(state, name)¶" &
                 "DESCRIPTION:   →Reads a named variable from a state string. Returns a native-typed scalar or vertical array based on the entry's type tag. Broadcasts over a column of states (scalar variables only).¶" &
-                "VERSION:       →May 02 2026¶" &
+                "VERSION:       →Apr 29 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   state          →(Required) Single state string, or a vertical column of states (e.g. a SCAN result).¶" &
                 "   name           →(Required) Variable name to read.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=GetVar(SetVar(NewState(), ""x"", 5), ""x"")¶" &
                 "Result         →5 (number — element type recovered from the tag)¶" &
-                "NOTE:          →Tag values: n=number, b=boolean, t=text. When state is a column, the variable must be scalar — array values collapse to their first element under broadcast. The helper meta block (FS-prefixed) is invisible — only user-facing variables are returned.",
+                "NOTE:          →Tag values: n=number, b=boolean, t=text. When state is a column, the variable must be scalar — array values collapse to their first element under broadcast.",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -30,25 +29,20 @@ GetVar = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
-        fs, CHAR(28),
         readOne, LAMBDA(s,
-                    LET(
-                        fsPos, IFERROR(FIND(fs, s), 0),
-                        userPart, IF(fsPos = 0, s, MID(s, fsPos + 1, LEN(s))),
-                        IF(userPart = "", NA(),
-                           LET(
-                               parts, TEXTSPLIT(userPart, us),
-                               match, @FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
-                               IF(match = "", NA(),
-                                  LET(
-                                      tag, MID(match, LEN(name) + 2, 1),
-                                      payload, MID(match, LEN(name) + 4, LEN(match)),
-                                      raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
-                                      IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", raw))
-                                  )
-                               )
+                    IF(s = "", NA(),
+                       LET(
+                           parts, TEXTSPLIT(s, us),
+                           match, @FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
+                           IF(match = "", NA(),
+                              LET(
+                                  tag, MID(match, LEN(name) + 2, 1),
+                                  payload, MID(match, LEN(name) + 4, LEN(match)),
+                                  raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
+                                  IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", raw))
+                              )
                            )
-                        )
+                       )
                     )
                 ),
         single?, AND(ROWS(state) = 1, COLUMNS(state) = 1),

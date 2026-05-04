@@ -1,8 +1,9 @@
 /*  FUNCTION NAME:      REDUCEWHILE
-    DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. fn signature: LAMBDA(state, current, i). continue signature: LAMBDA(state, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
+    DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. fn signature: LAMBDA(acc, current, i). continue signature: LAMBDA(acc, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
                         2026-05-03  Claude      Accept horizontal or vertical cases (inherits from REDUCEUNTIL)
+                        2026-05-04  Claude      Inherits new "user accumulator preserved by type" contract from REDUCEUNTIL.
 */
 REDUCEWHILE = LAMBDA(
 //  Parameter Declarations
@@ -13,23 +14,23 @@ REDUCEWHILE = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REDUCEWHILE(seed, cases, fn, continue)¶" &
-                "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. Returns the final state.¶" &
-                "VERSION:       →May 03 2026¶" &
+                "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. Returns whatever the user passed in (scalar / array / state-string).¶" &
+                "VERSION:       →May 04 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
+                "   seed           →(Required) Initial accumulator. Number/boolean/array → type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) → free-form text/state accumulation.¶" &
                 "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
-                "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
-                "   continue       →(Required) LAMBDA(state, i) returning TRUE to keep going, FALSE to halt.¶" &
+                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
+                "   continue       →(Required) LAMBDA(acc, i) returning TRUE to keep going, FALSE to halt.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=GetVar(REDUCEWHILE(SetVars(""sum"", 0), {1;2;3;4;5}, LAMBDA(s, cur, i, SetVar(s, ""sum"", GetVar(s, ""sum"") + cur)), LAMBDA(s, i, GetVar(s, ""sum"") < 6)), ""sum"")¶" &
-                "Result         →6 (stops after iteration 3 once sum reaches 6)¶" &
+                "Formula        →=REDUCEWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, i, a <= 20))¶" &
+                "Result         →28 (number — halts on iter 5 once sum is no longer ≤ 20)¶" &
                 "NOTE:          →Mechanically equivalent to REDUCEUNTIL with the predicate negated. Use whichever phrasing reads more naturally.",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(seed),
     //  Procedure
-        result, REDUCEUNTIL(seed, cases, fn, LAMBDA(s, i, NOT(continue(s, i)))),
+        result, REDUCEUNTIL(seed, cases, fn, LAMBDA(a, i, NOT(continue(a, i)))),
         IF(Help?, Help, result)
 )
 );

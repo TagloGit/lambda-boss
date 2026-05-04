@@ -1,23 +1,23 @@
 tests:
-  - name: continue while sum less than 6 - halts after iter 3
-    args: ['=SetVars("sum", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, GetVar(s, "sum") < 6)']
-    expected: "INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"
+  - name: scalar number seed - continue while sum at most 20
+    args: ['=0', '={1;3;5;9;10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a <= 20)']
+    expected: 28
 
-  - name: continue always TRUE traverses all cases
-    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
-    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+  - name: continue uses iteration index - halts after iter 3
+    args: ['=0', '={1;2;3;4;5}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, i < 3)']
+    expected: 6
 
   - name: continue immediately FALSE halts on iter 1
-    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, FALSE)']
-    expected: "INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, FALSE)']
+    expected: 1
 
-  - name: continue uses iteration index
-    args: ['=SetVars("count", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "count", GetVar(s, "count") + 1))', '=LAMBDA(s, i, i < 3)']
-    expected: "INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Ccount\x1En\x1E3"
+  - name: state-string seed - user gets state-string back
+    args: ['=SetVars("sum", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, GetVar(s, "sum") < 6)']
+    expected: "sum\x1En\x1E6"
 
   - name: horizontal cases array works the same as vertical
-    args: ['=SetVars("sum", 0)', '={1,2,3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
-    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+    args: ['=0', '={1,3,5,9,10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a <= 20)']
+    expected: 28
 
   - name: help text
     args: []

@@ -1,27 +1,42 @@
 tests:
-  - name: full traversal with no stop accumulates sum and final INDEX
+  - name: scalar number seed - sum stops once total exceeds 20
+    args: ['=0', '={1;3;5;9;10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a > 20)']
+    expected: 28
+
+  - name: scalar number seed - no stop traverses all cases (REDUCEI behaviour)
+    args: ['=0', '={1;2;3;4;5}', '=LAMBDA(a, v, i, a + v)']
+    expected: 15
+
+  - name: scalar number seed - stop fires immediately on iter 1
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, TRUE)']
+    expected: 1
+
+  - name: scalar boolean seed - any case equals 2
+    args: ['=FALSE', '={1;2;3;4}', '=LAMBDA(a, v, i, OR(a, v = 2))']
+    expected: "True"
+
+  - name: fn receives 1-based iteration index
+    args: ['=0', '={10;20;30;40}', '=LAMBDA(a, v, i, a + i)']
+    expected: 10
+
+  - name: state-string seed - user gets state-string back, no INDEX/BREAK in output
     args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
-    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+    expected: "sum\x1En\x1E6"
 
-  - name: stop fires when sum >= 6 - no further updates after iter 3
-    args: ['=SetVars("sum", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, GetVar(s, "sum") >= 6)']
-    expected: "INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"
+  - name: empty-text seed - fn builds state-string from scratch on iter 1
+    args: ['=""', '={10;20;30}', '=LAMBDA(a, v, i, IF(a = "", SetVar(NewState(), "first", v), SetVar(a, "n" & i, v)))']
+    expected: "first\x1En\x1E10\x1Fn2\x1En\x1E20\x1Fn3\x1En\x1E30"
 
-  - name: stop never fires - traverses all cases
-    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, FALSE)']
-    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
-
-  - name: stop fires immediately on iter 1
-    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
-    expected: "INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"
-
-  - name: fn receives correct iteration index
-    args: ['=SetVars("last_i", 0)', '={10;20;30}', '=LAMBDA(s, cur, i, SetVar(s, "last_i", i))']
-    expected: "INDEX\x1En\x1E3\x1Clast_i\x1En\x1E3"
+  - name: 1-D array seed - element-wise addition via broadcasting
+    args: ['={0;0;0}', '={1;2;3}', '=LAMBDA(a, v, i, a + v)']
+    expected:
+      - 6
+      - 6
+      - 6
 
   - name: horizontal cases array works the same as vertical
-    args: ['=SetVars("sum", 0)', '={1,2,3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
-    expected: "INDEX\x1En\x1E3\x1Csum\x1En\x1E6"
+    args: ['=0', '={1,3,5,9,10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a > 20)']
+    expected: 28
 
   - name: help text
     args: []

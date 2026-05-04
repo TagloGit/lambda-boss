@@ -1,40 +1,42 @@
 tests:
-  - name: full traversal returns column of intermediate states
+  - name: scalar number seed - column of running sums
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)']
+    expected:
+      - [1]
+      - [3]
+      - [6]
+
+  - name: scalar number seed - stop fires on iter 5, later rows pass through unchanged
+    args: ['=0', '={1;3;5;9;10;11;12}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a > 20)']
+    expected:
+      - [1]
+      - [4]
+      - [9]
+      - [18]
+      - [28]
+      - [28]
+      - [28]
+
+  - name: scalar number seed - stop fires immediately on iter 1
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, TRUE)']
+    expected:
+      - [1]
+      - [1]
+      - [1]
+
+  - name: state-string seed - column of intermediate state-strings
     args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
     expected:
-      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
-      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
-      - ["INDEX\x1En\x1E3\x1Csum\x1En\x1E6"]
+      - ["sum\x1En\x1E1"]
+      - ["sum\x1En\x1E3"]
+      - ["sum\x1En\x1E6"]
 
-  - name: stop fires at iter 3 - subsequent iterations pass through unchanged
-    args: ['=SetVars("sum", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, GetVar(s, "sum") >= 6)']
+  - name: horizontal cases array works the same as vertical
+    args: ['=0', '={1,2,3}', '=LAMBDA(a, v, i, a + v)']
     expected:
-      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
-      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
-      - ["INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"]
-      - ["INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"]
-      - ["INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"]
-
-  - name: stop fires immediately on iter 1
-    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
-    expected:
-      - ["INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"]
-      - ["INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"]
-      - ["INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"]
-
-  - name: horizontal cases work the same as vertical
-    args: ['=SetVars("sum", 0)', '={1,2,3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
-    expected:
-      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
-      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
-      - ["INDEX\x1En\x1E3\x1Csum\x1En\x1E6"]
-
-  - name: pairs with SplitState for tabular debug view
-    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
-    expected:
-      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
-      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
-      - ["INDEX\x1En\x1E3\x1Csum\x1En\x1E6"]
+      - [1]
+      - [3]
+      - [6]
 
   - name: help text
     args: []
