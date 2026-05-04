@@ -1,0 +1,70 @@
+/*  FUNCTION NAME:      SCANUNTIL
+    DESCRIPTION:*//**SCAN counterpart to REDUCEUNTIL — same signature, but returns a column of intermediate accumulators (one per iteration) instead of just the final value. Swap the function name to switch between final-result and per-iteration views.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-04  Claude      Initial version
+                        2026-05-04  Claude      Adopt new "user accumulator preserved by type" contract — output column is the unwrapped user value at each iteration, no helper meta.
+*/
+SCANUNTIL = LAMBDA(
+//  Parameter Declarations
+    [seed],
+    [cases],
+    [fn],
+    [stop],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SCANUNTIL(seed, cases, fn, [stop])¶" &
+                "DESCRIPTION:   →SCAN counterpart to REDUCEUNTIL. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEUNTIL — swap the name to switch views.¶" &
+                "VERSION:       →May 04 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial accumulator. Number/boolean/array → type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) → free-form text/state accumulation.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
+                "   stop           →(Optional) LAMBDA(acc, i) returning TRUE to halt. Default never stops.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SCANUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, i, a > 20))¶" &
+                "Result         →column {1; 4; 9; 18; 28} — running sums per iteration (last three identical once stop fires)¶" &
+                "NOTE:          →Once stop fires, BREAK is set and subsequent iterations pass the accumulator through unchanged — those rows look identical to the row where stop fired. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        us, CHAR(31),
+        rs, CHAR(30),
+        fs, CHAR(28),
+        realStop, IF(ISOMITTED(stop), LAMBDA(a, i, FALSE), stop),
+        flat, TOCOL(cases),
+        wrap?, NOT(ISTEXT(@seed)),
+        initialMeta, SetVar(NewState(), "INDEX", 0),
+        initialUser, IF(wrap?, SetVar(NewState(), "v", seed), seed),
+        initial, initialMeta & fs & initialUser,
+        rawScan, SCAN(initial, flat, LAMBDA(state, current,
+                    LET(
+                        fsPos, FIND(fs, state),
+                        metaPart, LEFT(state, fsPos - 1),
+                        userPart, MID(state, fsPos + 1, LEN(state)),
+                        broken?, IFNA(GetVar(metaPart, "BREAK"), FALSE),
+                        IF(broken?, state,
+                           LET(
+                               iter, GetVar(metaPart, "INDEX") + 1,
+                               acc, IF(wrap?, GetVar(userPart, "v"), userPart),
+                               newAcc, fn(acc, current, iter),
+                               stopped?, realStop(newAcc, iter),
+                               newUser, IF(wrap?, SetVar(userPart, "v", newAcc), newAcc),
+                               meta1, SetVar(metaPart, "INDEX", iter),
+                               newMeta, IF(stopped?, SetVar(meta1, "BREAK", TRUE), meta1),
+                               newMeta & fs & newUser
+                           )
+                        )
+                    )
+                )),
+        extract, LAMBDA(s,
+                    LET(
+                        fsPos, FIND(fs, s),
+                        userPart, MID(s, fsPos + 1, LEN(s)),
+                        IF(wrap?, GetVar(userPart, "v"), userPart)
+                    )),
+        result, MAP(rawScan, extract),
+        IF(Help?, Help, result)
+)
+);

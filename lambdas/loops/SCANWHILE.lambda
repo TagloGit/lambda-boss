@@ -1,0 +1,35 @@
+/*  FUNCTION NAME:      SCANWHILE
+    DESCRIPTION:*//**SCAN counterpart to REDUCEWHILE — same signature, but returns a column of intermediate accumulators (one per iteration) instead of just the final value. Swap the function name to switch between final-result and per-iteration views.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-04  Claude      Initial version
+                        2026-05-04  Claude      Adopt new "user accumulator preserved by type" contract from SCANUNTIL.
+*/
+SCANWHILE = LAMBDA(
+//  Parameter Declarations
+    [seed],
+    [cases],
+    [fn],
+    [continue],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SCANWHILE(seed, cases, fn, continue)¶" &
+                "DESCRIPTION:   →SCAN counterpart to REDUCEWHILE. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEWHILE — swap the name to switch views.¶" &
+                "VERSION:       →May 04 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial accumulator. Number/boolean/array → type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) → free-form text/state accumulation.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
+                "   continue       →(Required) LAMBDA(acc, i) returning TRUE to keep going, FALSE to halt.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SCANWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, i, a <= 20))¶" &
+                "Result         →column {1; 4; 9; 18; 28} — running sums per iteration (last three identical once stop fires)¶" &
+                "NOTE:          →Mechanically equivalent to SCANUNTIL with the predicate negated. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        result, SCANUNTIL(seed, cases, fn, LAMBDA(a, i, NOT(continue(a, i)))),
+        IF(Help?, Help, result)
+)
+);

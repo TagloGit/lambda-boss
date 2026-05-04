@@ -1,0 +1,52 @@
+tests:
+  - name: first matching case returns its answer
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(cur="b", "found-" & i, ""))']
+    expected: "found-2"
+
+  - name: no match with default sentinel returns empty string
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")']
+    expected: ""
+
+  - name: no match with custom if_not_found
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, "")', "nope"]
+    expected: "nope"
+
+  - name: custom sentinel NULL - empty string is valid answer
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, IF(cur="y", "", "NULL"))', "NULL", "NULL"]
+    expected: ""
+
+  - name: custom sentinel + custom if_not_found differ
+    args: ['={"x";"y";"z"}', '=LAMBDA(cur, i, "NULL")', "missing", "NULL"]
+    expected: "missing"
+
+  - name: horizontal cases array works the same as vertical
+    args: ['={"a","b","c"}', '=LAMBDA(cur, i, IF(cur="b", "found-" & i, ""))']
+    expected: "found-2"
+
+  - name: first of multiple matches wins
+    args: ['={"a";"b";"c"}', '=LAMBDA(cur, i, IF(LEN(cur)>0, cur & "-" & i, ""))']
+    expected: "a-1"
+
+  - name: predicate uses index in answer
+    args: ['={10;20;30}', '=LAMBDA(cur, i, IF(cur=20, i, ""))']
+    expected: 2
+
+  - name: numeric answer round-trips
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur>1, cur*10, ""))']
+    expected: 20
+
+  - name: error in predicate is treated as a miss - other matches still found
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur=2, 1/0, IF(cur=3, "got-" & i, "")))']
+    expected: "got-3"
+
+  - name: error in first case does not poison later matches
+    args: ['={1;2;3}', '=LAMBDA(cur, i, IF(cur=1, 1/0, "hit-" & i))']
+    expected: "hit-2"
+
+  - name: all predicate errors return if_not_found
+    args: ['={1;2;3}', '=LAMBDA(cur, i, 1/0)', "all errored"]
+    expected: "all errored"
+
+  - name: help text
+    args: []
+    expected_type: array

@@ -1,0 +1,43 @@
+tests:
+  - name: scalar number seed - column of running sums
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)']
+    expected:
+      - [1]
+      - [3]
+      - [6]
+
+  - name: scalar number seed - stop fires on iter 5, later rows pass through unchanged
+    args: ['=0', '={1;3;5;9;10;11;12}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a > 20)']
+    expected:
+      - [1]
+      - [4]
+      - [9]
+      - [18]
+      - [28]
+      - [28]
+      - [28]
+
+  - name: scalar number seed - stop fires immediately on iter 1
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, TRUE)']
+    expected:
+      - [1]
+      - [1]
+      - [1]
+
+  - name: state-string seed - column of intermediate state-strings
+    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))']
+    expected:
+      - ["sum\x1En\x1E1"]
+      - ["sum\x1En\x1E3"]
+      - ["sum\x1En\x1E6"]
+
+  - name: horizontal cases array works the same as vertical
+    args: ['=0', '={1,2,3}', '=LAMBDA(a, v, i, a + v)']
+    expected:
+      - [1]
+      - [3]
+      - [6]
+
+  - name: help text
+    args: []
+    expected_type: array
