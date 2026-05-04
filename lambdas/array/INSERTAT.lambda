@@ -1,0 +1,38 @@
+/*  FUNCTION NAME:      INSERTAT
+    DESCRIPTION:*//**Inserts a scalar value into a 1-D array at the given 1-based position, lengthening the array by 1.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-04  Claude      Initial version
+*/
+INSERTAT = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [value],
+    [pos],
+    [horizontal],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →INSERTAT(array, value, pos, [horizontal])¶" &
+                "DESCRIPTION:   →Inserts a scalar value into a 1-D array at the given 1-based position, lengthening the array by 1.¶" &
+                "VERSION:       →May 04 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) 1-D array (column by default).¶" &
+                "   value          →(Required) Scalar to insert at pos.¶" &
+                "   pos            →(Required) 1-based position. pos=1 prepends; pos=n+1 appends.¶" &
+                "   horizontal     →(Optional) Default FALSE. If TRUE, treats array as a row.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=INSERTAT({""a"";""b"";""c""}, ""X"", 2)¶" &
+                "Result         →{""a"";""X"";""b"";""c""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
+        len, IF(horiz, COLUMNS(array), ROWS(array)),
+        idx, SEQUENCE(IF(horiz, 1, len + 1), IF(horiz, len + 1, 1)),
+        src, idx - (idx > pos),
+        safe, IF(src > len, len, src),
+        result, IF(idx = pos, value, IF(horiz, INDEX(array, 1, safe), INDEX(array, safe, 1))),
+        IF(Help?, Help, result)
+)
+);
