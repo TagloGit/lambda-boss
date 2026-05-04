@@ -1,0 +1,34 @@
+tests:
+  - name: continue while sum less than 6 - halts after iter 3
+    args: ['=SetVars("sum", 0)', '={1;2;3;4;5}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, GetVar(s, "sum") < 6)']
+    expected:
+      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
+      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
+      - ["INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"]
+      - ["INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"]
+      - ["INDEX\x1En\x1E3\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E6"]
+
+  - name: continue always TRUE traverses all cases
+    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
+    expected:
+      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
+      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
+      - ["INDEX\x1En\x1E3\x1Csum\x1En\x1E6"]
+
+  - name: continue immediately FALSE halts on iter 1
+    args: ['=SetVars("sum", 0)', '={1;2;3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, FALSE)']
+    expected:
+      - ["INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"]
+      - ["INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"]
+      - ["INDEX\x1En\x1E1\x1FBREAK\x1Eb\x1ETRUE\x1Csum\x1En\x1E1"]
+
+  - name: horizontal cases work the same as vertical
+    args: ['=SetVars("sum", 0)', '={1,2,3}', '=LAMBDA(s, cur, i, SetVar(s, "sum", GetVar(s, "sum") + cur))', '=LAMBDA(s, i, TRUE)']
+    expected:
+      - ["INDEX\x1En\x1E1\x1Csum\x1En\x1E1"]
+      - ["INDEX\x1En\x1E2\x1Csum\x1En\x1E3"]
+      - ["INDEX\x1En\x1E3\x1Csum\x1En\x1E6"]
+
+  - name: help text
+    args: []
+    expected_type: array

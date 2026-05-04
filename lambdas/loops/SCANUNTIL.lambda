@@ -1,0 +1,49 @@
+/*  FUNCTION NAME:      SCANUNTIL
+    DESCRIPTION:*//**SCAN that halts when stop returns TRUE. Returns a column of intermediate states (one per iteration). Pair with SplitState for a tabular per-iteration debug view.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-04  Claude      Initial version
+*/
+SCANUNTIL = LAMBDA(
+//  Parameter Declarations
+    [seed],
+    [cases],
+    [fn],
+    [stop],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SCANUNTIL(seed, cases, fn, [stop])¶" &
+                "DESCRIPTION:   →SCAN that halts when stop returns TRUE. Returns a column of intermediate states (one per iteration).¶" &
+                "VERSION:       →May 04 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
+                "   stop           →(Optional) LAMBDA(state, i) returning TRUE to halt. Default never stops.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SplitState(SCANUNTIL(SetVars(""sum"", 0), {1;2;3;4;5}, LAMBDA(s, cur, i, SetVar(s, ""sum"", GetVar(s, ""sum"") + cur)), LAMBDA(s, i, GetVar(s, ""sum"") >= 6)), TRUE)¶" &
+                "Result         →6x3 table: header row plus one row per iteration with INDEX / BREAK / sum columns¶" &
+                "NOTE:          →Same internals as REDUCEUNTIL but uses SCAN to expose intermediate states. Once BREAK is set, subsequent iterations pass the state through unchanged — those rows look identical to the row where stop fired. Pair with SplitState(_, TRUE) for a tabular debug view.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        realStop, IF(ISOMITTED(stop), LAMBDA(s, i, FALSE), stop),
+        flat, TOCOL(cases),
+        seedWithIdx, SetIndex(seed, 0),
+        result, SCAN(seedWithIdx, flat, LAMBDA(state, current,
+                    LET(
+                        break?, GetBreak(state),
+                        IF(break?, state,
+                           LET(
+                               iter, GetIndex(state) + 1,
+                               sIdx, SetIndex(state, iter),
+                               newState, fn(sIdx, current, iter),
+                               IF(realStop(newState, iter), SetBreak(newState, TRUE), newState)
+                           )
+                        )
+                    )
+                )),
+        IF(Help?, Help, result)
+)
+);

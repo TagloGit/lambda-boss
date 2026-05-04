@@ -1,0 +1,34 @@
+/*  FUNCTION NAME:      SCANWHILE
+    DESCRIPTION:*//**SCAN that halts when continue returns FALSE. Returns a column of intermediate states (one per iteration). Mechanically equivalent to SCANUNTIL with the predicate negated.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-04  Claude      Initial version
+*/
+SCANWHILE = LAMBDA(
+//  Parameter Declarations
+    [seed],
+    [cases],
+    [fn],
+    [continue],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SCANWHILE(seed, cases, fn, continue)¶" &
+                "DESCRIPTION:   →SCAN that halts when continue returns FALSE. Returns a column of intermediate states (one per iteration).¶" &
+                "VERSION:       →May 04 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial state, typically built with SetVars / SetState.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   fn             →(Required) LAMBDA(state, current, i) returning new state. i is 1-based.¶" &
+                "   continue       →(Required) LAMBDA(state, i) returning TRUE to keep going, FALSE to halt.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SplitState(SCANWHILE(SetVars(""sum"", 0), {1;2;3;4;5}, LAMBDA(s, cur, i, SetVar(s, ""sum"", GetVar(s, ""sum"") + cur)), LAMBDA(s, i, GetVar(s, ""sum"") < 6)), TRUE)¶" &
+                "Result         →6x3 table: header row plus one row per iteration with INDEX / BREAK / sum columns¶" &
+                "NOTE:          →Mechanically equivalent to SCANUNTIL with the predicate negated. Use whichever phrasing reads more naturally. Pair with SplitState(_, TRUE) for a tabular debug view.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        result, SCANUNTIL(seed, cases, fn, LAMBDA(s, i, NOT(continue(s, i)))),
+        IF(Help?, Help, result)
+)
+);
