@@ -1,0 +1,35 @@
+/*  FUNCTION NAME:      WRITEAT
+    DESCRIPTION:*//**Overwrites a cell, row, or column of a 1-D or 2-D array with a scalar value.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-04  Claude      Initial version
+*/
+WRITEAT = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [value],
+    [row],
+    [col],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →WRITEAT(array, value, [row], [col])¶" &
+                "DESCRIPTION:   →Overwrites a cell, row, or column of a 1-D or 2-D array with a scalar value.¶" &
+                "VERSION:       →May 04 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) 1-D or 2-D array to write into.¶" &
+                "   value          →(Required) Scalar to write. Broadcasts across whichever dimension is omitted.¶" &
+                "   row            →(Optional) 1-based row index to overwrite. Omit to target all rows.¶" &
+                "   col            →(Optional) 1-based column index to overwrite. Omit to target all columns.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=WRITEAT({""a"";""b"";""c""}, ""X"", 1)¶" &
+                "Result         →{""X"";""b"";""c""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        rowMask, SEQUENCE(ROWS(array)) = IF(ISOMITTED(row), SEQUENCE(ROWS(array)), row),
+        colMask, SEQUENCE(, COLUMNS(array)) = IF(ISOMITTED(col), SEQUENCE(, COLUMNS(array)), col),
+        result, IF(rowMask * colMask, value, array),
+        IF(Help?, Help, result)
+)
+);

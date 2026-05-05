@@ -1,0 +1,65 @@
+tests:
+  - name: prepend on column array (edge - pos=1)
+    args: ['={"a";"b";"c";"d"}', "X", "=1"]
+    expected: [["X"], ["a"], ["b"], ["c"], ["d"]]
+
+  - name: insert into middle of column array
+    args: ['={"a";"b";"c";"d"}', "X", "=3"]
+    expected: [["a"], ["b"], ["X"], ["c"], ["d"]]
+
+  - name: append on column array (edge - pos=n+1)
+    args: ['={"a";"b";"c";"d"}', "X", "=5"]
+    expected: [["a"], ["b"], ["c"], ["d"], ["X"]]
+
+  - name: insert just before last on column array
+    args: ['={"a";"b";"c";"d"}', "X", "=4"]
+    expected: [["a"], ["b"], ["c"], ["X"], ["d"]]
+
+  - name: prepend on row array (auto-detected horizontal)
+    args: ['={"a","b","c","d"}', "X", "=1"]
+    expected: [["X", "a", "b", "c", "d"]]
+
+  - name: insert into middle of row array (auto-detected horizontal)
+    args: ['={"a","b","c","d"}', "X", "=2"]
+    expected: [["a", "X", "b", "c", "d"]]
+
+  - name: append on row array (auto-detected horizontal, edge)
+    args: ['={"a","b","c","d"}', "X", "=5"]
+    expected: [["a", "b", "c", "d", "X"]]
+
+  - name: insert into single-element column array
+    args: ['={"a"}', "X", "=1"]
+    expected: [["X"], ["a"]]
+
+  - name: append into single-element column array
+    args: ['={"a"}', "X", "=2"]
+    expected: [["a"], ["X"]]
+
+  - name: insert via real range using setup
+    setup:
+      cells:
+        - address: "B2:B5"
+          values:
+            - ["a"]
+            - ["b"]
+            - ["c"]
+            - ["d"]
+      names:
+        - { name: "icol", refers_to: "B2:B5" }
+    args: ["=icol", "X", "=2"]
+    expected: [["a"], ["X"], ["b"], ["c"], ["d"]]
+
+  - name: insert via real horizontal range using setup
+    setup:
+      cells:
+        - address: "B2:E2"
+          values:
+            - ["a", "b", "c", "d"]
+      names:
+        - { name: "irow", refers_to: "B2:E2" }
+    args: ["=irow", "X", "=3"]
+    expected: [["a", "b", "X", "c", "d"]]
+
+  - name: help text
+    args: []
+    expected_type: array
