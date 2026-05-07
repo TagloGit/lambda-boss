@@ -1,0 +1,109 @@
+tests:
+  - name: lookup numeric value by row key and header
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Tim", "=tblPerson", "Age"]
+    expected: 42
+
+  - name: lookup string value by row key and header
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Sam", "=tblPerson", "City"]
+    expected: "Melbourne"
+
+  - name: lookup last-row entry
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Alex", "=tblPerson", "Age"]
+    expected: 25
+
+  - name: item not found returns NA by default
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Jordan", "=tblPerson", "Age"]
+    expected: -2146826246
+
+  - name: item not found with custom fallback
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Jordan", "=tblPerson", "Age", "missing"]
+    expected: "missing"
+
+  - name: header not found returns NA by default
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Tim", "=tblPerson", "Salary"]
+    expected: -2146826246
+
+  - name: header not found with custom numeric fallback
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Tim", "=tblPerson", "Salary", "=0"]
+    expected: 0
+
+  - name: help text
+    args: []
+    expected_type: array
