@@ -1,0 +1,3 @@
+name: Lookup
+description: Table and reference lookup utilities
+default_prefix: lookup

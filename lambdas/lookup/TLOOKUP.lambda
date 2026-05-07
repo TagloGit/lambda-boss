@@ -1,0 +1,42 @@
+/*  FUNCTION NAME:      TLOOKUP
+    DESCRIPTION:*//**Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-07  Claude      Initial version
+*/
+TLOOKUP = LAMBDA(
+//  Parameter Declarations
+    [Table],
+    [Item],
+    [LookupCol],
+    [HeaderName],
+    [If_not_found],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →TLOOKUP(Table, Item, LookupCol, HeaderName, [If_not_found])¶" &
+                "DESCRIPTION:   →Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.¶" &
+                "VERSION:       →May 07 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Table          →(Required) Full table including its header row (e.g. tblData[#All]).¶" &
+                "   Item           →(Required) Value to find in LookupCol to identify the row.¶" &
+                "   LookupCol      →(Required) Column to search for Item (e.g. tblData[Person]). Excluding headers.¶" &
+                "   HeaderName     →(Required) Header text identifying the column whose value should be returned.¶" &
+                "   If_not_found   →(Optional) Value to return when Item or HeaderName is not found. Defaults to #N/A.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=TLOOKUP(tblData[#All], ""Tim"", tblData[Person], ""Age"")¶" &
+                "Result         →42",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(Table),
+    //  Procedure
+        result, IFERROR(
+                    INDEX(
+                        Table,
+                        MATCH(Item, LookupCol, 0) + 1,
+                        MATCH(HeaderName, INDEX(Table, 1, ), 0)
+                    ),
+                    IF(ISOMITTED(If_not_found), NA(), If_not_found)
+                ),
+        IF(Help?, Help, result)
+)
+);
