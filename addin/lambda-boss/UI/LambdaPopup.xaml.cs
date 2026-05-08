@@ -444,6 +444,14 @@ public partial class LambdaPopup
                 SearchBox.Focus();
             }),
         new SlashCommand(
+            "Import All Lambdas",
+            "Import every lambda from every configured library into the active workbook",
+            () =>
+            {
+                Hide();
+                ImportAllLambdasCommand.Run();
+            }),
+        new SlashCommand(
             "Settings",
             "Open Lambda Boss settings",
             () =>
