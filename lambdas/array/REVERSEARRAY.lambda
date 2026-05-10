@@ -1,21 +1,24 @@
 /*  FUNCTION NAME:      REVERSEARRAY
-    DESCRIPTION:*//**Reverses the order of elements in a 1D array.*/
+    DESCRIPTION:*//**Reverses elements of a 1D or 2D array along the specified axis.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-16  Claude      Initial version
+                        2026-05-10  Claude      Fix 2D arrays + add axis parameter
 */
 REVERSEARRAY = LAMBDA(
 //  Parameter Declarations
     [array],
+    [axis],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →REVERSEARRAY(array)¶" &
-                "DESCRIPTION:   →Reverses the order of elements in a 1D array.¶" &
-                "VERSION:       →Apr 16 2026¶" &
+                "FUNCTION:      →REVERSEARRAY(array, [axis])¶" &
+                "DESCRIPTION:   →Reverses elements of a 1D or 2D array along the specified axis.¶" &
+                "VERSION:       →May 10 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   array         →(Required) A 1D array (vertical or horizontal) to reverse.¶" &
+                "   array         →(Required) A 1D or 2D array to reverse.¶" &
+                "   axis          →(Optional) 0 = both axes (default), 1 = horizontal (reverse columns), 2 = vertical (reverse rows).¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=REVERSEARRAY({1;2;3;4;5})¶" &
-                "Result         →{5;4;3;2;1}",
+                "Formula        →=REVERSEARRAY({1,2;3,4})¶" &
+                "Result         →{4,3;2,1}",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -23,10 +26,12 @@ REVERSEARRAY = LAMBDA(
     //  Procedure
         n, ROWS(array),
         m, COLUMNS(array),
-        result, IF(m > 1,
-                    INDEX(array, , SEQUENCE(1,m,m,-1)),
-                    INDEX(array, SEQUENCE(n,,n,-1))
-                ),
+        ax, IF(ISOMITTED(axis), 0, axis),
+        flipRows, OR(ax=0, ax=2),
+        flipCols, OR(ax=0, ax=1),
+        rowIdx, IF(flipRows, SEQUENCE(n,,n,-1), SEQUENCE(n)),
+        colIdx, IF(flipCols, SEQUENCE(1,m,m,-1), SEQUENCE(1,m)),
+        result, INDEX(array, rowIdx, colIdx),
         IF(Help?, Help, result)
 )
 );
