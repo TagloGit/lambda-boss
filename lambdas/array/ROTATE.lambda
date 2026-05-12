@@ -1,0 +1,37 @@
+/*  FUNCTION NAME:      ROTATE
+    DESCRIPTION:*//**Rotates a 2D array by N quarter-turns (90 degrees), clockwise by default.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-12  Claude      Initial version
+*/
+ROTATE = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [turns],
+    [clockwise],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →ROTATE(array, [turns], [clockwise])¶" &
+                "DESCRIPTION:   →Rotates a 2D array by N quarter-turns (90 degrees), clockwise by default.¶" &
+                "VERSION:       →May 12 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array         →(Required) A 2D array to rotate.¶" &
+                "   turns         →(Optional) Number of 90-degree rotations. Default 1. Normalised via MOD(turns, 4).¶" &
+                "   clockwise     →(Optional) TRUE for clockwise (default), FALSE for anticlockwise.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ROTATE({1,2,3;4,5,6})¶" &
+                "Result         →{4,1;5,2;6,3}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        nTurns, IF(ISOMITTED(turns), 1, turns),
+        cw, IF(ISOMITTED(clockwise), TRUE, clockwise),
+        n, MOD(nTurns, 4),
+        result, IF(n=0, array,
+                    IF(cw,
+                        REDUCE(array, SEQUENCE(n), LAMBDA(acc, iter, TRANSPOSE(REVERSEARRAY(acc, 2)))),
+                        REDUCE(array, SEQUENCE(n), LAMBDA(acc, iter, REVERSEARRAY(TRANSPOSE(acc), 2))))),
+        IF(Help?, Help, result)
+)
+);
