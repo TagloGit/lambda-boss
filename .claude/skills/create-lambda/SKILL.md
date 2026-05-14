@@ -126,6 +126,73 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 - Closing `)`: 0 spaces
 - `);`: 0 spaces
 
+## Array-lifting Support
+
+Whenever a new LAMBDA has **at least one scalar-shaped input and a scalar-shaped output**, design it to lift per-parameter — i.e. passing an array of values to the scalar param returns an element-wise array of results. Without lifting, callers who point a column at the lambda silently get a single mixed-up value (the body's aggregators collapse the array). This is a silent footgun, not an error, so it's easy to miss in review.
+
+### When to apply
+
+| Input shape | Output shape | Lift? |
+|---|---|---|
+| ≥1 scalar param | scalar | ✅ Yes — apply dispatcher |
+| All array-shaped params (e.g. lookup tables, grids) | scalar or array | ➖ No — inputs are arrays by design |
+| Any | inherently array (region/window extractors, generators) | ➖ No — output is already array |
+| No real input (constant-table helpers) | array | ➖ No — nothing to lift |
+
+If you're unsure, ask: "does the scalar param semantically take **one** value?" If yes, lift it.
+
+### Dispatcher pattern
+
+Keep the scalar body inside an inline `scalar` LAMBDA within the `LET`, then branch on whether the lift param is multi-cell:
+
+```
+//  Procedure
+    scalar, LAMBDA(<paramName>,
+              LET(... scalar body ...,
+                  <scalar result>)),
+    result, IF(OR(ROWS(<liftParam>) > 1, COLUMNS(<liftParam>) > 1),
+                MAP(<liftParam>, scalar),
+                scalar(<liftParam>)),
+    IF(Help?, Help, result)
+```
+
+The dispatcher MUST sit **after** the `Help?, ISOMITTED(...)` line so `=YourLambda()` still returns help text. Scalar callers see no behavioural change.
+
+### Picking the lift parameter
+
+When multiple parameters could lift, default to lifting the **primary** scalar arg (the one most callers vary). Alternatives, only if the use case clearly demands it:
+
+- **Cartesian product** — more powerful, more complex; needs justification.
+- **Equal-shape zip** — when two arrays of the same shape should be paired element-wise.
+
+Most LAMBDAs just lift the primary arg. Document the choice in the help text.
+
+### Help text
+
+Add an "Also accepts an array of <param>" note to the lifted parameter's description, e.g.:
+
+```
+"   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.¶" &
+```
+
+### Tests
+
+Add at least one array-input test alongside the scalar cases. Cover both orientations if both are realistic (`vertical array of …`, `horizontal array of …`). The harness asserts the spilled result with list-of-lists:
+
+```yaml
+  - name: vertical array of indices lifts
+    args: ['={10,20,30,40}', '={1;3;-1}']
+    expected: [[10], [30], [40]]
+
+  - name: horizontal array of indices lifts
+    args: ['={10,20,30,40}', '={1,2,-1}']
+    expected: [[10, 20, 40]]
+```
+
+### Existing examples
+
+The `maps/` library, `NTH`, `CHARQ`, `REVERSESTRING`, and `TLOOKUP` all use this pattern — read any of them for a worked example. (Some lambdas already lift naturally via Excel's calc engine — e.g. `CONTAINS` via `XMATCH`, `CIRCPOS` via `MOD`. Those have confirmation tests but no dispatcher.)
+
 ## Tests File Format
 
 The `.tests.yaml` file provides test cases for the automated test harness.
@@ -184,6 +251,7 @@ Details to confirm:
 - **Parameters** — name, required/optional, description for each
 - **Formula approach** — brief description of the implementation
 - **Example** — sample call and expected result
+- **Array-lifting** — does the LAMBDA fit the "scalar input → scalar output" shape (see Array-lifting Support above)? If yes, plan the dispatcher and name the param that will lift.
 
 If the issue is missing key details or the approach is ambiguous, ask the user to clarify rather than guessing.
 
