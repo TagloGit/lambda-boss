@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      CELLTOPOS
-    DESCRIPTION:*//**Encodes a cell reference as a single integer (ROW * mult + COLUMN) for grid arithmetic.*/
+    DESCRIPTION:*//**Encodes an A1-style cell address string as a single integer (ROW * mult + COLUMN) for grid arithmetic.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
+                        2026-05-14  Claude      Switch to string input; parse address directly (non-volatile, no INDIRECT)
 */
 CELLTOPOS = LAMBDA(
 //  Parameter Declarations
@@ -10,13 +11,13 @@ CELLTOPOS = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →CELLTOPOS(cell, [mult])¶" &
-                "DESCRIPTION:   →Encodes a cell reference as a single integer (ROW * mult + COLUMN) for grid arithmetic.¶" &
-                "VERSION:       →Apr 15 2026¶" &
+                "DESCRIPTION:   →Encodes an A1-style cell address string as a single integer (ROW * mult + COLUMN) for grid arithmetic.¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cell           →(Required) A cell reference to encode.¶" &
+                "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Sheet prefixes and ranges are tolerated; the first cell of a range is used.¶" &
                 "   mult           →(Optional) Multiplier for the row component. Default: 1000. Must exceed the maximum column number used.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=CELLTOPOS(E5)¶" &
+                "Formula        →=CELLTOPOS(""E5"")¶" &
                 "Result         →5005",
                 "→", "¶"
                 ),
@@ -24,7 +25,14 @@ CELLTOPOS = LAMBDA(
         Help?, ISOMITTED(cell),
     //  Procedure
         m, IF(ISOMITTED(mult), 1000, mult),
-        result, ROW(cell) * m + COLUMN(cell),
+        afterSheet, IFERROR(TEXTAFTER(cell, "!", -1), cell),
+        firstCell, IFERROR(TEXTBEFORE(afterSheet, ":"), afterSheet),
+        upper, UPPER(firstCell),
+        letters, REGEXEXTRACT(upper, "[A-Z]+"),
+        rowNum, --REGEXEXTRACT(upper, "\d+"),
+        n, LEN(letters),
+        colNum, SUMPRODUCT((CODE(MID(letters, SEQUENCE(n), 1)) - 64) * 26^(n - SEQUENCE(n))),
+        result, rowNum * m + colNum,
         IF(Help?, Help, result)
 )
 );
