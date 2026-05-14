@@ -31,6 +31,14 @@ tests:
     args: ["MASSAGE", "S", true]
     expected: 2
 
+  - name: vertical array of texts lifts (literal mode)
+    args: ['={"MASSAGE";"HELLO";"abcabc"}', "S"]
+    expected: [[2], [0], [0]]
+
+  - name: vertical array of texts lifts (regex mode)
+    args: ['={"abc123def456";"abcdef";"1a2b3c"}', "[0-9]+", true]
+    expected: [[2], [0], [3]]
+
   - name: help text
     args: []
     expected_type: array

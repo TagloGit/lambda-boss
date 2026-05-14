@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-07  Claude      Initial version
+                        2026-05-14  Claude      Array-lift on Item via dispatcher: MAP over multi-item input, otherwise scalar body unchanged
 */
 TLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -14,10 +15,10 @@ TLOOKUP = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →TLOOKUP(Table, Item, LookupCol, HeaderName, [If_not_found])¶" &
                 "DESCRIPTION:   →Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.¶" &
-                "VERSION:       →May 07 2026¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   Table          →(Required) Full table including its header row (e.g. tblData[#All]).¶" &
-                "   Item           →(Required) Value to find in LookupCol to identify the row.¶" &
+                "   Item           →(Required) Value to find in LookupCol to identify the row. Also accepts an array of items — result lifts element-wise.¶" &
                 "   LookupCol      →(Required) Column to search for Item (e.g. tblData[Person]). Excluding headers.¶" &
                 "   HeaderName     →(Required) Header text identifying the column whose value should be returned.¶" &
                 "   If_not_found   →(Optional) Value to return when Item or HeaderName is not found. Defaults to #N/A.¶" &
@@ -29,14 +30,19 @@ TLOOKUP = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(Table),
     //  Procedure
-        result, IFERROR(
+        notFound, IF(ISOMITTED(If_not_found), NA(), If_not_found),
+        scalar, LAMBDA(it,
+                  IFERROR(
                     INDEX(
                         Table,
-                        MATCH(Item, LookupCol, 0) + 1,
+                        MATCH(it, LookupCol, 0) + 1,
                         MATCH(HeaderName, INDEX(Table, 1, ), 0)
                     ),
-                    IF(ISOMITTED(If_not_found), NA(), If_not_found)
-                ),
+                    notFound
+                  )),
+        result, IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
+                    MAP(Item, scalar),
+                    scalar(Item)),
         IF(Help?, Help, result)
 )
 );

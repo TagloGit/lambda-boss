@@ -15,6 +15,10 @@ tests:
     args: ["=7", "={10,42,99}"]
     expected: False
 
+  - name: vertical array of values lifts (XMATCH naturally lifts on lookup_value)
+    args: ['={"Podcast";"Video";"Music"}', '={"Podcast","Music","News"}']
+    expected: [[True], [False], [True]]
+
   - name: help text
     args: []
     expected_type: array

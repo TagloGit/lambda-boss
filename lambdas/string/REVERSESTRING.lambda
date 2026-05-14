@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Reverses the characters in a text string.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-16  Claude      Initial version
+                        2026-05-14  Claude      Array-lift on text via dispatcher: MAP over multi-text input, otherwise scalar body unchanged. SEQUENCE(LEN(text), ...) requires a scalar length.
 */
 REVERSESTRING = LAMBDA(
 //  Parameter Declarations
@@ -10,9 +11,9 @@ REVERSESTRING = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REVERSESTRING(text)¶" &
                 "DESCRIPTION:   →Reverses the characters in a text string.¶" &
-                "VERSION:       →Apr 16 2026¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   text          →(Required) The string to reverse.¶" &
+                "   text          →(Required) The string to reverse. Also accepts an array of strings — result lifts element-wise.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=REVERSESTRING(""863FOVW595"")¶" &
                 "Result         →595WVOF368",
@@ -21,7 +22,10 @@ REVERSESTRING = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(text),
     //  Procedure
-        result, CONCAT(MID(text, SEQUENCE(LEN(text),,LEN(text),-1), 1)),
+        scalar, LAMBDA(t, CONCAT(MID(t, SEQUENCE(LEN(t),,LEN(t),-1), 1))),
+        result, IF(OR(ROWS(text) > 1, COLUMNS(text) > 1),
+                    MAP(text, scalar),
+                    scalar(text)),
         IF(Help?, Help, result)
 )
 );

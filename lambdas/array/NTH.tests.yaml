@@ -35,6 +35,14 @@ tests:
     args: ['={10,20,30,40}', "=-5"]
     expected: -2146826246
 
+  - name: vertical array of indices lifts
+    args: ['={10,20,30,40}', '={1;3;-1}']
+    expected: [[10], [30], [40]]
+
+  - name: horizontal array of indices lifts
+    args: ['={10,20,30,40}', '={1,2,-1}']
+    expected: [[10, 20, 40]]
+
   - name: help text
     args: []
     expected_type: array
