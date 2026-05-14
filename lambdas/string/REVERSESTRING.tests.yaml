@@ -15,6 +15,14 @@ tests:
     args: ["X"]
     expected: "X"
 
+  - name: vertical array of strings lifts
+    args: ['={"hello";"world";"abc"}']
+    expected: [["olleh"], ["dlrow"], ["cba"]]
+
+  - name: horizontal array of strings lifts
+    args: ['={"hello","world","abc"}']
+    expected: [["olleh", "dlrow", "cba"]]
+
   - name: help text
     args: []
     expected_type: array

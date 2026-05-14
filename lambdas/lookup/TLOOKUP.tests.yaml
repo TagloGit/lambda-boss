@@ -104,6 +104,36 @@ tests:
     args: ["=tblAll", "Tim", "=tblPerson", "Salary", "=0"]
     expected: 0
 
+  - name: vertical array of items lifts
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", '={"Tim";"Sam";"Alex"}', "=tblPerson", "Age"]
+    expected: [[42], [30], [25]]
+
+  - name: array of items with one missing uses fallback
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", '={"Tim";"Jordan";"Alex"}', "=tblPerson", "Age", "=-1"]
+    expected: [[42], [-1], [25]]
+
   - name: help text
     args: []
     expected_type: array

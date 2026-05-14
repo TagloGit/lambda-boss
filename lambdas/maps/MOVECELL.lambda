@@ -4,6 +4,7 @@
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      cell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
                         2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
+                        2026-05-14  Claude      Array-lift on cell via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
 */
 MOVECELL = LAMBDA(
 //  Parameter Declarations
@@ -16,8 +17,8 @@ MOVECELL = LAMBDA(
                 "DESCRIPTION:   →Returns the A1 address of the cell offset from cell by the direction dir, using a moves table of {glyph, dRow, dCol}.¶" &
                 "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Output of MOVECELL itself can be fed back in.¶" &
-                "   dir            →(Required) Direction glyph matching a value in the first column of moves.¶" &
+                "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Output of MOVECELL itself can be fed back in. Also accepts an array/range of addresses — result lifts element-wise.¶" &
+                "   dir            →(Required) Direction glyph matching a value in the first column of moves. Treated as a scalar (single direction applied to every cell in array input).¶" &
                 "   moves          →(Optional) 3-column table: {glyph, dRow, dCol}. Defaults to ARROWMOVES(). Use HSTACK(customGlyphs, KNIGHTDELTAS()) for knight moves.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MOVECELL(""E5"", ""↖"")¶" &
@@ -32,10 +33,14 @@ MOVECELL = LAMBDA(
         idx, XMATCH(dir, CHOOSECOLS(m, 1)),
         dR, INDEX(m, idx, 2),
         dC, INDEX(m, idx, 3),
-        pos, CELLTOPOS(cell, safeMult),
-        curRow, INT(pos / safeMult),
-        curCol, MOD(pos, safeMult),
-        result, ADDRESS(curRow + dR, curCol + dC, 4),
+        scalar, LAMBDA(c,
+                  LET(pos, CELLTOPOS(c, safeMult),
+                      curRow, INT(pos / safeMult),
+                      curCol, MOD(pos, safeMult),
+                      ADDRESS(curRow + dR, curCol + dC, 4))),
+        result, IF(OR(ROWS(cell) > 1, COLUMNS(cell) > 1),
+                    MAP(cell, scalar),
+                    scalar(cell)),
         IF(Help?, Help, result)
 )
 );

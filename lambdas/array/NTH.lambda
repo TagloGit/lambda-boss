@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns the Nth element of an array (flattened), with negative N counting from the end.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-21  Claude      Initial version
+                        2026-05-14  Claude      Array-lift on n via dispatcher: MAP over multi-index input, otherwise scalar body unchanged
 */
 NTH = LAMBDA(
 //  Parameter Declarations
@@ -11,10 +12,10 @@ NTH = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →NTH(arr, n)¶" &
                 "DESCRIPTION:   →Returns the Nth element of an array (flattened), with negative N counting from the end.¶" &
-                "VERSION:       →Apr 21 2026¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   arr            →(Required) Any array or range — 1D, 2D, vertical, or horizontal.¶" &
-                "   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last).¶" &
+                "   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=NTH({""a"",""b"",""c""}, -1)¶" &
                 "Result         →""c""",
@@ -24,8 +25,12 @@ NTH = LAMBDA(
         Help?, ISOMITTED(arr),
     //  Procedure
         flat, TOCOL(arr),
-        idx, IF(n < 0, ROWS(flat) + n + 1, n),
-        result, IF(idx < 1, NA(), @INDEX(flat, idx, 1)),
+        scalar, LAMBDA(ni,
+                  LET(idx, IF(ni < 0, ROWS(flat) + ni + 1, ni),
+                      IF(idx < 1, NA(), @INDEX(flat, idx, 1)))),
+        result, IF(OR(ROWS(n) > 1, COLUMNS(n) > 1),
+                    MAP(n, scalar),
+                    scalar(n)),
         IF(Help?, Help, result)
 )
 );

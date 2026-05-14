@@ -43,6 +43,14 @@ tests:
     args: ['=MOVECELL("E5", "↖")', '="↘"']
     expected: "E5"
 
+  - name: vertical array of cells lifts with single direction
+    args: ['={"E5";"F3";"B2"}', '="↖"']
+    expected: [["D4"], ["E2"], ["A1"]]
+
+  - name: horizontal array of cells lifts with single direction
+    args: ['={"E5","F3","B2"}', '="↘"']
+    expected: [["F6", "G4", "C3"]]
+
   - name: help text
     args: []
     expected_type: array

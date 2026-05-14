@@ -4,6 +4,7 @@
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      Switch to string input; parse address directly (non-volatile, no INDIRECT)
                         2026-05-14  Claude      Default mult bumped from 1000 to 100000 — safe for any Excel column (max XFD=16384) while keeping the trailing 5 digits readable
+                        2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
 */
 CELLTOPOS = LAMBDA(
 //  Parameter Declarations
@@ -15,7 +16,7 @@ CELLTOPOS = LAMBDA(
                 "DESCRIPTION:   →Encodes an A1-style cell address string as a single integer (ROW * mult + COLUMN) for grid arithmetic.¶" &
                 "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Sheet prefixes and ranges are tolerated; the first cell of a range is used.¶" &
+                "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Sheet prefixes and ranges are tolerated; the first cell of a range is used. Also accepts an array/range of addresses — result lifts element-wise.¶" &
                 "   mult           →(Optional) Multiplier for the row component. Default: 100000 — safe for any Excel column (max XFD=16384) and keeps the trailing 5 digits readable as the column.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=CELLTOPOS(""E5"")¶" &
@@ -26,14 +27,20 @@ CELLTOPOS = LAMBDA(
         Help?, ISOMITTED(cell),
     //  Procedure
         m, IF(ISOMITTED(mult), 100000, mult),
-        afterSheet, IFERROR(TEXTAFTER(cell, "!", -1), cell),
-        firstCell, IFERROR(TEXTBEFORE(afterSheet, ":"), afterSheet),
-        upper, UPPER(firstCell),
-        letters, REGEXEXTRACT(upper, "[A-Z]+"),
-        rowNum, --REGEXEXTRACT(upper, "\d+"),
-        n, LEN(letters),
-        colNum, SUMPRODUCT((CODE(MID(letters, SEQUENCE(n), 1)) - 64) * 26^(n - SEQUENCE(n))),
-        result, rowNum * m + colNum,
+        scalar, LAMBDA(c,
+                  LET(
+                    afterSheet, IFERROR(TEXTAFTER(c, "!", -1), c),
+                    firstCell, IFERROR(TEXTBEFORE(afterSheet, ":"), afterSheet),
+                    upper, UPPER(firstCell),
+                    letters, REGEXEXTRACT(upper, "[A-Z]+"),
+                    rowNum, --REGEXEXTRACT(upper, "\d+"),
+                    n, LEN(letters),
+                    colNum, SUMPRODUCT((CODE(MID(letters, SEQUENCE(n), 1)) - 64) * 26^(n - SEQUENCE(n))),
+                    rowNum * m + colNum
+                  )),
+        result, IF(OR(ROWS(cell) > 1, COLUMNS(cell) > 1),
+                    MAP(cell, scalar),
+                    scalar(cell)),
         IF(Help?, Help, result)
 )
 );

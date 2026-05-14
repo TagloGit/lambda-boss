@@ -23,6 +23,14 @@ tests:
     args: ["=19", "=19", "=3"]
     expected: 3
 
+  - name: vertical array of moves lifts (MOD naturally lifts)
+    args: ['={1;5;-2}', "=19"]
+    expected: [[2], [6], [18]]
+
+  - name: vertical array of starts lifts
+    args: ["=0", "=19", '={1;5;19}']
+    expected: [[1], [5], [19]]
+
   - name: help text
     args: []
     expected_type: array
