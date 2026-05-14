@@ -4,6 +4,7 @@
                         2026-04-17  Claude      Initial version
                         2026-04-17  Claude      Swap grid/centerCell order; rename center to centerCell
                         2026-05-14  Claude      centerCell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
+                        2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
 */
 GRIDAREA = LAMBDA(
 //  Parameter Declarations
@@ -29,6 +30,7 @@ GRIDAREA = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(grid),
     //  Procedure
+        safeMult, 16385,
         winR, IF(ISOMITTED(rows), 3, rows),
         winC, IF(ISOMITTED(cols), winR, cols),
         hr, INT(winR/2),
@@ -37,9 +39,9 @@ GRIDAREA = LAMBDA(
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         endRow, baseRow + ROWS(grid) - 1,
         endCol, baseCol + COLUMNS(grid) - 1,
-        pos, CELLTOPOS(centerCell, 20000),
-        ctrRow, INT(pos / 20000),
-        ctrCol, MOD(pos, 20000),
+        pos, CELLTOPOS(centerCell, safeMult),
+        ctrRow, INT(pos / safeMult),
+        ctrCol, MOD(pos, safeMult),
         topRow, MAX(baseRow, ctrRow - hr),
         botRow, MIN(endRow, ctrRow + hr),
         leftCol, MAX(baseCol, ctrCol - hc),

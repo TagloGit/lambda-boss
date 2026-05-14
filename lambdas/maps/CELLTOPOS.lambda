@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      Switch to string input; parse address directly (non-volatile, no INDIRECT)
+                        2026-05-14  Claude      Default mult bumped from 1000 to 100000 — safe for any Excel column (max XFD=16384) while keeping the trailing 5 digits readable
 */
 CELLTOPOS = LAMBDA(
 //  Parameter Declarations
@@ -15,16 +16,16 @@ CELLTOPOS = LAMBDA(
                 "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Sheet prefixes and ranges are tolerated; the first cell of a range is used.¶" &
-                "   mult           →(Optional) Multiplier for the row component. Default: 1000. Must exceed the maximum column number used.¶" &
+                "   mult           →(Optional) Multiplier for the row component. Default: 100000 — safe for any Excel column (max XFD=16384) and keeps the trailing 5 digits readable as the column.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=CELLTOPOS(""E5"")¶" &
-                "Result         →5005",
+                "Result         →500005",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(cell),
     //  Procedure
-        m, IF(ISOMITTED(mult), 1000, mult),
+        m, IF(ISOMITTED(mult), 100000, mult),
         afterSheet, IFERROR(TEXTAFTER(cell, "!", -1), cell),
         firstCell, IFERROR(TEXTBEFORE(afterSheet, ":"), afterSheet),
         upper, UPPER(firstCell),

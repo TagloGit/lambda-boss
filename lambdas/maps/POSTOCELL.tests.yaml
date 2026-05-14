@@ -1,15 +1,19 @@
 tests:
-  - name: default mult 5005
-    args: ["=5005"]
+  - name: default mult 500005
+    args: ["=500005"]
     expected: "E5"
 
-  - name: default mult 3003
-    args: ["=3003"]
+  - name: default mult 300003
+    args: ["=300003"]
     expected: "C3"
 
-  - name: default mult 12012
-    args: ["=12012"]
+  - name: default mult 1200012
+    args: ["=1200012"]
     expected: "L12"
+
+  - name: default mult 1200028 (AB12)
+    args: ["=1200028"]
+    expected: "AB12"
 
   - name: custom mult 101
     args: ["=101", "=100"]

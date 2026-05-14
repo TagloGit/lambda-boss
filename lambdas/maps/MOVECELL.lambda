@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      cell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
+                        2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
 */
 MOVECELL = LAMBDA(
 //  Parameter Declarations
@@ -26,13 +27,14 @@ MOVECELL = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(cell),
     //  Procedure
+        safeMult, 16385,
         m, IF(ISOMITTED(moves), ARROWMOVES(), moves),
         idx, XMATCH(dir, CHOOSECOLS(m, 1)),
         dR, INDEX(m, idx, 2),
         dC, INDEX(m, idx, 3),
-        pos, CELLTOPOS(cell, 20000),
-        curRow, INT(pos / 20000),
-        curCol, MOD(pos, 20000),
+        pos, CELLTOPOS(cell, safeMult),
+        curRow, INT(pos / safeMult),
+        curCol, MOD(pos, safeMult),
         result, ADDRESS(curRow + dR, curCol + dC, 4),
         IF(Help?, Help, result)
 )

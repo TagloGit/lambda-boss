@@ -4,6 +4,7 @@
                         2026-04-15  Claude      Initial version
                         2026-04-15  Claude      Switch to XMATCH; add match_mode parameter
                         2026-05-14  Claude      Reverse branch parses address via CELLTOPOS instead of volatile INDIRECT
+                        2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
 */
 GRIDLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -31,13 +32,14 @@ GRIDLOOKUP = LAMBDA(
         reverse, AND(NOT(ISOMITTED(return_Value)), return_Value),
         mMode, IF(ISOMITTED(match_mode), 0, match_mode),
     //  Procedure
+        safeMult, 16385,
         baseRow, IFERROR(MIN(ROW(grid)), 1),
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         result, IF(reverse,
-                    LET(pos, CELLTOPOS(value, 20000),
+                    LET(pos, CELLTOPOS(value, safeMult),
                         INDEX(grid,
-                              INT(pos / 20000) - baseRow + 1,
-                              MOD(pos, 20000) - baseCol + 1)),
+                              INT(pos / safeMult) - baseRow + 1,
+                              MOD(pos, safeMult) - baseCol + 1)),
                     LET(p, XMATCH(value, TOCOL(grid), mMode),
                         cols, COLUMNS(grid),
                         ADDRESS(baseRow + INT((p - 1) / cols),
