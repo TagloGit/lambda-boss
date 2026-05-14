@@ -31,6 +31,14 @@ tests:
     args: ['="A5"', "=SEQUENCE(10,10)", "=TRUE"]
     expected: 41
 
+  - name: reverse lookup from cell containing address string
+    setup:
+      cells:
+        - address: "C3"
+          values: "A5"
+    args: ["=C3", "=SEQUENCE(10,10)", "=TRUE"]
+    expected: 41
+
   - name: match_mode 1 finds next larger value
     args: ["=99.5", "=SEQUENCE(10,10)", "=FALSE", "=1"]
     expected: "J10"

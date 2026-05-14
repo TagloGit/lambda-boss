@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-17  Claude      Initial version
                         2026-04-17  Claude      Swap grid/centerCell order; rename center to centerCell
+                        2026-05-14  Claude      centerCell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
 */
 GRIDAREA = LAMBDA(
 //  Parameter Declarations
@@ -14,16 +15,15 @@ GRIDAREA = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →GRIDAREA(grid, centerCell, [rows], [cols])¶" &
                 "DESCRIPTION:   →Extracts a rectangular neighborhood from grid around centerCell, clamped to the grid's bounds.¶" &
-                "VERSION:       →Apr 17 2026¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) The full grid range to extract from.¶" &
-                "   centerCell     →(Required) A cell reference for the center of the window (e.g. D4). If you have a string address, wrap it with INDIRECT, e.g. INDIRECT(""D4"").¶" &
+                "   centerCell     →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Position within grid determines the window's center.¶" &
                 "   rows           →(Optional) Height of the extraction window. Default 3.¶" &
                 "   cols           →(Optional) Width of the extraction window. Default = rows (square).¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=GRIDAREA(A1:I9, E5, 3, 3)¶" &
-                "Result         →3x3 array centered on E5, clamped to A1:I9¶" &
-                "With INDIRECT →=GRIDAREA(A1:I9, INDIRECT(""E5""), 3, 3)",
+                "Formula        →=GRIDAREA(A1:I9, ""E5"", 3, 3)¶" &
+                "Result         →3x3 array centered on E5, clamped to A1:I9",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -37,8 +37,9 @@ GRIDAREA = LAMBDA(
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         endRow, baseRow + ROWS(grid) - 1,
         endCol, baseCol + COLUMNS(grid) - 1,
-        ctrRow, ROW(centerCell),
-        ctrCol, COLUMN(centerCell),
+        pos, CELLTOPOS(centerCell, 20000),
+        ctrRow, INT(pos / 20000),
+        ctrCol, MOD(pos, 20000),
         topRow, MAX(baseRow, ctrRow - hr),
         botRow, MIN(endRow, ctrRow + hr),
         leftCol, MAX(baseCol, ctrCol - hc),

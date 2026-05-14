@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-30  Claude      Initial version
+                        2026-05-14  Claude      Document INDIRECT volatility in Help
 */
 INCEL = LAMBDA(
 //  Parameter Declarations
@@ -11,13 +12,14 @@ INCEL = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →INCEL(address, [sheet])¶" &
                 "DESCRIPTION:   →Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.¶" &
-                "VERSION:       →Apr 30 2026¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   address       →(Required) Cell or range address text (e.g. ""A1"" or ""B2:D5"").¶" &
                 "   sheet         →(Optional) Sheet name. If omitted, the address resolves on the current sheet.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=INCEL(""A1"", ""Data"")¶" &
-                "Result         →Value of A1 on the Data sheet",
+                "Result         →Value of A1 on the Data sheet¶" &
+                "NOTE:          →INDIRECT is volatile — every INCEL call recalculates on any workbook change. Prefer non-volatile alternatives (GRIDLOOKUP with return_Value=TRUE, INDEX into a known range) when you only need a value rather than a runtime reference.",
                 "→", "¶"
                 ),
     //  Check inputs

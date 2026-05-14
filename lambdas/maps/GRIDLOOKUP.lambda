@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-04-15  Claude      Switch to XMATCH; add match_mode parameter
+                        2026-05-14  Claude      Reverse branch parses address via CELLTOPOS instead of volatile INDIRECT
 */
 GRIDLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -14,7 +15,7 @@ GRIDLOOKUP = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →GRIDLOOKUP(value, grid, [return_Value], [match_mode])¶" &
                 "DESCRIPTION:   →Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.¶" &
-                "VERSION:       →Apr 15 2026¶" &
+                "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") to look up.¶" &
                 "   grid          →(Required) The grid range to search (e.g. M!C3:L12).¶" &
@@ -33,9 +34,10 @@ GRIDLOOKUP = LAMBDA(
         baseRow, IFERROR(MIN(ROW(grid)), 1),
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         result, IF(reverse,
-                    INDEX(grid,
-                          ROW(INDIRECT(value)) - baseRow + 1,
-                          COLUMN(INDIRECT(value)) - baseCol + 1),
+                    LET(pos, CELLTOPOS(value, 20000),
+                        INDEX(grid,
+                              INT(pos / 20000) - baseRow + 1,
+                              MOD(pos, 20000) - baseCol + 1)),
                     LET(p, XMATCH(value, TOCOL(grid), mMode),
                         cols, COLUMNS(grid),
                         ADDRESS(baseRow + INT((p - 1) / cols),
