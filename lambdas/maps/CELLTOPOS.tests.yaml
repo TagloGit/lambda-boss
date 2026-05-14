@@ -55,6 +55,26 @@ tests:
     args: ["=C3"]
     expected: 500005
 
+  - name: vertical array of addresses lifts
+    args: ['={"E5";"C3"}']
+    expected: [[500005], [300003]]
+
+  - name: horizontal array of addresses lifts
+    args: ['={"E5","C3"}']
+    expected: [[500005, 300003]]
+
+  - name: 2D array of addresses lifts
+    args: ['={"E5","F6";"C3","D4"}']
+    expected: [[500005, 600006], [300003, 400004]]
+
+  - name: range of cells containing addresses lifts
+    setup:
+      cells:
+        - address: "D2:E2"
+          values: [["E5", "F6"]]
+    args: ["=D2:E2"]
+    expected: [[500005, 600006]]
+
   - name: help text
     args: []
     expected_type: array

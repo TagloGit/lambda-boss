@@ -5,6 +5,7 @@
                         2026-04-15  Claude      Switch to XMATCH; add match_mode parameter
                         2026-05-14  Claude      Reverse branch parses address via CELLTOPOS instead of volatile INDIRECT
                         2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
+                        2026-05-14  Claude      Array-lift on value via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
 */
 GRIDLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -18,7 +19,7 @@ GRIDLOOKUP = LAMBDA(
                 "DESCRIPTION:   →Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.¶" &
                 "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") to look up.¶" &
+                "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") to look up. Also accepts an array/range of values or addresses — result lifts element-wise.¶" &
                 "   grid          →(Required) The grid range to search (e.g. M!C3:L12).¶" &
                 "   return_Value  →(Optional) FALSE (default) returns a cell address for the value. TRUE treats value as an address and returns the cell's value.¶" &
                 "   match_mode    →(Optional) Forwarded to XMATCH: 0 exact (default), -1 exact or next smaller, 1 exact or next larger, 2 wildcard. Ignored when return_Value is TRUE.¶" &
@@ -35,15 +36,19 @@ GRIDLOOKUP = LAMBDA(
         safeMult, 16385,
         baseRow, IFERROR(MIN(ROW(grid)), 1),
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
-        result, IF(reverse,
-                    LET(pos, CELLTOPOS(value, safeMult),
-                        INDEX(grid,
-                              INT(pos / safeMult) - baseRow + 1,
-                              MOD(pos, safeMult) - baseCol + 1)),
-                    LET(p, XMATCH(value, TOCOL(grid), mMode),
-                        cols, COLUMNS(grid),
-                        ADDRESS(baseRow + INT((p - 1) / cols),
-                                baseCol + MOD(p - 1, cols), 4))),
+        scalar, LAMBDA(v,
+                  IF(reverse,
+                     LET(pos, CELLTOPOS(v, safeMult),
+                         INDEX(grid,
+                               INT(pos / safeMult) - baseRow + 1,
+                               MOD(pos, safeMult) - baseCol + 1)),
+                     LET(p, XMATCH(v, TOCOL(grid), mMode),
+                         cols, COLUMNS(grid),
+                         ADDRESS(baseRow + INT((p - 1) / cols),
+                                 baseCol + MOD(p - 1, cols), 4)))),
+        result, IF(OR(ROWS(value) > 1, COLUMNS(value) > 1),
+                    MAP(value, scalar),
+                    scalar(value)),
         IF(Help?, Help, result)
 )
 );

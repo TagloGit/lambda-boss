@@ -51,6 +51,14 @@ tests:
     args: ["=9999", "=SEQUENCE(10,10)", "=FALSE", "=-1"]
     expected: "J10"
 
+  - name: forward lookup lifts over vertical array of values
+    args: ['={1;41;100}', "=SEQUENCE(10,10)"]
+    expected: [["A1"], ["A5"], ["J10"]]
+
+  - name: reverse lookup lifts over vertical array of addresses
+    args: ['={"A1";"A5";"J10"}', "=SEQUENCE(10,10)", "=TRUE"]
+    expected: [[1], [41], [100]]
+
   - name: help text
     args: []
     expected_type: array

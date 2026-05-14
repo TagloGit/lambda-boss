@@ -23,6 +23,26 @@ tests:
     args: ['="C5:E5"']
     expected: [[1, 2, 3]]
 
+  - name: vertical array of single-cell addresses lifts
+    setup:
+      cells:
+        - address: "A5"
+          values: 42
+        - address: "B3"
+          values: 99
+    args: ['={"A5";"B3"}']
+    expected: [[42], [99]]
+
+  - name: horizontal array of single-cell addresses lifts
+    setup:
+      cells:
+        - address: "A5"
+          values: 42
+        - address: "B3"
+          values: 99
+    args: ['={"A5","B3"}']
+    expected: [[42, 99]]
+
   - name: help text
     args: []
     expected_type: array

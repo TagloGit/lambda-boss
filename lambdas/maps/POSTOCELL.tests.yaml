@@ -23,6 +23,14 @@ tests:
     args: ["=526", "=50"]
     expected: "Z10"
 
+  - name: vertical array of positions lifts
+    args: ['={500005;300003}']
+    expected: [["E5"], ["C3"]]
+
+  - name: horizontal array of positions lifts
+    args: ['={500005,300003}']
+    expected: [["E5", "C3"]]
+
   - name: help text
     args: []
     expected_type: array

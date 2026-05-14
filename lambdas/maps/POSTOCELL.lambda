@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      Default mult bumped from 1000 to 100000 to match CELLTOPOS
+                        2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
 */
 POSTOCELL = LAMBDA(
 //  Parameter Declarations
@@ -14,7 +15,7 @@ POSTOCELL = LAMBDA(
                 "DESCRIPTION:   →Decodes an integer position (from CELLTOPOS) back to an A1-style cell address string.¶" &
                 "VERSION:       →May 14 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   pos            →(Required) Integer position to decode.¶" &
+                "   pos            →(Required) Integer position to decode. Also accepts an array/range of positions — result lifts element-wise.¶" &
                 "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches CELLTOPOS). Must match the mult used by CELLTOPOS.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=POSTOCELL(500005)¶" &
@@ -25,7 +26,10 @@ POSTOCELL = LAMBDA(
         Help?, ISOMITTED(pos),
     //  Procedure
         m, IF(ISOMITTED(mult), 100000, mult),
-        result, ADDRESS(ROUNDDOWN(pos / m, 0), MOD(pos, m), 4),
+        scalar, LAMBDA(p, ADDRESS(ROUNDDOWN(p / m, 0), MOD(p, m), 4)),
+        result, IF(OR(ROWS(pos) > 1, COLUMNS(pos) > 1),
+                    MAP(pos, scalar),
+                    scalar(pos)),
         IF(Help?, Help, result)
 )
 );
