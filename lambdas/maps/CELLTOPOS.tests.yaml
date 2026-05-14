@@ -1,43 +1,43 @@
 tests:
   - name: literal string E5
     args: ["E5"]
-    expected: 5005
+    expected: 500005
 
   - name: literal string C3
     args: ["C3"]
-    expected: 3003
+    expected: 300003
 
   - name: literal string L12
     args: ["L12"]
-    expected: 12012
+    expected: 1200012
 
   - name: lowercase address
     args: ["e5"]
-    expected: 5005
+    expected: 500005
 
   - name: absolute reference dollars stripped
     args: ["$E$5"]
-    expected: 5005
+    expected: 500005
 
   - name: range collapses to first cell
     args: ["E5:F6"]
-    expected: 5005
+    expected: 500005
 
   - name: sheet-prefixed address
     args: ["Sheet1!E5"]
-    expected: 5005
+    expected: 500005
 
   - name: sheet prefix with range
     args: ["Sheet1!E5:F6"]
-    expected: 5005
+    expected: 500005
 
   - name: quoted sheet name with space
     args: ["'My Sheet'!E5"]
-    expected: 5005
+    expected: 500005
 
   - name: multi-letter column AB12
     args: ["AB12"]
-    expected: 12028
+    expected: 1200028
 
   - name: custom mult A1
     args: ["A1", "=100"]
@@ -53,7 +53,7 @@ tests:
         - address: "C3"
           values: "E5"
     args: ["=C3"]
-    expected: 5005
+    expected: 500005
 
   - name: help text
     args: []
