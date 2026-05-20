@@ -1,0 +1,52 @@
+tests:
+  - name: simple address A1
+    args: ["A1"]
+    expected: 1
+
+  - name: multi-letter column AA1
+    args: ["AA1"]
+    expected: 27
+
+  - name: column Z
+    args: ["Z1"]
+    expected: 26
+
+  - name: max column XFD
+    args: ["XFD1"]
+    expected: 16384
+
+  - name: column AB
+    args: ["AB12"]
+    expected: 28
+
+  - name: absolute reference dollars stripped
+    args: ["$E$5"]
+    expected: 5
+
+  - name: sheet-prefixed address
+    args: ["Sheet1!AA17"]
+    expected: 27
+
+  - name: lowercase address
+    args: ["aa17"]
+    expected: 27
+
+  - name: cell containing address string
+    setup:
+      cells:
+        - address: "C3"
+          values: "AA17"
+    args: ["=C3"]
+    expected: 27
+
+  - name: vertical array of addresses lifts
+    args: ['={"A1";"Z1";"AA1"}']
+    expected: [[1], [26], [27]]
+
+  - name: horizontal array of addresses lifts
+    args: ['={"A1","Z1","AA1"}']
+    expected: [[1, 26, 27]]
+
+  - name: help text
+    args: []
+    expected_type: array

@@ -1,0 +1,48 @@
+tests:
+  - name: simple address Q17
+    args: ["Q17"]
+    expected: 17
+
+  - name: top-left A1
+    args: ["A1"]
+    expected: 1
+
+  - name: multi-letter column AA1
+    args: ["AA1"]
+    expected: 1
+
+  - name: large row Z99
+    args: ["Z99"]
+    expected: 99
+
+  - name: absolute reference dollars stripped
+    args: ["$E$5"]
+    expected: 5
+
+  - name: sheet-prefixed address
+    args: ["Sheet1!E5"]
+    expected: 5
+
+  - name: lowercase address
+    args: ["e5"]
+    expected: 5
+
+  - name: cell containing address string
+    setup:
+      cells:
+        - address: "C3"
+          values: "Q17"
+    args: ["=C3"]
+    expected: 17
+
+  - name: vertical array of addresses lifts
+    args: ['={"A1";"B5";"Z99"}']
+    expected: [[1], [5], [99]]
+
+  - name: horizontal array of addresses lifts
+    args: ['={"A1","B5","Z99"}']
+    expected: [[1, 5, 99]]
+
+  - name: help text
+    args: []
+    expected_type: array

@@ -1,0 +1,28 @@
+/*  FUNCTION NAME:      ROWNUM
+    DESCRIPTION:*//**Returns the row number of an A1-style cell address passed as text. Like ROW() but accepts strings.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-20  Claude      Initial version
+*/
+ROWNUM = LAMBDA(
+//  Parameter Declarations
+    [address],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →ROWNUM(address)¶" &
+                "DESCRIPTION:   →Returns the row number of an A1-style cell address passed as text. Like ROW() but accepts strings.¶" &
+                "VERSION:       →May 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   address        →(Required) A1 address text (e.g. ""Q17""), or an array/range of such. Sheet prefixes, $ anchors, and ranges are tolerated (first cell used). Result lifts element-wise.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ROWNUM(""Q17"")¶" &
+                "Result         →17",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(address),
+    //  Procedure
+        safeMult, 100000,
+        result, INT(CELLTOPOS(address, safeMult) / safeMult),
+        IF(Help?, Help, result)
+)
+);
