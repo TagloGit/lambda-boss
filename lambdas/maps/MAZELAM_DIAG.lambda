@@ -1,0 +1,44 @@
+/*  FUNCTION NAME:      MAZELAM_DIAG
+    DESCRIPTION:*//**Stock Mazelam for MAZE: diagonal steps cost 1.5x the destination cell's Cost; cardinal steps cost 1x. Produces realistic Euclidean-ish distance over a uniform map.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-20  Claude      Initial version
+*/
+MAZELAM_DIAG = LAMBDA(
+//  Parameter Declarations
+    [costFrom],
+    [costTo],
+    [rowFrom],
+    [colFrom],
+    [rowTo],
+    [colTo],
+    [distFrom],
+    [dirDelta],
+    [prevDir],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MAZELAM_DIAG(costFrom, costTo, rowFrom, colFrom, rowTo, colTo, distFrom, dirDelta, prevDir)¶" &
+                "DESCRIPTION:   →Stock Mazelam for MAZE: diagonal steps cost 1.5x the destination cell's Cost; cardinal steps cost 1x. Pass by name to MAZE: =MAZE(mp, ""C3"", , , , , , , MAZELAM_DIAG).¶" &
+                "VERSION:       →May 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   costFrom       →(Required) Cost at the source cell. (Unused by this Mazelam.)¶" &
+                "   costTo         →(Required) Cost at the destination cell. Multiplied by 1.5 on diagonals.¶" &
+                "   rowFrom        →(Required) Absolute row of source cell.¶" &
+                "   colFrom        →(Required) Absolute column of source cell.¶" &
+                "   rowTo          →(Required) Absolute row of destination cell.¶" &
+                "   colTo          →(Required) Absolute column of destination cell.¶" &
+                "   distFrom       →(Required) Cumulative cost to reach source. (Unused by this Mazelam.)¶" &
+                "   dirDelta       →(Required) This step's direction, encoded row*100000+col. (Unused.)¶" &
+                "   prevDir        →(Required) Previous direction. (Unused.)¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAZE(myMap, ""A1"", , , , , , , MAZELAM_DIAG)¶" &
+                "Result         →Distance grid where diagonal moves cost 1.5x and cardinals cost 1x",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(costFrom),
+    //  Procedure
+        diagonal, (rowFrom <> rowTo) * (colFrom <> colTo),
+        result, IF(diagonal = 1, costTo * 1.5, costTo),
+        IF(Help?, Help, result)
+)
+);
