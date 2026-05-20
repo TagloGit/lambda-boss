@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Generalized breadth-first / weighted shortest-path search over a grid. Coordinate frame, cost surface, and walkability are separate parameters, with an optional user-supplied per-edge cost LAMBDA.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version (body recreated from issue 184; parameter names preserved)
+                        2026-05-20  Claude      Rename internal LET variables for readability; logic and parameter names unchanged
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -37,101 +38,101 @@ MAZE = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(mp),
     //  Procedure
-        dir, {100000, -100000, 1, -1, 100001, -100001, 99999, -99999},
-        xRC, IF(ISOMITTED(Cus_Dir), TAKE(dir, , 8 - 4 * No_Diag), TOROW(Cus_Dir, 3)),
-        nv, IF(ISERR(@ROW(mp)), 1, 0),
-        cn, IF(nv, SEQUENCE(, COLUMNS(mp)), COLUMN(mp)),
-        rn, IF(nv, SEQUENCE(ROWS(mp)), ROW(mp)),
         M, 100000,
-        rcn, rn * M + cn,
-        ir, @rn - 1,
-        ic, @cn - 1,
-        na, HSTACK(0, 0, 0, 0),
-        rcst, TOCOL(ROWNUM(st) * M + COLNUM(st)),
-        costG, IF(ISOMITTED(Cost), mp - mp + 1, Cost),
-        mpA, IF(ISOMITTED(Allowmp), mp = mp, Allowmp),
-        fx, LAMBDA(lfx, pool, ft, n,
+        defaultDirs, {100000, -100000, 1, -1, 100001, -100001, 99999, -99999},
+        moveSet, IF(ISOMITTED(Cus_Dir), TAKE(defaultDirs, , 8 - 4 * No_Diag), TOROW(Cus_Dir, 3)),
+        noRowCol, IF(ISERR(@ROW(mp)), 1, 0),
+        colArr, IF(noRowCol, SEQUENCE(, COLUMNS(mp)), COLUMN(mp)),
+        rowArr, IF(noRowCol, SEQUENCE(ROWS(mp)), ROW(mp)),
+        posGrid, rowArr * M + colArr,
+        rowOffset, @rowArr - 1,
+        colOffset, @colArr - 1,
+        naRow, HSTACK(0, 0, 0, 0),
+        startPos, TOCOL(ROWNUM(st) * M + COLNUM(st)),
+        costGrid, IF(ISOMITTED(Cost), mp - mp + 1, Cost),
+        walkMask, IF(ISOMITTED(Allowmp), mp = mp, Allowmp),
+        recurse, LAMBDA(self, pool, frontier, iter,
             LET(
-                fcl, TAKE(ft, , 1),
-                fdist, CHOOSECOLS(ft, 2),
-                fprev, CHOOSECOLS(ft, 4),
-                cf, TOCOL(fcl + SEQUENCE(, COUNTA(xRC), 0, 0)),
-                rf, INT(cf / M) - ir,
-                clf, MOD(cf, M) - ic,
-                ct, TOCOL(fcl + xRC),
-                rt, INT(ct / M) - ir,
-                clt, MOD(ct, M) - ic,
-                conf, INDEX(costG, rf, clf),
-                cont, INDEX(costG, rt, clt),
-                st_, TOCOL(SEQUENCE(ROWS(ft), , 0) + SEQUENCE(, COUNTA(xRC), n + 1, 0)),
-                df, TOCOL(fdist + SEQUENCE(, COUNTA(xRC), 0, 0)),
-                dr, TOCOL(xRC + SEQUENCE(COUNTA(fcl), , 0, 0)),
-                prev, TOCOL(fprev + SEQUENCE(, COUNTA(xRC), 0, 0)),
-                pd, IFNA(XLOOKUP(ct, TAKE(pool, , 1), CHOOSECOLS(pool, 2), , , 2), ""),
-                ift, SORT(
+                frontPos, TAKE(frontier, , 1),
+                frontDist, CHOOSECOLS(frontier, 2),
+                frontPrev, CHOOSECOLS(frontier, 4),
+                fromPos, TOCOL(frontPos + SEQUENCE(, COUNTA(moveSet), 0, 0)),
+                fromRow, INT(fromPos / M) - rowOffset,
+                fromCol, MOD(fromPos, M) - colOffset,
+                toPos, TOCOL(frontPos + moveSet),
+                toRow, INT(toPos / M) - rowOffset,
+                toCol, MOD(toPos, M) - colOffset,
+                costFrom, INDEX(costGrid, fromRow, fromCol),
+                costTo, INDEX(costGrid, toRow, toCol),
+                stepNum, TOCOL(SEQUENCE(ROWS(frontier), , 0) + SEQUENCE(, COUNTA(moveSet), iter + 1, 0)),
+                distFrom, TOCOL(frontDist + SEQUENCE(, COUNTA(moveSet), 0, 0)),
+                dirDelta, TOCOL(moveSet + SEQUENCE(COUNTA(frontPos), , 0, 0)),
+                prevDir, TOCOL(frontPrev + SEQUENCE(, COUNTA(moveSet), 0, 0)),
+                bestSoFar, IFNA(XLOOKUP(toPos, TAKE(pool, , 1), CHOOSECOLS(pool, 2), , , 2), ""),
+                proposals, SORT(
                     IF(
-                        rt * clt,
+                        toRow * toCol,
                         LET(
-                            al, IFERROR(INDEX(mpA, rt, clt), 0),
-                            nd, IF(
+                            walkOK, IFERROR(INDEX(walkMask, toRow, toCol), 0),
+                            stepCost, IF(
                                 ISOMITTED(Mazelam),
-                                cont,
+                                costTo,
                                 IFERROR(
                                     Mazelam(
-                                        conf,
-                                        cont,
-                                        INT(cf / M),
-                                        MOD(cf, M),
-                                        INT(ct / M),
-                                        MOD(ct, M),
-                                        df,
-                                        dr,
-                                        prev
+                                        costFrom,
+                                        costTo,
+                                        INT(fromPos / M),
+                                        MOD(fromPos, M),
+                                        INT(toPos / M),
+                                        MOD(toPos, M),
+                                        distFrom,
+                                        dirDelta,
+                                        prevDir
                                     ),
                                     NA()
                                 )
                             ),
                             IF(
-                                al,
+                                walkOK,
                                 IFERROR(
                                     IF(
-                                        ISNA(nd),
-                                        na,
-                                        IF(nd + df < pd, HSTACK(ct, df + nd, st_, dr), na)
+                                        ISNA(stepCost),
+                                        naRow,
+                                        IF(stepCost + distFrom < bestSoFar, HSTACK(toPos, distFrom + stepCost, stepNum, dirDelta), naRow)
                                     ),
-                                    na
+                                    naRow
                                 ),
-                                na
+                                naRow
                             )
                         ),
-                        na
+                        naRow
                     ),
                     {1, 2},
                     {1, -1}
                 ),
-                nft, LET(
-                    au, UNIQUE(TAKE(ift, , 1)),
-                    a, HSTACK(au, VLOOKUP(au, ift, 2), VLOOKUP(au, ift, 3), VLOOKUP(au, ift, 4)),
-                    FILTER(a, TAKE(a, , 1) > 0, na)
+                newFrontier, LET(
+                    newKeys, UNIQUE(TAKE(proposals, , 1)),
+                    merged, HSTACK(newKeys, VLOOKUP(newKeys, proposals, 2), VLOOKUP(newKeys, proposals, 3), VLOOKUP(newKeys, proposals, 4)),
+                    FILTER(merged, TAKE(merged, , 1) > 0, naRow)
                 ),
-                npool, LET(
-                    b, SORT(VSTACK(pool, nft), {1, 2}, {1, -1}),
-                    bu, UNIQUE(TAKE(b, , 1)),
-                    HSTACK(bu, VLOOKUP(bu, b, 2), VLOOKUP(bu, b, 3), VLOOKUP(bu, b, 4))
+                newPool, LET(
+                    poolSorted, SORT(VSTACK(pool, newFrontier), {1, 2}, {1, -1}),
+                    poolKeys, UNIQUE(TAKE(poolSorted, , 1)),
+                    HSTACK(poolKeys, VLOOKUP(poolKeys, poolSorted, 2), VLOOKUP(poolKeys, poolSorted, 3), VLOOKUP(poolKeys, poolSorted, 4))
                 ),
-                IF(SUM(nft) = 0, pool, lfx(lfx, npool, nft, n + 1))
+                IF(SUM(newFrontier) = 0, pool, self(self, newPool, newFrontier, iter + 1))
             )
         ),
-        seed, IFNA(HSTACK(rcst, 0, 0, 0), 0),
-        rs, fx(fx, seed, seed, 0),
-        end, LET(
-            z, IF(ISOMITTED(Show_Steps), 2, 3),
+        seed, IFNA(HSTACK(startPos, 0, 0, 0), 0),
+        finalPool, recurse(recurse, seed, seed, 0),
+        output, LET(
+            outCol, IF(ISOMITTED(Show_Steps), 2, 3),
             IF(
                 ISOMITTED(Targets),
-                IFNA(VLOOKUP(rcn, rs, z, ), ""),
-                MAP(Targets, LAMBDA(t, IFNA(VLOOKUP(ROWNUM(t) * M + COLNUM(t), rs, z, ), NA())))
+                IFNA(VLOOKUP(posGrid, finalPool, outCol, ), ""),
+                MAP(Targets, LAMBDA(tgt, IFNA(VLOOKUP(ROWNUM(tgt) * M + COLNUM(tgt), finalPool, outCol, ), NA())))
             )
         ),
-        IF(Help?, Help, end)
+        IF(Help?, Help, output)
 )
 );
