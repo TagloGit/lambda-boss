@@ -1,0 +1,90 @@
+tests:
+  - name: Manhattan F28 to G26 (default)
+    args: ["F28", "G26"]
+    expected: 3
+
+  - name: Manhattan AH27 to S34
+    args: ["AH27", "S34"]
+    expected: 22
+
+  - name: Manhattan AL33 to N15
+    args: ["AL33", "N15"]
+    expected: 42
+
+  - name: Manhattan X15 to Z4
+    args: ["X15", "Z4"]
+    expected: 13
+
+  - name: Manhattan AC36 to AS42
+    args: ["AC36", "AS42"]
+    expected: 22
+
+  - name: Manhattan AS7 to U16
+    args: ["AS7", "U16"]
+    expected: 33
+
+  - name: same cell is zero
+    args: ["E5", "E5"]
+    expected: 0
+
+  - name: Chebyshev X15 to Z4 (metric 1)
+    args: ["X15", "Z4", "=1"]
+    expected: 11
+
+  - name: Chebyshev diagonal F5 to H7
+    args: ["F5", "H7", "=1"]
+    expected: 2
+
+  - name: Chebyshev pure horizontal A1 to E1
+    args: ["A1", "E1", "=1"]
+    expected: 4
+
+  - name: Euclidean A1 to A4 (metric 2)
+    args: ["A1", "A4", "=2"]
+    expected: 3
+
+  - name: Euclidean A1 to B2 (metric 2)
+    args: ["A1", "B2", "=2"]
+    expected: 1.4142135623730951
+
+  - name: Euclidean A1 to D5 (3-4-5 triangle)
+    args: ["A1", "D5", "=2"]
+    expected: 5
+
+  - name: handles absolute references
+    args: ["$F$28", "$G$26"]
+    expected: 3
+
+  - name: handles sheet prefix
+    args: ["Sheet1!F28", "Sheet1!G26"]
+    expected: 3
+
+  - name: cell containing address string
+    setup:
+      cells:
+        - address: "C3"
+          values: "F28"
+        - address: "C4"
+          values: "G26"
+    args: ["=C3", "=C4"]
+    expected: 3
+
+  - name: vertical array zip same-shape
+    args: ['={"F28";"AH27";"X15"}', '={"G26";"S34";"Z4"}']
+    expected: [[3], [22], [13]]
+
+  - name: horizontal array zip same-shape
+    args: ['={"F28","X15"}', '={"G26","Z4"}']
+    expected: [[3, 13]]
+
+  - name: cartesian column x row broadcast
+    args: ['={"A1";"B2"}', '={"C3","D4"}']
+    expected: [[4, 6], [2, 4]]
+
+  - name: cartesian column x row Chebyshev
+    args: ['={"A1";"B2"}', '={"C3","D4"}', "=1"]
+    expected: [[2, 3], [1, 2]]
+
+  - name: help text
+    args: []
+    expected_type: array

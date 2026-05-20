@@ -1,0 +1,28 @@
+/*  FUNCTION NAME:      COLNUM
+    DESCRIPTION:*//**Returns the column number of an A1-style cell address passed as text. Like COLUMN() but accepts strings.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-20  Claude      Initial version
+*/
+COLNUM = LAMBDA(
+//  Parameter Declarations
+    [address],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →COLNUM(address)¶" &
+                "DESCRIPTION:   →Returns the column number of an A1-style cell address passed as text. Like COLUMN() but accepts strings. Handles multi-letter columns (AA, BZ, XFD).¶" &
+                "VERSION:       →May 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   address        →(Required) A1 address text (e.g. ""AA17""), or an array/range of such. Sheet prefixes, $ anchors, and ranges are tolerated (first cell used). Result lifts element-wise.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COLNUM(""AA17"")¶" &
+                "Result         →27",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(address),
+    //  Procedure
+        safeMult, 100000,
+        result, MOD(CELLTOPOS(address, safeMult), safeMult),
+        IF(Help?, Help, result)
+)
+);

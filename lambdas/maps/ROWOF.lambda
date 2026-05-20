@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      ROWOF
+    DESCRIPTION:*//**Extracts the row number from an encoded position integer (as produced by CELLTOPOS).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-20  Claude      Initial version
+*/
+ROWOF = LAMBDA(
+//  Parameter Declarations
+    [pos],
+    [mult],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →ROWOF(pos, [mult])¶" &
+                "DESCRIPTION:   →Extracts the row number from an encoded position integer (as produced by CELLTOPOS).¶" &
+                "VERSION:       →May 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches CELLTOPOS). Must match the mult used to encode pos.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ROWOF(1700017)¶" &
+                "Result         →17",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), 100000, mult),
+        result, INT(pos / m),
+        IF(Help?, Help, result)
+)
+);

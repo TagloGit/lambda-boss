@@ -1,0 +1,42 @@
+/*  FUNCTION NAME:      CELLDIST
+    DESCRIPTION:*//**Returns the grid distance between two A1-style cell addresses (Manhattan, Chebyshev, or Euclidean).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-20  Claude      Initial version
+*/
+CELLDIST = LAMBDA(
+//  Parameter Declarations
+    [cell1],
+    [cell2],
+    [metric],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CELLDIST(cell1, cell2, [metric])¶" &
+                "DESCRIPTION:   →Returns the grid distance between two A1-style cell addresses (Manhattan, Chebyshev, or Euclidean).¶" &
+                "VERSION:       →May 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   cell1          →(Required) First cell address as text (e.g. ""F28""). Also accepts an array of addresses.¶" &
+                "   cell2          →(Required) Second cell address as text (e.g. ""G26""). Also accepts an array of addresses. When both are arrays, Excel broadcasts naturally: same-shape inputs pair element-wise, column × row produces a 2D distance grid.¶" &
+                "   metric         →(Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CELLDIST(""F28"", ""G26"")¶" &
+                "Result         →3",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(cell1),
+    //  Procedure
+        safeMult, 16385,
+        met, IF(ISOMITTED(metric), 0, metric),
+        posA, CELLTOPOS(cell1, safeMult),
+        posB, CELLTOPOS(cell2, safeMult),
+        rowA, INT(posA / safeMult),
+        rowB, INT(posB / safeMult),
+        colA, MOD(posA, safeMult),
+        colB, MOD(posB, safeMult),
+        dR, ABS(rowA - rowB),
+        dC, ABS(colA - colB),
+        result, IF(met = 2, SQRT((rowA - rowB)^2 + (colA - colB)^2),
+                IF(met = 1, IF(dR > dC, dR, dC), dR + dC)),
+        IF(Help?, Help, result)
+)
+);

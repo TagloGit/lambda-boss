@@ -1,0 +1,39 @@
+tests:
+  - name: single cell F28
+    setup:
+      names:
+        - { name: "testRng", refers_to: "F28" }
+    args: ["=testRng"]
+    expected: "F28"
+
+  - name: 3x3 grid F28:H30
+    setup:
+      names:
+        - { name: "testRng", refers_to: "F28:H30" }
+    args: ["=testRng"]
+    expected: [["F28", "G28", "H28"], ["F29", "G29", "H29"], ["F30", "G30", "H30"]]
+
+  - name: column B5:B10
+    setup:
+      names:
+        - { name: "testRng", refers_to: "B5:B10" }
+    args: ["=testRng"]
+    expected: [["B5"], ["B6"], ["B7"], ["B8"], ["B9"], ["B10"]]
+
+  - name: row B5:D5
+    setup:
+      names:
+        - { name: "testRng", refers_to: "B5:D5" }
+    args: ["=testRng"]
+    expected: [["B5", "C5", "D5"]]
+
+  - name: multi-letter column AA1
+    setup:
+      names:
+        - { name: "testRng", refers_to: "AA1" }
+    args: ["=testRng"]
+    expected: "AA1"
+
+  - name: help text
+    args: []
+    expected_type: array

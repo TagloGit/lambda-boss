@@ -1,0 +1,40 @@
+tests:
+  - name: simple position Q17
+    args: ["=1700017"]
+    expected: 17
+
+  - name: column 5 from position E5
+    args: ["=500005"]
+    expected: 5
+
+  - name: top-left A1
+    args: ["=100001"]
+    expected: 1
+
+  - name: multi-letter column AB
+    args: ['=CELLTOPOS("AB12")']
+    expected: 28
+
+  - name: composed with CELLTOPOS XFD
+    args: ['=CELLTOPOS("XFD16384")']
+    expected: 16384
+
+  - name: custom mult 50
+    args: ["=526", "=50"]
+    expected: 26
+
+  - name: custom mult matches CELLTOPOS custom mult
+    args: ['=CELLTOPOS("Z10", 50)', "=50"]
+    expected: 26
+
+  - name: vertical array of positions lifts
+    args: ['={100001;500005;1700017}']
+    expected: [[1], [5], [17]]
+
+  - name: horizontal array of positions lifts
+    args: ['={100001,500005,1700017}']
+    expected: [[1, 5, 17]]
+
+  - name: help text
+    args: []
+    expected_type: array
