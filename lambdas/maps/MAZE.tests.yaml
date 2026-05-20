@@ -1,0 +1,94 @@
+tests:
+  - name: uniform-cost 3x3 grid, 4-way, full distance grid from top-left
+    setup:
+      cells:
+        - address: "G3:I5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "theMap", refers_to: "G3:I5" }
+    args: ["=theMap", '="G3"', "=", "=", "=TRUE"]
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
+  - name: 8-way diagonal distances to a list of targets
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "theMap", refers_to: "C3:E5" }
+    args: ["=theMap", '="C3"', "=", '={"C3";"E5";"E3"}', "=FALSE"]
+    expected: [[0], [2], [2]]
+
+  - name: walkability mask forces detour around blocked cell
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "theMap", refers_to: "C3:E5" }
+    args: ["=theMap", '="C3"', "=", '="E3"', "=TRUE", "={TRUE,FALSE,TRUE;TRUE,TRUE,TRUE;TRUE,TRUE,TRUE}"]
+    expected: 4
+
+  - name: custom Cost grid scales cumulative cost
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+        - address: "G3:I5"
+          values:
+            - [2, 2, 2]
+            - [2, 2, 2]
+            - [2, 2, 2]
+      names:
+        - { name: "theMap", refers_to: "C3:E5" }
+        - { name: "costArr", refers_to: "G3:I5" }
+    args: ["=theMap", '="C3"', "=costArr", '="E5"', "=FALSE"]
+    expected: 4
+
+  - name: Show_Steps returns the body's step counter for the path to a target
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+        - address: "G3:I5"
+          values:
+            - [2, 2, 2]
+            - [2, 2, 2]
+            - [2, 2, 2]
+      names:
+        - { name: "theMap", refers_to: "C3:E5" }
+        - { name: "costArr", refers_to: "G3:I5" }
+    args: ["=theMap", '="C3"', "=costArr", '="E5"', "=FALSE", "=", "=TRUE"]
+    expected: 4
+
+  - name: custom Mazelam — diagonals cost 1.5x
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "theMap", refers_to: "C3:E5" }
+    args: ["=theMap", '="C3"', "=", '="E5"', "=FALSE", "=", "=", "=", "=LAMBDA(costFrom,costTo,rowFrom,colFrom,rowTo,colTo,distFrom,dirDelta,prevDir,IF((rowFrom<>rowTo)*(colFrom<>colTo)=1,costTo*1.5,costTo))"]
+    expected: 3
+
+  - name: help text
+    args: []
+    expected_type: array

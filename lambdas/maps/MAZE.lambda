@@ -1,0 +1,137 @@
+/*  FUNCTION NAME:      MAZE
+    DESCRIPTION:*//**Generalized breadth-first / weighted shortest-path search over a grid. Coordinate frame, cost surface, and walkability are separate parameters, with an optional user-supplied per-edge cost LAMBDA.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-20  Claude      Initial version (body recreated from issue 184; parameter names preserved)
+*/
+MAZE = LAMBDA(
+//  Parameter Declarations
+    [mp],
+    [st],
+    [Cost],
+    [Targets],
+    [No_Diag],
+    [Allowmp],
+    [Show_Steps],
+    [Cus_Dir],
+    [Mazelam],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MAZE(mp, st, [Cost], [Targets], [No_Diag], [Allowmp], [Show_Steps], [Cus_Dir], [Mazelam])¶" &
+                "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. Coordinate frame, cost surface, and walkability are separate parameters so the function works for icon-text maps, dynamically computed cost surfaces, or simple uniform-cost mazes.¶" &
+                "VERSION:       →May 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   mp            →(Required) Map range. Defines the coordinate frame — its ROW/COLUMN determine what addresses like ""Q17"" mean. Values inside mp are not used for cost.¶" &
+                "   st            →(Required) Start cell address(es) as A1 text (e.g. ""C3""). Accepts an array of addresses for multi-source BFS.¶" &
+                "   Cost          →(Optional) Per-cell step cost, same shape as mp. Defaults to uniform 1 (every step costs 1).¶" &
+                "   Targets       →(Optional) A1 address(es) of cells to report distance for. Omitted returns the full distance grid covering all reachable cells.¶" &
+                "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
+                "   Allowmp       →(Optional) Boolean walkability mask, same shape as mp. Defaults to everywhere walkable.¶" &
+                "   Show_Steps    →(Optional) TRUE returns step count; default returns cumulative cost.¶" &
+                "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
+                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, rowFrom, colFrom, rowTo, colTo, distFrom, dirDelta, prevDir) returning per-step cost. Return NA() to drop an edge.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAZE(mp, ""C3"", , , TRUE)¶" &
+                "Result         →4-way distance grid from C3 covering all reachable cells in mp",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(mp),
+    //  Procedure
+        dir, {100000, -100000, 1, -1, 100001, -100001, 99999, -99999},
+        xRC, IF(ISOMITTED(Cus_Dir), TAKE(dir, , 8 - 4 * No_Diag), TOROW(Cus_Dir, 3)),
+        nv, IF(ISERR(@ROW(mp)), 1, 0),
+        cn, IF(nv, SEQUENCE(, COLUMNS(mp)), COLUMN(mp)),
+        rn, IF(nv, SEQUENCE(ROWS(mp)), ROW(mp)),
+        M, 100000,
+        rcn, rn * M + cn,
+        ir, @rn - 1,
+        ic, @cn - 1,
+        na, HSTACK(0, 0, 0, 0),
+        rcst, TOCOL(ROWNUM(st) * M + COLNUM(st)),
+        costG, IF(ISOMITTED(Cost), mp - mp + 1, Cost),
+        mpA, IF(ISOMITTED(Allowmp), mp = mp, Allowmp),
+        fx, LAMBDA(lfx, pool, ft, n,
+            LET(
+                fcl, TAKE(ft, , 1),
+                fdist, CHOOSECOLS(ft, 2),
+                fprev, CHOOSECOLS(ft, 4),
+                cf, TOCOL(fcl + SEQUENCE(, COUNTA(xRC), 0, 0)),
+                rf, INT(cf / M) - ir,
+                clf, MOD(cf, M) - ic,
+                ct, TOCOL(fcl + xRC),
+                rt, INT(ct / M) - ir,
+                clt, MOD(ct, M) - ic,
+                conf, INDEX(costG, rf, clf),
+                cont, INDEX(costG, rt, clt),
+                st_, TOCOL(SEQUENCE(ROWS(ft), , 0) + SEQUENCE(, COUNTA(xRC), n + 1, 0)),
+                df, TOCOL(fdist + SEQUENCE(, COUNTA(xRC), 0, 0)),
+                dr, TOCOL(xRC + SEQUENCE(COUNTA(fcl), , 0, 0)),
+                prev, TOCOL(fprev + SEQUENCE(, COUNTA(xRC), 0, 0)),
+                pd, IFNA(XLOOKUP(ct, TAKE(pool, , 1), CHOOSECOLS(pool, 2), , , 2), ""),
+                ift, SORT(
+                    IF(
+                        rt * clt,
+                        LET(
+                            al, IFERROR(INDEX(mpA, rt, clt), 0),
+                            nd, IF(
+                                ISOMITTED(Mazelam),
+                                cont,
+                                IFERROR(
+                                    Mazelam(
+                                        conf,
+                                        cont,
+                                        INT(cf / M),
+                                        MOD(cf, M),
+                                        INT(ct / M),
+                                        MOD(ct, M),
+                                        df,
+                                        dr,
+                                        prev
+                                    ),
+                                    NA()
+                                )
+                            ),
+                            IF(
+                                al,
+                                IFERROR(
+                                    IF(
+                                        ISNA(nd),
+                                        na,
+                                        IF(nd + df < pd, HSTACK(ct, df + nd, st_, dr), na)
+                                    ),
+                                    na
+                                ),
+                                na
+                            )
+                        ),
+                        na
+                    ),
+                    {1, 2},
+                    {1, -1}
+                ),
+                nft, LET(
+                    au, UNIQUE(TAKE(ift, , 1)),
+                    a, HSTACK(au, VLOOKUP(au, ift, 2), VLOOKUP(au, ift, 3), VLOOKUP(au, ift, 4)),
+                    FILTER(a, TAKE(a, , 1) > 0, na)
+                ),
+                npool, LET(
+                    b, SORT(VSTACK(pool, nft), {1, 2}, {1, -1}),
+                    bu, UNIQUE(TAKE(b, , 1)),
+                    HSTACK(bu, VLOOKUP(bu, b, 2), VLOOKUP(bu, b, 3), VLOOKUP(bu, b, 4))
+                ),
+                IF(SUM(nft) = 0, pool, lfx(lfx, npool, nft, n + 1))
+            )
+        ),
+        seed, IFNA(HSTACK(rcst, 0, 0, 0), 0),
+        rs, fx(fx, seed, seed, 0),
+        end, LET(
+            z, IF(ISOMITTED(Show_Steps), 2, 3),
+            IF(
+                ISOMITTED(Targets),
+                IFNA(VLOOKUP(rcn, rs, z, ), ""),
+                MAP(Targets, LAMBDA(t, IFNA(VLOOKUP(ROWNUM(t) * M + COLNUM(t), rs, z, ), NA())))
+            )
+        ),
+        IF(Help?, Help, end)
+)
+);
