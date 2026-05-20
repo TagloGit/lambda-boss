@@ -76,7 +76,7 @@ tests:
     args: ["=theMap", '="C3"', "=costArr", '="E5"', "=FALSE", "=", "=TRUE"]
     expected: 4
 
-  - name: custom Mazelam — diagonals cost 1.5x
+  - name: custom Mazelam — inline LAMBDA, diagonals cost 1.5x
     setup:
       cells:
         - address: "C3:E5"
@@ -87,6 +87,19 @@ tests:
       names:
         - { name: "theMap", refers_to: "C3:E5" }
     args: ["=theMap", '="C3"', "=", '="E5"', "=FALSE", "=", "=", "=", "=LAMBDA(costFrom,costTo,rowFrom,colFrom,rowTo,colTo,distFrom,dirDelta,prevDir,IF((rowFrom<>rowTo)*(colFrom<>colTo)=1,costTo*1.5,costTo))"]
+    expected: 3
+
+  - name: stock MAZELAM_DIAG passed by name gives same result as the inline LAMBDA
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "theMap", refers_to: "C3:E5" }
+    args: ["=theMap", '="C3"', "=", '="E5"', "=FALSE", "=", "=", "=", "=MAZELAM_DIAG"]
     expected: 3
 
   - name: help text
