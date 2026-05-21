@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace LambdaBoss.Common;
 
-public static class NativeMethods
+internal static class NativeMethods
 {
     public const int MonitorDefaultToNearest = 2;
 
@@ -15,34 +15,34 @@ public static class NativeMethods
     public const int WsExToolWindow = 0x00000080;
 
     [DllImport("user32.dll")]
-    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    internal static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
-    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    internal static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
     [DllImport("user32.dll")]
-    public static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
+    internal static extern bool GetWindowRect(IntPtr hWnd, out Rect lpRect);
 
     [DllImport("user32.dll")]
-    public static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
+    internal static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
 
     [DllImport("user32.dll")]
-    public static extern IntPtr MonitorFromPoint(Point pt, int dwFlags);
+    internal static extern IntPtr MonitorFromPoint(Point pt, int dwFlags);
 
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern bool GetMonitorInfo(IntPtr hMonitor, ref Monitorinfo lpmi);
+    internal static extern bool GetMonitorInfo(IntPtr hMonitor, ref Monitorinfo lpmi);
 
     [DllImport("shcore.dll")]
-    public static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
+    internal static extern int GetDpiForMonitor(IntPtr hMonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     [DllImport("user32.dll")]
-    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+    internal static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
         int x, int y, int cx, int cy, uint uFlags);
 
-    public static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
+    internal static readonly IntPtr DpiAwarenessContextPerMonitorAwareV2 = new(-4);
 
     [DllImport("user32.dll")]
-    public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+    internal static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
 
     [StructLayout(LayoutKind.Sequential)]
     public struct Point
@@ -71,6 +71,6 @@ public static class NativeMethods
         public Rect rcWork;
         public uint dwFlags;
 
-        public static Monitorinfo Create() => new() { cbSize = Marshal.SizeOf<Monitorinfo>() };
+        internal static Monitorinfo Create() => new() { cbSize = Marshal.SizeOf<Monitorinfo>() };
     }
 }
