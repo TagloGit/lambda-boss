@@ -1,5 +1,7 @@
 # 0006 — Self-contained tournament build
 
+> **Status: Superseded by spike findings (2026-05-21).** See [Spike outcome](#spike-outcome) below. The proposed approach is architecturally impossible. Superseded by spec [0007 — .NET Framework 4.8 port for tournament-ready single-file XLL](0007-net-framework-port.md).
+
 ## Problem
 
 Lambda Boss is currently distributed as an InnoSetup installer (`LambdaBoss-x.y.z-Setup.exe`) that copies an XLL plus ~5 side-car DLLs and 3 config JSONs into `%LOCALAPPDATA%\LambdaBoss\`, sets an `OPEN` registry key under `HKCU\Software\Microsoft\Office\16.0\Excel\Options` so Excel autoloads the add-in, and silently installs the .NET 6 Desktop Runtime if it isn't already present. This is the right shape for normal users on their own machines.
@@ -94,3 +96,55 @@ The verification must demonstrate the full happy-path flow — copy → unblock 
 ## Open Questions
 
 - **Self-contained publish + ExcelDNA AddIn package interaction.** ExcelDNA's `PublishExcelDnaAddIn` MSBuild target is the supported path for producing a packed XLL, but its interaction with `<SelfContained>true</SelfContained>` + `<PublishSingleFile>true</PublishSingleFile>` needs verification — there are known edge cases around how the embedded runtime sits inside the XLL. The implementation plan should begin with a short spike that confirms a hello-world Lambda Boss build loads as a single self-contained XLL on the verification VM before any further build-script work. If the spike uncovers blockers, the spec gets revisited before the rest of the plan proceeds.
+
+## Spike outcome
+
+The spike called out in the open question above (issue #190, branch `issue-190-spike-self-contained-xll`, 2026-05-21) **uncovered a blocker**. The proposed approach is not implementable — ExcelDNA architecturally precludes self-contained / single-file publish for .NET 6+ XLL add-ins.
+
+### Empirical evidence
+
+ExcelDNA.AddIn 1.9.0, .NET 6 (runtime 6.0.36 present locally).
+
+**Attempt 1 — full proposed combo:**
+
+```
+dotnet publish addin/lambda-boss/lambda-boss.csproj -c Release \
+  -r win-x64 --self-contained true -p:PublishSingleFile=true
+```
+
+Fails with:
+
+> `error NETSDK1099: Publishing to a single-file is only supported for executable applications.`
+
+`PublishSingleFile` requires `<OutputType>Exe</OutputType>`. Lambda Boss is a class library — the XLL itself is a native loader copied from ExcelDNA's NuGet tools folder, with managed assemblies appended as Win32 resources. There is no managed entry point for the apphost-bundle mechanism to wrap. Hard .NET SDK constraint, not configurable.
+
+**Attempt 2 — drop `PublishSingleFile`, keep self-contained:**
+
+```
+dotnet publish addin/lambda-boss/lambda-boss.csproj -c Release \
+  -r win-x64 --self-contained true
+```
+
+Succeeds, but produces 287 files totalling 156 MB with **no `.xll` file produced**. ExcelDNA's `PublishExcelDnaAddIn` / `PackExcelAddIn` targets do not integrate with `dotnet publish` in self-contained mode — the publish output is plain managed DLLs + native runtime, with no native XLL bootstrapper.
+
+### Primary-source confirmation
+
+ExcelDNA author Govert van Drimmelen on [Discussion #607](https://github.com/Excel-DNA/ExcelDna/discussions/607):
+
+> We don't support the bring-your-own-runtime option of .NET Core, because the add-in isolation mechanism we use (the AssemblyLoadContext etc.) doesn't support that. … only one version of a .NET Core runtime can be loaded into the Excel process.
+
+Official [ExcelDNA .NET runtime support docs](https://excel-dna.net/docs/guides-basic/dotnet-runtime-support/):
+
+> If your add-in will be distributed outside your organization, or on machines that you don't have much control over, then I would suggest targeting .NET Framework.
+
+The [ExcelDNA 1.9.0 release notes](https://excel-dna.net/docs/release-notes-1-9/) introduce extended registration, async, object handles, and native-dependency packing — but no self-contained / single-file publish support.
+
+### Why ExcelDNA architecturally precludes this
+
+XLL files are native DLLs loaded by Excel via the XLL Manager. ExcelDNA's loader (`ExcelDna64.xll`) is a small native bootstrapper that locates an installed .NET runtime via the standard hostfxr resolution path, then hosts CoreCLR in-process. The .NET 6 single-file bundler is built around `apphost.exe` and a managed entry-point — neither concept maps onto a native XLL. The `AssemblyLoadContext`-based isolation ExcelDNA uses to keep multiple add-ins from conflicting also depends on a single shared runtime in the process.
+
+### Decision
+
+This spec is **superseded** by a .NET Framework 4.8 port. Under .NET Framework, the packed XLL produced by `ExcelDnaPack` is a true single-file artifact because the .NET Framework runtime ships as part of Windows — no runtime prerequisite, no self-contained machinery needed. Tim has elected to replace the current .NET 6 build entirely with a net48 build rather than maintain both in parallel.
+
+See spec [0007 — .NET Framework 4.8 port](0007-net-framework-port.md). The sub-issues attached to this spec (#190–#194) are closed; new issues track the port work.
