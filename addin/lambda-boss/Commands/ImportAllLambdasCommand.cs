@@ -1,7 +1,7 @@
 using ExcelDna.Integration;
 using System.Windows;
 
-using Taglo.Excel.Common;
+using LambdaBoss.Common;
 
 namespace LambdaBoss.Commands;
 

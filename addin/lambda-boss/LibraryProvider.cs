@@ -1,6 +1,6 @@
 using System.Net.Http;
 
-using Taglo.Excel.Common;
+using LambdaBoss.Common;
 
 namespace LambdaBoss;
 

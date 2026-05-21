@@ -54,7 +54,7 @@ internal static class CellGraphWalker
     }
 
     public static WalkOutcome Walk(
-        CellRef sink, ICellSource source, IReadOnlySet<CellRef>? restrictTo)
+        CellRef sink, ICellSource source, ISet<CellRef>? restrictTo)
     {
         return Walk(sink, source, restrictTo, null);
     }
@@ -62,8 +62,8 @@ internal static class CellGraphWalker
     public static WalkOutcome Walk(
         CellRef sink,
         ICellSource source,
-        IReadOnlySet<CellRef>? restrictTo,
-        IReadOnlySet<CellRef>? excludedCells)
+        ISet<CellRef>? restrictTo,
+        ISet<CellRef>? excludedCells)
     {
         return Walk(sink, source, restrictTo, excludedCells, null);
     }
@@ -71,11 +71,11 @@ internal static class CellGraphWalker
     public static WalkOutcome Walk(
         CellRef sink,
         ICellSource source,
-        IReadOnlySet<CellRef>? restrictTo,
-        IReadOnlySet<CellRef>? excludedCells,
-        IReadOnlySet<CellRef>? demotedCells)
+        ISet<CellRef>? restrictTo,
+        ISet<CellRef>? excludedCells,
+        ISet<CellRef>? demotedCells)
     {
-        ArgumentNullException.ThrowIfNull(source);
+        if (source is null) throw new ArgumentNullException(nameof(source));
 
         var byRef = new Dictionary<CellRef, WalkedCell>();
         var leafRestricted = 0;

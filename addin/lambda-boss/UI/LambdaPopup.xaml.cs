@@ -37,7 +37,7 @@ public partial class LambdaPopup
     ///     Sets the data for the popup to display.
     /// </summary>
     public void SetData(IReadOnlyList<LibraryInfo> libraries, IReadOnlyList<LambdaInfo> lambdas,
-        IReadOnlySet<string>? loadedLibraryKeys = null)
+        ISet<string>? loadedLibraryKeys = null)
     {
         _allLibraries = libraries
             .Select(l => new LibraryDisplayItem
@@ -72,7 +72,7 @@ public partial class LambdaPopup
     /// <summary>
     ///     Refreshes the loaded indicators on existing library items without replacing all data.
     /// </summary>
-    public void UpdateLoadedKeys(IReadOnlySet<string>? loadedLibraryKeys)
+    public void UpdateLoadedKeys(ISet<string>? loadedLibraryKeys)
     {
         if (_allLibraries.Count == 0)
             return;

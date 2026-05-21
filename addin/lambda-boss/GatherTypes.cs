@@ -59,11 +59,14 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
 
     public override int GetHashCode()
     {
+        // Microsoft.Bcl.HashCode on net48 calls StringComparer.GetHashCode directly,
+        // which throws on null. Net6's built-in HashCode tolerates null. Coalesce
+        // to the empty string to match .NET 6 behaviour across the migration.
         var hash = new HashCode();
-        hash.Add(Sheet, StringComparer.OrdinalIgnoreCase);
+        hash.Add(Sheet ?? "", StringComparer.OrdinalIgnoreCase);
         hash.Add(Column);
         hash.Add(Row);
-        hash.Add(ExternalWorkbook, StringComparer.OrdinalIgnoreCase);
+        hash.Add(ExternalWorkbook ?? "", StringComparer.OrdinalIgnoreCase);
         return hash.ToHashCode();
     }
 

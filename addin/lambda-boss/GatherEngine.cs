@@ -85,7 +85,7 @@ public static class GatherEngine
         ICellSource source,
         IReadOnlyList<RowState> rows)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        if (rows is null) throw new ArgumentNullException(nameof(rows));
         var excluded = new HashSet<FormulaRef>();
         Dictionary<FormulaRef, BindingRole>? roleOverrides = null;
         Dictionary<FormulaRef, string>? nameOverrides = null;
@@ -111,13 +111,13 @@ public static class GatherEngine
         CellRef sink,
         IReadOnlyList<CellRef> selection,
         ICellSource source,
-        IReadOnlySet<FormulaRef>? excluded,
+        ISet<FormulaRef>? excluded,
         IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides = null,
         IReadOnlyDictionary<FormulaRef, string>? nameOverrides = null)
     {
-        ArgumentNullException.ThrowIfNull(sink);
-        ArgumentNullException.ThrowIfNull(selection);
-        ArgumentNullException.ThrowIfNull(source);
+        if (sink is null) throw new ArgumentNullException(nameof(sink));
+        if (selection is null) throw new ArgumentNullException(nameof(selection));
+        if (source is null) throw new ArgumentNullException(nameof(source));
 
         var sinkFormula = source.GetFormula(sink);
         if (sinkFormula == null)
@@ -715,7 +715,7 @@ public static class GatherEngine
     private static BindingRole ClassifyRole(
         WalkedCell cell,
         IReadOnlyDictionary<FormulaRef, string> nameByRef,
-        IReadOnlySet<FormulaRef>? excluded,
+        ISet<FormulaRef>? excluded,
         IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides)
     {
         // PR 11: a row-level role override forces the classification.
@@ -771,7 +771,7 @@ public static class GatherEngine
     private static string StripLeadingEquals(string formula)
     {
         var trimmed = formula.TrimStart();
-        return trimmed.StartsWith('=') ? trimmed[1..] : trimmed;
+        return trimmed.StartsWith("=", StringComparison.Ordinal) ? trimmed[1..] : trimmed;
     }
 
     /// <summary>

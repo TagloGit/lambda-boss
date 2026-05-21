@@ -92,8 +92,8 @@ internal sealed class OrphanedRowTracker
     /// </summary>
     public void Reconcile(
         IReadOnlyDictionary<FormulaRef, BindingRow> activeBefore,
-        IReadOnlySet<FormulaRef> activeAfter,
-        IReadOnlySet<FormulaRef> excluded,
+        ISet<FormulaRef> activeAfter,
+        ISet<FormulaRef> excluded,
         FormulaRef? causedBy)
     {
         // Drop orphans that the engine resurfaced. A row reappears when

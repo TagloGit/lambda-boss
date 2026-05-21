@@ -2,7 +2,7 @@ using ExcelDna.Integration;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
-using Taglo.Excel.Common;
+using LambdaBoss.Common;
 
 namespace LambdaBoss.Commands;
 
@@ -140,8 +140,8 @@ internal static class EditLambdaCommand
     /// </summary>
     internal static string BuildExpandedLet(LambdaSignature signature, IReadOnlyList<string> arguments)
     {
-        ArgumentNullException.ThrowIfNull(signature);
-        ArgumentNullException.ThrowIfNull(arguments);
+        if (signature is null) throw new ArgumentNullException(nameof(signature));
+        if (arguments is null) throw new ArgumentNullException(nameof(arguments));
 
         if (arguments.Count > signature.Parameters.Count)
         {
