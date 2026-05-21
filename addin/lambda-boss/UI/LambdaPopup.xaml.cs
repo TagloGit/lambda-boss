@@ -261,8 +261,8 @@ public partial class LambdaPopup
             else
             {
                 LibraryList.ItemsSource = _allLibraries
-                    .Where(l => l.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
-                                || l.Description.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    .Where(l => l.DisplayName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0
+                                || l.Description.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)
                     .ToList();
             }
 
