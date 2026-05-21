@@ -8,22 +8,21 @@
 
     Steps:
       1. Prompt for new version, certificate path, and password
-      2. Create release branch, bump version (props + .iss), push, and open PR
+      2. Create release branch, bump version (props), push, and open PR
       3. Build in Release configuration
       4. Run tests
-      5. Sign the XLL with code-signing certificate
-      6. Compile the installer
-      7. Sign the installer
-      8. Merge the version bump PR (only after build+sign succeed)
-      9. Create git tag on the merge commit
-     10. Create GitHub Release (draft) with signed installer
+      5. Sign the packed XLL with code-signing certificate
+      6. Bundle the signed XLL + README + unblock.cmd into LambdaBoss-<version>.zip
+      7. Merge the version bump PR (only after build+sign succeed)
+      8. Create git tag on the merge commit
+      9. Create GitHub Release (draft) with the release zip
 
     Prompts for version, certificate path, and password. No secrets are stored.
     The version bump only lands on main after the entire build and sign process
     succeeds, so a failed release never leaves main in a bumped state.
 
 .PARAMETER Version
-    The version to release (e.g. "0.1.0"). Prompted if not provided.
+    The version to release (e.g. "0.2.0"). Prompted if not provided.
 
 .PARAMETER CertPath
     Path to the .pfx code-signing certificate. Prompted if not provided.
@@ -42,7 +41,7 @@
 
 .EXAMPLE
     .\scripts\publish-release.ps1
-    .\scripts\publish-release.ps1 -Version "0.1.0" -CertPath "C:\certs\sectigo.pfx"
+    .\scripts\publish-release.ps1 -Version "0.2.0" -CertPath "C:\certs\sectigo.pfx"
     .\scripts\publish-release.ps1 -DryRun -SkipSign
 #>
 
@@ -60,12 +59,12 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
-$BuildOutput = "$RepoRoot\addin\lambda-boss\bin\Release\net6.0-windows"
+$BuildOutput = "$RepoRoot\addin\lambda-boss\bin\Release\net48\publish"
 $SolutionPath = "$RepoRoot\addin\lambda-boss.slnx"
-$InstallerDir = "$RepoRoot\installer"
-$IssFile = "$InstallerDir\lambda-boss.iss"
+$ReleaseDir = "$RepoRoot\release"
+$ReleaseOutputDir = "$ReleaseDir\output"
+$BundleScript = "$RepoRoot\scripts\build-release-bundle.ps1"
 $SignTool = "C:\Program Files (x86)\Microsoft SDKs\ClickOnce\SignTool\signtool.exe"
-$IsccExe = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 $TimestampServer = "http://timestamp.sectigo.com"
 
 # --- Helpers ---
@@ -97,10 +96,6 @@ Write-Host ""
 Write-Host "Lambda Boss Release Publisher" -ForegroundColor Magenta
 Write-Host "=============================" -ForegroundColor Magenta
 
-# Check tools
-if (-not (Test-Path $IsccExe)) {
-    Write-Error "InnoSetup not found at: $IsccExe`nInstall from https://jrsoftware.org/isdl.php"
-}
 if (-not $SkipSign -and -not (Test-Path $SignTool)) {
     Write-Error "signtool.exe not found at: $SignTool`nInstall the ClickOnce Publishing Tools via Visual Studio Installer."
 }
@@ -110,14 +105,15 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Error ".NET SDK not found on PATH."
 }
+if (-not (Test-Path $BundleScript)) {
+    Write-Error "Bundle script not found at: $BundleScript"
+}
 
-# Must be on main
 $currentBranch = git -C $RepoRoot rev-parse --abbrev-ref HEAD
 if ($currentBranch -ne "main") {
     Write-Error "Must be on the main branch to publish a release. Current branch: $currentBranch"
 }
 
-# Working directory must be clean
 $gitStatus = git -C $RepoRoot status --porcelain
 if ($gitStatus) {
     Write-Host ""
@@ -126,7 +122,6 @@ if ($gitStatus) {
     Write-Error "Working directory must be clean before publishing. Commit or stash your changes."
 }
 
-# Pull latest
 git -C $RepoRoot pull --ff-only
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull latest main. Resolve any divergence first." }
 
@@ -134,7 +129,6 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull latest main. Resolve any 
 
 Write-Step 1 "Collect release inputs"
 
-# Version
 $propsFile = "$RepoRoot\Directory.Build.props"
 [xml]$props = Get-Content $propsFile
 $currentVersion = $props.Project.PropertyGroup.Version
@@ -145,7 +139,7 @@ if (-not $currentVersion) {
 Write-Host "  Current version: $currentVersion"
 
 if (-not $Version) {
-    $Version = Read-Host "New version (e.g. 0.1.0)"
+    $Version = Read-Host "New version (e.g. 0.2.0)"
 }
 
 if (-not ($Version -match '^\d+\.\d+\.\d+$')) {
@@ -158,13 +152,12 @@ if ($Version -eq $currentVersion) {
 }
 
 $version = $Version
-$xllPath = "$BuildOutput\lambda-boss64.xll"
-$installerName = "LambdaBoss-$version-Setup.exe"
-$installerPath = "$InstallerDir\output\$installerName"
+$packedXllPath = "$BuildOutput\lambda-boss64-packed.xll"
+$zipName = "LambdaBoss-$version.zip"
+$zipPath = "$ReleaseOutputDir\$zipName"
 $tag = "v$version"
 $releaseBranch = "release/v$version"
 
-# Check if tag already exists
 $existingTag = git -C $RepoRoot tag -l $tag
 if ($existingTag) {
     Write-Host ""
@@ -172,7 +165,6 @@ if ($existingTag) {
     Confirm-Continue "This will overwrite the existing tag. Continue?"
 }
 
-# Signing credentials
 if (-not $SkipSign) {
     if (-not $CertPath) {
         $CertPath = Read-Host "Path to .pfx certificate"
@@ -193,10 +185,10 @@ if (-not $SkipSign) {
 }
 
 Write-Host ""
-Write-Host "  Version:   $currentVersion -> $version"
-Write-Host "  Branch:    $releaseBranch"
-Write-Host "  Installer: $installerName"
-Write-Host "  Tag:       $tag"
+Write-Host "  Version: $currentVersion -> $version"
+Write-Host "  Branch:  $releaseBranch"
+Write-Host "  Zip:     $zipName"
+Write-Host "  Tag:     $tag"
 
 # --- Step 2: Create release branch and version bump PR ---
 
@@ -206,17 +198,11 @@ if (-not $DryRun) {
     git -C $RepoRoot checkout -b $releaseBranch
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to create branch $releaseBranch" }
 
-    # Update Directory.Build.props
     $propsContent = Get-Content $propsFile -Raw
     $propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
     Set-Content $propsFile $propsContent -NoNewline
 
-    # Sync version to InnoSetup script
-    $issContent = Get-Content $IssFile -Raw
-    $issContent = $issContent -replace '#define MyAppVersion ".*?"', "#define MyAppVersion ""$version"""
-    Set-Content $IssFile $issContent -NoNewline
-
-    git -C $RepoRoot add $propsFile $IssFile
+    git -C $RepoRoot add $propsFile
     git -C $RepoRoot commit -m "Bump version to $version"
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to commit version bump." }
 
@@ -231,14 +217,9 @@ if (-not $DryRun) {
     if ($LASTEXITCODE -ne 0) { Write-Error "Failed to create PR." }
     Write-Success "Release branch and PR created"
 } else {
-    # Still need to bump locally for the build
     $propsContent = Get-Content $propsFile -Raw
     $propsContent = $propsContent -replace '<Version>.*?</Version>', "<Version>$version</Version>"
     Set-Content $propsFile $propsContent -NoNewline
-
-    $issContent = Get-Content $IssFile -Raw
-    $issContent = $issContent -replace '#define MyAppVersion ".*?"', "#define MyAppVersion ""$version"""
-    Set-Content $IssFile $issContent -NoNewline
     Write-Skip "Release branch and PR (--DryRun)"
 }
 
@@ -250,8 +231,8 @@ dotnet build $SolutionPath -c Release
 if ($LASTEXITCODE -ne 0) { Write-Error "Build failed." }
 Write-Success "Build succeeded"
 
-if (-not (Test-Path $xllPath)) {
-    Write-Error "Expected XLL not found at: $xllPath"
+if (-not (Test-Path $packedXllPath)) {
+    Write-Error "Expected packed XLL not found at: $packedXllPath"
 }
 
 # --- Step 4: Tests ---
@@ -266,58 +247,33 @@ if (-not $SkipTests) {
     Write-Skip "Tests (--SkipTests)"
 }
 
-# --- Step 5: Sign the XLL ---
+# --- Step 5: Sign the packed XLL ---
 
 if (-not $SkipSign) {
-    Write-Step 5 "Sign the XLL"
+    Write-Step 5 "Sign the packed XLL"
 
-    & $SignTool sign /f $CertPath /p $CertPassword /fd sha256 /tr $TimestampServer /td sha256 $xllPath
+    & $SignTool sign /f $CertPath /p $CertPassword /fd sha256 /tr $TimestampServer /td sha256 $packedXllPath
     if ($LASTEXITCODE -ne 0) { Write-Error "XLL signing failed." }
 
-    & $SignTool verify /pa $xllPath
+    & $SignTool verify /pa $packedXllPath
     if ($LASTEXITCODE -ne 0) { Write-Error "XLL signature verification failed." }
-    Write-Success "XLL signed and verified"
+    Write-Success "Packed XLL signed and verified"
 } else {
-    Write-Step 5 "Sign the XLL"
+    Write-Step 5 "Sign the packed XLL"
     Write-Skip "XLL signing (--SkipSign)"
 }
 
-# --- Step 6: Compile the installer ---
+# --- Step 6: Build the release zip ---
 
-Write-Step 6 "Compile the installer"
+Write-Step 6 "Build release bundle"
 
-# Check bundled runtime exists
-$runtimeFiles = Get-ChildItem "$InstallerDir\bundled-runtime\windowsdesktop-runtime-6.0.*-win-x64.exe" -ErrorAction SilentlyContinue
-if (-not $runtimeFiles) {
-    Write-Host ""
-    Write-Host "WARNING: No bundled .NET runtime found in installer/bundled-runtime/" -ForegroundColor Yellow
-    Write-Host "Download from: https://dotnet.microsoft.com/en-us/download/dotnet/6.0"
-    Confirm-Continue "Continue without bundled runtime?"
+& $BundleScript -Version $version -SignedXllPath $packedXllPath
+if ($LASTEXITCODE -ne 0) { Write-Error "Release bundle build failed." }
+
+if (-not (Test-Path $zipPath)) {
+    Write-Error "Expected release zip not found at: $zipPath"
 }
-
-& $IsccExe $IssFile
-if ($LASTEXITCODE -ne 0) { Write-Error "InnoSetup compilation failed." }
-
-if (-not (Test-Path $installerPath)) {
-    Write-Error "Expected installer not found at: $installerPath"
-}
-Write-Success "Installer built: $installerPath"
-
-# --- Step 7: Sign the installer ---
-
-if (-not $SkipSign) {
-    Write-Step 7 "Sign the installer"
-
-    & $SignTool sign /f $CertPath /p $CertPassword /fd sha256 /tr $TimestampServer /td sha256 $installerPath
-    if ($LASTEXITCODE -ne 0) { Write-Error "Installer signing failed." }
-
-    & $SignTool verify /pa $installerPath
-    if ($LASTEXITCODE -ne 0) { Write-Error "Installer signature verification failed." }
-    Write-Success "Installer signed and verified"
-} else {
-    Write-Step 7 "Sign the installer"
-    Write-Skip "Installer signing (--SkipSign)"
-}
+Write-Success "Release zip built: $zipPath"
 
 # --- Summary before publish ---
 
@@ -326,11 +282,11 @@ Write-Host "=============================" -ForegroundColor Magenta
 Write-Host "Ready to publish!" -ForegroundColor Magenta
 Write-Host "=============================" -ForegroundColor Magenta
 Write-Host ""
-Write-Host "  Version:   $version"
-Write-Host "  Tag:       $tag"
-Write-Host "  Installer: $installerPath"
-$installerSize = (Get-Item $installerPath).Length / 1MB
-Write-Host ("  Size:      {0:N1} MB" -f $installerSize)
+Write-Host "  Version: $version"
+Write-Host "  Tag:     $tag"
+Write-Host "  Zip:     $zipPath"
+$zipSize = (Get-Item $zipPath).Length / 1MB
+Write-Host ("  Size:    {0:N1} MB" -f $zipSize)
 Write-Host ""
 
 if ($DryRun) {
@@ -341,16 +297,15 @@ if ($DryRun) {
     Write-Host "  git tag $tag"
     Write-Host "  git push origin $tag"
     Write-Host "  gh release create $tag --title 'Lambda Boss $version' ..."
-    # Restore locally modified files since we won't be committing
-    git -C $RepoRoot checkout -- $propsFile $IssFile
+    git -C $RepoRoot checkout -- $propsFile
     exit 0
 }
 
 Confirm-Continue "Merge version bump PR, tag, and create GitHub Release?"
 
-# --- Step 8: Merge version bump PR ---
+# --- Step 7: Merge version bump PR ---
 
-Write-Step 8 "Merge version bump PR"
+Write-Step 7 "Merge version bump PR"
 
 gh pr merge $releaseBranch `
     --repo TagloGit/lambda-boss `
@@ -360,17 +315,15 @@ gh pr merge $releaseBranch `
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to merge PR. Merge manually and re-run." }
 Write-Success "Version bump PR merged"
 
-# Switch back to main and pull the merge commit
 git -C $RepoRoot checkout main
 git -C $RepoRoot pull --ff-only
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to pull merged main." }
 Write-Success "On main with version bump"
 
-# --- Step 9: Tag the merge commit ---
+# --- Step 8: Tag the merge commit ---
 
-Write-Step 9 "Create git tag"
+Write-Step 8 "Create git tag"
 
-# Delete existing tag if present (user already confirmed above)
 $existingTag = git -C $RepoRoot tag -l $tag
 if ($existingTag) {
     git -C $RepoRoot tag -d $tag
@@ -384,9 +337,10 @@ git -C $RepoRoot push origin $tag
 if ($LASTEXITCODE -ne 0) { Write-Error "Failed to push tag." }
 Write-Success "Tag pushed to origin"
 
-Write-Step 10 "Create GitHub Release"
+# --- Step 9: Create GitHub Release ---
 
-# Write release notes to a temp file to avoid here-string parsing issues
+Write-Step 9 "Create GitHub Release"
+
 $releaseNotesFile = [System.IO.Path]::GetTempFileName()
 try {
     $notes = @(
@@ -400,14 +354,12 @@ try {
         "",
         "### Requirements",
         "- 64-bit Excel (Microsoft 365 or Excel 2019+)",
-        "- Windows 10/11",
-        "- .NET 6 Desktop Runtime (bundled in installer)",
+        "- Windows 10 / 11",
+        "- No .NET runtime install required — the add-in ships against .NET Framework 4.8, which is part of Windows.",
         "",
         "### Installation",
-        "Download and run ``$installerName``. The installer will:",
-        "- Install to ``%LOCALAPPDATA%\LambdaBoss``",
-        "- Install .NET 6 Desktop Runtime if needed",
-        "- Register the add-in with Excel automatically"
+        "Download ``$zipName``, extract, and follow the load instructions in the bundled README.txt.",
+        "Three load paths are documented (AddIns folder + Add-Ins dialog, any folder + Add-Ins dialog, or double-click)."
     )
     $notes -join "`n" | Set-Content $releaseNotesFile -NoNewline
 
@@ -416,7 +368,7 @@ try {
         --title "Lambda Boss $version" `
         --notes-file $releaseNotesFile `
         --draft `
-        $installerPath
+        $zipPath
 } finally {
     Remove-Item $releaseNotesFile -ErrorAction SilentlyContinue
 }
@@ -430,6 +382,6 @@ Write-Host "=============================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:"
 Write-Host "  1. Edit the release notes on GitHub"
-Write-Host "  2. Test the installer from the release download"
+Write-Host "  2. Download the zip from the release, test the XLL on a clean VM"
 Write-Host "  3. Publish the release when ready"
 Write-Host ""

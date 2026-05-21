@@ -5,7 +5,7 @@ using ExcelDna.Integration;
 
 using LambdaBoss.UI;
 
-using Taglo.Excel.Common;
+using LambdaBoss.Common;
 
 namespace LambdaBoss.Commands;
 

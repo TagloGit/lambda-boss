@@ -21,7 +21,7 @@ public static class LetToLambdaBuilder
 {
     public static string Build(LambdaGenerationRequest request)
     {
-        ArgumentNullException.ThrowIfNull(request);
+        if (request is null) throw new ArgumentNullException(nameof(request));
         var parsed = request.ParsedLet;
 
         var choicesByName = request.Inputs.ToDictionary(

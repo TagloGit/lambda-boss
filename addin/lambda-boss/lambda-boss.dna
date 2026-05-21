@@ -1,4 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <DnaLibrary Name="Lambda Boss" RuntimeVersion="v4.0">
-  <ExternalLibrary Path="lambda-boss.dll" ExplicitExports="false" LoadFromBytes="false" Pack="false" ExplicitRegistration="false" />
+  <ExternalLibrary Path="lambda-boss.dll" ExplicitExports="false" LoadFromBytes="false" Pack="true" ExplicitRegistration="false" />
+  <!--
+    On net48 there's no deps.json, so ExcelDNA's pack step can't enumerate
+    referenced assemblies automatically. List each runtime dependency
+    explicitly so it gets embedded into the packed XLL.
+  -->
+  <Reference Path="GongSolutions.WPF.DragDrop.dll" Pack="true" />
+  <Reference Path="Microsoft.Bcl.AsyncInterfaces.dll" Pack="true" />
+  <Reference Path="Microsoft.Bcl.HashCode.dll" Pack="true" />
+  <Reference Path="Ookii.Dialogs.Wpf.dll" Pack="true" />
+  <Reference Path="System.Buffers.dll" Pack="true" />
+  <Reference Path="System.Memory.dll" Pack="true" />
+  <Reference Path="System.Numerics.Vectors.dll" Pack="true" />
+  <Reference Path="System.Runtime.CompilerServices.Unsafe.dll" Pack="true" />
+  <Reference Path="System.Text.Encodings.Web.dll" Pack="true" />
+  <Reference Path="System.Text.Json.dll" Pack="true" />
+  <Reference Path="System.Threading.Tasks.Extensions.dll" Pack="true" />
+  <Reference Path="System.ValueTuple.dll" Pack="true" />
+  <Reference Path="YamlDotNet.dll" Pack="true" />
 </DnaLibrary>

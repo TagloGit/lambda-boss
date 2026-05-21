@@ -33,13 +33,24 @@ public class LambdaFormatTests
         var data = new TheoryData<string>();
         foreach (var file in Directory.EnumerateFiles(LambdasRoot, "*.lambda", SearchOption.AllDirectories))
             // Store path relative to the lambdas root for readable test names
-            data.Add(Path.GetRelativePath(LambdasRoot, file));
+            data.Add(MakeRelativePath(LambdasRoot, file));
         return data;
     }
 
     private string ReadFile(string relativePath)
     {
         return File.ReadAllText(Path.Combine(LambdasRoot, relativePath));
+    }
+
+    // Polyfill for Path.GetRelativePath, which net48 doesn't ship.
+    private static string MakeRelativePath(string basePath, string targetPath)
+    {
+        var baseUri = new Uri(basePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
+            ? basePath
+            : basePath + Path.DirectorySeparatorChar);
+        var targetUri = new Uri(targetPath);
+        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString())
+            .Replace('/', Path.DirectorySeparatorChar);
     }
 
     [Theory]

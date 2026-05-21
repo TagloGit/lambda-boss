@@ -17,7 +17,5 @@ obj/
 .vs/
 .idea/
 
-# Installer
-installer/output/
-installer/bundled-runtime/*
-!installer/bundled-runtime/README.md
+# Release bundle output
+release/output/

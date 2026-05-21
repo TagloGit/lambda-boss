@@ -1,7 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 
-using Taglo.Excel.Common;
+using LambdaBoss.Common;
 
 namespace LambdaBoss;
 
