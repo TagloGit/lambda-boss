@@ -1,6 +1,6 @@
 namespace LambdaBoss.Common;
 
-public static class WindowPositioner
+internal static class WindowPositioner
 {
     /// <summary>
     ///     Centers the WPF window over the Excel window using Win32 SetWindowPos.

@@ -7,7 +7,7 @@ namespace LambdaBoss.Common;
 ///     Checks for newer releases on GitHub and exposes result for notification.
 ///     All failures are silent — network errors are logged but never shown to the user.
 /// </summary>
-public static class UpdateChecker
+internal static class UpdateChecker
 {
     private static Uri? _latestReleaseUri;
     private static string? _userAgent;
