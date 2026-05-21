@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     End-to-end release publishing script for Lambda Boss.
 
@@ -355,7 +355,7 @@ try {
         "### Requirements",
         "- 64-bit Excel (Microsoft 365 or Excel 2019+)",
         "- Windows 10 / 11",
-        "- No .NET runtime install required — the add-in ships against .NET Framework 4.8, which is part of Windows.",
+        "- No .NET runtime install required -- the add-in ships against .NET Framework 4.8, which is part of Windows.",
         "",
         "### Installation",
         "Download ``$zipName``, extract, and follow the load instructions in the bundled README.txt.",

@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Builds the Lambda Boss release zip: signed packed XLL + README + unblock.cmd.
 
@@ -7,7 +7,7 @@
     `release/` into a temporary folder, then zips it as
     `release/output/LambdaBoss-<version>.zip`.
 
-    The script assumes the build has already happened and the XLL is signed —
+    The script assumes the build has already happened and the XLL is signed --
     `publish-release.ps1` handles those steps and calls this script after.
 
 .PARAMETER Version
@@ -62,7 +62,7 @@ if (Test-Path $StagingDir) {
 New-Item -ItemType Directory -Force -Path $StagingDir | Out-Null
 
 # Copy in the three deliverables. Rename the XLL to drop the "-packed" suffix
-# — end users don't need to see ExcelDNA's internal naming.
+# -- end users don't need to see ExcelDNA's internal naming.
 Copy-Item $SignedXllPath "$StagingDir\lambda-boss64.xll"
 Copy-Item $readmePath "$StagingDir\README.txt"
 Copy-Item $unblockPath "$StagingDir\unblock.cmd"
@@ -74,7 +74,7 @@ if (Test-Path $zipPath) {
 
 Compress-Archive -Path "$StagingDir\*" -DestinationPath $zipPath -CompressionLevel Optimal
 
-# Clean up the staging folder — the zip is the only thing we keep
+# Clean up the staging folder -- the zip is the only thing we keep
 Remove-Item -Recurse -Force $StagingDir
 
 $zipSize = (Get-Item $zipPath).Length / 1MB
