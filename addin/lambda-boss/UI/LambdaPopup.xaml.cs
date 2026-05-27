@@ -435,6 +435,14 @@ public partial class LambdaPopup
                 ExcelAsyncUtil.QueueAsMacro(() => GatherCommand.Run());
             }),
         new SlashCommand(
+            "Refactor",
+            "Rewrite the active cell's formula as a tidy =LET(...) with one binding per ref",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => RefactorCommand.Run());
+            }),
+        new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",
             () =>
