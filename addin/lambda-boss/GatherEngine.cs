@@ -98,10 +98,10 @@ public static class GatherEngine
                 roleOverrides ??= new Dictionary<FormulaRef, BindingRole>();
                 roleOverrides[r.Source] = r.RoleOverride.Value;
             }
-            if (!string.IsNullOrEmpty(r.NameOverride))
+            if (r.NameOverride is { Length: > 0 } nameOverride)
             {
                 nameOverrides ??= new Dictionary<FormulaRef, string>();
-                nameOverrides[r.Source] = r.NameOverride;
+                nameOverrides[r.Source] = nameOverride;
             }
         }
         return GatherInternal(sink, selection, source, excluded, roleOverrides, nameOverrides);

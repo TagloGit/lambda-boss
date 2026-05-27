@@ -31,7 +31,10 @@ public static class LetNameSanitizer
         if (string.IsNullOrEmpty(text))
             return null;
 
-        var trimmed = text.Trim();
+        // text is non-null after the IsNullOrEmpty guard; net48's BCL
+        // doesn't annotate IsNullOrEmpty with [NotNullWhen(false)], so
+        // the analyzer can't narrow on its own.
+        var trimmed = text!.Trim();
         if (trimmed.Length == 0)
             return null;
 

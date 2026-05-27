@@ -88,7 +88,7 @@ internal static class RefactorCommand
                         }
                     }
 
-                    var window = new RefactorToLetWindow(result, sheetName, Recompute);
+                    var window = new RefactorToLetWindow(result, Recompute);
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
 

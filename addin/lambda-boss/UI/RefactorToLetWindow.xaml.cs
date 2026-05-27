@@ -34,8 +34,6 @@ public partial class RefactorToLetWindow
     private const string InvalidNameStatusText =
         "Fix invalid names before saving";
 
-    private readonly string _activeSheet;
-    private readonly string _originalFormula;
     private readonly Func<IReadOnlyList<RefactorRowState>, RefactorResult> _recompute;
     private readonly ObservableCollection<RefactorInputRowVm> _rows = [];
 
@@ -48,13 +46,10 @@ public partial class RefactorToLetWindow
 
     public RefactorToLetWindow(
         RefactorResult initial,
-        string activeSheet,
         Func<IReadOnlyList<RefactorRowState>, RefactorResult> recompute)
     {
         InitializeComponent();
         _result = initial;
-        _activeSheet = activeSheet;
-        _originalFormula = initial.OriginalFormula;
         _recompute = recompute;
 
         OriginalFormulaText.Text = initial.OriginalFormula;

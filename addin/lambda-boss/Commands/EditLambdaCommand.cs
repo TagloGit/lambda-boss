@@ -113,7 +113,10 @@ internal static class EditLambdaCommand
 
         var name = match.Groups[1].Value;
         var openParen = match.Index + match.Length - 1;
-        var closeParen = LetParser.FindMatchingClose(formula, openParen);
+        // formula is non-null after IsNullOrEmpty guard; net48's BCL
+        // doesn't annotate IsNullOrEmpty with [NotNullWhen(false)], so
+        // the analyzer can't narrow on its own.
+        var closeParen = LetParser.FindMatchingClose(formula!, openParen);
         if (closeParen < 0)
             return null;
 
