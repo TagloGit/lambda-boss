@@ -102,6 +102,19 @@ tests:
     args: ["=theMap", '="C3"', "=", '="E5"', "=FALSE", "=", "=", "=", "=MAZELAM_DIAG"]
     expected: 3
 
+  - name: regression — Mazelam using GRIDLOOKUP(cellTo, range, TRUE) survives off-grid neighbors
+    setup:
+      cells:
+        - address: "G3:I5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "theMap", refers_to: "G3:I5" }
+    args: ["=theMap", '="G3"', "=", "=", "=TRUE", "=", "=", "=", "=LAMBDA(costFrom,costTo,cellFrom,cellTo,distFrom,dirDelta,prevDir,GRIDLOOKUP(cellTo,theMap,TRUE)+1)"]
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
   - name: help text
     args: []
     expected_type: array

@@ -4,6 +4,7 @@
                         2026-05-20  Claude      Initial version (body recreated from issue 184; parameter names preserved)
                         2026-05-20  Claude      Rename internal LET variables for readability; logic and parameter names unchanged
                         2026-05-27  Claude      Mazelam signature now takes cellFrom/cellTo as A1 string addresses instead of separate rowFrom/colFrom/rowTo/colTo numerics
+                        2026-05-27  Claude      Mazelam is now guaranteed to receive only in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates have their toPos substituted with fromPos before the call. Prevents non-scalar return shapes (e.g. GRIDLOOKUP on an off-grid address) from poisoning the proposals array.
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -30,7 +31,7 @@ MAZE = LAMBDA(
                 "   Allowmp       →(Optional) Boolean walkability mask, same shape as mp. Defaults to everywhere walkable.¶" &
                 "   Show_Steps    →(Optional) TRUE returns step count; default returns cumulative cost.¶" &
                 "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
-                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Return NA() to drop an edge.¶" &
+                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MAZE(mp, ""C3"", , , TRUE)¶" &
                 "Result         →4-way distance grid from C3 covering all reachable cells in mp",
@@ -74,6 +75,9 @@ MAZE = LAMBDA(
                     IF(
                         toRow * toCol,
                         LET(
+                            inBounds, (toRow >= 1) * (toRow <= ROWS(mp)) * (toCol >= 1) * (toCol <= COLUMNS(mp)),
+                            safeToPos, IF(inBounds, toPos, fromPos),
+                            safeCostTo, IF(inBounds, IFERROR(costTo, costFrom), costFrom),
                             walkOK, IFERROR(INDEX(walkMask, toRow, toCol), 0),
                             stepCost, IF(
                                 ISOMITTED(Mazelam),
@@ -81,9 +85,9 @@ MAZE = LAMBDA(
                                 IFERROR(
                                     Mazelam(
                                         costFrom,
-                                        costTo,
+                                        safeCostTo,
                                         ADDRESS(INT(fromPos / M), MOD(fromPos, M), 4),
-                                        ADDRESS(INT(toPos / M), MOD(toPos, M), 4),
+                                        ADDRESS(INT(safeToPos / M), MOD(safeToPos, M), 4),
                                         distFrom,
                                         dirDelta,
                                         prevDir
