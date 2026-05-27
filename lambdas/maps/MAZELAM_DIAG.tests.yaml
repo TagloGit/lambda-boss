@@ -1,22 +1,22 @@
 tests:
   - name: diagonal step costs 1.5x destination
-    args: ["=1", "=2", "=3", "=3", "=4", "=4", "=0", "=100001", "=0"]
+    args: ["=1", "=2", '="C3"', '="D4"', "=0", "=100001", "=0"]
     expected: 3
 
   - name: horizontal step costs 1x destination
-    args: ["=1", "=2", "=3", "=3", "=3", "=4", "=0", "=1", "=0"]
+    args: ["=1", "=2", '="C3"', '="D3"', "=0", "=1", "=0"]
     expected: 2
 
   - name: vertical step costs 1x destination
-    args: ["=1", "=2", "=3", "=3", "=4", "=3", "=0", "=100000", "=0"]
+    args: ["=1", "=2", '="C3"', '="C4"', "=0", "=100000", "=0"]
     expected: 2
 
   - name: anti-diagonal step also costs 1.5x destination
-    args: ["=1", "=4", "=5", "=5", "=4", "=6", "=0", "=-99999", "=0"]
+    args: ["=1", "=4", '="E5"', '="F4"', "=0", "=-99999", "=0"]
     expected: 6
 
   - name: array of destination costs lifts element-wise (vertical)
-    args: ['=1', '={1;2;3}', "=3", "=3", "=4", "=4", "=0", "=100001", "=0"]
+    args: ['=1', '={1;2;3}', '="C3"', '="D4"', "=0", "=100001", "=0"]
     expected: [[1.5], [3], [4.5]]
 
   - name: help text
