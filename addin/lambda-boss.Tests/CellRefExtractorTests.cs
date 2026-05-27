@@ -200,28 +200,35 @@ public class CellRefExtractorTests
     }
 
     [Fact]
-    public void Extract_SpillRef_ResolvesToAnchorCell()
+    public void Extract_SpillRef_ResolvesToAnchorCellWithSpillFlag()
     {
-        // PR 5: A1# is recognised as a ref to the anchor cell A1. The
-        // returned FormulaRef collapses spill onto the anchor (no separate
-        // flag) — the engine learns spill-ness from ICellSource.HasSpill.
+        // A1# is a ref to the anchor cell A1 with IsSpilled=true (spec
+        // 0008). /Gather still treats it the same as A1 via
+        // CellGraphWalker's spill-flag normalisation; /Refactor uses the
+        // flag to bind A1 and A1# as distinct inputs.
         var refs = CellRefExtractor.Extract("=SUM(A1#)+B1", Sheet);
 
         Assert.Equal(2, refs.Count);
         Assert.Equal("A1", refs[0].A1Address);
+        Assert.True(refs[0].IsSpilled);
         Assert.False(refs[0].IsRange);
         Assert.Equal("B1", refs[1].A1Address);
+        Assert.False(refs[1].IsSpilled);
     }
 
     [Fact]
-    public void Extract_BareRefAndSpillRefOnSameCell_DedupedToOneRef()
+    public void Extract_BareRefAndSpillRefOnSameCell_ProduceTwoDistinctRefs()
     {
-        // A1 and A1# resolve to the same FormulaRef key (the anchor cell).
-        // The dedupe in Extract drops the second occurrence.
+        // Spec 0008 (/Refactor): A1 and A1# are distinct FormulaRefs so
+        // each can become its own LET binding. The non-spilled ref comes
+        // first because that's its first-seen position in the formula.
         var refs = CellRefExtractor.Extract("=A1+SUM(A1#)", Sheet);
 
-        Assert.Single(refs);
+        Assert.Equal(2, refs.Count);
         Assert.Equal("A1", refs[0].A1Address);
+        Assert.False(refs[0].IsSpilled);
+        Assert.Equal("A1", refs[1].A1Address);
+        Assert.True(refs[1].IsSpilled);
     }
 
     [Fact]

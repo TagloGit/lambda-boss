@@ -146,7 +146,19 @@ internal static class CellGraphWalker
                     // its OWN sheet, not the sink's — otherwise crossing into
                     // Sheet1 from a sink on Sheet2 would mis-route Sheet1's
                     // internal `B1` references back to Sheet2.
-                    precedents = CellRefExtractor.Extract(formula, cell.Sheet);
+                    //
+                    // Strip the IsSpilled flag for cell-level precedents.
+                    // /Gather has always treated A1 and A1# as the same
+                    // precedent — spill info lives on
+                    // <see cref="WalkedCell.HasSpill" />, not on the ref. The
+                    // shared FormulaRef now carries IsSpilled (spec 0008
+                    // needs it for /Refactor's distinct-binding rule), but
+                    // /Gather's downstream code keys on the non-spilled
+                    // anchor; normalising here keeps that contract intact.
+                    // Ranges are left as-is (IsSpilled is always false on
+                    // ranges).
+                    precedents = NormaliseSpillFlag(
+                        CellRefExtractor.Extract(formula, cell.Sheet));
                 }
             }
 
@@ -176,6 +188,36 @@ internal static class CellGraphWalker
         }
 
         return CycleAwareTopoSort(sink, byRef, leafRestricted);
+    }
+
+    /// <summary>
+    ///     Returns a new precedent list where every spilled single-cell
+    ///     FormulaRef is replaced by its non-spilled equivalent and
+    ///     duplicates are collapsed in first-seen order. Range refs are
+    ///     pass-through. Used so /Gather's downstream code (which keys on
+    ///     non-spilled anchors) keeps working after spec 0008 split A1
+    ///     and A1# into distinct FormulaRefs.
+    /// </summary>
+    private static IReadOnlyList<FormulaRef> NormaliseSpillFlag(
+        IReadOnlyList<FormulaRef> precedents)
+    {
+        if (precedents.Count == 0)
+            return precedents;
+        var any = false;
+        for (var i = 0; i < precedents.Count; i++)
+            if (precedents[i].IsSpilled) { any = true; break; }
+        if (!any)
+            return precedents;
+
+        var seen = new HashSet<FormulaRef>();
+        var result = new List<FormulaRef>(precedents.Count);
+        foreach (var p in precedents)
+        {
+            var normalised = p.IsSpilled ? new FormulaRef(p.Start) : p;
+            if (seen.Add(normalised))
+                result.Add(normalised);
+        }
+        return result;
     }
 
     /// <summary>
