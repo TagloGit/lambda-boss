@@ -86,7 +86,7 @@ tests:
             - [0, 0, 0]
       names:
         - { name: "theMap", refers_to: "C3:E5" }
-    args: ["=theMap", '="C3"', "=", '="E5"', "=FALSE", "=", "=", "=", "=LAMBDA(costFrom,costTo,rowFrom,colFrom,rowTo,colTo,distFrom,dirDelta,prevDir,IF((rowFrom<>rowTo)*(colFrom<>colTo)=1,costTo*1.5,costTo))"]
+    args: ["=theMap", '="C3"', "=", '="E5"', "=FALSE", "=", "=", "=", "=LAMBDA(costFrom,costTo,cellFrom,cellTo,distFrom,dirDelta,prevDir,IF((ROWNUM(cellFrom)<>ROWNUM(cellTo))*(COLNUM(cellFrom)<>COLNUM(cellTo))=1,costTo*1.5,costTo))"]
     expected: 3
 
   - name: stock MAZELAM_DIAG passed by name gives same result as the inline LAMBDA

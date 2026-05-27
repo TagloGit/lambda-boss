@@ -2,30 +2,27 @@
     DESCRIPTION:*//**Stock Mazelam for MAZE: treats Cost as elevation. Uphill steps cost 1 + 2x the rise; downhill steps cost 1 + 0.5x the drop (negative); flat steps cost 1.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
+                        2026-05-27  Claude      Signature changed: cellFrom/cellTo (A1 strings) replace rowFrom/colFrom/rowTo/colTo
 */
 MAZELAM_ELEV = LAMBDA(
 //  Parameter Declarations
     [costFrom],
     [costTo],
-    [rowFrom],
-    [colFrom],
-    [rowTo],
-    [colTo],
+    [cellFrom],
+    [cellTo],
     [distFrom],
     [dirDelta],
     [prevDir],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MAZELAM_ELEV(costFrom, costTo, rowFrom, colFrom, rowTo, colTo, distFrom, dirDelta, prevDir)¶" &
+                "FUNCTION:      →MAZELAM_ELEV(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir)¶" &
                 "DESCRIPTION:   →Stock Mazelam for MAZE that treats Cost as elevation. Cost of a step = 1 + 2*rise for uphill, 1 + 0.5*drop for downhill (drop is negative, so the step is cheaper than 1), and 1 for flat.¶" &
-                "VERSION:       →May 20 2026¶" &
+                "VERSION:       →May 27 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   costFrom       →(Required) Elevation at source cell.¶" &
                 "   costTo         →(Required) Elevation at destination cell.¶" &
-                "   rowFrom        →(Required) Absolute row of source. (Unused by this Mazelam.)¶" &
-                "   colFrom        →(Required) Absolute column of source. (Unused.)¶" &
-                "   rowTo          →(Required) Absolute row of destination. (Unused.)¶" &
-                "   colTo          →(Required) Absolute column of destination. (Unused.)¶" &
+                "   cellFrom       →(Required) A1 address of source cell (e.g. ""C3""). (Unused by this Mazelam.)¶" &
+                "   cellTo         →(Required) A1 address of destination cell (e.g. ""D4""). (Unused.)¶" &
                 "   distFrom       →(Required) Cumulative cost to reach source. (Unused.)¶" &
                 "   dirDelta       →(Required) This step's direction. (Unused.)¶" &
                 "   prevDir        →(Required) Previous direction. (Unused.)¶" &
