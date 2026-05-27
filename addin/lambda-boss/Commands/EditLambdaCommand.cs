@@ -1,8 +1,8 @@
 using ExcelDna.Integration;
+using LambdaBoss.Common;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
-using LambdaBoss.Common;
 
 namespace LambdaBoss.Commands;
 
@@ -120,7 +120,7 @@ internal static class EditLambdaCommand
         if (closeParen < 0)
             return null;
 
-        for (var i = closeParen + 1; i < formula.Length; i++)
+        for (var i = closeParen + 1; i < formula!.Length; i++)
             if (!char.IsWhiteSpace(formula[i]))
                 return null;
 
