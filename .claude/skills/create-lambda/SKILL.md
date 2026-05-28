@@ -306,13 +306,21 @@ Then re-run the test. If validation fails, read the error output, fix the `.lamb
 
 ### Step 7 — Run Functional Tests
 
-Excel is available in this environment. Run the test harness to verify the LAMBDA works end-to-end:
+Excel is available in this environment. Run the test harness scoped to this LAMBDA only — the full suite is ~470 cases and takes much longer than necessary while iterating. Use `LAMBDA_FILTER` (case-insensitive substring match against the lambda file path) to narrow the run:
 
-```bash
-dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj --filter "LambdaHarnessTests"
+```powershell
+$env:LAMBDA_FILTER = "<Name>"
+dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj --filter "FullyQualifiedName~LambdaHarnessTests"
+Remove-Item Env:LAMBDA_FILTER
 ```
 
 If tests fail, read the output, fix the `.lambda` file or `.tests.yaml`, and re-run until all tests pass.
+
+Before raising the PR (Step 8), run the full suite once **without** `LAMBDA_FILTER` to confirm the new LAMBDA hasn't broken anything else (e.g. a shared helper, a name collision, or a dependency-injection ordering issue):
+
+```bash
+dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj --filter "FullyQualifiedName~LambdaHarnessTests"
+```
 
 ### Step 8 — Commit, Push, and Create PR
 
