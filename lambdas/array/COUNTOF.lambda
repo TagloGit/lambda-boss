@@ -1,0 +1,31 @@
+/*  FUNCTION NAME:      COUNTOF
+    DESCRIPTION:*//**Counts items for which the predicate is TRUE (or truthy items when predicate is omitted).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-28  Claude      Initial version
+*/
+COUNTOF = LAMBDA(
+//  Parameter Declarations
+    [items],
+    [predicate],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →COUNTOF(items, [predicate])¶" &
+                "DESCRIPTION:   →Counts items for which the predicate is TRUE (or truthy items when predicate is omitted).¶" &
+                "VERSION:       →May 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   items          →(Required) Array or range of values to test.¶" &
+                "   predicate      →(Optional) LAMBDA(v) returning TRUE/FALSE or 0/1. If omitted, items are assumed to already be boolean or 0/1 values.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COUNTOF({1,2,3,4,5}, LAMBDA(n, n>=3))¶" &
+                "Result         →3",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
+        mapped, MAP(items, pred),
+        result, SUM(--mapped),
+        IF(Help?, Help, result)
+)
+);

@@ -1,0 +1,31 @@
+/*  FUNCTION NAME:      ANY
+    DESCRIPTION:*//**Returns TRUE if at least one item satisfies the predicate, else FALSE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-28  Claude      Initial version
+*/
+ANY = LAMBDA(
+//  Parameter Declarations
+    [items],
+    [predicate],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →ANY(items, [predicate])¶" &
+                "DESCRIPTION:   →Returns TRUE if at least one item satisfies the predicate, else FALSE.¶" &
+                "VERSION:       →May 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   items          →(Required) Array or range of values to test.¶" &
+                "   predicate      →(Optional) LAMBDA(v) returning TRUE/FALSE or 0/1. If omitted, items are assumed to already be boolean or 0/1 values.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ANY({""A"",""B"",""C""}, LAMBDA(c, c=""B""))¶" &
+                "Result         →TRUE",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
+        mapped, MAP(items, pred),
+        result, SUM(--mapped)>0,
+        IF(Help?, Help, result)
+)
+);

@@ -1,0 +1,36 @@
+tests:
+  - name: predicate matches one item
+    args: ['={"A","B","C"}', '=LAMBDA(c, c="B")']
+    expected: True
+
+  - name: predicate matches no items
+    args: ['={"A","B","C"}', '=LAMBDA(c, c="Z")']
+    expected: False
+
+  - name: predicate matches every item
+    args: ['={1,2,3}', '=LAMBDA(n, n>0)']
+    expected: True
+
+  - name: no predicate - one boolean true
+    args: ['={FALSE,FALSE,TRUE}']
+    expected: True
+
+  - name: no predicate - all booleans false
+    args: ['={FALSE,FALSE,FALSE}']
+    expected: False
+
+  - name: no predicate - one 1 among zeros
+    args: ['={0,0,1,0}']
+    expected: True
+
+  - name: no predicate - all zeros
+    args: ['={0,0,0}']
+    expected: False
+
+  - name: vertical array with predicate
+    args: ['={1;3;5;7}', '=LAMBDA(n, MOD(n,2)=0)']
+    expected: False
+
+  - name: help text
+    args: []
+    expected_type: array
