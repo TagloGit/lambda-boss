@@ -16,7 +16,6 @@ namespace LambdaBoss.UI;
 ///     a read-only Calculation-bindings section (PR 2+), and a live
 ///     preview of the synthesised LET. Save returns the preview text via
 ///     <see cref="SavedFormula" />; Cancel discards.
-///
 ///     The code-behind is intentionally thin: every row-state change
 ///     (rename, Include toggle, reorder) calls back into the supplied
 ///     <c>recompute</c> delegate (which wraps
@@ -35,15 +34,17 @@ public partial class RefactorToLetWindow
     private const string InvalidNameStatusText =
         "Fix invalid names before saving";
 
-    private readonly Func<IReadOnlyList<RefactorRowState>, RefactorResult> _recompute;
-    private readonly ObservableCollection<RefactorInputRowVm> _rows = [];
-    private readonly ObservableCollection<RefactorCalcBindingVm> _calcRows = [];
     // Calc binding names are read-only in the dialog but they still occupy
     // the LET's name namespace — Inputs are flagged invalid when they
     // collide with one.
-    private IReadOnlyList<string> _calcBindingNames = Array.Empty<string>();
+    private readonly IReadOnlyList<string> _calcBindingNames;
+    private readonly ObservableCollection<RefactorCalcBindingVm> _calcRows = [];
+
+    private readonly Func<IReadOnlyList<RefactorRowState>, RefactorResult> _recompute;
+    private readonly ObservableCollection<RefactorInputRowVm> _rows = [];
 
     private RefactorResult _result;
+
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
     // handler. The guard short-circuits the nested calls so a single
@@ -237,9 +238,7 @@ public partial class RefactorToLetWindow
         {
             bool valid;
             if (!vm.Include)
-            {
                 valid = true;
-            }
             else
             {
                 var shapeOk = ExcelNameValidator.Validate(vm.Name).IsValid;
@@ -247,8 +246,10 @@ public partial class RefactorToLetWindow
                 valid = shapeOk && !dupes.Contains(vm) && !collidesWithCalc;
                 if (!valid) allValid = false;
             }
+
             vm.IsNameValid = valid;
         }
+
         return allValid;
     }
 

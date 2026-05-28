@@ -7,7 +7,6 @@ namespace LambdaBoss;
 ///     Spec 0008 — the <c>/Refactor</c> entry point. Takes a formula and
 ///     the active cell's sheet, hoists every cell ref / range into its own
 ///     LET binding, and emits a tidy <c>=LET(...)</c>.
-///
 ///     PR 2 adds existing-LET handling. When the input is already a LET,
 ///     value bindings pre-populate the Inputs section; calculation bindings
 ///     populate the read-only Calculation-bindings section; value bindings
@@ -15,7 +14,6 @@ namespace LambdaBoss;
 ///     inside calculation bindings or the body are extracted as new input
 ///     rows; the synthesised LET emits all value bindings first (in dialog
 ///     order) followed by all calc bindings (in source order).
-///
 ///     The engine re-derives merge state on every <see cref="Recompute" />
 ///     call — the dialog only carries name / Include / order for each row
 ///     via <see cref="RefactorRowState" />, not the underlying merge graph,
@@ -24,6 +22,22 @@ namespace LambdaBoss;
 /// </summary>
 public static class RefactorEngine
 {
+    // Identifier rewriter: substitutes whole-token identifiers from
+    // <paramref name="subs" /> while leaving strings, sheet/workbook
+    // qualifiers, and cell-shaped tokens alone. Cell refs in qualified
+    // form (e.g. <c>Sheet1!A1</c>) keep their pieces — the lookbehind
+    // class guards against renaming the <c>A1</c> tail of a sheet
+    // qualifier.
+    private static readonly Regex IdentifierTokenPattern = new(
+        // Lookbehind matches the same identifier-boundary characters
+        // CellRefExtractor uses, so we don't accidentally substitute the
+        // tail of a sheet-qualified ref (`Sheet1!A1` keeps its `A1`) or
+        // the row digits inside a numeric (`123` isn't an identifier
+        // anyway, but the negative lookbehind on '.' also prevents
+        // matching across decimal points).
+        @"(?<![A-Za-z0-9_.!:'\]#?])[A-Za-z_][A-Za-z0-9_.?]*",
+        RegexOptions.CultureInvariant);
+
     /// <summary>
     ///     Runs the initial refactor over <paramref name="formula" />.
     ///     Existing LETs are parsed and merged/extracted per spec 0008;
@@ -35,7 +49,7 @@ public static class RefactorEngine
         if (formula is null) throw new ArgumentNullException(nameof(formula));
         if (activeSheet is null) throw new ArgumentNullException(nameof(activeSheet));
 
-        return RefactorInternal(formula, activeSheet, rowStates: null);
+        return RefactorInternal(formula, activeSheet, null);
     }
 
     /// <summary>
@@ -83,11 +97,11 @@ public static class RefactorEngine
         foreach (var fr in extracted)
         {
             defaultRows.Add(new RefactorInputRow(
-                Key: BuildExtractedKey(fr, activeSheet),
-                Source: fr,
-                Name: $"input{nameIndex}",
-                Rhs: fr.DisplayAddress(activeSheet),
-                Origin: RefactorRowOrigin.Extracted));
+                BuildExtractedKey(fr, activeSheet),
+                fr,
+                $"input{nameIndex}",
+                fr.DisplayAddress(activeSheet),
+                RefactorRowOrigin.Extracted));
             nameIndex++;
         }
 
@@ -96,7 +110,7 @@ public static class RefactorEngine
 
         var synthesisedLet = BuildSynthesisedLet(
             formula, activeSheet, keptRows, Array.Empty<RefactorCalcBindingRow>(),
-            isExistingLet: false, body: null, identifierSubstitutions: null);
+            false, null, null);
 
         return new RefactorResult(
             formula,
@@ -163,12 +177,12 @@ public static class RefactorEngine
         {
             merge.MergedFromBySurvivor.TryGetValue(s.Name, out var mergedFrom);
             existingValueRows.Add(new RefactorInputRow(
-                Key: BuildExistingLetKey(s.Name),
-                Source: TryParseSingleRef(s.RhsText, activeSheet),
-                Name: s.Name,
-                Rhs: s.RhsText,
-                Origin: RefactorRowOrigin.ExistingLetValue,
-                MergedFrom: mergedFrom));
+                BuildExistingLetKey(s.Name),
+                TryParseSingleRef(s.RhsText, activeSheet),
+                s.Name,
+                s.RhsText,
+                RefactorRowOrigin.ExistingLetValue,
+                mergedFrom));
         }
 
         // Step 4 — combine and apply rowStates (rename / include / order).
@@ -186,7 +200,7 @@ public static class RefactorEngine
 
         var synthesisedLet = BuildSynthesisedLet(
             formula, activeSheet, keptRows, rewrittenCalcs,
-            isExistingLet: true, body: parsed.Body, identifierSubstitutions: identifierSubs);
+            true, parsed.Body, identifierSubs);
 
         return new RefactorResult(
             formula,
@@ -194,13 +208,6 @@ public static class RefactorEngine
             rewrittenCalcs,
             synthesisedLet);
     }
-
-    // ---------------- merge ----------------
-
-    private record MergeResult(
-        IReadOnlyList<LetBinding> Survivors,
-        IReadOnlyDictionary<string, string> SurvivorByOriginalName,
-        IReadOnlyDictionary<string, IReadOnlyList<string>> MergedFromBySurvivor);
 
     private static MergeResult MergeValueBindings(
         IReadOnlyList<LetBinding> valueBindings,
@@ -219,9 +226,10 @@ public static class RefactorEngine
                 survivorByName[vb.Name] = existing.Name;
                 if (!mergedFrom.TryGetValue(existing.Name, out var list))
                 {
-                    list = new List<string>();
+                    list = [];
                     mergedFrom[existing.Name] = list;
                 }
+
                 list.Add(vb.Name);
             }
             else
@@ -341,34 +349,24 @@ public static class RefactorEngine
                 if (!usedNames.Contains(name))
                     break;
             }
+
             usedNames.Add(name);
 
             sink.Add(new RefactorInputRow(
-                Key: BuildExtractedKey(fr, activeSheet),
-                Source: fr,
-                Name: name,
-                Rhs: fr.DisplayAddress(activeSheet),
-                Origin: RefactorRowOrigin.Extracted));
+                BuildExtractedKey(fr, activeSheet),
+                fr,
+                name,
+                fr.DisplayAddress(activeSheet),
+                RefactorRowOrigin.Extracted));
         }
     }
-
-    // ---------------- rowState materialisation ----------------
-
-    /// <summary>
-    ///     Pairs each engine-derived <see cref="RefactorInputRow" /> with
-    ///     the dialog's user-edited state. Captures the row's "current"
-    ///     <see cref="Name" /> and <see cref="IsIncluded" /> flag so the
-    ///     rewrite + synthesis passes can read them without re-keying
-    ///     against the input rowStates dictionary.
-    /// </summary>
-    private sealed record MaterialisedRow(RefactorInputRow Row, bool IsIncluded);
 
     private static List<MaterialisedRow> ApplyRowStates(
         IReadOnlyList<RefactorInputRow> defaultRows,
         IReadOnlyList<RefactorRowState>? rowStates)
     {
         if (rowStates is null)
-            return defaultRows.Select(r => new MaterialisedRow(r, IsIncluded: true)).ToList();
+            return defaultRows.Select(r => new MaterialisedRow(r, true)).ToList();
 
         var byKey = defaultRows.ToDictionary(r => r.Key, StringComparer.Ordinal);
         var ordered = new List<MaterialisedRow>(rowStates.Count);
@@ -381,7 +379,7 @@ public static class RefactorEngine
             // (validation is enforced dialog-side).
             ordered.Add(new MaterialisedRow(
                 row with { Name = rs.Name },
-                IsIncluded: rs.Include));
+                rs.Include));
         }
 
         // Any rows the rowStates didn't mention (shouldn't happen in
@@ -390,7 +388,7 @@ public static class RefactorEngine
         // lost.
         foreach (var row in defaultRows)
             if (!consumed.Contains(row.Key))
-                ordered.Add(new MaterialisedRow(row, IsIncluded: true));
+                ordered.Add(new MaterialisedRow(row, true));
 
         return ordered;
     }
@@ -413,6 +411,7 @@ public static class RefactorEngine
             var rewritten = RewriteText(c.RhsText, activeSheet, refLookup, identifierSubs);
             result.Add(new RefactorCalcBindingRow(c.Name, rewritten));
         }
+
         return result;
     }
 
@@ -445,22 +444,6 @@ public static class RefactorEngine
             return afterRefs;
         return RewriteIdentifiers(afterRefs, identifierSubs);
     }
-
-    // Identifier rewriter: substitutes whole-token identifiers from
-    // <paramref name="subs" /> while leaving strings, sheet/workbook
-    // qualifiers, and cell-shaped tokens alone. Cell refs in qualified
-    // form (e.g. <c>Sheet1!A1</c>) keep their pieces — the lookbehind
-    // class guards against renaming the <c>A1</c> tail of a sheet
-    // qualifier.
-    private static readonly Regex IdentifierTokenPattern = new(
-        // Lookbehind matches the same identifier-boundary characters
-        // CellRefExtractor uses, so we don't accidentally substitute the
-        // tail of a sheet-qualified ref (`Sheet1!A1` keeps its `A1`) or
-        // the row digits inside a numeric (`123` isn't an identifier
-        // anyway, but the negative lookbehind on '.' also prevents
-        // matching across decimal points).
-        @"(?<![A-Za-z0-9_.!:'\]#?])[A-Za-z_][A-Za-z0-9_.?]*",
-        RegexOptions.CultureInvariant);
 
     private static string RewriteIdentifiers(
         string text,
@@ -499,6 +482,7 @@ public static class RefactorEngine
             sb.Append(rewritten);
             i = segEnd;
         }
+
         return sb.ToString();
     }
 
@@ -522,10 +506,13 @@ public static class RefactorEngine
                     i += 2;
                     continue;
                 }
+
                 return i + 1;
             }
+
             i++;
         }
+
         return text.Length;
     }
 
@@ -541,10 +528,13 @@ public static class RefactorEngine
                     i += 2;
                     continue;
                 }
+
                 return i + 1;
             }
+
             i++;
         }
+
         return text.Length;
     }
 
@@ -601,7 +591,7 @@ public static class RefactorEngine
 
         var sb = new StringBuilder();
         sb.Append('=');
-        FormulaFormatter.AppendLet(sb, indent: 0, bindings, bodyText);
+        FormulaFormatter.AppendLet(sb, 0, bindings, bodyText);
         return sb.ToString();
     }
 
@@ -647,4 +637,22 @@ public static class RefactorEngine
         var trimmed = formula.TrimStart();
         return trimmed.StartsWith("=", StringComparison.Ordinal) ? trimmed[1..] : trimmed;
     }
+
+    // ---------------- merge ----------------
+
+    private record MergeResult(
+        IReadOnlyList<LetBinding> Survivors,
+        IReadOnlyDictionary<string, string> SurvivorByOriginalName,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> MergedFromBySurvivor);
+
+    // ---------------- rowState materialisation ----------------
+
+    /// <summary>
+    ///     Pairs each engine-derived <see cref="RefactorInputRow" /> with
+    ///     the dialog's user-edited state. Captures the row's "current"
+    ///     Name and <see cref="IsIncluded" /> flag so the
+    ///     rewrite + synthesis passes can read them without re-keying
+    ///     against the input rowStates dictionary.
+    /// </summary>
+    private sealed record MaterialisedRow(RefactorInputRow Row, bool IsIncluded);
 }
