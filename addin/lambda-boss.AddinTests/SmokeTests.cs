@@ -45,8 +45,7 @@ public class SmokeTests
             try
             {
                 cell.Formula2 = "=TEST_DOUBLE(5)";
-                // Allow calc
-                Thread.Sleep(500);
+                _excel.Application.Calculate();
                 object? value = cell.Value;
                 _output.WriteLine($"=TEST_DOUBLE(5) result: {value}");
                 Assert.Equal(10.0, Convert.ToDouble(value));
@@ -114,7 +113,7 @@ public class SmokeTests
             try
             {
                 cell.Formula2 = "=tst.Double(5)";
-                Thread.Sleep(500);
+                _excel.Application.Calculate();
                 Assert.Equal(10.0, Convert.ToDouble(cell.Value));
             }
             finally
@@ -135,7 +134,7 @@ public class SmokeTests
             try
             {
                 cell2.Formula2 = "=tst.Double(5)";
-                Thread.Sleep(500);
+                _excel.Application.Calculate();
                 object? value = cell2.Value;
                 _output.WriteLine($"After update: =tst.Double(5) = {value}");
                 Assert.Equal(15.0, Convert.ToDouble(value));
@@ -149,7 +148,7 @@ public class SmokeTests
             var cell1Again = ws.Range["A1"];
             try
             {
-                Thread.Sleep(500);
+                _excel.Application.Calculate();
                 object? updatedValue = cell1Again.Value;
                 _output.WriteLine($"Cell A1 after update: {updatedValue}");
                 Assert.Equal(15.0, Convert.ToDouble(updatedValue));

@@ -27,6 +27,11 @@ public class LambdaHarnessTests
         var lambdasDir = FindLambdasDirectory();
         var yamlFiles = Directory.GetFiles(lambdasDir, "*.tests.yaml", SearchOption.AllDirectories);
 
+        // Optional env-var filter: substring match against the lambda file path.
+        // Agents iterating on a single lambda can set LAMBDA_FILTER=CELLDIST to skip
+        // the other ~450 cases. Empty/unset = run everything.
+        var filter = Environment.GetEnvironmentVariable("LAMBDA_FILTER");
+
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(UnderscoredNamingConvention.Instance)
             .Build();
@@ -37,6 +42,10 @@ public class LambdaHarnessTests
             var lambdaPath = Path.Combine(Path.GetDirectoryName(yamlPath)!, lambdaFileName);
 
             if (!File.Exists(lambdaPath))
+                continue;
+
+            if (!string.IsNullOrEmpty(filter)
+                && lambdaPath.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0)
                 continue;
 
             var yamlContent = File.ReadAllText(yamlPath);
@@ -75,7 +84,10 @@ public class LambdaHarnessTests
             try
             {
                 cell.Formula2 = cellFormula;
-                Thread.Sleep(500);
+                // Force a synchronous recalc rather than sleeping. Application.Calculate()
+                // blocks until the workbook is fully recalculated, which is both faster
+                // and more correct than Thread.Sleep(500). See issue investigation 2026-05-28.
+                _excel.Application.Calculate();
 
                 if (!string.IsNullOrEmpty(expectedType))
                     AssertType(cell, expectedType, testName);

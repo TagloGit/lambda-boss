@@ -29,6 +29,19 @@ dotnet test addin/lambda-boss.Tests/lambda-boss.Tests.csproj
 dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj
 ```
 
+### Targeting a single LAMBDA
+
+The harness has ~470+ theory cases across all `*.tests.yaml` files. xUnit's `--filter` can't narrow to a single LAMBDA (all theory cases collapse under one `LambdaTest` method), so use the `LAMBDA_FILTER` env var instead — it's a case-insensitive substring match against the lambda file path:
+
+```powershell
+# Run only CELLDIST tests (~2 s vs ~20 s for the full suite)
+$env:LAMBDA_FILTER = "CELLDIST"
+dotnet test addin/lambda-boss.AddinTests/lambda-boss.AddinTests.csproj --filter "FullyQualifiedName~LambdaHarnessTests"
+Remove-Item Env:LAMBDA_FILTER
+```
+
+When iterating on a single LAMBDA, always use `LAMBDA_FILTER`. Run the full suite (no filter) before raising the PR.
+
 The packed XLL lands at `addin/lambda-boss/bin/Release/net48/publish/lambda-boss64-packed.xll`. All managed dependencies (`lambda-boss.dll`, `YamlDotNet.dll`, `GongSolutions.WPF.DragDrop.dll`, `Ookii.Dialogs.Wpf.dll`, `System.Text.Json.dll`, and transitive packages) are embedded in the XLL as Win32 resources — there are no loose side-car DLLs to ship.
 
 ## Conventions
