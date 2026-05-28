@@ -451,4 +451,201 @@ public class RefactorEngineTests
     {
         return new string(s.Where(c => !char.IsWhiteSpace(c)).ToArray());
     }
+
+    // ---------- PR 3 — promotables: named ranges + external refs ----------
+
+    /// <summary>In-memory <see cref="IWorkbookContext" /> stub for tests.</summary>
+    private sealed class StubContext : IWorkbookContext
+    {
+        public StubContext(params (string Name, string RefersTo)[] entries)
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (n, r) in entries) dict[n] = r;
+            WorkbookNames = dict;
+        }
+
+        public IReadOnlyDictionary<string, string> WorkbookNames { get; }
+    }
+
+    [Fact]
+    public void Refactor_NamedRange_AppearsAsPromotable_WithOccurrenceCount()
+    {
+        var ctx = new StubContext(("Tax_Rate", "=0.2"));
+        var result = RefactorEngine.Refactor("=A1 * Tax_Rate + Tax_Rate", Sheet, ctx);
+
+        Assert.Null(result.Diagnostic);
+        var promotable = Assert.Single(result.Promotables);
+        Assert.Equal(RefactorPromotableKind.NamedRange, promotable.Kind);
+        Assert.Equal("Tax_Rate", promotable.Token);
+        Assert.Equal(2, promotable.Occurrences);
+
+        // Un-promoted: stays inline; only A1 becomes a binding.
+        var input = Assert.Single(result.Inputs);
+        Assert.Equal("A1", input.Rhs);
+        Assert.Contains("input1 * Tax_Rate + Tax_Rate", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_NamedRange_LambdaName_IsExcludedFromPromotables()
+    {
+        // Defined name 'MyLambda' resolves to =LAMBDA(...) — should be
+        // skipped, regardless of whether the formula has a trailing '('.
+        var ctx = new StubContext(
+            ("MyLambda", "=LAMBDA(x, x + 1)"),
+            ("Tax_Rate", "=0.2"));
+
+        var withCall = RefactorEngine.Refactor("=MyLambda(A1) + Tax_Rate", Sheet, ctx);
+        var promo = Assert.Single(withCall.Promotables);
+        Assert.Equal("Tax_Rate", promo.Token);
+
+        // Naked reference (no trailing '(' — malformed/in-progress shape)
+        // should also be excluded.
+        var withoutCall = RefactorEngine.Refactor("=A1 + MyLambda + Tax_Rate", Sheet, ctx);
+        var promo2 = Assert.Single(withoutCall.Promotables);
+        Assert.Equal("Tax_Rate", promo2.Token);
+    }
+
+    [Fact]
+    public void Refactor_NamedRange_NoContext_NoPromotableEmitted()
+    {
+        // No workbook context → identifier walker can't recognise names.
+        var result = RefactorEngine.Refactor("=A1 * Tax_Rate", Sheet, context: null);
+        Assert.Empty(result.Promotables);
+    }
+
+    [Fact]
+    public void Recompute_NamedRangePromoted_RewritesEverywhere()
+    {
+        var ctx = new StubContext(("Tax_Rate", "=0.2"));
+        var initial = RefactorEngine.Refactor("=A1 * Tax_Rate + Tax_Rate", Sheet, ctx);
+        Assert.Equal(2, initial.Promotables[0].Occurrences);
+
+        var promo = initial.Promotables[0];
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(promo.Key, "rate"),
+        };
+
+        var result = RefactorEngine.Recompute(
+            "=A1 * Tax_Rate + Tax_Rate", Sheet, rowStates, ctx);
+
+        Assert.Equal(2, result.Inputs.Count);
+        Assert.Empty(result.Promotables);
+        var promoted = result.Inputs[1];
+        Assert.Equal("rate", promoted.Name);
+        Assert.Equal("Tax_Rate", promoted.Rhs);
+        Assert.Equal(RefactorRowOrigin.PromotedNamedRange, promoted.Origin);
+        Assert.Contains("rate, Tax_Rate", result.SynthesisedLet);
+        Assert.Contains("input1 * rate + rate", result.SynthesisedLet);
+        AssertRoundTrips(result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_WorksheetScopedName_BehavesAsWorkbookScoped()
+    {
+        // Worksheet-scoped names share the same lookup once the live
+        // adapter has unioned them; the engine just sees a name in the
+        // catalogue. Test by passing a worksheet-scoped style entry.
+        var ctx = new StubContext(("LocalRate", "=Sheet1!$D$10"));
+        var initial = RefactorEngine.Refactor("=LocalRate * 2", Sheet, ctx);
+
+        var promo = Assert.Single(initial.Promotables);
+        Assert.Equal("LocalRate", promo.Token);
+
+        var rowStates = new[] { new RefactorRowState(promo.Key, "rate") };
+        var result = RefactorEngine.Recompute("=LocalRate * 2", Sheet, rowStates, ctx);
+
+        Assert.Empty(result.Promotables);
+        var input = Assert.Single(result.Inputs);
+        Assert.Equal("rate", input.Name);
+        Assert.Equal("LocalRate", input.Rhs);
+        Assert.Contains("rate * 2", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_ExternalRef_AppearsAsPromotable_NotAsInputByDefault()
+    {
+        var formula = "=A1 + [Other.xlsx]Sheet1!A1";
+        var result = RefactorEngine.Refactor(formula, Sheet);
+
+        var input = Assert.Single(result.Inputs);
+        Assert.Equal("A1", input.Rhs);
+
+        var promo = Assert.Single(result.Promotables);
+        Assert.Equal(RefactorPromotableKind.ExternalRef, promo.Kind);
+        Assert.Equal("[Other.xlsx]Sheet1!A1", promo.Token);
+        Assert.Equal(1, promo.Occurrences);
+
+        // Body keeps the external ref inline.
+        Assert.Contains("input1 + [Other.xlsx]Sheet1!A1", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_ExternalRefPromoted_ProducesBinding()
+    {
+        var formula = "=A1 + [Other.xlsx]Sheet1!A1";
+        var initial = RefactorEngine.Refactor(formula, Sheet);
+        var promo = Assert.Single(initial.Promotables);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(promo.Key, "ext"),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates);
+
+        Assert.Equal(2, result.Inputs.Count);
+        Assert.Empty(result.Promotables);
+        var promoted = result.Inputs[1];
+        Assert.Equal("ext", promoted.Name);
+        Assert.Equal("[Other.xlsx]Sheet1!A1", promoted.Rhs);
+        Assert.Equal(RefactorRowOrigin.PromotedExternalRef, promoted.Origin);
+        Assert.Contains("ext, [Other.xlsx]Sheet1!A1", result.SynthesisedLet);
+        Assert.Contains("input1 + ext", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_IdentifierBoundary_HelpQuestionFooNotSplit()
+    {
+        // 'Help?Foo' is a single identifier (the ? predicate convention).
+        // The candidate walker should NOT split on the '?'. If 'Help' is
+        // ALSO a workbook name, we should NOT match it inside 'Help?Foo'.
+        var ctx = new StubContext(("Help", "=42"));
+        var result = RefactorEngine.Refactor("=Help?Foo + A1", Sheet, ctx);
+
+        // 'Help?Foo' isn't in WorkbookNames → not promotable.
+        // 'Help' bare doesn't appear in the formula text either.
+        Assert.Empty(result.Promotables);
+    }
+
+    [Fact]
+    public void Refactor_NamedRange_ExistingLet_BodyReferences()
+    {
+        // Existing LET body references a named range. Should appear as
+        // promotable; existing binding names shouldn't.
+        var ctx = new StubContext(("Tax_Rate", "=0.2"));
+        var result = RefactorEngine.Refactor(
+            "=LET(a, A1, a * Tax_Rate)", Sheet, ctx);
+
+        var promo = Assert.Single(result.Promotables);
+        Assert.Equal("Tax_Rate", promo.Token);
+        Assert.Equal(RefactorPromotableKind.NamedRange, promo.Kind);
+
+        // Un-promoted: Tax_Rate stays inline.
+        Assert.Contains("a * Tax_Rate", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_NamedRange_ExistingLetBindingName_NotOfferedAsPromotable()
+    {
+        // The user has a LET binding named 'rate'. Even if 'rate' also
+        // happens to be a defined name on the workbook, treat it as the
+        // local binding within the LET scope.
+        var ctx = new StubContext(("rate", "=0.05"));
+        var result = RefactorEngine.Refactor(
+            "=LET(rate, A1, rate * 2)", Sheet, ctx);
+
+        Assert.Empty(result.Promotables);
+    }
 }
