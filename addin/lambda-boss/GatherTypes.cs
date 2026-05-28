@@ -59,11 +59,13 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
 
     public override int GetHashCode()
     {
-        // Microsoft.Bcl.HashCode on net48 calls StringComparer.GetHashCode directly,
-        // which throws on null. Net6's built-in HashCode tolerates null. Coalesce
-        // to the empty string to match .NET 6 behaviour across the migration.
+        // Microsoft.Bcl.HashCode on net48 calls StringComparer.GetHashCode
+        // directly, which throws on null where .NET 6's built-in HashCode
+        // tolerates it. Sheet is annotated non-nullable so we trust the
+        // contract; ExternalWorkbook is genuinely nullable, so we coalesce
+        // to "" before hashing.
         var hash = new HashCode();
-        hash.Add(Sheet ?? "", StringComparer.OrdinalIgnoreCase);
+        hash.Add(Sheet, StringComparer.OrdinalIgnoreCase);
         hash.Add(Column);
         hash.Add(Row);
         hash.Add(ExternalWorkbook ?? "", StringComparer.OrdinalIgnoreCase);
@@ -134,15 +136,26 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
 ///     range refs without recursing into their constituent cells; the engine
 ///     promotes each unique range to a single leaf input and drops walked
 ///     cells covered by any promoted range. Equality follows
-///     <see cref="CellRef" />'s case-insensitive sheet rule.
+///     <see cref="CellRef" />'s case-insensitive sheet rule, plus the
+///     <see cref="IsSpilled" /> flag so <c>A1</c> and <c>A1#</c> dedupe
+///     as distinct refs — what spec 0008 (<c>/Refactor</c>) needs. Range
+///     refs always have <see cref="IsSpilled" /> = false (Excel has no
+///     <c>A1:B5#</c> syntax). <see cref="CellRefExtractor.Rewrite" />
+///     transparently falls back from a spilled key to its non-spilled
+///     equivalent when the spilled key isn't in the lookup, so
+///     <c>/Gather</c> — which only ever registers non-spilled keys —
+///     keeps its PR 5 behaviour of collapsing <c>A1#</c> tokens to the
+///     anchor cell's binding name.
 /// </summary>
-public sealed record FormulaRef(CellRef Start, CellRef? End = null)
+public sealed record FormulaRef(CellRef Start, CellRef? End = null, bool IsSpilled = false)
 {
     public bool IsRange => End is not null;
 
     /// <summary>
     ///     The convenience accessor most callers want; for ranges it returns
     ///     <c>Start:End</c> so the value still uniquely identifies the ref.
+    ///     Does NOT include the spill <c>#</c> suffix — call
+    ///     <see cref="DisplayAddress" /> for the LET-binding render form.
     /// </summary>
     public string A1Address => IsRange ? $"{Start.A1Address}:{End!.A1Address}" : Start.A1Address;
 
@@ -174,12 +187,33 @@ public sealed record FormulaRef(CellRef Start, CellRef? End = null)
     ///     The form to emit as a LET binding RHS when the LET lives on
     ///     <paramref name="hostSheet" />. For ranges, the sheet qualifier is
     ///     emitted once on Start; the End cell's address is rendered bare.
+    ///     Single-cell refs flagged as <see cref="IsSpilled" /> append a
+    ///     trailing <c>#</c> so the binding represents the whole spilled
+    ///     array rather than just the anchor's value.
     /// </summary>
     public string DisplayAddress(string hostSheet)
     {
-        if (!IsRange)
-            return Start.DisplayAddress(hostSheet);
-        return $"{Start.DisplayAddress(hostSheet)}:{End!.A1Address}";
+        if (IsRange)
+            return $"{Start.DisplayAddress(hostSheet)}:{End!.A1Address}";
+        var addr = Start.DisplayAddress(hostSheet);
+        return IsSpilled ? addr + "#" : addr;
+    }
+
+    public bool Equals(FormulaRef? other)
+    {
+        return other is not null
+               && Start.Equals(other.Start)
+               && Equals(End, other.End)
+               && IsSpilled == other.IsSpilled;
+    }
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Start);
+        hash.Add(End);
+        hash.Add(IsSpilled);
+        return hash.ToHashCode();
     }
 }
 

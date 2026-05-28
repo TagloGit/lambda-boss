@@ -126,6 +126,16 @@ internal static class CellRefExtractor
     ///     collapses to one binding name even when its endpoints alone are
     ///     also bound elsewhere. The default-sheet rule matches
     ///     <see cref="Extract" />.
+    ///
+    ///     Spill refs (<c>A1#</c>) match in priority order: first the
+    ///     spilled key, then the non-spilled equivalent. <c>/Gather</c>
+    ///     only registers non-spilled keys for spilling anchor cells (the
+    ///     binding RHS is built as <c>A1#</c> directly by the engine), so
+    ///     the fallback path keeps its PR 5 behaviour of collapsing the
+    ///     whole <c>A1#</c> token to the binding name with no trailing
+    ///     <c>#</c>. <c>/Refactor</c> (spec 0008) registers both keys
+    ///     independently — the spilled lookup wins for the <c>A1#</c>
+    ///     token, the non-spilled lookup for plain <c>A1</c>.
     /// </summary>
     public static string Rewrite(
         string formula,
@@ -153,7 +163,19 @@ internal static class CellRefExtractor
             var rewritten = CellRefPattern.Replace(segment, m =>
             {
                 var key = BuildFormulaRef(m, defaultSheet);
-                return lookup.TryGetValue(key, out var name) ? name : m.Value;
+                if (lookup.TryGetValue(key, out var name))
+                    return name;
+                // Spilled-key miss: try the non-spilled equivalent so a
+                // legacy /Gather lookup keyed only on the anchor still
+                // collapses an A1# token. Ranges never reach this branch
+                // (IsSpilled is always false on ranges).
+                if (key.IsSpilled)
+                {
+                    var fallback = new FormulaRef(key.Start);
+                    if (lookup.TryGetValue(fallback, out name))
+                        return name;
+                }
+                return m.Value;
             });
             result.Append(rewritten);
             i = segEnd;
@@ -164,15 +186,19 @@ internal static class CellRefExtractor
     private static FormulaRef BuildFormulaRef(Match m, string defaultSheet)
     {
         var start = BuildCellRef(m, defaultSheet);
-        if (!m.Groups["col2"].Success)
-            return new FormulaRef(start);
+        if (m.Groups["col2"].Success)
+        {
+            // Range tail: End shares the sheet/workbook of Start (Excel
+            // disallows cross-sheet ranges), so we don't reparse the
+            // qualifier. Ranges never carry a spill marker.
+            var endCol = CellRef.LettersToColumn(m.Groups["col2"].Value);
+            var endRow = int.Parse(m.Groups["row2"].Value);
+            var end = new CellRef(start.Sheet, endCol, endRow, start.ExternalWorkbook);
+            return new FormulaRef(start, end);
+        }
 
-        // Range tail: End shares the sheet/workbook of Start (Excel
-        // disallows cross-sheet ranges), so we don't reparse the qualifier.
-        var endCol = CellRef.LettersToColumn(m.Groups["col2"].Value);
-        var endRow = int.Parse(m.Groups["row2"].Value);
-        var end = new CellRef(start.Sheet, endCol, endRow, start.ExternalWorkbook);
-        return new FormulaRef(start, end);
+        var isSpilled = m.Groups["spill"].Success;
+        return new FormulaRef(start, IsSpilled: isSpilled);
     }
 
     private static CellRef BuildCellRef(Match m, string defaultSheet)

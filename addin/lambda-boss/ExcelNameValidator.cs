@@ -27,22 +27,28 @@ public static class ExcelNameValidator
         if (string.IsNullOrWhiteSpace(name))
             return ValidationResult.Invalid("Name is required.");
 
-        if (name.Length > 255)
+        // name is non-null after the IsNullOrWhiteSpace guard; net48's
+        // BCL doesn't annotate IsNullOrWhiteSpace with [NotNullWhen(false)],
+        // so the analyzer can't narrow on its own. Re-bind to a non-null
+        // local so the rest of the method reads cleanly.
+        var n = name!;
+
+        if (n.Length > 255)
             return ValidationResult.Invalid("Name is too long (max 255 characters).");
 
-        var first = name[0];
+        var first = n[0];
         if (!char.IsLetter(first) && first != '_' && first != '\\')
             return ValidationResult.Invalid("Name must start with a letter, underscore, or backslash.");
 
-        foreach (var c in name)
+        foreach (var c in n)
             if (!char.IsLetterOrDigit(c) && c != '_' && c != '.' && c != '\\' && c != '?')
                 return ValidationResult.Invalid($"Invalid character '{c}' in name.");
 
-        if (Reserved.Contains(name))
-            return ValidationResult.Invalid($"'{name}' is reserved by Excel.");
+        if (Reserved.Contains(n))
+            return ValidationResult.Invalid($"'{n}' is reserved by Excel.");
 
-        if (CellRefPattern.IsMatch(name))
-            return ValidationResult.Invalid($"'{name}' looks like a cell reference.");
+        if (CellRefPattern.IsMatch(n))
+            return ValidationResult.Invalid($"'{n}' looks like a cell reference.");
 
         return ValidationResult.Valid();
     }
