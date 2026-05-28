@@ -1,0 +1,31 @@
+/*  FUNCTION NAME:      ALL
+    DESCRIPTION:*//**Returns TRUE if every item satisfies the predicate, else FALSE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-05-28  Claude      Initial version
+*/
+ALL = LAMBDA(
+//  Parameter Declarations
+    [items],
+    [predicate],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →ALL(items, [predicate])¶" &
+                "DESCRIPTION:   →Returns TRUE if every item satisfies the predicate, else FALSE.¶" &
+                "VERSION:       →May 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   items          →(Required) Array or range of values to test.¶" &
+                "   predicate      →(Optional) LAMBDA(v) returning TRUE/FALSE or 0/1. If omitted, items are assumed to already be boolean or 0/1 values.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ALL({""A"",""B"",""C""}, LAMBDA(c, CODE(c)>=65))¶" &
+                "Result         →TRUE",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
+        mapped, MAP(items, pred),
+        result, SUM(--NOT(mapped))=0,
+        IF(Help?, Help, result)
+)
+);
