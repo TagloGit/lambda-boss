@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dd="urn:gong-wpf-dragdrop"
         Title="Lambda Boss — Refactor to LET"
-        Width="640" Height="560"
+        Width="640" Height="640"
         WindowStyle="ToolWindow"
         ShowInTaskbar="True"
         Topmost="True"
@@ -13,6 +13,8 @@
 
     <Grid Margin="12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -88,6 +90,16 @@
                                           Cursor="Hand"
                                           ToolTip="Uncheck to leave this ref inline in the LET body" />
                                 <TextBlock DockPanel.Dock="Right"
+                                           Text="{Binding BadgeText}"
+                                           Visibility="{Binding BadgeVisibility}"
+                                           Foreground="#9cdcfe"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           FontStyle="Italic"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0"
+                                           ToolTip="{Binding BadgeTooltip}" />
+                                <TextBlock DockPanel.Dock="Right"
                                            Text="{Binding Rhs}"
                                            Foreground="{Binding RhsBrush}"
                                            FontFamily="Consolas"
@@ -117,7 +129,52 @@
             </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="4" Margin="0,12,0,0">
+        <TextBlock x:Name="CalcBindingsHeader"
+                   Grid.Row="4"
+                   Text="Calculation bindings"
+                   FontSize="13"
+                   FontWeight="Bold"
+                   Foreground="#dcdcaa"
+                   Margin="0,12,0,4"
+                   Visibility="Collapsed" />
+
+        <Border x:Name="CalcBindingsBorder"
+                Grid.Row="5"
+                Background="#252526"
+                BorderBrush="#3e3e3e"
+                BorderThickness="1"
+                MaxHeight="120"
+                Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="CalcBindingsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="4,3">
+                                <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                                <TextBlock DockPanel.Dock="Left"
+                                           Text="{Binding Name}"
+                                           Foreground="#9cdcfe"
+                                           FontFamily="Consolas"
+                                           FontSize="13"
+                                           VerticalAlignment="Center"
+                                           MinWidth="120"
+                                           Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding RewrittenRhs}"
+                                           Foreground="#cccccc"
+                                           FontFamily="Consolas"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding RewrittenRhs}" />
+                                <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
+                            </DockPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="6" Margin="0,12,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -145,7 +202,7 @@
                      HorizontalScrollBarVisibility="Auto" />
         </Grid>
 
-        <DockPanel Grid.Row="5" Margin="0,12,0,0">
+        <DockPanel Grid.Row="7" Margin="0,12,0,0">
             <Button x:Name="CancelButton"
                     DockPanel.Dock="Right"
                     Content="Cancel"

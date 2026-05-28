@@ -10,21 +10,22 @@ using System.Windows.Media;
 namespace LambdaBoss.UI;
 
 /// <summary>
-///     Spec 0008 / PR 1 — the <c>/Refactor</c> dialog. Shows the active
-///     cell's original formula, the engine-extracted input bindings (with
-///     editable names, Include checkbox, and drag/Alt+Up-Down reorder),
-///     and a live preview of the synthesised LET. Save returns the
-///     preview text via <see cref="SavedFormula" />; Cancel discards.
+///     Spec 0008 — the <c>/Refactor</c> dialog. Shows the active cell's
+///     original formula, the engine-extracted / existing-LET input rows
+///     (with editable names, Include checkbox, drag + Alt+Up/Down reorder),
+///     a read-only Calculation-bindings section (PR 2+), and a live
+///     preview of the synthesised LET. Save returns the preview text via
+///     <see cref="SavedFormula" />; Cancel discards.
 ///
 ///     The code-behind is intentionally thin: every row-state change
 ///     (rename, Include toggle, reorder) calls back into the supplied
 ///     <c>recompute</c> delegate (which wraps
 ///     <see cref="RefactorEngine.Recompute" />), and the result replaces
-///     the preview + the row collection in place. Live name validation
-///     gates the Save button via per-row canonicality (mirrors
-///     <see cref="GatherWindow" />'s pattern but without the engine-side
-///     collision-suffix dance — /Refactor is a one-shot pass, so the
-///     dialog enforces both shape and cross-row uniqueness up front).
+///     the preview + the calc-binding list in place. Row Keys (not
+///     <c>FormulaRef</c>s) drive the identity round-trip with the engine
+///     so existing-LET value bindings whose RHS isn't a single cell ref
+///     (e.g. a literal or a named range) can be tracked alongside
+///     extracted refs.
 /// </summary>
 public partial class RefactorToLetWindow
 {
@@ -36,6 +37,11 @@ public partial class RefactorToLetWindow
 
     private readonly Func<IReadOnlyList<RefactorRowState>, RefactorResult> _recompute;
     private readonly ObservableCollection<RefactorInputRowVm> _rows = [];
+    private readonly ObservableCollection<RefactorCalcBindingVm> _calcRows = [];
+    // Calc binding names are read-only in the dialog but they still occupy
+    // the LET's name namespace — Inputs are flagged invalid when they
+    // collide with one.
+    private IReadOnlyList<string> _calcBindingNames = Array.Empty<string>();
 
     private RefactorResult _result;
     // Reentrancy guard: rebuilding the row list during a Recompute fires
@@ -55,9 +61,12 @@ public partial class RefactorToLetWindow
         OriginalFormulaText.Text = initial.OriginalFormula;
         PreviewText.Text = initial.SynthesisedLet;
 
+        _calcBindingNames = initial.CalcBindings.Select(c => c.Name).ToList();
         BuildRowsFromInputs(initial.Inputs);
+        UpdateCalcBindings(initial.CalcBindings);
         _rows.CollectionChanged += Rows_CollectionChanged;
         InputsList.ItemsSource = _rows;
+        CalcBindingsList.ItemsSource = _calcRows;
 
         UpdateSaveButtonEnabled(RevalidateNames());
     }
@@ -152,6 +161,17 @@ public partial class RefactorToLetWindow
         }
     }
 
+    private void UpdateCalcBindings(IReadOnlyList<RefactorCalcBindingRow> calcBindings)
+    {
+        _calcRows.Clear();
+        foreach (var c in calcBindings)
+            _calcRows.Add(new RefactorCalcBindingVm(c.Name, c.RewrittenRhs));
+
+        var show = calcBindings.Count > 0;
+        CalcBindingsHeader.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        CalcBindingsBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void Rows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         // Reorder via drag/drop or Alt+Up/Down fires Move; rerun the
@@ -174,7 +194,7 @@ public partial class RefactorToLetWindow
     private void RecomputeAndRefresh()
     {
         var rowStates = _rows
-            .Select(r => new RefactorRowState(r.Source, r.Name, r.Include))
+            .Select(r => new RefactorRowState(r.Key, r.Name, r.Include))
             .ToList();
 
         var newResult = _recompute(rowStates);
@@ -186,6 +206,7 @@ public partial class RefactorToLetWindow
         {
             _result = newResult;
             PreviewText.Text = newResult.SynthesisedLet;
+            UpdateCalcBindings(newResult.CalcBindings);
         }
         finally
         {
@@ -195,9 +216,10 @@ public partial class RefactorToLetWindow
 
     /// <summary>
     ///     Stamps each row's <see cref="RefactorInputRowVm.IsNameValid" />
-    ///     based on per-row canonicality (shape + non-reserved) AND
-    ///     cross-row uniqueness among included rows. Returns true when
-    ///     every included row is valid AND no duplicates exist.
+    ///     based on per-row canonicality (shape + non-reserved), cross-row
+    ///     uniqueness among included rows, AND collision with calc binding
+    ///     names. Returns true when every included row is valid AND no
+    ///     duplicates exist.
     /// </summary>
     private bool RevalidateNames()
     {
@@ -207,6 +229,8 @@ public partial class RefactorToLetWindow
             .Where(g => g.Count() > 1)
             .SelectMany(g => g)
             .ToHashSet();
+
+        var calcNameSet = new HashSet<string>(_calcBindingNames, StringComparer.OrdinalIgnoreCase);
 
         var allValid = true;
         foreach (var vm in _rows)
@@ -219,7 +243,8 @@ public partial class RefactorToLetWindow
             else
             {
                 var shapeOk = ExcelNameValidator.Validate(vm.Name).IsValid;
-                valid = shapeOk && !dupes.Contains(vm);
+                var collidesWithCalc = calcNameSet.Contains(vm.Name);
+                valid = shapeOk && !dupes.Contains(vm) && !collidesWithCalc;
                 if (!valid) allValid = false;
             }
             vm.IsNameValid = valid;
@@ -229,10 +254,15 @@ public partial class RefactorToLetWindow
 
     private void UpdateSaveButtonEnabled(bool allValid)
     {
-        SaveButton.IsEnabled = allValid && _rows.Any(r => r.Include);
+        // An existing LET with every input dropped still produces a valid
+        // formula (the bare body), so Save stays enabled when calc
+        // bindings exist OR at least one row is kept.
+        var hasKeptRows = _rows.Any(r => r.Include);
+        var hasCalcBindings = _calcBindingNames.Count > 0;
+        SaveButton.IsEnabled = allValid && (hasKeptRows || hasCalcBindings);
         if (!allValid)
             StatusText.Text = InvalidNameStatusText;
-        else if (!_rows.Any(r => r.Include))
+        else if (!hasKeptRows && !hasCalcBindings)
             StatusText.Text = "No bindings selected — nothing to refactor";
         else
             StatusText.Text = DefaultStatusText;
@@ -240,11 +270,13 @@ public partial class RefactorToLetWindow
 }
 
 /// <summary>
-///     Row view-model bound to <see cref="RefactorToLetWindow" />'s
-///     inputs list. Carries the row's <see cref="Source" /> identity and
-///     the user-editable <see cref="Name" /> + <see cref="Include" />.
-///     <see cref="IsNameValid" /> is set by the dialog on every
-///     validation pass and drives the red-border on the Name TextBox.
+///     Row view-model bound to <see cref="RefactorToLetWindow" />'s inputs
+///     list. Carries the row's <see cref="Key" /> identity (used to round-
+///     trip user state back to the engine via <see cref="RefactorRowState" />),
+///     the user-editable <see cref="Name" /> + <see cref="Include" />, and
+///     the merge-survivor <see cref="BadgeText" /> when applicable.
+///     <see cref="IsNameValid" /> is set by the dialog on every validation
+///     pass and drives the red-border on the Name TextBox.
 /// </summary>
 public class RefactorInputRowVm : INotifyPropertyChanged
 {
@@ -269,13 +301,31 @@ public class RefactorInputRowVm : INotifyPropertyChanged
 
     public RefactorInputRowVm(RefactorInputRow input)
     {
-        Source = input.Source;
+        Key = input.Key;
         _name = input.Name;
         Rhs = input.Rhs;
+        if (input.MergedFrom is { Count: > 0 })
+        {
+            BadgeText = "merged ← " + string.Join(", ", input.MergedFrom);
+            BadgeTooltip =
+                "This binding's RHS matched " +
+                string.Join(", ", input.MergedFrom) +
+                "; refs to those names were rewritten to use this one.";
+            BadgeVisibility = Visibility.Visible;
+        }
+        else
+        {
+            BadgeText = string.Empty;
+            BadgeTooltip = string.Empty;
+            BadgeVisibility = Visibility.Collapsed;
+        }
     }
 
-    public FormulaRef Source { get; }
+    public string Key { get; }
     public string Rhs { get; }
+    public string BadgeText { get; }
+    public string BadgeTooltip { get; }
+    public Visibility BadgeVisibility { get; }
 
     public string Name
     {
@@ -324,3 +374,9 @@ public class RefactorInputRowVm : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
     }
 }
+
+/// <summary>
+///     Read-only view-model for a calc binding in the dialog's
+///     Calculation-bindings section.
+/// </summary>
+public sealed record RefactorCalcBindingVm(string Name, string RewrittenRhs);
