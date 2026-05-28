@@ -118,6 +118,42 @@ internal static class CellRefExtractor
     }
 
     /// <summary>
+    ///     Like <see cref="Extract" /> but returns every match (not deduped),
+    ///     in source order. Spec 0008 / PR 3 uses this to count occurrences
+    ///     of external refs in the formula so the promotable section can
+    ///     surface a count alongside each token. The list is allowed to
+    ///     contain duplicates; callers group/dedupe themselves.
+    /// </summary>
+    public static IReadOnlyList<FormulaRef> ExtractAll(string formula, string defaultSheet)
+    {
+        if (string.IsNullOrEmpty(formula))
+            return Array.Empty<FormulaRef>();
+
+        var refs = new List<FormulaRef>();
+
+        var i = 0;
+        while (i < formula.Length)
+        {
+            if (formula[i] == '"')
+            {
+                i = SkipString(formula, i);
+                continue;
+            }
+
+            var nextQuote = formula.IndexOf('"', i);
+            var segEnd = nextQuote < 0 ? formula.Length : nextQuote;
+            var segment = formula[i..segEnd];
+
+            foreach (Match m in CellRefPattern.Matches(segment))
+                refs.Add(BuildFormulaRef(m, defaultSheet));
+
+            i = segEnd;
+        }
+
+        return refs;
+    }
+
+    /// <summary>
     ///     Rewrites every in-scope ref in <paramref name="formula" /> to the
     ///     binding name supplied by <paramref name="lookup" />. Refs not in
     ///     <paramref name="lookup" /> (out-of-scope cells, named ranges,

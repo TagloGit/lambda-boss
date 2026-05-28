@@ -6,12 +6,18 @@ namespace LambdaBoss;
 ///     binding's RHS. <see cref="ExistingLetValue" /> is a value binding
 ///     already present in an existing LET — the binding's name and RHS are
 ///     pre-populated and the row can still be renamed, reordered, dropped,
-///     or marked as the survivor of a merge.
+///     or marked as the survivor of a merge. PR 3 adds
+///     <see cref="PromotedNamedRange" /> and <see cref="PromotedExternalRef" />:
+///     rows that were originally promotable but the user (or the dialog's
+///     initial state) has promoted into the inputs section. The dialog
+///     uses the badge to communicate the row's provenance.
 /// </summary>
 public enum RefactorRowOrigin
 {
     Extracted,
-    ExistingLetValue
+    ExistingLetValue,
+    PromotedNamedRange,
+    PromotedExternalRef
 }
 
 /// <summary>
@@ -45,13 +51,48 @@ public sealed record RefactorCalcBindingRow(
     string RewrittenRhs);
 
 /// <summary>
+///     Spec 0008 / PR 3 — a candidate identifier or external ref that the
+///     engine found in the formula but didn't promote to an input binding
+///     by default. <see cref="Kind" /> tells the dialog whether the row
+///     represents a workbook/worksheet defined name or an external-workbook
+///     ref. <see cref="Token" /> is the user-facing label (the identifier
+///     text for named ranges, the host-relative display address for
+///     external refs). <see cref="Occurrences" /> is the number of times
+///     the token appears in the source formula — handy for the author
+///     deciding whether promoting it saves work. When the user toggles
+///     Promote on, the dialog passes the row's <see cref="Key" /> back to
+///     <see cref="RefactorEngine.Recompute" /> via
+///     <see cref="RefactorRowState" /> (the engine recognises the
+///     <c>extref:</c> / <c>named:</c> key prefix and materialises the row
+///     as an input binding with the requested name).
+/// </summary>
+public sealed record RefactorPromotableRow(
+    string Key,
+    RefactorPromotableKind Kind,
+    string Token,
+    int Occurrences);
+
+public enum RefactorPromotableKind
+{
+    /// <summary>A workbook- or worksheet-scoped defined name (not a LAMBDA).</summary>
+    NamedRange,
+
+    /// <summary>An external-workbook ref (<c>[Wb.xlsx]Sheet!A1</c>, etc.).</summary>
+    ExternalRef
+}
+
+/// <summary>
 ///     User's per-row state passed back into
 ///     <see cref="RefactorEngine.Recompute" />. PR 2 keys rows by
-///     <see cref="Key" /> (the matching <see cref="RefactorInputRow.Key" />)
-///     instead of <see cref="FormulaRef" /> so rows without a single-ref
-///     source (existing-LET value bindings whose RHS is a literal or named
-///     range) can be tracked too. The dialog produces the row order by
-///     resequencing this list before the call.
+///     <see cref="Key" /> (the matching <see cref="RefactorInputRow.Key" />
+///     or <see cref="RefactorPromotableRow.Key" />) instead of
+///     <see cref="FormulaRef" /> so rows without a single-ref source
+///     (existing-LET value bindings whose RHS is a literal or named range)
+///     can be tracked too. PR 3 reuses the same record for promoted
+///     promotables — the dialog adds the promotable's Key to this list
+///     when the user toggles Promote on, with an auto-allocated or
+///     user-edited Name. The dialog produces the row order by resequencing
+///     this list before the call.
 /// </summary>
 public sealed record RefactorRowState(
     string Key,
@@ -61,21 +102,28 @@ public sealed record RefactorRowState(
 /// <summary>
 ///     The engine's output. <see cref="OriginalFormula" /> is the formula
 ///     text passed in (handy for the dialog header). <see cref="Inputs" />
-///     is the in-dialog-order list of input rows. <see cref="CalcBindings" />
-///     carries the rewritten calculation bindings from an existing LET
-///     (empty for non-LET formulas). <see cref="SynthesisedLet" /> is the
-///     formatted <c>=LET(...)</c> text ready to write back to the active
-///     cell on Save (or the unchanged formula when there's nothing to
-///     refactor). <see cref="Diagnostic" /> is non-null when the engine
-///     refused (PR 2: <c>MalformedLet</c>); in that case
-///     <see cref="Inputs" /> and <see cref="CalcBindings" /> are empty and
-///     <see cref="SynthesisedLet" /> is the original formula unchanged.
+///     is the in-dialog-order list of input rows. <see cref="Promotables" />
+///     is the list of un-promoted candidates (named ranges, external refs)
+///     the dialog shows in its "Promote to input" section; promoted rows
+///     materialise as <see cref="RefactorInputRow" /> in
+///     <see cref="Inputs" /> and DON'T appear here.
+///     <see cref="CalcBindings" /> carries the rewritten calculation
+///     bindings from an existing LET (empty for non-LET formulas).
+///     <see cref="SynthesisedLet" /> is the formatted <c>=LET(...)</c>
+///     text ready to write back to the active cell on Save (or the
+///     unchanged formula when there's nothing to refactor).
+///     <see cref="Diagnostic" /> is non-null when the engine refused (PR 2:
+///     <c>MalformedLet</c>); in that case <see cref="Inputs" />,
+///     <see cref="Promotables" />, and <see cref="CalcBindings" /> are
+///     empty and <see cref="SynthesisedLet" /> is the original formula
+///     unchanged.
 /// </summary>
 public sealed record RefactorResult(
     string OriginalFormula,
     IReadOnlyList<RefactorInputRow> Inputs,
     IReadOnlyList<RefactorCalcBindingRow> CalcBindings,
     string SynthesisedLet,
+    IReadOnlyList<RefactorPromotableRow> Promotables,
     RefactorDiagnostic? Diagnostic = null);
 
 /// <summary>
@@ -96,4 +144,23 @@ public enum RefactorDiagnosticKind
     ///     opening the dialog.
     /// </summary>
     MalformedLet
+}
+
+/// <summary>
+///     Spec 0008 / PR 3 — workbook-name lookup the engine consults when
+///     deciding which bare identifiers in the formula are candidate
+///     defined-name references (and which should be excluded as LAMBDA
+///     names). The live adapter in <c>RefactorCommand</c> populates the
+///     dictionary once from <c>workbook.Names</c> AND the active sheet's
+///     <c>worksheet.Names</c>, unioned with case-insensitive collation.
+///     <see cref="WorkbookNames" /> maps name → <c>RefersTo</c> text;
+///     entries whose <c>RefersTo</c> starts with <c>=LAMBDA(</c> are
+///     filtered out by the engine via
+///     <see cref="LambdaSignatureParser.IsLambdaFormula" />. Tests pass an
+///     in-memory stub; callers that don't need promotable named ranges
+///     (e.g. PR 1's tracer tests) pass null.
+/// </summary>
+public interface IWorkbookContext
+{
+    IReadOnlyDictionary<string, string> WorkbookNames { get; }
 }

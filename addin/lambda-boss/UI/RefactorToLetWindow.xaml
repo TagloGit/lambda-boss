@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dd="urn:gong-wpf-dragdrop"
         Title="Lambda Boss — Refactor to LET"
-        Width="640" Height="640"
+        Width="640" Height="700"
         WindowStyle="ToolWindow"
         ShowInTaskbar="True"
         Topmost="True"
@@ -13,6 +13,8 @@
 
     <Grid Margin="12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -57,7 +59,7 @@
                 Background="#252526"
                 BorderBrush="#3e3e3e"
                 BorderThickness="1"
-                MaxHeight="220">
+                MaxHeight="200">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="InputsList"
                               dd:DragDrop.IsDragSource="True"
@@ -129,8 +131,67 @@
             </ScrollViewer>
         </Border>
 
-        <TextBlock x:Name="CalcBindingsHeader"
+        <TextBlock x:Name="PromotablesHeader"
                    Grid.Row="4"
+                   Text="Promote to input"
+                   FontSize="13"
+                   FontWeight="Bold"
+                   Foreground="#dcdcaa"
+                   Margin="0,12,0,4"
+                   Visibility="Collapsed" />
+
+        <Border x:Name="PromotablesBorder"
+                Grid.Row="5"
+                Background="#252526"
+                BorderBrush="#3e3e3e"
+                BorderThickness="1"
+                MaxHeight="160"
+                Visibility="Collapsed">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="PromotablesList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="4,3">
+                                <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                                <CheckBox DockPanel.Dock="Left"
+                                          IsChecked="{Binding Promote, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,8,0"
+                                          Cursor="Hand"
+                                          ToolTip="Check to add this as a LAMBDA input binding" />
+                                <TextBlock DockPanel.Dock="Left"
+                                           Text="{Binding KindLabel}"
+                                           Foreground="#808080"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           FontStyle="Italic"
+                                           VerticalAlignment="Center"
+                                           MinWidth="72"
+                                           Margin="0,0,8,0" />
+                                <TextBlock DockPanel.Dock="Right"
+                                           Text="{Binding OccurrencesLabel}"
+                                           Foreground="#808080"
+                                           FontFamily="Consolas"
+                                           FontSize="11"
+                                           VerticalAlignment="Center"
+                                           Margin="8,0,0,0" />
+                                <TextBlock Text="{Binding Token}"
+                                           Foreground="#cccccc"
+                                           FontFamily="Consolas"
+                                           FontSize="13"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip="{Binding Token}" />
+                                <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
+                            </DockPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock x:Name="CalcBindingsHeader"
+                   Grid.Row="6"
                    Text="Calculation bindings"
                    FontSize="13"
                    FontWeight="Bold"
@@ -139,7 +200,7 @@
                    Visibility="Collapsed" />
 
         <Border x:Name="CalcBindingsBorder"
-                Grid.Row="5"
+                Grid.Row="7"
                 Background="#252526"
                 BorderBrush="#3e3e3e"
                 BorderThickness="1"
@@ -174,7 +235,7 @@
             </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="6" Margin="0,12,0,0">
+        <Grid Grid.Row="8" Margin="0,12,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -202,7 +263,7 @@
                      HorizontalScrollBarVisibility="Auto" />
         </Grid>
 
-        <DockPanel Grid.Row="7" Margin="0,12,0,0">
+        <DockPanel Grid.Row="9" Margin="0,12,0,0">
             <Button x:Name="CancelButton"
                     DockPanel.Dock="Right"
                     Content="Cancel"

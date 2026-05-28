@@ -45,10 +45,15 @@ internal static class RefactorCommand
             // cells, which would corrupt our refactor.
             string formula = (string)activeCell.Formula2;
 
+            // PR 3 — snapshot the workbook + active-sheet defined-name
+            // catalogue once when the dialog opens. The engine consults
+            // this on every Recompute (no further COM round-trips).
+            var context = LiveWorkbookContext.Snapshot(workbook, worksheet);
+
             RefactorResult result;
             try
             {
-                result = RefactorEngine.Refactor(formula, sheetName);
+                result = RefactorEngine.Refactor(formula, sheetName, context);
             }
             catch (Exception ex)
             {
@@ -76,7 +81,7 @@ internal static class RefactorCommand
                     {
                         try
                         {
-                            return RefactorEngine.Recompute(formula, sheetName, rows);
+                            return RefactorEngine.Recompute(formula, sheetName, rows, context);
                         }
                         catch (Exception ex)
                         {
@@ -126,6 +131,86 @@ internal static class RefactorCommand
         catch
         {
             Logger.Info($"ShowError: {message}");
+        }
+    }
+
+    /// <summary>
+    ///     Live adapter for <see cref="IWorkbookContext" />. Snapshots
+    ///     workbook-scoped names AND the active sheet's worksheet-scoped
+    ///     names once when the dialog opens (per spec 0008 / PR 3 — the
+    ///     dialog reads the catalogue once, then no more COM traffic until
+    ///     Save). Hidden names and worksheet-scoped names whose RefersTo
+    ///     can't be read (closed external sources, etc.) are skipped
+    ///     defensively rather than aborted on.
+    /// </summary>
+    private sealed class LiveWorkbookContext : IWorkbookContext
+    {
+        private LiveWorkbookContext(IReadOnlyDictionary<string, string> names)
+        {
+            WorkbookNames = names;
+        }
+
+        public IReadOnlyDictionary<string, string> WorkbookNames { get; }
+
+        public static LiveWorkbookContext Snapshot(dynamic workbook, dynamic worksheet)
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            TryHarvestNames(dict, workbook?.Names, "workbook");
+
+            try
+            {
+                TryHarvestNames(dict, worksheet?.Names, "worksheet");
+            }
+            catch (Exception ex)
+            {
+                // worksheet.Names doesn't exist in older Excel object models;
+                // workbook-scoped names alone are still useful.
+                Logger.Error("Refactor/Snapshot/Worksheet", ex);
+            }
+
+            return new LiveWorkbookContext(dict);
+        }
+
+        private static void TryHarvestNames(
+            Dictionary<string, string> sink, dynamic? names, string scope)
+        {
+            if (names is null) return;
+            try
+            {
+                int count = (int)names.Count;
+                for (var i = 1; i <= count; i++)
+                {
+                    string? key = null;
+                    try
+                    {
+                        dynamic item = names[i];
+                        key = item.Name as string;
+                        if (string.IsNullOrEmpty(key)) continue;
+                        // Strip the sheet qualifier from worksheet-scoped
+                        // names so identifier lookup matches the bare
+                        // identifier as written in the formula.
+                        var bang = key!.LastIndexOf('!');
+                        if (bang >= 0 && bang + 1 < key.Length)
+                            key = key[(bang + 1)..];
+                        var refersTo = item.RefersTo as string ?? string.Empty;
+                        // Last-write-wins when a worksheet-scoped name
+                        // shadows a workbook-scoped one of the same
+                        // identifier. Excel's own resolution prefers
+                        // worksheet scope for the active sheet, and the
+                        // worksheet pass runs second.
+                        sink[key] = refersTo;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error($"Refactor/Snapshot/{scope}#{i}({key ?? "?"})", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Refactor/Snapshot/{scope}", ex);
+            }
         }
     }
 }

@@ -7,18 +7,27 @@ namespace LambdaBoss;
 ///     Spec 0008 — the <c>/Refactor</c> entry point. Takes a formula and
 ///     the active cell's sheet, hoists every cell ref / range into its own
 ///     LET binding, and emits a tidy <c>=LET(...)</c>.
-///     PR 2 adds existing-LET handling. When the input is already a LET,
-///     value bindings pre-populate the Inputs section; calculation bindings
-///     populate the read-only Calculation-bindings section; value bindings
-///     with equivalent canonical RHS are merged (first wins); cell refs
-///     inside calculation bindings or the body are extracted as new input
-///     rows; the synthesised LET emits all value bindings first (in dialog
-///     order) followed by all calc bindings (in source order).
-///     The engine re-derives merge state on every <see cref="Recompute" />
-///     call — the dialog only carries name / Include / order for each row
-///     via <see cref="RefactorRowState" />, not the underlying merge graph,
-///     so the engine has to be re-run anchored on the source formula
-///     text.
+///     PR 2 added existing-LET handling (merge value bindings, extract
+///     refs from calc bindings and body, keep calc bindings in source
+///     order).
+///     PR 3 adds the promotable section: external refs and workbook /
+///     worksheet-scoped defined names (excluding LAMBDA names) become
+///     default-off rows in a separate section the dialog renders below
+///     the inputs. When the user toggles Promote, the dialog re-issues
+///     the row state with the promotable's Key in <see cref="RefactorRowState" />;
+///     the engine recognises the <c>extref:</c> / <c>named:</c> Key prefix
+///     and materialises the promoted row as an input binding alongside
+///     the extracted ones. The rewrite step uses a second-pass identifier
+///     rewriter (separate from <see cref="CellRefExtractor.Rewrite" />) for
+///     promoted named ranges, so the bare identifier is swapped for the
+///     binding name while leaving cell-shaped tokens, sheet qualifiers,
+///     and strings alone.
+///     The engine re-derives merge state and promotable state on every
+///     <see cref="Recompute" /> call — the dialog only carries name /
+///     Include / order / Promote-by-membership for each row via
+///     <see cref="RefactorRowState" />, not the underlying merge graph
+///     or named-range catalogue, so the engine has to be re-run anchored
+///     on the source formula text and the live workbook-name lookup.
 /// </summary>
 public static class RefactorEngine
 {
@@ -38,18 +47,35 @@ public static class RefactorEngine
         @"(?<![A-Za-z0-9_.!:'\]#?])[A-Za-z_][A-Za-z0-9_.?]*",
         RegexOptions.CultureInvariant);
 
+    // Candidate-identifier walker used to find named-range references.
+    // Same identifier shape as IdentifierTokenPattern but with a trailing
+    // negative lookahead for '(' (function calls — SUM, MAX, etc.) and
+    // '!' (sheet qualifiers — Sheet1! is the lead-in to a cell ref, not
+    // a defined-name reference). The lookbehind class mirrors
+    // CellRefExtractor's so we don't pick up the cell tail of a
+    // sheet-qualified ref.
+    private static readonly Regex CandidateIdentifierPattern = new(
+        @"(?<![A-Za-z0-9_.!:'\]#?])[A-Za-z_][A-Za-z0-9_.?]*(?![A-Za-z0-9_.?(!])",
+        RegexOptions.CultureInvariant);
+
     /// <summary>
     ///     Runs the initial refactor over <paramref name="formula" />.
     ///     Existing LETs are parsed and merged/extracted per spec 0008;
     ///     non-LET formulas have their cell refs hoisted in first-seen
-    ///     order.
+    ///     order. The optional <paramref name="context" /> supplies the
+    ///     workbook-name catalogue for PR 3's promotable section; pass
+    ///     null when only extracted-ref / existing-LET behaviour is
+    ///     needed (e.g. unit tests for PR 1/2 paths).
     /// </summary>
-    public static RefactorResult Refactor(string formula, string activeSheet)
+    public static RefactorResult Refactor(
+        string formula,
+        string activeSheet,
+        IWorkbookContext? context = null)
     {
         if (formula is null) throw new ArgumentNullException(nameof(formula));
         if (activeSheet is null) throw new ArgumentNullException(nameof(activeSheet));
 
-        return RefactorInternal(formula, activeSheet, null);
+        return RefactorInternal(formula, activeSheet, null, context);
     }
 
     /// <summary>
@@ -60,27 +86,33 @@ public static class RefactorEngine
     ///     its source cell ref inline (matching PR 1). For existing LETs a
     ///     dropped value binding is removed and its name is inlined back to
     ///     the binding's original RHS text wherever it appeared.
+    ///     PR 3: row states whose <see cref="RefactorRowState.Key" /> matches
+    ///     a default promotable (external ref or named range) are treated
+    ///     as promotions — the row materialises as an input binding instead
+    ///     of staying in the promotable section.
     /// </summary>
     public static RefactorResult Recompute(
         string formula,
         string activeSheet,
-        IReadOnlyList<RefactorRowState> rowStates)
+        IReadOnlyList<RefactorRowState> rowStates,
+        IWorkbookContext? context = null)
     {
         if (formula is null) throw new ArgumentNullException(nameof(formula));
         if (activeSheet is null) throw new ArgumentNullException(nameof(activeSheet));
         if (rowStates is null) throw new ArgumentNullException(nameof(rowStates));
 
-        return RefactorInternal(formula, activeSheet, rowStates);
+        return RefactorInternal(formula, activeSheet, rowStates, context);
     }
 
     private static RefactorResult RefactorInternal(
         string formula,
         string activeSheet,
-        IReadOnlyList<RefactorRowState>? rowStates)
+        IReadOnlyList<RefactorRowState>? rowStates,
+        IWorkbookContext? context)
     {
         if (LetParser.IsLetFormula(formula))
-            return RefactorExistingLet(formula, activeSheet, rowStates);
-        return RefactorNonLet(formula, activeSheet, rowStates);
+            return RefactorExistingLet(formula, activeSheet, rowStates, context);
+        return RefactorNonLet(formula, activeSheet, rowStates, context);
     }
 
     // ---------------- non-LET path ----------------
@@ -88,15 +120,23 @@ public static class RefactorEngine
     private static RefactorResult RefactorNonLet(
         string formula,
         string activeSheet,
-        IReadOnlyList<RefactorRowState>? rowStates)
+        IReadOnlyList<RefactorRowState>? rowStates,
+        IWorkbookContext? context)
     {
         var extracted = CellRefExtractor.Extract(formula, activeSheet);
+        var allRefs = CellRefExtractor.ExtractAll(formula, activeSheet);
 
-        var defaultRows = new List<RefactorInputRow>(extracted.Count);
-        var nameIndex = 1;
+        // Separate in-scope refs (always-input) from external refs (promotable).
+        var inScopeRefs = new List<FormulaRef>();
+        var externalRefs = new List<FormulaRef>();
         foreach (var fr in extracted)
+            (fr.IsExternal ? externalRefs : inScopeRefs).Add(fr);
+
+        var defaultInputRows = new List<RefactorInputRow>(inScopeRefs.Count);
+        var nameIndex = 1;
+        foreach (var fr in inScopeRefs)
         {
-            defaultRows.Add(new RefactorInputRow(
+            defaultInputRows.Add(new RefactorInputRow(
                 BuildExtractedKey(fr, activeSheet),
                 fr,
                 $"input{nameIndex}",
@@ -105,18 +145,40 @@ public static class RefactorEngine
             nameIndex++;
         }
 
-        var finalRows = ApplyRowStates(defaultRows, rowStates);
-        var keptRows = finalRows.Where(r => r.IsIncluded).ToList();
+        // Default promotables: external refs found anywhere in the
+        // formula + workbook-named identifiers (non-LAMBDA) found in the
+        // formula body.
+        var defaultPromotables = BuildDefaultPromotables(
+            new[] { formula },
+            allRefs,
+            activeSheet,
+            context,
+            ReadOnlyEmptySet<string>.Instance);
+
+        var promotableLookup = BuildPromotableLookup(defaultPromotables, externalRefs, activeSheet);
+
+        var (materialised, remainingPromotables) = MaterialiseRowStates(
+            defaultInputRows,
+            defaultPromotables,
+            promotableLookup,
+            rowStates,
+            nextAutoNameIndex: nameIndex,
+            existingBindingNames: ReadOnlyEmptySet<string>.Instance);
+
+        var keptRows = materialised.Where(r => r.IsIncluded).ToList();
+
+        var identifierSubs = BuildPromotedNamedRangeSubstitutions(keptRows);
 
         var synthesisedLet = BuildSynthesisedLet(
             formula, activeSheet, keptRows, Array.Empty<RefactorCalcBindingRow>(),
-            false, null, null);
+            false, null, identifierSubs);
 
         return new RefactorResult(
             formula,
             keptRows.Select(r => r.Row).ToList(),
             Array.Empty<RefactorCalcBindingRow>(),
-            synthesisedLet);
+            synthesisedLet,
+            remainingPromotables);
     }
 
     // ---------------- existing-LET path ----------------
@@ -124,7 +186,8 @@ public static class RefactorEngine
     private static RefactorResult RefactorExistingLet(
         string formula,
         string activeSheet,
-        IReadOnlyList<RefactorRowState>? rowStates)
+        IReadOnlyList<RefactorRowState>? rowStates,
+        IWorkbookContext? context)
     {
         ParsedLet parsed;
         try
@@ -138,6 +201,7 @@ public static class RefactorEngine
                 Array.Empty<RefactorInputRow>(),
                 Array.Empty<RefactorCalcBindingRow>(),
                 formula,
+                Array.Empty<RefactorPromotableRow>(),
                 new RefactorDiagnostic(
                     RefactorDiagnosticKind.MalformedLet,
                     $"Refactor can't parse this LET: {ex.Message}"));
@@ -152,7 +216,8 @@ public static class RefactorEngine
         // Step 2 — walk calc binding RHSes and the body for new refs.
         //   Refs already represented by a kept value binding (matched via
         //   canonical FormulaRef) are skipped; everything else becomes an
-        //   auto-named Extracted row.
+        //   auto-named Extracted row. External refs are routed to the
+        //   promotables list instead.
         var existingRefs = new HashSet<FormulaRef>();
         foreach (var survivor in merge.Survivors)
         {
@@ -160,16 +225,38 @@ public static class RefactorEngine
             if (fr != null) existingRefs.Add(fr);
         }
 
-        var usedNames = new HashSet<string>(
+        var existingBindingNames = new HashSet<string>(
             parsed.Bindings.Select(b => b.Name), StringComparer.OrdinalIgnoreCase);
+
+        var usedNames = new HashSet<string>(existingBindingNames, StringComparer.OrdinalIgnoreCase);
 
         var newRows = new List<RefactorInputRow>();
         var seenNew = new HashSet<FormulaRef>();
+        var externalRefsFound = new List<FormulaRef>();
         var autoNameIndex = 1;
 
         foreach (var calc in calcBindings)
-            ExtractNewRefs(calc.RhsText, activeSheet, existingRefs, seenNew, usedNames, ref autoNameIndex, newRows);
-        ExtractNewRefs(parsed.Body, activeSheet, existingRefs, seenNew, usedNames, ref autoNameIndex, newRows);
+            ExtractNewRefs(
+                calc.RhsText, activeSheet, existingRefs, seenNew, usedNames,
+                ref autoNameIndex, newRows, externalRefsFound);
+        ExtractNewRefs(
+            parsed.Body, activeSheet, existingRefs, seenNew, usedNames,
+            ref autoNameIndex, newRows, externalRefsFound);
+
+        // For promotable counting we want EVERY occurrence (including
+        // duplicates), so walk a second time without the dedupe filter.
+        var allRefsInScope = new List<FormulaRef>();
+        foreach (var calc in calcBindings)
+            allRefsInScope.AddRange(CellRefExtractor.ExtractAll(calc.RhsText, activeSheet));
+        allRefsInScope.AddRange(CellRefExtractor.ExtractAll(parsed.Body, activeSheet));
+
+        var promotableScopes = new List<string>(calcBindings.Count + 1);
+        foreach (var calc in calcBindings)
+            promotableScopes.Add(calc.RhsText);
+        promotableScopes.Add(parsed.Body);
+
+        var defaultPromotables = BuildDefaultPromotables(
+            promotableScopes, allRefsInScope, activeSheet, context, existingBindingNames);
 
         // Step 3 — build the existing-LET-value rows (in source order).
         var existingValueRows = new List<RefactorInputRow>(merge.Survivors.Count);
@@ -185,15 +272,33 @@ public static class RefactorEngine
                 mergedFrom));
         }
 
-        // Step 4 — combine and apply rowStates (rename / include / order).
+        // Step 4 — combine defaults and apply rowStates (rename / include /
+        // order / promote).
         var defaultRows = existingValueRows.Concat(newRows).ToList();
-        var finalRows = ApplyRowStates(defaultRows, rowStates);
+
+        var promotableLookup = BuildPromotableLookup(
+            defaultPromotables, externalRefsFound, activeSheet);
+
+        var (materialised, remainingPromotables) = MaterialiseRowStates(
+            defaultRows,
+            defaultPromotables,
+            promotableLookup,
+            rowStates,
+            nextAutoNameIndex: autoNameIndex,
+            existingBindingNames: existingBindingNames);
 
         // Step 5 — assemble the rewrite maps and synthesise.
-        var keptRows = finalRows.Where(r => r.IsIncluded).ToList();
+        var keptRows = materialised.Where(r => r.IsIncluded).ToList();
 
         var identifierSubs = BuildIdentifierSubstitutions(
-            valueBindings, merge, finalRows);
+            valueBindings, merge, materialised);
+
+        // Promoted named ranges add their identifier-to-binding entries
+        // on top of the existing-LET ones; the dictionaries don't overlap
+        // (promotable identifiers were excluded from defaults if they
+        // matched an existing binding name).
+        foreach (var kv in BuildPromotedNamedRangeSubstitutions(keptRows))
+            identifierSubs[kv.Key] = kv.Value;
 
         var rewrittenCalcs = RewriteCalcBindings(
             calcBindings, activeSheet, keptRows, identifierSubs);
@@ -206,7 +311,8 @@ public static class RefactorEngine
             formula,
             keptRows.Select(r => r.Row).ToList(),
             rewrittenCalcs,
-            synthesisedLet);
+            synthesisedLet,
+            remainingPromotables);
     }
 
     private static MergeResult MergeValueBindings(
@@ -290,7 +396,7 @@ public static class RefactorEngine
     ///         </item>
     ///     </list>
     /// </summary>
-    private static IReadOnlyDictionary<string, string> BuildIdentifierSubstitutions(
+    private static Dictionary<string, string> BuildIdentifierSubstitutions(
         IReadOnlyList<LetBinding> originalValueBindings,
         MergeResult merge,
         IReadOnlyList<MaterialisedRow> finalRows)
@@ -325,6 +431,26 @@ public static class RefactorEngine
         return subs;
     }
 
+    /// <summary>
+    ///     Builds the identifier → binding-name subs for promoted named
+    ///     ranges among <paramref name="keptRows" />. Promoted external
+    ///     refs aren't included here — they ride the FormulaRef rewrite
+    ///     path via <see cref="BuildFormulaRefLookup" />.
+    /// </summary>
+    private static Dictionary<string, string> BuildPromotedNamedRangeSubstitutions(
+        IReadOnlyList<MaterialisedRow> keptRows)
+    {
+        var subs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in keptRows)
+        {
+            if (r.Row.Origin != RefactorRowOrigin.PromotedNamedRange) continue;
+            // RHS for a promoted named range is the identifier itself.
+            subs[r.Row.Rhs] = r.Row.Name;
+        }
+
+        return subs;
+    }
+
     // ---------------- ref extraction (calc bindings + body) ----------------
 
     private static void ExtractNewRefs(
@@ -334,10 +460,17 @@ public static class RefactorEngine
         HashSet<FormulaRef> seenNew,
         HashSet<string> usedNames,
         ref int autoNameIndex,
-        List<RefactorInputRow> sink)
+        List<RefactorInputRow> sink,
+        List<FormulaRef> externalSink)
     {
         foreach (var fr in CellRefExtractor.Extract(text, activeSheet))
         {
+            if (fr.IsExternal)
+            {
+                externalSink.Add(fr);
+                continue;
+            }
+
             if (existingRefs.Contains(fr)) continue;
             if (!seenNew.Add(fr)) continue;
 
@@ -361,36 +494,268 @@ public static class RefactorEngine
         }
     }
 
-    private static List<MaterialisedRow> ApplyRowStates(
-        IReadOnlyList<RefactorInputRow> defaultRows,
-        IReadOnlyList<RefactorRowState>? rowStates)
-    {
-        if (rowStates is null)
-            return defaultRows.Select(r => new MaterialisedRow(r, true)).ToList();
+    // ---------------- promotable building & lookup ----------------
 
-        var byKey = defaultRows.ToDictionary(r => r.Key, StringComparer.Ordinal);
-        var ordered = new List<MaterialisedRow>(rowStates.Count);
-        var consumed = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var rs in rowStates)
+    /// <summary>
+    ///     Builds the default-off promotable rows: external refs (deduped,
+    ///     with occurrence counts) and workbook-name identifiers that
+    ///     aren't LAMBDA names and aren't masked by an existing LET
+    ///     binding name.
+    /// </summary>
+    private static List<RefactorPromotableRow> BuildDefaultPromotables(
+        IReadOnlyList<string> identifierScopes,
+        IReadOnlyList<FormulaRef> allRefs,
+        string activeSheet,
+        IWorkbookContext? context,
+        ISet<string> excludeBindingNames)
+    {
+        var promotables = new List<RefactorPromotableRow>();
+
+        // External refs — first-occurrence order, count all matches.
+        var externalCounts = new Dictionary<string, (FormulaRef Ref, int Count)>(StringComparer.Ordinal);
+        var externalOrder = new List<string>();
+        foreach (var fr in allRefs)
         {
-            if (!byKey.TryGetValue(rs.Key, out var row)) continue;
-            consumed.Add(rs.Key);
-            // The dialog owns the binding name; the engine just forwards it
-            // (validation is enforced dialog-side).
-            ordered.Add(new MaterialisedRow(
-                row with { Name = rs.Name },
-                rs.Include));
+            if (!fr.IsExternal) continue;
+            var key = BuildExternalRefKey(fr, activeSheet);
+            if (externalCounts.TryGetValue(key, out var existing))
+                externalCounts[key] = (existing.Ref, existing.Count + 1);
+            else
+            {
+                externalCounts[key] = (fr, 1);
+                externalOrder.Add(key);
+            }
         }
 
-        // Any rows the rowStates didn't mention (shouldn't happen in
-        // practice — the dialog tracks every row) are appended at the end
-        // in their default order, kept included so they aren't silently
-        // lost.
-        foreach (var row in defaultRows)
-            if (!consumed.Contains(row.Key))
+        foreach (var key in externalOrder)
+        {
+            var (fr, count) = externalCounts[key];
+            promotables.Add(new RefactorPromotableRow(
+                key,
+                RefactorPromotableKind.ExternalRef,
+                fr.DisplayAddress(activeSheet),
+                count));
+        }
+
+        // Named-range candidates — only when a workbook context supplies
+        // names. First-occurrence-spelling wins for display; dedupe is
+        // case-insensitive (Excel name resolution is case-insensitive).
+        if (context is { WorkbookNames.Count: > 0 })
+        {
+            var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var firstSpelling = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var nameOrder = new List<string>(); // canonical (first-found) spellings
+
+            foreach (var scope in identifierScopes)
+            foreach (var identifier in WalkCandidateIdentifiers(scope))
+            {
+                if (excludeBindingNames.Contains(identifier)) continue;
+                if (!context.WorkbookNames.TryGetValue(identifier, out var refersTo)) continue;
+                if (LambdaSignatureParser.IsLambdaFormula(refersTo)) continue;
+
+                if (!nameCounts.ContainsKey(identifier))
+                {
+                    firstSpelling[identifier] = identifier;
+                    nameOrder.Add(identifier);
+                }
+
+                nameCounts[identifier] = nameCounts.TryGetValue(identifier, out var c) ? c + 1 : 1;
+            }
+
+            foreach (var spelling in nameOrder)
+            {
+                promotables.Add(new RefactorPromotableRow(
+                    BuildNamedRangeKey(spelling),
+                    RefactorPromotableKind.NamedRange,
+                    spelling,
+                    nameCounts[spelling]));
+            }
+        }
+
+        return promotables;
+    }
+
+    /// <summary>
+    ///     Walks <paramref name="text" /> for bare-identifier tokens that
+    ///     aren't immediately followed by '(' (function call) or '!'
+    ///     (sheet qualifier). String literals and single-quoted sheet/
+    ///     workbook qualifiers are skipped wholesale.
+    /// </summary>
+    private static IEnumerable<string> WalkCandidateIdentifiers(string text)
+    {
+        if (string.IsNullOrEmpty(text)) yield break;
+
+        var i = 0;
+        while (i < text.Length)
+        {
+            if (text[i] == '"')
+            {
+                i = SkipString(text, i);
+                continue;
+            }
+
+            if (text[i] == '\'')
+            {
+                i = SkipSingleQuoted(text, i);
+                continue;
+            }
+
+            var nextQuote = IndexOfAny(text, i, '"', '\'');
+            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
+            var segment = text.Substring(i, segEnd - i);
+
+            foreach (Match m in CandidateIdentifierPattern.Matches(segment))
+                yield return m.Value;
+
+            i = segEnd;
+        }
+    }
+
+    /// <summary>
+    ///     Lookup the materialiser uses to turn a promoted promotable's
+    ///     key into an input row. External refs carry their FormulaRef so
+    ///     <see cref="BuildFormulaRefLookup" /> can register them for
+    ///     cell-ref rewriting; named ranges carry only their identifier
+    ///     text (the RHS).
+    /// </summary>
+    private static Dictionary<string, PromotedInfo> BuildPromotableLookup(
+        IReadOnlyList<RefactorPromotableRow> defaultPromotables,
+        IReadOnlyList<FormulaRef> externalRefs,
+        string activeSheet)
+    {
+        var byKey = new Dictionary<string, PromotedInfo>(StringComparer.Ordinal);
+        foreach (var p in defaultPromotables)
+        {
+            switch (p.Kind)
+            {
+                case RefactorPromotableKind.NamedRange:
+                    byKey[p.Key] = new PromotedInfo(p, null);
+                    break;
+                case RefactorPromotableKind.ExternalRef:
+                    var fr = externalRefs.FirstOrDefault(
+                        r => BuildExternalRefKey(r, activeSheet) == p.Key);
+                    if (fr != null)
+                        byKey[p.Key] = new PromotedInfo(p, fr);
+                    break;
+            }
+        }
+
+        return byKey;
+    }
+
+    private sealed record PromotedInfo(RefactorPromotableRow Row, FormulaRef? ExternalSource);
+
+    // ---------------- materialisation (rowState → kept rows) ----------------
+
+    /// <summary>
+    ///     Combines the engine-derived <paramref name="defaultInputRows" />
+    ///     and <paramref name="defaultPromotables" /> with the dialog's
+    ///     per-row state. Recognises three Key shapes in
+    ///     <paramref name="rowStates" />:
+    ///     <list type="bullet">
+    ///         <item>
+    ///             <c>ref:</c> (extracted cell ref) or <c>name:</c>
+    ///             (existing-LET value binding) — already an input row;
+    ///             update Name + Include.
+    ///         </item>
+    ///         <item>
+    ///             <c>extref:</c> (promotable external ref) or
+    ///             <c>named:</c> (promotable named range) — promotion;
+    ///             materialise as an input row and remove from the
+    ///             promotables list.
+    ///         </item>
+    ///     </list>
+    ///     Promotable rows whose Key wasn't mentioned in rowStates remain
+    ///     in the result's <see cref="RefactorResult.Promotables" />.
+    /// </summary>
+    private static (List<MaterialisedRow> Rows, List<RefactorPromotableRow> Promotables)
+        MaterialiseRowStates(
+            IReadOnlyList<RefactorInputRow> defaultInputRows,
+            IReadOnlyList<RefactorPromotableRow> defaultPromotables,
+            IReadOnlyDictionary<string, PromotedInfo> promotableLookup,
+            IReadOnlyList<RefactorRowState>? rowStates,
+            int nextAutoNameIndex,
+            ISet<string> existingBindingNames)
+    {
+        if (rowStates is null)
+            return (
+                defaultInputRows.Select(r => new MaterialisedRow(r, true)).ToList(),
+                defaultPromotables.ToList());
+
+        var byInputKey = defaultInputRows.ToDictionary(r => r.Key, StringComparer.Ordinal);
+        var ordered = new List<MaterialisedRow>(rowStates.Count);
+        var consumedInputs = new HashSet<string>(StringComparer.Ordinal);
+        var promotedKeys = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var rs in rowStates)
+        {
+            if (byInputKey.TryGetValue(rs.Key, out var inputRow))
+            {
+                consumedInputs.Add(rs.Key);
+                ordered.Add(new MaterialisedRow(inputRow with { Name = rs.Name }, rs.Include));
+                continue;
+            }
+
+            if (promotableLookup.TryGetValue(rs.Key, out var promotable))
+            {
+                promotedKeys.Add(rs.Key);
+                var name = string.IsNullOrEmpty(rs.Name)
+                    ? AllocateAutoName(ref nextAutoNameIndex, existingBindingNames)
+                    : rs.Name;
+                ordered.Add(new MaterialisedRow(
+                    BuildPromotedInputRow(promotable, name),
+                    rs.Include));
+            }
+            // Unknown key (stale dialog state from a prior formula) — skip
+            // silently rather than throwing; the dialog round-trips fresh
+            // engine output on every change so stale keys shouldn't reach
+            // here in practice.
+        }
+
+        foreach (var row in defaultInputRows)
+            if (!consumedInputs.Contains(row.Key))
                 ordered.Add(new MaterialisedRow(row, true));
 
-        return ordered;
+        var remainingPromotables = defaultPromotables
+            .Where(p => !promotedKeys.Contains(p.Key))
+            .ToList();
+
+        return (ordered, remainingPromotables);
+    }
+
+    private static RefactorInputRow BuildPromotedInputRow(PromotedInfo info, string name)
+    {
+        switch (info.Row.Kind)
+        {
+            case RefactorPromotableKind.NamedRange:
+                return new RefactorInputRow(
+                    info.Row.Key,
+                    Source: null,
+                    name,
+                    info.Row.Token,
+                    RefactorRowOrigin.PromotedNamedRange);
+            case RefactorPromotableKind.ExternalRef:
+                return new RefactorInputRow(
+                    info.Row.Key,
+                    info.ExternalSource,
+                    name,
+                    info.Row.Token,
+                    RefactorRowOrigin.PromotedExternalRef);
+            default:
+                throw new InvalidOperationException(
+                    $"Unknown promotable kind: {info.Row.Kind}");
+        }
+    }
+
+    private static string AllocateAutoName(ref int autoNameIndex, ISet<string> usedNames)
+    {
+        while (true)
+        {
+            var name = "input" + autoNameIndex;
+            autoNameIndex++;
+            if (!usedNames.Contains(name))
+                return name;
+        }
     }
 
     // ---------------- rewrite & synthesis ----------------
@@ -428,8 +793,9 @@ public static class RefactorEngine
     /// <summary>
     ///     Runs the cell-ref rewrite (replacing in-scope <see cref="FormulaRef" />s
     ///     with their kept binding names) followed by the identifier
-    ///     rewrite (renaming merged-away binding names or inlining the RHS
-    ///     of dropped existing-LET value bindings).
+    ///     rewrite (renaming merged-away binding names, inlining the RHS
+    ///     of dropped existing-LET value bindings, or swapping a promoted
+    ///     named range's identifier for its binding name).
     /// </summary>
     private static string RewriteText(
         string text,
@@ -551,7 +917,13 @@ public static class RefactorEngine
     {
         // No work to do — nothing extracted and nothing merged.
         if (!isExistingLet && keptInputs.Count == 0)
+        {
+            // PR 3: even without any cell-ref inputs we may need to emit a
+            // LET if the user promoted a named range. The check above
+            // already covers no-extracts AND no-promotables (the promoted
+            // rows would be in keptInputs).
             return originalFormula;
+        }
 
         // An existing LET with zero kept inputs AND zero calc bindings
         // collapses to its body — the dialog still synthesises a valid
@@ -582,11 +954,13 @@ public static class RefactorEngine
         else
         {
             // Non-LET: the original formula's content (sans leading '=') is
-            // the LET body, with cell refs rewritten to kept binding names.
-            bodyText = CellRefExtractor.Rewrite(
+            // the LET body, with cell refs and (PR 3) promoted named
+            // ranges rewritten to kept binding names.
+            bodyText = RewriteText(
                 StripLeadingEquals(originalFormula),
                 activeSheet,
-                BuildFormulaRefLookup(keptInputs));
+                BuildFormulaRefLookup(keptInputs),
+                identifierSubstitutions ?? new Dictionary<string, string>());
         }
 
         var sb = new StringBuilder();
@@ -610,6 +984,16 @@ public static class RefactorEngine
         return "name:" + bindingName;
     }
 
+    private static string BuildExternalRefKey(FormulaRef fr, string activeSheet)
+    {
+        return "extref:" + fr.DisplayAddress(activeSheet);
+    }
+
+    private static string BuildNamedRangeKey(string identifier)
+    {
+        return "named:" + identifier;
+    }
+
     /// <summary>
     ///     If <paramref name="rhsText" /> consists of exactly one cell-shaped
     ///     ref (single cell, range, or spill — optionally sheet- or
@@ -626,7 +1010,7 @@ public static class RefactorEngine
         // Verify the RHS is JUST that ref (no surrounding tokens or
         // operators) by rewriting it to a sentinel and checking the
         // remainder is whitespace.
-        var sentinel = "";
+        var sentinel = "";
         var probe = CellRefExtractor.Rewrite(
             rhsText, activeSheet, new Dictionary<FormulaRef, string> { [refs[0]] = sentinel });
         return probe.Trim() == sentinel ? refs[0] : null;
@@ -655,4 +1039,34 @@ public static class RefactorEngine
     ///     against the input rowStates dictionary.
     /// </summary>
     private sealed record MaterialisedRow(RefactorInputRow Row, bool IsIncluded);
+
+    /// <summary>
+    ///     A tiny immutable empty-set sentinel used in the non-LET path
+    ///     where there are no existing binding names to exclude. Saves an
+    ///     allocation per call without changing semantics.
+    /// </summary>
+    private sealed class ReadOnlyEmptySet<T> : ISet<T>
+    {
+        public static readonly ReadOnlyEmptySet<T> Instance = new();
+        public IEnumerator<T> GetEnumerator() { yield break; }
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public int Count => 0;
+        public bool IsReadOnly => true;
+        public bool Contains(T item) => false;
+        public void CopyTo(T[] array, int arrayIndex) { }
+        public bool Add(T item) => throw new NotSupportedException();
+        void System.Collections.Generic.ICollection<T>.Add(T item) => throw new NotSupportedException();
+        public void Clear() => throw new NotSupportedException();
+        public bool Remove(T item) => throw new NotSupportedException();
+        public void ExceptWith(IEnumerable<T> other) => throw new NotSupportedException();
+        public void IntersectWith(IEnumerable<T> other) => throw new NotSupportedException();
+        public bool IsProperSubsetOf(IEnumerable<T> other) => other?.Any() ?? false;
+        public bool IsProperSupersetOf(IEnumerable<T> other) => false;
+        public bool IsSubsetOf(IEnumerable<T> other) => true;
+        public bool IsSupersetOf(IEnumerable<T> other) => !(other?.Any() ?? false);
+        public bool Overlaps(IEnumerable<T> other) => false;
+        public bool SetEquals(IEnumerable<T> other) => !(other?.Any() ?? false);
+        public void SymmetricExceptWith(IEnumerable<T> other) => throw new NotSupportedException();
+        public void UnionWith(IEnumerable<T> other) => throw new NotSupportedException();
+    }
 }

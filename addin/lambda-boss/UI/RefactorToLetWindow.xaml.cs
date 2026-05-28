@@ -13,18 +13,19 @@ namespace LambdaBoss.UI;
 ///     Spec 0008 — the <c>/Refactor</c> dialog. Shows the active cell's
 ///     original formula, the engine-extracted / existing-LET input rows
 ///     (with editable names, Include checkbox, drag + Alt+Up/Down reorder),
-///     a read-only Calculation-bindings section (PR 2+), and a live
-///     preview of the synthesised LET. Save returns the preview text via
+///     the PR 3 promotable section (named ranges + external refs),
+///     a read-only Calculation-bindings section, and a live preview of
+///     the synthesised LET. Save returns the preview text via
 ///     <see cref="SavedFormula" />; Cancel discards.
 ///     The code-behind is intentionally thin: every row-state change
-///     (rename, Include toggle, reorder) calls back into the supplied
-///     <c>recompute</c> delegate (which wraps
+///     (rename, Include toggle, reorder, Promote toggle) calls back into
+///     the supplied <c>recompute</c> delegate (which wraps
 ///     <see cref="RefactorEngine.Recompute" />), and the result replaces
-///     the preview + the calc-binding list in place. Row Keys (not
-///     <c>FormulaRef</c>s) drive the identity round-trip with the engine
-///     so existing-LET value bindings whose RHS isn't a single cell ref
-///     (e.g. a literal or a named range) can be tracked alongside
-///     extracted refs.
+///     the preview + calc-binding list + promotables in place. Row Keys
+///     (not <c>FormulaRef</c>s) drive the identity round-trip with the
+///     engine so existing-LET value bindings whose RHS isn't a single
+///     cell ref (e.g. a literal or a named range) and promoted promotables
+///     can be tracked alongside extracted refs.
 /// </summary>
 public partial class RefactorToLetWindow
 {
@@ -39,6 +40,7 @@ public partial class RefactorToLetWindow
     // collide with one.
     private readonly IReadOnlyList<string> _calcBindingNames;
     private readonly ObservableCollection<RefactorCalcBindingVm> _calcRows = [];
+    private readonly ObservableCollection<RefactorPromotableRowVm> _promotables = [];
 
     private readonly Func<IReadOnlyList<RefactorRowState>, RefactorResult> _recompute;
     private readonly ObservableCollection<RefactorInputRowVm> _rows = [];
@@ -65,9 +67,11 @@ public partial class RefactorToLetWindow
         _calcBindingNames = initial.CalcBindings.Select(c => c.Name).ToList();
         BuildRowsFromInputs(initial.Inputs);
         UpdateCalcBindings(initial.CalcBindings);
+        UpdatePromotables(initial.Promotables);
         _rows.CollectionChanged += Rows_CollectionChanged;
         InputsList.ItemsSource = _rows;
         CalcBindingsList.ItemsSource = _calcRows;
+        PromotablesList.ItemsSource = _promotables;
 
         UpdateSaveButtonEnabled(RevalidateNames());
     }
@@ -173,6 +177,37 @@ public partial class RefactorToLetWindow
         CalcBindingsBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    ///     Rebuilds the promotables collection from the engine's most recent
+    ///     result. The dialog doesn't track per-promotable user state besides
+    ///     the Promote toggle (which has just been processed by the engine),
+    ///     so a wholesale rebuild is safe.
+    /// </summary>
+    private void UpdatePromotables(IReadOnlyList<RefactorPromotableRow> promotables)
+    {
+        _suppressRecompute = true;
+        try
+        {
+            foreach (var vm in _promotables)
+                vm.PropertyChanged -= Promotable_PropertyChanged;
+            _promotables.Clear();
+            foreach (var p in promotables)
+            {
+                var vm = new RefactorPromotableRowVm(p);
+                vm.PropertyChanged += Promotable_PropertyChanged;
+                _promotables.Add(vm);
+            }
+        }
+        finally
+        {
+            _suppressRecompute = false;
+        }
+
+        var show = promotables.Count > 0;
+        PromotablesHeader.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        PromotablesBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void Rows_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         // Reorder via drag/drop or Alt+Up/Down fires Move; rerun the
@@ -190,6 +225,87 @@ public partial class RefactorToLetWindow
 
         UpdateSaveButtonEnabled(RevalidateNames());
         RecomputeAndRefresh();
+    }
+
+    /// <summary>
+    ///     When a promotable's Promote checkbox flips on/off, mutate
+    ///     <see cref="_rows" /> to add or remove the corresponding input
+    ///     row (Promote-on creates a fresh promoted input row with a
+    ///     locally allocated <c>inputN</c> name; Promote-off removes the
+    ///     row matched by Key), then recompute. The recompute pass
+    ///     overwrites <see cref="_promotables" /> from the engine's
+    ///     <see cref="RefactorResult.Promotables" />, so the VM that fired
+    ///     this event is replaced with a fresh one carrying the engine's
+    ///     authoritative state.
+    /// </summary>
+    private void Promotable_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_suppressRecompute) return;
+        if (e.PropertyName != nameof(RefactorPromotableRowVm.Promote)) return;
+        if (sender is not RefactorPromotableRowVm vm) return;
+
+        if (vm.Promote)
+        {
+            // Already present? Defensive — shouldn't happen since promotable
+            // VMs only show when un-promoted, but the engine's reconciliation
+            // is the source of truth so we tolerate it.
+            if (_rows.Any(r => string.Equals(r.Key, vm.Key, StringComparison.Ordinal)))
+                return;
+
+            var name = AllocateLocalAutoName();
+            var origin = vm.Kind == RefactorPromotableKind.NamedRange
+                ? RefactorRowOrigin.PromotedNamedRange
+                : RefactorRowOrigin.PromotedExternalRef;
+            var input = new RefactorInputRow(vm.Key, null, name, vm.Token, origin);
+            var rowVm = new RefactorInputRowVm(input);
+            rowVm.PropertyChanged += Row_PropertyChanged;
+            _suppressRecompute = true;
+            try
+            {
+                _rows.Add(rowVm);
+            }
+            finally
+            {
+                _suppressRecompute = false;
+            }
+        }
+        else
+        {
+            var row = _rows.FirstOrDefault(r => string.Equals(r.Key, vm.Key, StringComparison.Ordinal));
+            if (row != null)
+            {
+                _suppressRecompute = true;
+                try
+                {
+                    row.PropertyChanged -= Row_PropertyChanged;
+                    _rows.Remove(row);
+                }
+                finally
+                {
+                    _suppressRecompute = false;
+                }
+            }
+        }
+
+        UpdateSaveButtonEnabled(RevalidateNames());
+        RecomputeAndRefresh();
+    }
+
+    /// <summary>
+    ///     Picks the lowest free <c>inputN</c> name not already in use by an
+    ///     existing input row or a calc binding. Matches the engine's
+    ///     allocator so dialog-allocated and engine-allocated names land in
+    ///     the same sequence when the user mixes extracted refs with
+    ///     promoted promotables.
+    /// </summary>
+    private string AllocateLocalAutoName()
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in _rows) used.Add(r.Name);
+        foreach (var c in _calcBindingNames) used.Add(c);
+        var i = 1;
+        while (used.Contains("input" + i)) i++;
+        return "input" + i;
     }
 
     private void RecomputeAndRefresh()
@@ -213,6 +329,10 @@ public partial class RefactorToLetWindow
         {
             _suppressRecompute = false;
         }
+
+        // Reconcile promotables AFTER releasing the guard so the
+        // promotables update can rewire the per-VM property handlers.
+        UpdatePromotables(newResult.Promotables);
     }
 
     /// <summary>
@@ -314,6 +434,20 @@ public class RefactorInputRowVm : INotifyPropertyChanged
                 "; refs to those names were rewritten to use this one.";
             BadgeVisibility = Visibility.Visible;
         }
+        else if (input.Origin == RefactorRowOrigin.PromotedNamedRange)
+        {
+            BadgeText = "promoted name";
+            BadgeTooltip =
+                "Promoted from the named-range section. Uncheck Promote there to un-promote.";
+            BadgeVisibility = Visibility.Visible;
+        }
+        else if (input.Origin == RefactorRowOrigin.PromotedExternalRef)
+        {
+            BadgeText = "promoted ref";
+            BadgeTooltip =
+                "Promoted external-workbook ref. Uncheck Promote there to un-promote.";
+            BadgeVisibility = Visibility.Visible;
+        }
         else
         {
             BadgeText = string.Empty;
@@ -367,6 +501,57 @@ public class RefactorInputRowVm : INotifyPropertyChanged
     public Brush NameBrush => Include ? ActiveNameBrush : MutedBrush;
     public Brush RhsBrush => Include ? ActiveRhsBrush : MutedBrush;
     public Brush NameBorderBrush => IsNameValid ? DefaultNameBorderBrush : InvalidNameBorderBrush;
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    private void OnPropertyChanged([CallerMemberName] string? prop = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(prop));
+    }
+}
+
+/// <summary>
+///     Row view-model bound to <see cref="RefactorToLetWindow" />'s
+///     promote-to-input list. The dialog flips <see cref="Promote" /> in
+///     response to the user's checkbox toggle; the
+///     <c>PropertyChanged</c> handler on the window adds or removes the
+///     corresponding row in the inputs list. Read-only otherwise —
+///     <see cref="Token" /> and <see cref="OccurrencesLabel" /> come from
+///     the engine and don't change for the lifetime of this VM.
+/// </summary>
+public class RefactorPromotableRowVm : INotifyPropertyChanged
+{
+    private bool _promote;
+
+    public RefactorPromotableRowVm(RefactorPromotableRow row)
+    {
+        Key = row.Key;
+        Kind = row.Kind;
+        Token = row.Token;
+        Occurrences = row.Occurrences;
+        KindLabel = row.Kind == RefactorPromotableKind.NamedRange
+            ? "named range"
+            : "external ref";
+        OccurrencesLabel = row.Occurrences == 1 ? "1 use" : row.Occurrences + " uses";
+    }
+
+    public string Key { get; }
+    public RefactorPromotableKind Kind { get; }
+    public string Token { get; }
+    public int Occurrences { get; }
+    public string KindLabel { get; }
+    public string OccurrencesLabel { get; }
+
+    public bool Promote
+    {
+        get => _promote;
+        set
+        {
+            if (_promote == value) return;
+            _promote = value;
+            OnPropertyChanged();
+        }
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
