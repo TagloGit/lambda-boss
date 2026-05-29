@@ -22,6 +22,16 @@ public class LetToLambdaBuilderTests
         return LetToLambdaBuilder.Build(new LambdaGenerationRequest(lambdaName, parsed, inputs));
     }
 
+    private static string BuildWithDefault(string formula, string lambdaName,
+        params (string name, string paramName, bool keep, bool isOptional, string? defaultExpr)[] choices)
+    {
+        var parsed = LetParser.Parse(formula);
+        var inputs = choices
+            .Select(c => new InputChoice(c.name, c.paramName, c.keep, c.isOptional, c.defaultExpr))
+            .ToList();
+        return LetToLambdaBuilder.Build(new LambdaGenerationRequest(lambdaName, parsed, inputs));
+    }
+
     private static string Lines(params string[] lines) => string.Join("\n", lines);
 
     [Fact]
@@ -364,6 +374,78 @@ public class LetToLambdaBuilderTests
             "    base,",
             "    LET(",
             "        offset, IF(ISOMITTED(offset), $A$1, offset),",
+            "        base + offset",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void OptionalWithCustomDefault_UsesTypedDefault()
+    {
+        // The original RHS is A1, but the user overrides the default to 0.
+        var result = BuildWithDefault("=LET(x, 10, y, A1, x + y)", "Adder",
+            ("x", "x", true, false, null), ("y", "offset", true, true, "0"));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    [offset],",
+            "    LET(",
+            "        offset, IF(ISOMITTED(offset), 0, offset),",
+            "        x + offset",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void OptionalWithCustomDefault_CellRefAbsolutized()
+    {
+        // A cell ref typed as a custom default is absolutized like any other.
+        var result = BuildWithDefault("=LET(x, 10, y, A1, x + y)", "Adder",
+            ("x", "x", true, false, null), ("y", "offset", true, true, "B2"));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    [offset],",
+            "    LET(",
+            "        offset, IF(ISOMITTED(offset), $B$2, offset),",
+            "        x + offset",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void OptionalWithBlankCustomDefault_FallsBackToOriginalRhs()
+    {
+        // A null/blank custom default preserves the pre-edit behaviour.
+        var result = BuildWithDefault("=LET(x, 10, y, A1, x + y)", "Adder",
+            ("x", "x", true, false, null), ("y", "offset", true, true, "   "));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    x,",
+            "    [offset],",
+            "    LET(",
+            "        offset, IF(ISOMITTED(offset), $A$1, offset),",
+            "        x + offset",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void OptionalWithCustomDefault_AppliesRenames()
+    {
+        // The typed default references binding x, which is renamed to base.
+        var result = BuildWithDefault("=LET(x, 5, y, 0, x + y)", "Calc",
+            ("x", "base", true, false, null), ("y", "offset", true, true, "x + 1"));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    base,",
+            "    [offset],",
+            "    LET(",
+            "        offset, IF(ISOMITTED(offset), base + 1, offset),",
             "        base + offset",
             "    )",
             ")"), result);

@@ -6,11 +6,18 @@ namespace LambdaBoss;
 /// <summary>
 ///     User's decision for a single LET binding whose RHS is a value.
 /// </summary>
+/// <param name="DefaultExpression">
+///     Custom default for an optional param, as typed by the user in the
+///     dialog. When null or blank the builder falls back to the binding's
+///     original RHS, preserving the pre-edit behaviour. Only consulted when
+///     <paramref name="IsOptional" /> is true.
+/// </param>
 public record InputChoice(
     string OriginalBindingName,
     string ParamName,
     bool Keep,
-    bool IsOptional = false);
+    bool IsOptional = false,
+    string? DefaultExpression = null);
 
 public record LambdaGenerationRequest(
     string LambdaName,
@@ -99,13 +106,10 @@ public static class LetToLambdaBuilder
             .ToList();
 
         // Optional bindings wrap each optional kept param with an
-        // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
-        // They appear before internal bindings so internal bindings can
-        // reference the defaulted value.
-        // Optional bindings wrap each optional kept param with an
-        // IF(ISOMITTED(...)) defaulting to the original RHS (with renames).
-        // They appear before internal bindings so internal bindings can
-        // reference the defaulted value. Cell references in the default are
+        // IF(ISOMITTED(...)) defaulting to the user's custom default (or the
+        // original RHS when none was supplied), with renames applied. They
+        // appear before internal bindings so internal bindings can reference
+        // the defaulted value. Cell references in the default are
         // forced absolute: when Excel stores a LAMBDA as a workbook Name,
         // relative refs shift by the offset between the active cell at
         // registration time and the calling cell, which in practice baked
@@ -113,10 +117,18 @@ public static class LetToLambdaBuilder
         // regardless of where the LAMBDA is invoked.
         var optionalBindings = kept
             .Where(k => k.Choice.IsOptional)
-            .Select(k => new LetBinding(
-                k.Choice.ParamName,
-                $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(k.Binding.RhsText, renames))}, {k.Choice.ParamName})",
-                IsCalculation: false))
+            .Select(k =>
+            {
+                // A blank custom default falls back to the original RHS so the
+                // builder behaves exactly as before when no edit was made.
+                var defaultExpr = string.IsNullOrWhiteSpace(k.Choice.DefaultExpression)
+                    ? k.Binding.RhsText
+                    : k.Choice.DefaultExpression!;
+                return new LetBinding(
+                    k.Choice.ParamName,
+                    $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(defaultExpr, renames))}, {k.Choice.ParamName})",
+                    IsCalculation: false);
+            })
             .ToList();
 
         var body = ApplyRenames(parsed.Body, renames);
