@@ -93,7 +93,7 @@ public sealed class ExcelAddinFixture : IDisposable
         foreach (var config in new[] { "Debug", "Release" })
         {
             var xllPath = Path.Combine(repoRoot, "lambda-boss", "bin", config,
-                "net6.0-windows", "lambda-boss64.xll");
+                "net48", "lambda-boss64.xll");
             if (File.Exists(xllPath))
             {
                 return xllPath;
