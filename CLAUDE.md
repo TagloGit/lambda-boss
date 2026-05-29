@@ -49,6 +49,7 @@ The packed XLL lands at `addin/lambda-boss/bin/Release/net48/publish/lambda-boss
 - Default branch: `main`
 - **Never use compound Bash commands** (no `&&`, `;`, or `|` chaining). Use separate Bash tool calls instead — independent calls can run in parallel. Compound commands trigger extra permission prompts.
 - **Never prefix Bash commands with `cd`**. The working directory is already the project root. All commands (`gh`, `git`, `npm`, etc.) work without `cd`.
+- **Pass `gh` bodies inline, not via a temp file.** `gh release edit`/`gh issue create`/`gh pr` etc. accept multi-line bodies inline (`--notes`/`--body` with a PowerShell single-quoted here-string `@'...'@`). UTF-8 — including em-dashes and curly quotes — round-trips correctly through PowerShell → `gh` → GitHub (verified). Do **not** write the body to a `.md` file in the repo first; that just leaves clutter. The ASCII-only rule applies to `.ps1` *files on disk* (read as windows-1252), not to command-line arguments.
 - **Always use `Range.Formula2`, never `Range.Formula`.** The legacy `Formula` property silently wraps array refs (e.g. `A1#`) with the implicit-intersection `@` operator on write and returns `@`-prefixed text on read, which scalarises dynamic-array formulas. `Formula2` is the modern dynamic-array-aware property — use it for both read and write, regardless of whether the formula in question is array-shaped.
 
 ## Net48 polyfills
