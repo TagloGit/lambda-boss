@@ -15,17 +15,31 @@ public class LetInputRow : INotifyPropertyChanged
     private bool _isOptional;
     private bool _keep = true;
     private string _paramName = "";
+    private string _defaultExpression = "";
 
     public string BindingName { get; set; } = "";
     public string RhsPreview { get; set; } = "";
 
     /// <summary>
-    ///     Display form of <see cref="RhsPreview" /> used by the row template.
-    ///     When the row is marked optional, the RHS becomes the default
-    ///     expression in the generated LAMBDA, so we prefix "default:" to
-    ///     make that role explicit.
+    ///     The default expression for an optional param, editable in the row
+    ///     template when <see cref="IsOptional" /> is set. Seeded with the
+    ///     original RHS so the dialog opens showing the existing behaviour.
     /// </summary>
-    public string RhsPreviewDisplay => IsOptional ? $"default: {RhsPreview}" : RhsPreview;
+    public string DefaultExpression
+    {
+        get => _defaultExpression;
+        set
+        {
+            _defaultExpression = value;
+            OnChanged();
+        }
+    }
+
+    /// <summary>
+    ///     The read-only RHS preview is shown only while the row is not
+    ///     optional; when optional, the editable default box takes its place.
+    /// </summary>
+    public bool ShowRhsPreview => !IsOptional;
 
     /// <summary>
     ///     Zero-based position in the original LET source order. Used to keep
@@ -54,7 +68,7 @@ public class LetInputRow : INotifyPropertyChanged
             {
                 _isOptional = false;
                 OnChanged(nameof(IsOptional));
-                OnChanged(nameof(RhsPreviewDisplay));
+                OnChanged(nameof(ShowRhsPreview));
             }
             OnChanged();
         }
@@ -68,7 +82,7 @@ public class LetInputRow : INotifyPropertyChanged
             if (_isOptional == value) return;
             _isOptional = value;
             OnChanged();
-            OnChanged(nameof(RhsPreviewDisplay));
+            OnChanged(nameof(ShowRhsPreview));
         }
     }
 
@@ -114,6 +128,7 @@ public partial class LetToLambdaWindow
                 BindingName = b.Name,
                 ParamName = b.Name,
                 RhsPreview = b.RhsText,
+                DefaultExpression = b.RhsText,
                 Keep = true,
                 SourceIndex = i
             }));
@@ -314,6 +329,15 @@ public partial class LetToLambdaWindow
             return;
         }
 
+        var blankDefault = keptRows
+            .FirstOrDefault(r => r.IsOptional && string.IsNullOrWhiteSpace(r.DefaultExpression));
+        if (blankDefault != null)
+        {
+            StatusText.Text = $"Optional input '{blankDefault.ParamName}' needs a default value.";
+            SaveButton.IsEnabled = false;
+            return;
+        }
+
         var retainedBindingNames = _parsed.Bindings
             .Where(b => b.IsCalculation || _rows.Any(r => r.BindingName == b.Name && !r.Keep))
             .Select(b => b.Name)
@@ -355,7 +379,12 @@ public partial class LetToLambdaWindow
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         var inputs = _rows
-            .Select(r => new InputChoice(r.BindingName, r.ParamName.Trim(), r.Keep, r.IsOptional))
+            .Select(r => new InputChoice(
+                r.BindingName,
+                r.ParamName.Trim(),
+                r.Keep,
+                r.IsOptional,
+                r.IsOptional ? r.DefaultExpression.Trim() : null))
             .ToList();
 
         Result = new LambdaGenerationRequest(LambdaNameBox.Text.Trim(), _parsed, inputs);
