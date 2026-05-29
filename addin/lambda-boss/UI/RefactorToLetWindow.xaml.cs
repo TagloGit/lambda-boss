@@ -29,9 +29,6 @@ namespace LambdaBoss.UI;
 /// </summary>
 public partial class RefactorToLetWindow
 {
-    private const string DefaultStatusText =
-        "Save writes the LET into the active cell · Esc to cancel";
-
     private const string InvalidNameStatusText =
         "Fix invalid names before saving";
 
@@ -46,6 +43,10 @@ public partial class RefactorToLetWindow
     private readonly ObservableCollection<RefactorInputRowVm> _rows = [];
 
     private RefactorResult _result;
+
+    // Tracks the last name-validation outcome so the status bar can decide
+    // between a validation error and the summary count.
+    private bool _namesValid = true;
 
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
@@ -253,9 +254,13 @@ public partial class RefactorToLetWindow
                 return;
 
             var name = AllocateLocalAutoName();
-            var origin = vm.Kind == RefactorPromotableKind.NamedRange
-                ? RefactorRowOrigin.PromotedNamedRange
-                : RefactorRowOrigin.PromotedExternalRef;
+            var origin = vm.Kind switch
+            {
+                RefactorPromotableKind.NamedRange => RefactorRowOrigin.PromotedNamedRange,
+                RefactorPromotableKind.ExternalRef => RefactorRowOrigin.PromotedExternalRef,
+                RefactorPromotableKind.Literal => RefactorRowOrigin.PromotedLiteral,
+                _ => RefactorRowOrigin.PromotedNamedRange
+            };
             var input = new RefactorInputRow(vm.Key, null, name, vm.Token, origin);
             var rowVm = new RefactorInputRowVm(input);
             rowVm.PropertyChanged += Row_PropertyChanged;
@@ -333,6 +338,11 @@ public partial class RefactorToLetWindow
         // Reconcile promotables AFTER releasing the guard so the
         // promotables update can rewire the per-VM property handlers.
         UpdatePromotables(newResult.Promotables);
+
+        // Refresh the summary now that _result + _promotables reflect the
+        // engine's latest output (the earlier validation pass ran against
+        // the stale counts).
+        RefreshStatusText();
     }
 
     /// <summary>
@@ -375,18 +385,54 @@ public partial class RefactorToLetWindow
 
     private void UpdateSaveButtonEnabled(bool allValid)
     {
+        _namesValid = allValid;
         // An existing LET with every input dropped still produces a valid
         // formula (the bare body), so Save stays enabled when calc
         // bindings exist OR at least one row is kept.
         var hasKeptRows = _rows.Any(r => r.Include);
         var hasCalcBindings = _calcBindingNames.Count > 0;
         SaveButton.IsEnabled = allValid && (hasKeptRows || hasCalcBindings);
-        if (!allValid)
+        RefreshStatusText();
+    }
+
+    /// <summary>
+    ///     Drives the status bar: validation errors take priority, then the
+    ///     "nothing to refactor" guard, then a summary count of the bindings
+    ///     plus any merge note. Reads the engine's latest <see cref="_result" />
+    ///     for promotable / calc-binding / merge counts and the live row
+    ///     collection for the included-input count.
+    /// </summary>
+    private void RefreshStatusText()
+    {
+        if (!_namesValid)
+        {
             StatusText.Text = InvalidNameStatusText;
-        else if (!hasKeptRows && !hasCalcBindings)
+            return;
+        }
+
+        var inputCount = _rows.Count(r => r.Include);
+        var calcCount = _calcBindingNames.Count;
+
+        if (inputCount == 0 && calcCount == 0)
+        {
             StatusText.Text = "No bindings selected — nothing to refactor";
-        else
-            StatusText.Text = DefaultStatusText;
+            return;
+        }
+
+        var promotableCount = _promotables.Count;
+        var mergeCount = _result.Inputs.Count(i => i.MergedFrom is { Count: > 0 });
+
+        var parts = new List<string>
+        {
+            inputCount == 1 ? "1 input" : inputCount + " inputs",
+            promotableCount + " promotable",
+            calcCount == 1 ? "1 calculation binding" : calcCount + " calculation bindings"
+        };
+        var summary = string.Join(", ", parts);
+        if (mergeCount > 0)
+            summary += mergeCount == 1 ? " · 1 merged" : $" · {mergeCount} merged";
+
+        StatusText.Text = summary;
     }
 }
 
@@ -446,6 +492,13 @@ public class RefactorInputRowVm : INotifyPropertyChanged
             BadgeText = "promoted ref";
             BadgeTooltip =
                 "Promoted external-workbook ref. Uncheck Promote there to un-promote.";
+            BadgeVisibility = Visibility.Visible;
+        }
+        else if (input.Origin == RefactorRowOrigin.PromotedLiteral)
+        {
+            BadgeText = "promoted literal";
+            BadgeTooltip =
+                "Promoted literal. Uncheck Promote there to un-promote.";
             BadgeVisibility = Visibility.Visible;
         }
         else
@@ -529,9 +582,13 @@ public class RefactorPromotableRowVm : INotifyPropertyChanged
         Kind = row.Kind;
         Token = row.Token;
         Occurrences = row.Occurrences;
-        KindLabel = row.Kind == RefactorPromotableKind.NamedRange
-            ? "named range"
-            : "external ref";
+        KindLabel = row.Kind switch
+        {
+            RefactorPromotableKind.NamedRange => "named range",
+            RefactorPromotableKind.ExternalRef => "external ref",
+            RefactorPromotableKind.Literal => "literal",
+            _ => "promotable"
+        };
         OccurrencesLabel = row.Occurrences == 1 ? "1 use" : row.Occurrences + " uses";
     }
 

@@ -550,13 +550,16 @@ public class RefactorEngineTests
         var ctx = new StubContext(("LocalRate", "=Sheet1!$D$10"));
         var initial = RefactorEngine.Refactor("=LocalRate * 2", Sheet, ctx);
 
-        var promo = Assert.Single(initial.Promotables);
+        var promo = Assert.Single(
+            initial.Promotables.Where(p => p.Kind == RefactorPromotableKind.NamedRange));
         Assert.Equal("LocalRate", promo.Token);
 
         var rowStates = new[] { new RefactorRowState(promo.Key, "rate") };
         var result = RefactorEngine.Recompute("=LocalRate * 2", Sheet, rowStates, ctx);
 
-        Assert.Empty(result.Promotables);
+        // The named range is gone from promotables (the literal `2` remains).
+        Assert.DoesNotContain(
+            result.Promotables, p => p.Kind == RefactorPromotableKind.NamedRange);
         var input = Assert.Single(result.Inputs);
         Assert.Equal("rate", input.Name);
         Assert.Equal("LocalRate", input.Rhs);
@@ -646,6 +649,242 @@ public class RefactorEngineTests
         var result = RefactorEngine.Refactor(
             "=LET(rate, A1, rate * 2)", Sheet, ctx);
 
+        // 'rate' is a local binding, not a promotable named range (the
+        // literal `2` is a separate promotable and unaffected here).
+        Assert.DoesNotContain(
+            result.Promotables, p => p.Kind == RefactorPromotableKind.NamedRange);
+    }
+
+    // ---------- PR 4 — promotable literals ----------
+
+    [Fact]
+    public void Refactor_NumericLiteral_AppearsAsPromotable_NotInputByDefault_NoContextNeeded()
+    {
+        // No workbook context: literals are purely textual.
+        var result = RefactorEngine.Refactor("=A1 * 100 + 100", Sheet, context: null);
+
+        Assert.Null(result.Diagnostic);
+        var lit = Assert.Single(result.Promotables);
+        Assert.Equal(RefactorPromotableKind.Literal, lit.Kind);
+        Assert.Equal("100", lit.Token);
+        Assert.Equal(2, lit.Occurrences);
+
+        // Un-promoted: only A1 is a binding; literals stay inline.
+        var input = Assert.Single(result.Inputs);
+        Assert.Equal("A1", input.Rhs);
+        Assert.Contains("input1 * 100 + 100", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_NumericLiteralPromoted_ReplacedEverywhere()
+    {
+        var formula = "=A1 * 10 + B1 * 10";
+        var initial = RefactorEngine.Refactor(formula, Sheet);
+        var lit = initial.Promotables.Single(p => p.Kind == RefactorPromotableKind.Literal);
+        Assert.Equal(2, lit.Occurrences);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(initial.Inputs[1].Key, initial.Inputs[1].Name),
+            new RefactorRowState(lit.Key, "ten"),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates);
+
         Assert.Empty(result.Promotables);
+        var promoted = result.Inputs.Single(r => r.Origin == RefactorRowOrigin.PromotedLiteral);
+        Assert.Equal("ten", promoted.Name);
+        Assert.Equal("10", promoted.Rhs);
+        Assert.Contains("ten, 10", result.SynthesisedLet);
+        Assert.Contains("input1 * ten + input2 * ten", result.SynthesisedLet);
+        AssertRoundTrips(result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_StringLiteralWithEmbeddedQuotes_PromotesAsOneRow()
+    {
+        // The "" inside the string is an escaped double-quote; both copies
+        // share a value and dedupe to one promotable. Token keeps the
+        // original (escaped) spelling.
+        const string formula = "=IF(A1, \"say \"\"hi\"\"\", \"say \"\"hi\"\"\")";
+        var initial = RefactorEngine.Refactor(formula, Sheet);
+
+        var lit = initial.Promotables.Single(p => p.Kind == RefactorPromotableKind.Literal);
+        Assert.Equal("\"say \"\"hi\"\"\"", lit.Token);
+        Assert.Equal(2, lit.Occurrences);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(lit.Key, "greeting"),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates);
+
+        var promoted = result.Inputs.Single(r => r.Origin == RefactorRowOrigin.PromotedLiteral);
+        Assert.Equal("\"say \"\"hi\"\"\"", promoted.Rhs);
+        Assert.Contains("IF(input1, greeting, greeting)", result.SynthesisedLet);
+        AssertRoundTrips(result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_BooleanLiteral_PromotesAndReplaces()
+    {
+        const string formula = "=IF(A1, TRUE, TRUE)";
+        var initial = RefactorEngine.Refactor(formula, Sheet);
+
+        var lit = initial.Promotables.Single(p => p.Kind == RefactorPromotableKind.Literal);
+        Assert.Equal("TRUE", lit.Token);
+        Assert.Equal(2, lit.Occurrences);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(lit.Key, "flag"),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates);
+
+        var promoted = result.Inputs.Single(r => r.Origin == RefactorRowOrigin.PromotedLiteral);
+        Assert.Equal("TRUE", promoted.Rhs);
+        Assert.Contains("IF(input1, flag, flag)", result.SynthesisedLet);
+        AssertRoundTrips(result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_TwoDistinctNumerics_StayDistinctRows()
+    {
+        var result = RefactorEngine.Refactor("=A1 * 10 + B1 * 20", Sheet);
+
+        var lits = result.Promotables
+            .Where(p => p.Kind == RefactorPromotableKind.Literal)
+            .ToList();
+        Assert.Equal(2, lits.Count);
+        Assert.Equal("10", lits[0].Token);
+        Assert.Equal("20", lits[1].Token);
+    }
+
+    [Fact]
+    public void Refactor_NumericLiterals_DedupeByValue_FirstSpellingWins()
+    {
+        // 0.20 and 0.2 parse to the same value → one promotable; the first
+        // occurrence's spelling (0.20) is preserved.
+        var result = RefactorEngine.Refactor("=A1 * 0.20 + B1 * 0.2", Sheet);
+
+        var lit = Assert.Single(result.Promotables.Where(p => p.Kind == RefactorPromotableKind.Literal));
+        Assert.Equal("0.20", lit.Token);
+        Assert.Equal(2, lit.Occurrences);
+    }
+
+    [Fact]
+    public void Refactor_DigitsInsideIdentifier_NotTreatedAsLiteral()
+    {
+        // The '1' in the named range 'Cell1' must not surface as a numeric
+        // literal; only the standalone 5 does.
+        var ctx = new StubContext(("Cell1", "=Sheet1!$Z$9"));
+        var result = RefactorEngine.Refactor("=Cell1 * 5", Sheet, ctx);
+
+        var lit = Assert.Single(result.Promotables.Where(p => p.Kind == RefactorPromotableKind.Literal));
+        Assert.Equal("5", lit.Token);
+    }
+
+    [Fact]
+    public void Refactor_ManualExample_SurfacesAllLiterals_InSourceOrder()
+    {
+        // Issue 205 manual-test formula. Literals dedupe by value; the
+        // duplicate 100 collapses, leaving source-order tokens.
+        const string formula =
+            "=IF(A1 > 100, \"high\", IF(A1 > 50, \"medium\", \"low\")) + IF(B1 > 100, 1, 0)";
+        var result = RefactorEngine.Refactor(formula, Sheet);
+
+        var literals = result.Promotables
+            .Where(p => p.Kind == RefactorPromotableKind.Literal)
+            .Select(p => p.Token)
+            .ToList();
+        Assert.Equal(
+            new[] { "100", "\"high\"", "50", "\"medium\"", "\"low\"", "1", "0" },
+            literals);
+
+        var hundred = result.Promotables.Single(
+            p => p.Kind == RefactorPromotableKind.Literal && p.Token == "100");
+        Assert.Equal(2, hundred.Occurrences);
+    }
+
+    [Fact]
+    public void Recompute_PromotedLiteralThenDropped_RestoresLiteralInline()
+    {
+        // Promote 10, then untick Include — every occurrence returns to the
+        // inline literal and no binding is emitted.
+        const string formula = "=A1 * 10 + 10";
+        var initial = RefactorEngine.Refactor(formula, Sheet);
+        var lit = initial.Promotables.Single(p => p.Kind == RefactorPromotableKind.Literal);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(lit.Key, "ten", Include: false),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates);
+
+        Assert.DoesNotContain(result.Inputs, r => r.Origin == RefactorRowOrigin.PromotedLiteral);
+        Assert.Contains("input1 * 10 + 10", result.SynthesisedLet);
+        Assert.DoesNotContain("ten", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_PromotedNamedRangeThenDropped_RestoresIdentifierInline()
+    {
+        var ctx = new StubContext(("Tax_Rate", "=0.2"));
+        const string formula = "=A1 * Tax_Rate + Tax_Rate";
+        var initial = RefactorEngine.Refactor(formula, Sheet, ctx);
+        var promo = initial.Promotables.Single(p => p.Kind == RefactorPromotableKind.NamedRange);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(promo.Key, "rate", Include: false),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates, ctx);
+
+        Assert.DoesNotContain(result.Inputs, r => r.Origin == RefactorRowOrigin.PromotedNamedRange);
+        Assert.Contains("input1 * Tax_Rate + Tax_Rate", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Refactor_ExistingLet_LiteralsInCalcAndBody_Promotable_ValueBindingRhsNot()
+    {
+        // The "x" value binding's RHS literal must NOT be promotable; the
+        // calc binding's 0.1 and the body's 2 should be.
+        const string formula =
+            "=LET(x, 100, factor, A1 * 0.1, x * 2 + factor)";
+        var result = RefactorEngine.Refactor(formula, Sheet);
+
+        var litTokens = result.Promotables
+            .Where(p => p.Kind == RefactorPromotableKind.Literal)
+            .Select(p => p.Token)
+            .ToList();
+        Assert.DoesNotContain("100", litTokens); // value-binding RHS, not scanned
+        Assert.Contains("0.1", litTokens);
+        Assert.Contains("2", litTokens);
+    }
+
+    [Fact]
+    public void Recompute_ExistingLet_PromoteLiteralFromBody_AddsBinding()
+    {
+        const string formula = "=LET(a, A1, a * 100 + 100)";
+        var initial = RefactorEngine.Refactor(formula, Sheet);
+        var lit = initial.Promotables.Single(p => p.Kind == RefactorPromotableKind.Literal);
+        Assert.Equal(2, lit.Occurrences);
+
+        var rowStates = new[]
+        {
+            new RefactorRowState(initial.Inputs[0].Key, initial.Inputs[0].Name),
+            new RefactorRowState(lit.Key, "scale"),
+        };
+        var result = RefactorEngine.Recompute(formula, Sheet, rowStates);
+
+        var promoted = result.Inputs.Single(r => r.Origin == RefactorRowOrigin.PromotedLiteral);
+        Assert.Equal("scale", promoted.Name);
+        Assert.Equal("100", promoted.Rhs);
+        Assert.Contains("a * scale + scale", result.SynthesisedLet);
+        AssertRoundTrips(result.SynthesisedLet);
     }
 }

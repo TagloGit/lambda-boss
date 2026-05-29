@@ -9,15 +9,18 @@ namespace LambdaBoss;
 ///     or marked as the survivor of a merge. PR 3 adds
 ///     <see cref="PromotedNamedRange" /> and <see cref="PromotedExternalRef" />:
 ///     rows that were originally promotable but the user (or the dialog's
-///     initial state) has promoted into the inputs section. The dialog
-///     uses the badge to communicate the row's provenance.
+///     initial state) has promoted into the inputs section. PR 4 adds
+///     <see cref="PromotedLiteral" /> for promoted numeric / string /
+///     boolean literals. The dialog uses the badge to communicate the
+///     row's provenance.
 /// </summary>
 public enum RefactorRowOrigin
 {
     Extracted,
     ExistingLetValue,
     PromotedNamedRange,
-    PromotedExternalRef
+    PromotedExternalRef,
+    PromotedLiteral
 }
 
 /// <summary>
@@ -78,7 +81,16 @@ public enum RefactorPromotableKind
     NamedRange,
 
     /// <summary>An external-workbook ref (<c>[Wb.xlsx]Sheet!A1</c>, etc.).</summary>
-    ExternalRef
+    ExternalRef,
+
+    /// <summary>
+    ///     A numeric, string, or boolean literal (spec 0008 / PR 4). The
+    ///     <see cref="RefactorPromotableRow.Token" /> is the original text of
+    ///     the first occurrence (preserving formatting like <c>0.20</c>);
+    ///     occurrences dedupe by parsed value, not spelling. Promoting it
+    ///     replaces every occurrence with the binding name.
+    /// </summary>
+    Literal
 }
 
 /// <summary>

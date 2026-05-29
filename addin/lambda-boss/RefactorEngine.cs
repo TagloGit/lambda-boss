@@ -58,6 +58,25 @@ public static class RefactorEngine
         @"(?<![A-Za-z0-9_.!:'\]#?])[A-Za-z_][A-Za-z0-9_.?]*(?![A-Za-z0-9_.?(!])",
         RegexOptions.CultureInvariant);
 
+    // Numeric-literal matcher (PR 4), anchored at the scan position via \G.
+    // Accepts an optional integer/decimal mantissa with an optional
+    // scientific exponent (the exponent carries its own sign — we never
+    // capture a leading +/- because that's an operator in formula text, so
+    // `A1*-5` correctly promotes `5` and keeps the `-` inline). The
+    // lookbehind rejects digits sitting inside an identifier (`input1`); the
+    // lookahead rejects a trailing identifier char so we don't truncate a
+    // longer token.
+    private static readonly Regex NumericLiteralPattern = new(
+        @"\G(?<![A-Za-z0-9_.])(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?(?![A-Za-z0-9_.])",
+        RegexOptions.CultureInvariant);
+
+    // Boolean-literal matcher (PR 4). Case-insensitive TRUE / FALSE that
+    // isn't part of a larger identifier and isn't a function call (`TRUE(`)
+    // or sheet qualifier (`TRUE!`).
+    private static readonly Regex BooleanLiteralPattern = new(
+        @"\G(?<![A-Za-z0-9_.])(?:TRUE|FALSE)(?![A-Za-z0-9_.(!])",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
     /// <summary>
     ///     Runs the initial refactor over <paramref name="formula" />.
     ///     Existing LETs are parsed and merged/extracted per spec 0008;
@@ -168,10 +187,11 @@ public static class RefactorEngine
         var keptRows = materialised.Where(r => r.IsIncluded).ToList();
 
         var identifierSubs = BuildPromotedNamedRangeSubstitutions(keptRows);
+        var literalSubs = BuildPromotedLiteralSubstitutions(keptRows);
 
         var synthesisedLet = BuildSynthesisedLet(
             formula, activeSheet, keptRows, Array.Empty<RefactorCalcBindingRow>(),
-            false, null, identifierSubs);
+            false, null, identifierSubs, literalSubs);
 
         return new RefactorResult(
             formula,
@@ -300,12 +320,14 @@ public static class RefactorEngine
         foreach (var kv in BuildPromotedNamedRangeSubstitutions(keptRows))
             identifierSubs[kv.Key] = kv.Value;
 
+        var literalSubs = BuildPromotedLiteralSubstitutions(keptRows);
+
         var rewrittenCalcs = RewriteCalcBindings(
-            calcBindings, activeSheet, keptRows, identifierSubs);
+            calcBindings, activeSheet, keptRows, identifierSubs, literalSubs);
 
         var synthesisedLet = BuildSynthesisedLet(
             formula, activeSheet, keptRows, rewrittenCalcs,
-            true, parsed.Body, identifierSubs);
+            true, parsed.Body, identifierSubs, literalSubs);
 
         return new RefactorResult(
             formula,
@@ -451,6 +473,28 @@ public static class RefactorEngine
         return subs;
     }
 
+    /// <summary>
+    ///     Builds the literal-value → binding-name subs for promoted literals
+    ///     among <paramref name="keptRows" />. The key is the parsed-value
+    ///     key (so every occurrence of the value rewrites, regardless of
+    ///     spelling) — re-derived from the row's RHS (the original token
+    ///     text) by re-tokenising it.
+    /// </summary>
+    private static Dictionary<string, string> BuildPromotedLiteralSubstitutions(
+        IReadOnlyList<MaterialisedRow> keptRows)
+    {
+        var subs = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var r in keptRows)
+        {
+            if (r.Row.Origin != RefactorRowOrigin.PromotedLiteral) continue;
+            var key = LiteralValueKeyOf(r.Row.Rhs);
+            if (key != null)
+                subs[key] = r.Row.Name;
+        }
+
+        return subs;
+    }
+
     // ---------------- ref extraction (calc bindings + body) ----------------
 
     private static void ExtractNewRefs(
@@ -572,6 +616,34 @@ public static class RefactorEngine
             }
         }
 
+        // Literals — numeric / string / boolean, deduped by parsed value
+        // (not spelling, so `0.20` and `0.2` collapse). First occurrence's
+        // text and position win for display + order. Independent of the
+        // workbook context: literals are purely textual.
+        var litCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        var litFirstText = new Dictionary<string, string>(StringComparer.Ordinal);
+        var litOrder = new List<string>(); // value keys, first-seen order
+        foreach (var scope in identifierScopes)
+        foreach (var tok in WalkLiterals(scope))
+        {
+            if (!litCounts.ContainsKey(tok.ValueKey))
+            {
+                litOrder.Add(tok.ValueKey);
+                litFirstText[tok.ValueKey] = tok.Text;
+            }
+
+            litCounts[tok.ValueKey] = litCounts.TryGetValue(tok.ValueKey, out var c) ? c + 1 : 1;
+        }
+
+        foreach (var vk in litOrder)
+        {
+            promotables.Add(new RefactorPromotableRow(
+                BuildLiteralKey(vk),
+                RefactorPromotableKind.Literal,
+                litFirstText[vk],
+                litCounts[vk]));
+        }
+
         return promotables;
     }
 
@@ -629,6 +701,7 @@ public static class RefactorEngine
             switch (p.Kind)
             {
                 case RefactorPromotableKind.NamedRange:
+                case RefactorPromotableKind.Literal:
                     byKey[p.Key] = new PromotedInfo(p, null);
                     break;
                 case RefactorPromotableKind.ExternalRef:
@@ -741,6 +814,13 @@ public static class RefactorEngine
                     name,
                     info.Row.Token,
                     RefactorRowOrigin.PromotedExternalRef);
+            case RefactorPromotableKind.Literal:
+                return new RefactorInputRow(
+                    info.Row.Key,
+                    Source: null,
+                    name,
+                    info.Row.Token,
+                    RefactorRowOrigin.PromotedLiteral);
             default:
                 throw new InvalidOperationException(
                     $"Unknown promotable kind: {info.Row.Kind}");
@@ -764,7 +844,8 @@ public static class RefactorEngine
         IReadOnlyList<LetBinding> calcBindings,
         string activeSheet,
         IReadOnlyList<MaterialisedRow> keptRows,
-        IReadOnlyDictionary<string, string> identifierSubs)
+        IReadOnlyDictionary<string, string> identifierSubs,
+        IReadOnlyDictionary<string, string> literalSubs)
     {
         if (calcBindings.Count == 0)
             return Array.Empty<RefactorCalcBindingRow>();
@@ -773,7 +854,7 @@ public static class RefactorEngine
         var result = new List<RefactorCalcBindingRow>(calcBindings.Count);
         foreach (var c in calcBindings)
         {
-            var rewritten = RewriteText(c.RhsText, activeSheet, refLookup, identifierSubs);
+            var rewritten = RewriteText(c.RhsText, activeSheet, refLookup, identifierSubs, literalSubs);
             result.Add(new RefactorCalcBindingRow(c.Name, rewritten));
         }
 
@@ -791,24 +872,32 @@ public static class RefactorEngine
     }
 
     /// <summary>
-    ///     Runs the cell-ref rewrite (replacing in-scope <see cref="FormulaRef" />s
-    ///     with their kept binding names) followed by the identifier
-    ///     rewrite (renaming merged-away binding names, inlining the RHS
-    ///     of dropped existing-LET value bindings, or swapping a promoted
-    ///     named range's identifier for its binding name).
+    ///     Runs, in order: the cell-ref rewrite (replacing in-scope
+    ///     <see cref="FormulaRef" />s with their kept binding names), the
+    ///     identifier rewrite (renaming merged-away binding names, inlining
+    ///     the RHS of dropped existing-LET value bindings, or swapping a
+    ///     promoted named range's identifier for its binding name), and
+    ///     finally the literal rewrite (swapping promoted numeric / string /
+    ///     boolean literals for their binding name). Literals run last so
+    ///     the earlier passes — which skip string contents — never see a
+    ///     promoted-string binding name as a candidate identifier.
     /// </summary>
     private static string RewriteText(
         string text,
         string activeSheet,
         IReadOnlyDictionary<FormulaRef, string> refLookup,
-        IReadOnlyDictionary<string, string> identifierSubs)
+        IReadOnlyDictionary<string, string> identifierSubs,
+        IReadOnlyDictionary<string, string> literalSubs)
     {
         var afterRefs = refLookup.Count > 0
             ? CellRefExtractor.Rewrite(text, activeSheet, refLookup)
             : text;
-        if (identifierSubs.Count == 0)
-            return afterRefs;
-        return RewriteIdentifiers(afterRefs, identifierSubs);
+        var afterIds = identifierSubs.Count > 0
+            ? RewriteIdentifiers(afterRefs, identifierSubs)
+            : afterRefs;
+        return literalSubs.Count > 0
+            ? RewriteLiterals(afterIds, literalSubs)
+            : afterIds;
     }
 
     private static string RewriteIdentifiers(
@@ -850,6 +939,166 @@ public static class RefactorEngine
         }
 
         return sb.ToString();
+    }
+
+    // ---------------- literal tokenizer & rewrite (PR 4) ----------------
+
+    /// <summary>
+    ///     One literal occurrence found by <see cref="WalkLiterals" />:
+    ///     its <see cref="Start" /> / <see cref="Length" /> within the
+    ///     scanned text, the original <see cref="Text" /> (preserving
+    ///     spelling), and a value-based <see cref="ValueKey" /> used to
+    ///     dedupe occurrences and to look up promotion substitutions
+    ///     (so <c>0.20</c> and <c>0.2</c> share a key).
+    /// </summary>
+    private readonly record struct LiteralToken(
+        int Start, int Length, string Text, string ValueKey);
+
+    /// <summary>
+    ///     Walks <paramref name="text" /> left-to-right yielding every
+    ///     numeric / string / boolean literal occurrence in source order.
+    ///     Cell-ref tokens are pre-masked (via
+    ///     <see cref="CellRefExtractor.MatchSpans" />) so the row digits of
+    ///     <c>A1</c> aren't surfaced as a numeric literal; single-quoted
+    ///     sheet / workbook qualifiers are skipped wholesale. String
+    ///     literals are recognised directly (with embedded <c>""</c>
+    ///     un-escaped for the value key).
+    /// </summary>
+    private static IEnumerable<LiteralToken> WalkLiterals(string text)
+    {
+        if (string.IsNullOrEmpty(text)) yield break;
+
+        var masked = BuildCellRefMask(text);
+        var i = 0;
+        while (i < text.Length)
+        {
+            var c = text[i];
+
+            if (c == '"')
+            {
+                var end = SkipString(text, i);
+                // Only a properly-closed string is a literal; an unterminated
+                // quote (malformed formula) is skipped, not promoted.
+                if (end - i >= 2 && text[end - 1] == '"')
+                {
+                    var original = text.Substring(i, end - i);
+                    yield return new LiteralToken(
+                        i, end - i, original, "str:" + UnescapeString(original));
+                }
+
+                i = end;
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                i = SkipSingleQuoted(text, i);
+                continue;
+            }
+
+            if (masked[i])
+            {
+                i++;
+                continue;
+            }
+
+            var numeric = NumericLiteralPattern.Match(text, i);
+            if (numeric.Success && numeric.Index == i
+                && !SpanTouchesMask(masked, i, numeric.Length)
+                && double.TryParse(
+                    numeric.Value,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var val))
+            {
+                yield return new LiteralToken(
+                    i, numeric.Length, numeric.Value,
+                    "num:" + val.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+                i += numeric.Length;
+                continue;
+            }
+
+            var boolean = BooleanLiteralPattern.Match(text, i);
+            if (boolean.Success && boolean.Index == i
+                && !SpanTouchesMask(masked, i, boolean.Length))
+            {
+                var isTrue = string.Equals(boolean.Value, "TRUE", StringComparison.OrdinalIgnoreCase);
+                yield return new LiteralToken(
+                    i, boolean.Length, boolean.Value, "bool:" + (isTrue ? "true" : "false"));
+                i += boolean.Length;
+                continue;
+            }
+
+            i++;
+        }
+    }
+
+    /// <summary>
+    ///     Rewrites promoted literals to their binding names. Each
+    ///     occurrence whose value key is in <paramref name="subs" /> is
+    ///     replaced; everything else (including un-promoted literals) is
+    ///     left verbatim. Runs after the cell-ref and identifier passes;
+    ///     it re-derives the cell-ref mask from the text it's handed, so
+    ///     it's order-independent.
+    /// </summary>
+    private static string RewriteLiterals(
+        string text, IReadOnlyDictionary<string, string> subs)
+    {
+        if (string.IsNullOrEmpty(text) || subs.Count == 0) return text;
+
+        var sb = new StringBuilder(text.Length);
+        var pos = 0;
+        foreach (var tok in WalkLiterals(text))
+        {
+            if (!subs.TryGetValue(tok.ValueKey, out var name)) continue;
+            sb.Append(text, pos, tok.Start - pos);
+            sb.Append(name);
+            pos = tok.Start + tok.Length;
+        }
+
+        sb.Append(text, pos, text.Length - pos);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    ///     Re-tokenises a promoted literal row's RHS (its original token
+    ///     text) back to the value key used in the substitution map.
+    ///     Returns null when the text isn't a recognisable literal (which
+    ///     shouldn't happen for a row the engine itself materialised).
+    /// </summary>
+    private static string? LiteralValueKeyOf(string token)
+    {
+        foreach (var t in WalkLiterals(token))
+            return t.ValueKey;
+        return null;
+    }
+
+    private static bool[] BuildCellRefMask(string text)
+    {
+        var mask = new bool[text.Length];
+        foreach (var (start, end) in CellRefExtractor.MatchSpans(text))
+            for (var k = start; k < end && k < mask.Length; k++)
+                mask[k] = true;
+        return mask;
+    }
+
+    private static bool SpanTouchesMask(bool[] mask, int start, int length)
+    {
+        for (var k = start; k < start + length && k < mask.Length; k++)
+            if (mask[k])
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    ///     Strips the surrounding double quotes from a string literal and
+    ///     un-escapes embedded <c>""</c> to a single <c>"</c>, giving the
+    ///     value used for dedupe.
+    /// </summary>
+    private static string UnescapeString(string quoted)
+    {
+        if (quoted.Length < 2) return quoted;
+        return quoted.Substring(1, quoted.Length - 2).Replace("\"\"", "\"");
     }
 
     private static int IndexOfAny(string text, int start, char a, char b)
@@ -913,7 +1162,8 @@ public static class RefactorEngine
         IReadOnlyList<RefactorCalcBindingRow> rewrittenCalcs,
         bool isExistingLet,
         string? body,
-        IReadOnlyDictionary<string, string>? identifierSubstitutions)
+        IReadOnlyDictionary<string, string>? identifierSubstitutions,
+        IReadOnlyDictionary<string, string>? literalSubstitutions)
     {
         // No work to do — nothing extracted and nothing merged.
         if (!isExistingLet && keptInputs.Count == 0)
@@ -929,12 +1179,15 @@ public static class RefactorEngine
         // collapses to its body — the dialog still synthesises a valid
         // formula so the user can save (matches PR 1's "all dropped"
         // behaviour).
+        var idSubs = identifierSubstitutions ?? new Dictionary<string, string>();
+        var litSubs = literalSubstitutions ?? new Dictionary<string, string>();
+
         if (isExistingLet && keptInputs.Count == 0 && rewrittenCalcs.Count == 0)
         {
             var rewrittenBody = RewriteText(
                 body!, activeSheet,
                 BuildFormulaRefLookup(keptInputs),
-                identifierSubstitutions ?? new Dictionary<string, string>());
+                idSubs, litSubs);
             return "=" + rewrittenBody;
         }
 
@@ -949,18 +1202,18 @@ public static class RefactorEngine
             bodyText = RewriteText(
                 body!, activeSheet,
                 BuildFormulaRefLookup(keptInputs),
-                identifierSubstitutions ?? new Dictionary<string, string>());
+                idSubs, litSubs);
         }
         else
         {
             // Non-LET: the original formula's content (sans leading '=') is
-            // the LET body, with cell refs and (PR 3) promoted named
-            // ranges rewritten to kept binding names.
+            // the LET body, with cell refs, promoted named ranges (PR 3) and
+            // promoted literals (PR 4) rewritten to kept binding names.
             bodyText = RewriteText(
                 StripLeadingEquals(originalFormula),
                 activeSheet,
                 BuildFormulaRefLookup(keptInputs),
-                identifierSubstitutions ?? new Dictionary<string, string>());
+                idSubs, litSubs);
         }
 
         var sb = new StringBuilder();
@@ -992,6 +1245,11 @@ public static class RefactorEngine
     private static string BuildNamedRangeKey(string identifier)
     {
         return "named:" + identifier;
+    }
+
+    private static string BuildLiteralKey(string valueKey)
+    {
+        return "lit:" + valueKey;
     }
 
     /// <summary>
