@@ -154,6 +154,43 @@ internal static class CellRefExtractor
     }
 
     /// <summary>
+    ///     Returns the <c>[Start, End)</c> character spans of every cell-ref
+    ///     token in <paramref name="formula" /> (string literals skipped),
+    ///     in source order. Spec 0008 / PR 4's literal tokenizer uses this to
+    ///     mask out cell-ref ranges before walking for promotable numeric /
+    ///     string / boolean literals — so the row digits of <c>A1</c> aren't
+    ///     mistaken for a numeric literal. Spans are non-overlapping and
+    ///     anchored to the original string's indices.
+    /// </summary>
+    public static IReadOnlyList<(int Start, int End)> MatchSpans(string formula)
+    {
+        if (string.IsNullOrEmpty(formula))
+            return Array.Empty<(int, int)>();
+
+        var spans = new List<(int, int)>();
+        var i = 0;
+        while (i < formula.Length)
+        {
+            if (formula[i] == '"')
+            {
+                i = SkipString(formula, i);
+                continue;
+            }
+
+            var nextQuote = formula.IndexOf('"', i);
+            var segEnd = nextQuote < 0 ? formula.Length : nextQuote;
+            var segment = formula[i..segEnd];
+
+            foreach (Match m in CellRefPattern.Matches(segment))
+                spans.Add((i + m.Index, i + m.Index + m.Length));
+
+            i = segEnd;
+        }
+
+        return spans;
+    }
+
+    /// <summary>
     ///     Rewrites every in-scope ref in <paramref name="formula" /> to the
     ///     binding name supplied by <paramref name="lookup" />. Refs not in
     ///     <paramref name="lookup" /> (out-of-scope cells, named ranges,
