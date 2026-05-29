@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -181,8 +183,8 @@ public static class RefactorEngine
             defaultPromotables,
             promotableLookup,
             rowStates,
-            nextAutoNameIndex: nameIndex,
-            existingBindingNames: ReadOnlyEmptySet<string>.Instance);
+            nameIndex,
+            ReadOnlyEmptySet<string>.Instance);
 
         var keptRows = materialised.Where(r => r.IsIncluded).ToList();
 
@@ -304,8 +306,8 @@ public static class RefactorEngine
             defaultPromotables,
             promotableLookup,
             rowStates,
-            nextAutoNameIndex: autoNameIndex,
-            existingBindingNames: existingBindingNames);
+            autoNameIndex,
+            existingBindingNames);
 
         // Step 5 — assemble the rewrite maps and synthesise.
         var keptRows = materialised.Where(r => r.IsIncluded).ToList();
@@ -587,33 +589,27 @@ public static class RefactorEngine
         if (context is { WorkbookNames.Count: > 0 })
         {
             var nameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var firstSpelling = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var nameOrder = new List<string>(); // canonical (first-found) spellings
 
             foreach (var scope in identifierScopes)
-            foreach (var identifier in WalkCandidateIdentifiers(scope))
-            {
-                if (excludeBindingNames.Contains(identifier)) continue;
-                if (!context.WorkbookNames.TryGetValue(identifier, out var refersTo)) continue;
-                if (LambdaSignatureParser.IsLambdaFormula(refersTo)) continue;
-
-                if (!nameCounts.ContainsKey(identifier))
+                foreach (var identifier in WalkCandidateIdentifiers(scope))
                 {
-                    firstSpelling[identifier] = identifier;
-                    nameOrder.Add(identifier);
+                    if (excludeBindingNames.Contains(identifier)) continue;
+                    if (!context.WorkbookNames.TryGetValue(identifier, out var refersTo)) continue;
+                    if (LambdaSignatureParser.IsLambdaFormula(refersTo)) continue;
+
+                    if (!nameCounts.ContainsKey(identifier))
+                        nameOrder.Add(identifier);
+
+                    nameCounts[identifier] = nameCounts.TryGetValue(identifier, out var c) ? c + 1 : 1;
                 }
 
-                nameCounts[identifier] = nameCounts.TryGetValue(identifier, out var c) ? c + 1 : 1;
-            }
-
             foreach (var spelling in nameOrder)
-            {
                 promotables.Add(new RefactorPromotableRow(
                     BuildNamedRangeKey(spelling),
                     RefactorPromotableKind.NamedRange,
                     spelling,
                     nameCounts[spelling]));
-            }
         }
 
         // Literals — numeric / string / boolean, deduped by parsed value
@@ -624,25 +620,23 @@ public static class RefactorEngine
         var litFirstText = new Dictionary<string, string>(StringComparer.Ordinal);
         var litOrder = new List<string>(); // value keys, first-seen order
         foreach (var scope in identifierScopes)
-        foreach (var tok in WalkLiterals(scope))
-        {
-            if (!litCounts.ContainsKey(tok.ValueKey))
+            foreach (var tok in WalkLiterals(scope))
             {
-                litOrder.Add(tok.ValueKey);
-                litFirstText[tok.ValueKey] = tok.Text;
+                if (!litCounts.ContainsKey(tok.ValueKey))
+                {
+                    litOrder.Add(tok.ValueKey);
+                    litFirstText[tok.ValueKey] = tok.Text;
+                }
+
+                litCounts[tok.ValueKey] = litCounts.TryGetValue(tok.ValueKey, out var c) ? c + 1 : 1;
             }
 
-            litCounts[tok.ValueKey] = litCounts.TryGetValue(tok.ValueKey, out var c) ? c + 1 : 1;
-        }
-
         foreach (var vk in litOrder)
-        {
             promotables.Add(new RefactorPromotableRow(
                 BuildLiteralKey(vk),
                 RefactorPromotableKind.Literal,
                 litFirstText[vk],
                 litCounts[vk]));
-        }
 
         return promotables;
     }
@@ -697,7 +691,6 @@ public static class RefactorEngine
     {
         var byKey = new Dictionary<string, PromotedInfo>(StringComparer.Ordinal);
         foreach (var p in defaultPromotables)
-        {
             switch (p.Kind)
             {
                 case RefactorPromotableKind.NamedRange:
@@ -705,18 +698,14 @@ public static class RefactorEngine
                     byKey[p.Key] = new PromotedInfo(p, null);
                     break;
                 case RefactorPromotableKind.ExternalRef:
-                    var fr = externalRefs.FirstOrDefault(
-                        r => BuildExternalRefKey(r, activeSheet) == p.Key);
+                    var fr = externalRefs.FirstOrDefault(r => BuildExternalRefKey(r, activeSheet) == p.Key);
                     if (fr != null)
                         byKey[p.Key] = new PromotedInfo(p, fr);
                     break;
             }
-        }
 
         return byKey;
     }
-
-    private sealed record PromotedInfo(RefactorPromotableRow Row, FormulaRef? ExternalSource);
 
     // ---------------- materialisation (rowState → kept rows) ----------------
 
@@ -751,9 +740,11 @@ public static class RefactorEngine
             ISet<string> existingBindingNames)
     {
         if (rowStates is null)
+        {
             return (
                 defaultInputRows.Select(r => new MaterialisedRow(r, true)).ToList(),
                 defaultPromotables.ToList());
+        }
 
         var byInputKey = defaultInputRows.ToDictionary(r => r.Key, StringComparer.Ordinal);
         var ordered = new List<MaterialisedRow>(rowStates.Count);
@@ -803,7 +794,7 @@ public static class RefactorEngine
             case RefactorPromotableKind.NamedRange:
                 return new RefactorInputRow(
                     info.Row.Key,
-                    Source: null,
+                    null,
                     name,
                     info.Row.Token,
                     RefactorRowOrigin.PromotedNamedRange);
@@ -817,7 +808,7 @@ public static class RefactorEngine
             case RefactorPromotableKind.Literal:
                 return new RefactorInputRow(
                     info.Row.Key,
-                    Source: null,
+                    null,
                     name,
                     info.Row.Token,
                     RefactorRowOrigin.PromotedLiteral);
@@ -941,19 +932,6 @@ public static class RefactorEngine
         return sb.ToString();
     }
 
-    // ---------------- literal tokenizer & rewrite (PR 4) ----------------
-
-    /// <summary>
-    ///     One literal occurrence found by <see cref="WalkLiterals" />:
-    ///     its <see cref="Start" /> / <see cref="Length" /> within the
-    ///     scanned text, the original <see cref="Text" /> (preserving
-    ///     spelling), and a value-based <see cref="ValueKey" /> used to
-    ///     dedupe occurrences and to look up promotion substitutions
-    ///     (so <c>0.20</c> and <c>0.2</c> share a key).
-    /// </summary>
-    private readonly record struct LiteralToken(
-        int Start, int Length, string Text, string ValueKey);
-
     /// <summary>
     ///     Walks <paramref name="text" /> left-to-right yielding every
     ///     numeric / string / boolean literal occurrence in source order.
@@ -1004,23 +982,23 @@ public static class RefactorEngine
 
             var numeric = NumericLiteralPattern.Match(text, i);
             if (numeric.Success && numeric.Index == i
-                && !SpanTouchesMask(masked, i, numeric.Length)
-                && double.TryParse(
-                    numeric.Value,
-                    System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out var val))
+                                && !SpanTouchesMask(masked, i, numeric.Length)
+                                && double.TryParse(
+                                    numeric.Value,
+                                    NumberStyles.Float,
+                                    CultureInfo.InvariantCulture,
+                                    out var val))
             {
                 yield return new LiteralToken(
                     i, numeric.Length, numeric.Value,
-                    "num:" + val.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+                    "num:" + val.ToString("R", CultureInfo.InvariantCulture));
                 i += numeric.Length;
                 continue;
             }
 
             var boolean = BooleanLiteralPattern.Match(text, i);
             if (boolean.Success && boolean.Index == i
-                && !SpanTouchesMask(masked, i, boolean.Length))
+                                && !SpanTouchesMask(masked, i, boolean.Length))
             {
                 var isTrue = string.Equals(boolean.Value, "TRUE", StringComparison.OrdinalIgnoreCase);
                 yield return new LiteralToken(
@@ -1280,6 +1258,24 @@ public static class RefactorEngine
         return trimmed.StartsWith("=", StringComparison.Ordinal) ? trimmed[1..] : trimmed;
     }
 
+    private sealed record PromotedInfo(RefactorPromotableRow Row, FormulaRef? ExternalSource);
+
+    // ---------------- literal tokenizer & rewrite (PR 4) ----------------
+
+    /// <summary>
+    ///     One literal occurrence found by <see cref="WalkLiterals" />:
+    ///     its <see cref="Start" /> / <see cref="Length" /> within the
+    ///     scanned text, the original <see cref="Text" /> (preserving
+    ///     spelling), and a value-based <see cref="ValueKey" /> used to
+    ///     dedupe occurrences and to look up promotion substitutions
+    ///     (so <c>0.20</c> and <c>0.2</c> share a key).
+    /// </summary>
+    private readonly record struct LiteralToken(
+        int Start,
+        int Length,
+        string Text,
+        string ValueKey);
+
     // ---------------- merge ----------------
 
     private record MergeResult(
@@ -1306,25 +1302,97 @@ public static class RefactorEngine
     private sealed class ReadOnlyEmptySet<T> : ISet<T>
     {
         public static readonly ReadOnlyEmptySet<T> Instance = new();
-        public IEnumerator<T> GetEnumerator() { yield break; }
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            yield break;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
         public int Count => 0;
         public bool IsReadOnly => true;
-        public bool Contains(T item) => false;
-        public void CopyTo(T[] array, int arrayIndex) { }
-        public bool Add(T item) => throw new NotSupportedException();
-        void System.Collections.Generic.ICollection<T>.Add(T item) => throw new NotSupportedException();
-        public void Clear() => throw new NotSupportedException();
-        public bool Remove(T item) => throw new NotSupportedException();
-        public void ExceptWith(IEnumerable<T> other) => throw new NotSupportedException();
-        public void IntersectWith(IEnumerable<T> other) => throw new NotSupportedException();
-        public bool IsProperSubsetOf(IEnumerable<T> other) => other?.Any() ?? false;
-        public bool IsProperSupersetOf(IEnumerable<T> other) => false;
-        public bool IsSubsetOf(IEnumerable<T> other) => true;
-        public bool IsSupersetOf(IEnumerable<T> other) => !(other?.Any() ?? false);
-        public bool Overlaps(IEnumerable<T> other) => false;
-        public bool SetEquals(IEnumerable<T> other) => !(other?.Any() ?? false);
-        public void SymmetricExceptWith(IEnumerable<T> other) => throw new NotSupportedException();
-        public void UnionWith(IEnumerable<T> other) => throw new NotSupportedException();
+
+        public bool Contains(T item)
+        {
+            return false;
+        }
+
+        public void CopyTo(T[] array, int arrayIndex)
+        {
+        }
+
+        public bool Add(T item)
+        {
+            throw new NotSupportedException();
+        }
+
+        void ICollection<T>.Add(T item)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void Clear()
+        {
+            throw new NotSupportedException();
+        }
+
+        public bool Remove(T item)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void ExceptWith(IEnumerable<T> other)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void IntersectWith(IEnumerable<T> other)
+        {
+            throw new NotSupportedException();
+        }
+
+        public bool IsProperSubsetOf(IEnumerable<T> other)
+        {
+            return other.Any();
+        }
+
+        public bool IsProperSupersetOf(IEnumerable<T> other)
+        {
+            return false;
+        }
+
+        public bool IsSubsetOf(IEnumerable<T> other)
+        {
+            return true;
+        }
+
+        public bool IsSupersetOf(IEnumerable<T> other)
+        {
+            return !other.Any();
+        }
+
+        public bool Overlaps(IEnumerable<T> other)
+        {
+            return false;
+        }
+
+        public bool SetEquals(IEnumerable<T> other)
+        {
+            return !other.Any();
+        }
+
+        public void SymmetricExceptWith(IEnumerable<T> other)
+        {
+            throw new NotSupportedException();
+        }
+
+        public void UnionWith(IEnumerable<T> other)
+        {
+            throw new NotSupportedException();
+        }
     }
 }
