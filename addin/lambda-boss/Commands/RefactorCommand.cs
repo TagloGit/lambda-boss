@@ -1,11 +1,8 @@
+using ExcelDna.Integration;
+using LambdaBoss.Common;
+using LambdaBoss.UI;
 using System.Windows;
 using System.Windows.Interop;
-
-using ExcelDna.Integration;
-
-using LambdaBoss.UI;
-
-using LambdaBoss.Common;
 
 namespace LambdaBoss.Commands;
 
@@ -25,25 +22,25 @@ internal static class RefactorCommand
         try
         {
             dynamic app = ExcelDnaUtil.Application;
-            dynamic workbook = app.ActiveWorkbook;
+            var workbook = app.ActiveWorkbook;
             if (workbook == null)
                 return;
 
-            dynamic activeCell = app.ActiveCell;
+            var activeCell = app.ActiveCell;
             if (activeCell == null)
                 return;
 
-            dynamic worksheet = activeCell.Worksheet;
-            string sheetName = (string)worksheet.Name;
+            var worksheet = activeCell.Worksheet;
+            var sheetName = (string)worksheet.Name;
 
-            bool hasFormula = (bool)activeCell.HasFormula;
+            var hasFormula = (bool)activeCell.HasFormula;
             if (!hasFormula)
                 return;
 
             // Formula2 is the dynamic-array-aware reader — the legacy
             // Formula property returns `@`-prefixed text for spill-shaped
             // cells, which would corrupt our refactor.
-            string formula = (string)activeCell.Formula2;
+            var formula = (string)activeCell.Formula2;
 
             // PR 3 — snapshot the workbook + active-sheet defined-name
             // catalogue once when the dialog opens. The engine consults
@@ -156,11 +153,11 @@ internal static class RefactorCommand
         {
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            TryHarvestNames(dict, workbook?.Names, "workbook");
+            TryHarvestNames(dict, workbook.Names, "workbook");
 
             try
             {
-                TryHarvestNames(dict, worksheet?.Names, "worksheet");
+                TryHarvestNames(dict, worksheet.Names, "worksheet");
             }
             catch (Exception ex)
             {
@@ -178,13 +175,13 @@ internal static class RefactorCommand
             if (names is null) return;
             try
             {
-                int count = (int)names.Count;
+                var count = (int)names.Count;
                 for (var i = 1; i <= count; i++)
                 {
                     string? key = null;
                     try
                     {
-                        dynamic item = names[i];
+                        var item = names[i];
                         key = item.Name as string;
                         if (string.IsNullOrEmpty(key)) continue;
                         // Strip the sheet qualifier from worksheet-scoped

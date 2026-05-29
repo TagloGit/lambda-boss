@@ -137,25 +137,33 @@ public class EditLambdaCommandTests
     }
 
     [Fact]
-    public void BuildExpandedLet_FewerArgsThanParams_LeavesTrailingUnbound()
+    public void BuildExpandedLet_FewerArgsThanParams_BindsOmittedToNa()
     {
+        // No ISOMITTED default to extract, so omitted params fall back to NA()
+        // — a valid binding that surfaces #N/A rather than an invalid LET.
         var sig = new LambdaSignature(["x", "y", "z"], "x + y + z");
         var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
 
         Assert.Equal(Lines(
             "=LET(",
             "    x, A1,",
+            "    y, NA(),",
+            "    z, NA(),",
             "    x + y + z",
             ")"), result);
     }
 
     [Fact]
-    public void BuildExpandedLet_ZeroArgsWithParams_OmitsLetWrapper()
+    public void BuildExpandedLet_ZeroArgsWithParams_BindsOmittedToNa()
     {
         var sig = new LambdaSignature(["x"], "x + 1");
         var result = EditLambdaCommand.BuildExpandedLet(sig, []);
 
-        Assert.Equal("=x + 1", result);
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, NA(),",
+            "    x + 1",
+            ")"), result);
     }
 
     [Fact]
@@ -286,5 +294,163 @@ public class EditLambdaCommandTests
             "    y, MAX(x),",
             "    x + y",
             ")"), expanded);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_OmittedOptional_GeneratedLambda_MergesWrapperToDefault()
+    {
+        // LET to Lambda emits the optional param as `c, IF(ISOMITTED(c), 3, c)`.
+        // Omitting c should merge that wrapper back to the bare default `c, 3`.
+        var sig = LambdaSignatureParser.Parse(
+            "=LAMBDA(a, b, [c], LET(c, IF(ISOMITTED(c), 3, c), a + b + c))");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["1", "2"]);
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    a, 1,",
+            "    b, 2,",
+            "    c, 3,",
+            "    a + b + c",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_SuppliedOptional_GeneratedLambda_MergesWrapperToArg()
+    {
+        // Supplying c should merge the wrapper to the supplied argument, not the
+        // default.
+        var sig = LambdaSignatureParser.Parse(
+            "=LAMBDA(a, b, [c], LET(c, IF(ISOMITTED(c), 3, c), a + b + c))");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["1", "2", "9"]);
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    a, 1,",
+            "    b, 2,",
+            "    c, 9,",
+            "    a + b + c",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_OmittedOptional_HandAuthored_AddsParamBinding()
+    {
+        // EXPLODE-style: the wrapper's binding name (_size) differs from the
+        // param (chunk_size). The param has no binding of its own, so one is
+        // added with the extracted default, and the stray ISOMITTED is
+        // neutralised to FALSE.
+        var sig = LambdaSignatureParser.Parse(
+            "=LAMBDA(text, [chunk_size], "
+            + "LET(_size, IF(ISOMITTED(chunk_size), 1, chunk_size), "
+            + "MID(text, 1, _size)))");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    text, A1,",
+            "    chunk_size, 1,",
+            "    _size, IF(FALSE, 1, chunk_size),",
+            "    MID(text, 1, _size)",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_NeutralizesIsOmittedToFalse_ForSuppliedParam()
+    {
+        // `Help?, ISOMITTED(text)` references a supplied param; ISOMITTED is
+        // illegal in a LET so it must become FALSE.
+        var sig = LambdaSignatureParser.Parse(
+            "=LAMBDA(text, LET(Help?, ISOMITTED(text), IF(Help?, 0, text)))");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    text, A1,",
+            "    Help?, FALSE,",
+            "    IF(Help?, 0, text)",
+            ")"), result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_IsOmittedInsideStringLiteral_NotReplaced()
+    {
+        // The literal text "ISOMITTED" inside a help string must be left alone.
+        var sig = LambdaSignatureParser.Parse(
+            "=LAMBDA(x, LET(note, \"uses ISOMITTED(y) internally\", "
+            + "CONCAT(note, x)))");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
+
+        Assert.Contains("uses ISOMITTED(y) internally", result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_OmittedNoDefault_FallsBackToNa()
+    {
+        var sig = LambdaSignatureParser.Parse("=LAMBDA(x, y, x + y)");
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["A1"]);
+
+        Assert.Equal(Lines(
+            "=LET(",
+            "    x, A1,",
+            "    y, NA(),",
+            "    x + y",
+            ")"), result);
+    }
+
+    [Fact]
+    public void ExtractIsOmittedDefault_ParamSubstring_NotMatched()
+    {
+        // `size` must not match inside `chunk_size`.
+        var defaultFor = EditLambdaCommand.ExtractIsOmittedDefault(
+            ["IF(ISOMITTED(chunk_size), 1, chunk_size)"], "size");
+
+        Assert.Null(defaultFor);
+    }
+
+    [Fact]
+    public void ExtractIsOmittedDefault_NestedIf_ExtractsFullDefault()
+    {
+        var defaultFor = EditLambdaCommand.ExtractIsOmittedDefault(
+            ["IF(ISOMITTED(p), IF(A1>0, 1, 2), p)"], "p");
+
+        Assert.Equal("IF(A1>0, 1, 2)", defaultFor);
+    }
+
+    [Fact]
+    public void NeutralizeIsOmitted_ReplacesOutsideStringsOnly()
+    {
+        var result = EditLambdaCommand.NeutralizeIsOmitted(
+            "IF(ISOMITTED(a), \"ISOMITTED(b)\", a)");
+
+        Assert.Equal("IF(FALSE, \"ISOMITTED(b)\", a)", result);
+    }
+
+    [Fact]
+    public void BuildExpandedLet_FullExplode_ProducesValidLet()
+    {
+        // A faithful registered form of EXPLODE (no // comments, brackets kept
+        // on optional params). Calling with only `text` must yield a valid LET
+        // with no surviving ISOMITTED and both optional params bound.
+        var refersTo =
+            "=LAMBDA([text], [chunk_size], [horizontal], "
+            + "LET("
+            + "Help, TEXTSPLIT(\"FUNCTION: EXPLODE(text, chunk_size, horizontal)\", \"->\", \"|\"), "
+            + "Help?, ISOMITTED(text), "
+            + "_size, IF(ISOMITTED(chunk_size), 1, chunk_size), "
+            + "_horiz, IF(ISOMITTED(horizontal), FALSE, horizontal), "
+            + "_count, CEILING(LEN(text) / _size, 1), "
+            + "_starts, IF(_horiz, SEQUENCE(1, _count, 1, _size), SEQUENCE(_count, 1, 1, _size)), "
+            + "result, MID(text, _starts, _size), "
+            + "IF(Help?, Help, result)))";
+
+        var sig = LambdaSignatureParser.Parse(refersTo);
+        var result = EditLambdaCommand.BuildExpandedLet(sig, ["O13"]);
+
+        Assert.StartsWith("=LET(", result);
+        Assert.DoesNotContain("ISOMITTED", result);
+        Assert.Contains("text, O13,", result);
+        Assert.Contains("chunk_size, 1,", result);
+        Assert.Contains("horizontal, FALSE,", result);
+        Assert.Contains("Help?, FALSE,", result);
     }
 }
