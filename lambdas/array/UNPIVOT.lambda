@@ -1,0 +1,44 @@
+/*  FUNCTION NAME:      UNPIVOT
+    DESCRIPTION:*//**Reshapes a 2D crosstab into a tidy 3-column [RowHeading, ColHeading, Value] table.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-02  Claude      Initial version
+*/
+UNPIVOT = LAMBDA(
+//  Parameter Declarations
+    [range],
+    [dropBlanks],
+    [headers],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →UNPIVOT(range, dropBlanks, headers)¶" &
+                "DESCRIPTION:   →Reshapes a 2D crosstab into a tidy 3-column [RowHeading, ColHeading, Value] table.¶" &
+                "VERSION:       →Jun 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   range          →(Required) A 2D range whose first row and first column are headings; the top-left corner cell is ignored.¶" &
+                "   dropBlanks     →(Optional) If TRUE, omit rows whose value cell is blank/empty (sparse crosstabs). Default FALSE.¶" &
+                "   headers        →(Optional) If TRUE, prepend a header row (""Row"", ""Column"", ""Value""). Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=UNPIVOT(A1:C3)¶" &
+                "Result         →4-row x 3-col table of (row heading, column heading, value) triples",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(range),
+    //  Procedure
+        drop?, IF(ISOMITTED(dropBlanks), FALSE, dropBlanks),
+        header?, IF(ISOMITTED(headers), FALSE, headers),
+        nr, ROWS(range) - 1,
+        nc, COLUMNS(range) - 1,
+        rh, DROP(TAKE(range, , 1), 1),
+        ch, TOROW(DROP(TAKE(range, 1), , 1)),
+        vals, DROP(DROP(range, 1), , 1),
+        idx, SEQUENCE(nr * nc, 1, 0),
+        rk, INDEX(rh, INT(idx / nc) + 1, 1),
+        ck, INDEX(ch, 1, MOD(idx, nc) + 1),
+        vv, TOCOL(vals),
+        full, HSTACK(rk, ck, vv),
+        body, IF(drop?, FILTER(full, LEN(vv & "") > 0), full),
+        result, IF(header?, VSTACK(HSTACK("Row", "Column", "Value"), body), body),
+        IF(Help?, Help, result)
+)
+);
