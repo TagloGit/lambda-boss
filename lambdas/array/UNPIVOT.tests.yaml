@@ -36,6 +36,15 @@ tests:
       - ["are", "One", 3]
       - ["are", "Two", 4]
 
+  - name: headers as custom names array
+    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=FALSE", '={"Region","Metric","Amount"}']
+    expected:
+      - ["Region", "Metric", "Amount"]
+      - ["These", "One", 1]
+      - ["These", "Two", 2]
+      - ["are", "One", 3]
+      - ["are", "Two", 4]
+
   - name: single value cell crosstab
     args: ['={"","Col1";"Row1",42}']
     expected: [["Row1", "Col1", 42]]

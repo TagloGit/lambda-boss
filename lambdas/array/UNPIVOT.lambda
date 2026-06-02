@@ -16,7 +16,7 @@ UNPIVOT = LAMBDA(
                 "PARAMETERS:    →¶" &
                 "   range          →(Required) A 2D range whose first row and first column are headings; the top-left corner cell is ignored.¶" &
                 "   dropBlanks     →(Optional) If TRUE, omit rows whose value cell is blank/empty (sparse crosstabs). Default FALSE.¶" &
-                "   headers        →(Optional) If TRUE, prepend a header row (""Row"", ""Column"", ""Value""). Default FALSE.¶" &
+                "   headers        →(Optional) TRUE prepends a default header row (Row, Column, Value); or pass a 3-element array of custom column names. Default FALSE.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=UNPIVOT(A1:C3)¶" &
                 "Result         →4-row x 3-col table of (row heading, column heading, value) triples",
@@ -26,7 +26,9 @@ UNPIVOT = LAMBDA(
         Help?, ISOMITTED(range),
     //  Procedure
         drop?, IF(ISOMITTED(dropBlanks), FALSE, dropBlanks),
-        header?, IF(ISOMITTED(headers), FALSE, headers),
+        hdrCount, IF(ISOMITTED(headers), 0, ROWS(headers) * COLUMNS(headers)),
+        header?, IF(ISOMITTED(headers), FALSE, IF(hdrCount > 1, TRUE, N(headers))),
+        headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Row", "Column", "Value")),
         nr, ROWS(range) - 1,
         nc, COLUMNS(range) - 1,
         rh, DROP(TAKE(range, , 1), 1),
@@ -38,7 +40,7 @@ UNPIVOT = LAMBDA(
         vv, TOCOL(vals),
         full, HSTACK(rk, ck, vv),
         body, IF(drop?, FILTER(full, LEN(vv & "") > 0), full),
-        result, IF(header?, VSTACK(HSTACK("Row", "Column", "Value"), body), body),
+        result, IF(header?, VSTACK(headerRow, body), body),
         IF(Help?, Help, result)
 )
 );
