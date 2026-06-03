@@ -11,12 +11,12 @@ namespace LambdaBoss.Commands;
 /// </summary>
 internal static class ImportAllLambdasCommand
 {
-    public static void Run()
+    public static void Run(bool applyPrefix = true)
     {
-        Task.Run(RunAsync);
+        Task.Run(() => RunAsync(applyPrefix));
     }
 
-    private static async Task RunAsync()
+    private static async Task RunAsync(bool applyPrefix)
     {
         IReadOnlyList<LibraryInfo> libraries;
         var libraryLambdas = new List<(LibraryInfo Info, IReadOnlyList<(string Name, string Formula)> Lambdas)>();
@@ -34,16 +34,20 @@ internal static class ImportAllLambdasCommand
             {
                 try
                 {
+                    // When applyPrefix is false, an empty prefix yields bare names with no
+                    // function-reference rewriting (see PrefixRewriter.Apply / FetchedLibrary.LoadWithPrefix).
+                    var prefix = applyPrefix ? info.DefaultPrefix : "";
+
                     IReadOnlyList<(string Name, string Formula)> lambdas;
                     if (info.IsLocal)
                     {
                         lambdas = provider.LoadLocalLibrary(
-                            info.LocalSourceConfig!, info.FolderName, info.DefaultPrefix);
+                            info.LocalSourceConfig!, info.FolderName, prefix);
                     }
                     else
                     {
                         lambdas = await provider.LoadLibraryAsync(
-                            info.RepoConfig, info.FolderName, info.DefaultPrefix);
+                            info.RepoConfig, info.FolderName, prefix);
                     }
                     libraryLambdas.Add((info, lambdas));
                 }
@@ -65,7 +69,7 @@ internal static class ImportAllLambdasCommand
         {
             try
             {
-                InjectAll(libraryLambdas, fetchFailures);
+                InjectAll(libraryLambdas, fetchFailures, applyPrefix);
             }
             catch (Exception ex)
             {
@@ -77,7 +81,8 @@ internal static class ImportAllLambdasCommand
 
     private static void InjectAll(
         IReadOnlyList<(LibraryInfo Info, IReadOnlyList<(string Name, string Formula)> Lambdas)> libraryLambdas,
-        IReadOnlyList<(string Label, string Error)> fetchFailures)
+        IReadOnlyList<(string Label, string Error)> fetchFailures,
+        bool applyPrefix)
     {
         if (libraryLambdas.Count == 0 && fetchFailures.Count == 0)
         {
@@ -113,7 +118,8 @@ internal static class ImportAllLambdasCommand
                 ? info.LocalSourceConfig!.Path
                 : info.RepoConfig.Url;
 
-            var comment = LambdaLoader.BuildComment(sourceLabel, info.FolderName, info.DefaultPrefix);
+            var prefix = applyPrefix ? info.DefaultPrefix : "";
+            var comment = LambdaLoader.BuildComment(sourceLabel, info.FolderName, prefix);
 
             var existing = alreadyLoaded.FirstOrDefault(s =>
                 string.Equals(s.LibraryName, info.FolderName, StringComparison.OrdinalIgnoreCase)
