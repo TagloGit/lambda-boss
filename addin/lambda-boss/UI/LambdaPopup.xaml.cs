@@ -453,11 +453,19 @@ public partial class LambdaPopup
             }),
         new SlashCommand(
             "Import All Lambdas",
-            "Import every lambda from every configured library into the active workbook",
+            "Import every lambda from every configured library using each library's default prefix",
             () =>
             {
                 Hide();
                 ImportAllLambdasCommand.Run();
+            }),
+        new SlashCommand(
+            "Import All Lambdas (no prefix)",
+            "Import every lambda from every configured library with bare names (no prefix)",
+            () =>
+            {
+                Hide();
+                ImportAllLambdasCommand.Run(applyPrefix: false);
             }),
         new SlashCommand(
             "Settings",
