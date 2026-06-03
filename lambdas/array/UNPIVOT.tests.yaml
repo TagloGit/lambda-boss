@@ -1,0 +1,54 @@
+tests:
+  - name: basic 2x2 crosstab unpivots row-major
+    args: ['={"","One","Two";"These",1,2;"are",3,4}']
+    expected: [["These", "One", 1], ["These", "Two", 2], ["are", "One", 3], ["are", "Two", 4]]
+
+  - name: 4x3 value block walks across each row before moving down
+    args: ['={"","One","Two","Three";"These",1,2,3;"are",4,5,6;"my",7,8,9;"rows",10,11,12}']
+    expected:
+      - ["These", "One", 1]
+      - ["These", "Two", 2]
+      - ["These", "Three", 3]
+      - ["are", "One", 4]
+      - ["are", "Two", 5]
+      - ["are", "Three", 6]
+      - ["my", "One", 7]
+      - ["my", "Two", 8]
+      - ["my", "Three", 9]
+      - ["rows", "One", 10]
+      - ["rows", "Two", 11]
+      - ["rows", "Three", 12]
+
+  - name: dropBlanks omits empty value cells
+    args: ['={"","One","Two";"These",1,"";"are",3,4}', "=TRUE"]
+    expected: [["These", "One", 1], ["are", "One", 3], ["are", "Two", 4]]
+
+  - name: dropBlanks FALSE keeps blank value rows
+    args: ['={"","One","Two";"These",1,"";"are",3,4}', "=FALSE"]
+    expected: [["These", "One", 1], ["These", "Two", ""], ["are", "One", 3], ["are", "Two", 4]]
+
+  - name: headers prepends Row Column Value row
+    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=FALSE", "=TRUE"]
+    expected:
+      - ["Row", "Column", "Value"]
+      - ["These", "One", 1]
+      - ["These", "Two", 2]
+      - ["are", "One", 3]
+      - ["are", "Two", 4]
+
+  - name: headers as custom names array
+    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=FALSE", '={"Region","Metric","Amount"}']
+    expected:
+      - ["Region", "Metric", "Amount"]
+      - ["These", "One", 1]
+      - ["These", "Two", 2]
+      - ["are", "One", 3]
+      - ["are", "Two", 4]
+
+  - name: single value cell crosstab
+    args: ['={"","Col1";"Row1",42}']
+    expected: [["Row1", "Col1", 42]]
+
+  - name: help text
+    args: []
+    expected_type: array
