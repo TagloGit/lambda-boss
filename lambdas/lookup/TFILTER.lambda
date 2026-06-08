@@ -1,0 +1,32 @@
+/*  FUNCTION NAME:      TFILTER
+    DESCRIPTION:*//**Filters a table by a predicate mask and returns a table-object closure; call it with a header name to read that whole column across all kept rows.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-08  Claude      Initial version
+*/
+TFILTER = LAMBDA(
+//  Parameter Declarations
+    [Table],
+    [Keep],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →TFILTER(Table, Keep)¶" &
+                "DESCRIPTION:   →Filters a table by a predicate mask and returns a table-object closure; call it with a header name to read that whole column across all kept rows.¶" &
+                "VERSION:       →Jun 08 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Table          →(Required) Full table including its header row (e.g. tblData[#All]).¶" &
+                "   Keep           →(Required) Boolean mask, one value per data row, selecting which rows to keep (e.g. tblData[Age] > 30).¶" &
+                "RETURNS:       →A closure: call result(Header) for the whole column under that header. Pass an array of headers (e.g. HSTACK(""Person"",""City"")) to project several columns at once.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=LET(t, TFILTER(tblData[#All], tblData[Age] > 30), HSTACK(t(""Person""), t(""City"")))¶" &
+                "Result         →(Person and City columns for every row where Age > 30)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(Table),
+    //  Procedure
+        headers, CHOOSEROWS(Table, 1),
+        kept, FILTER(DROP(Table, 1), Keep),
+        result, LAMBDA(Header, CHOOSECOLS(kept, XMATCH(Header, headers))),
+        IF(Help?, Help, result)
+)
+);
