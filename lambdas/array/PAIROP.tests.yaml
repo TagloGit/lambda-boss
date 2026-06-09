@@ -1,0 +1,36 @@
+tests:
+  - name: horizontal vector default odd-even diff
+    args: ['={10,3,8,5}']
+    expected: [[7, 3]]
+
+  - name: vertical vector pairs along length and returns vertical
+    args: ['={10;3;8;5}']
+    expected: [[7], [3]]
+
+  - name: two-element array returns a single value
+    args: ['={10,3}']
+    expected: 7
+
+  - name: odd count passes the last element through unchanged
+    args: ['={10,3,8}']
+    expected: [[7, 8]]
+
+  - name: custom op pairwise sum
+    args: ['={10,3,8,5}', '=LAMBDA(a,b,a+b)']
+    expected: [[13, 13]]
+
+  - name: custom op reverses direction (even minus odd)
+    args: ['={10,3}', '=LAMBDA(a,b,b-a)']
+    expected: -7
+
+  - name: 2D defaults to pairing adjacent columns
+    args: ['={10,3,8,5;20,6,16,10}']
+    expected: [[7, 3], [14, 6]]
+
+  - name: 2D byRow pairs adjacent rows
+    args: ['={10,3;8,5;2,1;9,9}', '=LAMBDA(a,b,a-b)', '=TRUE']
+    expected: [[2, -2], [-7, -8]]
+
+  - name: help text
+    args: []
+    expected_type: array

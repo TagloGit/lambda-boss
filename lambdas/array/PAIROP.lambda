@@ -1,0 +1,48 @@
+/*  FUNCTION NAME:      PAIROP
+    DESCRIPTION:*//**Applies a binary op to consecutive pairs (odd vs even), collapsing each pair to one value.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-09  Claude      Initial version
+*/
+PAIROP = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [op],
+    [byRow],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PAIROP(array, op, byRow)¶" &
+                "DESCRIPTION:   →Applies a binary op to consecutive pairs (odd vs even element), collapsing each pair to one value. If the count is odd, the last unpaired element passes through unchanged.¶" &
+                "VERSION:       →Jun 09 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) Values to pair. A vector pairs along its length (either orientation); a 2D array pairs adjacent columns by default.¶" &
+                "   op             →(Optional) LAMBDA(a, b) applied to each pair — a is the odd element (1st, 3rd, …), b the even (2nd, 4th, …). Default LAMBDA(a, b, a - b).¶" &
+                "   byRow          →(Optional) For 2D arrays, TRUE pairs adjacent rows instead of columns. Ignored for vectors. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PAIROP({10,3,8,5})¶" &
+                "Result         →{7, 3}  (10-3, 8-5)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        f, IF(ISOMITTED(op), LAMBDA(a, b, a - b), op),
+        by?, IF(ISOMITTED(byRow), FALSE, byRow),
+        nr, ROWS(array),
+        nc, COLUMNS(array),
+        vector?, OR(nr = 1, nc = 1),
+        pairRows?, IF(vector?, nc = 1, by?),
+        data, IF(pairRows?, TRANSPOSE(array), array),
+        m, ROWS(data),
+        n, COLUMNS(data),
+        p, INT((n + 1) / 2),
+        rowIdx, SEQUENCE(m),
+        aIdx, SEQUENCE(1, p, 1, 2),
+        bIdx, SEQUENCE(1, p, 2, 2),
+        aGrid, INDEX(data, rowIdx, aIdx),
+        bGrid, INDEX(data, rowIdx, IF(bIdx > n, n, bIdx)),
+        orphanGrid, (rowIdx * 0) + (bIdx > n),
+        paired, MAP(aGrid, bGrid, orphanGrid, LAMBDA(a, b, orph, IF(orph, a, f(a, b)))),
+        result, IF(pairRows?, TRANSPOSE(paired), paired),
+        IF(Help?, Help, result)
+)
+);
