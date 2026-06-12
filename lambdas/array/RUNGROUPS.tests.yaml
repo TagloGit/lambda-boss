@@ -1,0 +1,24 @@
+tests:
+  - name: text runs encode to value and length
+    args: ['={"A";"A";"A";"B";"B";"C";"C";"C";"C"}']
+    expected: [["A", 3], ["B", 2], ["C", 4]]
+
+  - name: numeric runs
+    args: ['={5;5;7;7;7;5}']
+    expected: [[5, 2], [7, 3], [5, 1]]
+
+  - name: row orientation produces same N-by-2
+    args: ['={"A","A","B"}']
+    expected: [["A", 2], ["B", 1]]
+
+  - name: single run
+    args: ['={"X";"X";"X"}']
+    expected: [["X", 3]]
+
+  - name: all distinct elements each length 1
+    args: ['={1;2;3}']
+    expected: [[1, 1], [2, 1], [3, 1]]
+
+  - name: help text
+    args: []
+    expected_type: array

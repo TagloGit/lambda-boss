@@ -1,0 +1,28 @@
+tests:
+  - name: identical-neighbours mode on text column
+    args: ['={"A";"A";"A";"B";"B";"C";"C";"C";"C"}']
+    expected: [[1], [2], [3], [1], [2], [1], [2], [3], [4]]
+
+  - name: identical-neighbours mode on numbers
+    args: ['={5;5;7;7;7;5}']
+    expected: [[1], [2], [1], [2], [3], [1]]
+
+  - name: row orientation lifts back to a row
+    args: ['={"A","A","B"}']
+    expected: [[1, 2, 1]]
+
+  - name: with-match streak of target value
+    args: ['={1;1;0;1;1;1;0}', '=1']
+    expected: [[1], [2], [0], [1], [2], [3], [0]]
+
+  - name: with-match text target
+    args: ['={"x";"x";"y";"x"}', '="x"']
+    expected: [[1], [2], [0], [1]]
+
+  - name: single element returns 1
+    args: ['={"Z"}']
+    expected: 1
+
+  - name: help text
+    args: []
+    expected_type: array

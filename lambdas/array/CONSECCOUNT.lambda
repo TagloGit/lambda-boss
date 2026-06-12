@@ -1,0 +1,37 @@
+/*  FUNCTION NAME:      CONSECCOUNT
+    DESCRIPTION:*//**Returns a running consecutive-run counter at each position of a 1D array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-12  Claude      Initial version
+*/
+CONSECCOUNT = LAMBDA(
+//  Parameter Declarations
+    [vector],
+    [match],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CONSECCOUNT(vector, match)¶" &
+                "DESCRIPTION:   →Returns a running consecutive-run counter at each position of a 1D array.¶" &
+                "VERSION:       →Jun 12 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
+                "   match          →(Optional) If omitted: counter = previous count + 1 when an element equals its predecessor, else 1 (longest run of any value). If supplied: counter increments while an element equals match, resets to 0 otherwise (longest streak of that value).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CONSECCOUNT({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
+                "Result         →{1;2;3;1;2;1}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(vector),
+        useMatch, NOT(ISOMITTED(match)),
+    //  Procedure
+        col, TOCOL(vector),
+        n, ROWS(col),
+        matchVal, IF(useMatch, match, ""),
+        runWith, SCAN(0, col, LAMBDA(acc, x, IF(x = matchVal, acc + 1, 0))),
+        boundaries, MAP(SEQUENCE(n), LAMBDA(i, IF(i = 1, 1, IF(INDEX(col, i) = INDEX(col, i - 1), 0, 1)))),
+        runNo, MAP(SEQUENCE(n), LAMBDA(i, i - MAX(SEQUENCE(i) * INDEX(boundaries, SEQUENCE(i))) + 1)),
+        running, IF(useMatch, runWith, runNo),
+        result, IF(COLUMNS(vector) > 1, TRANSPOSE(running), running),
+        IF(Help?, Help, result)
+)
+);
