@@ -23,20 +23,20 @@ tests:
     args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3']
     expected: [[1, 2, 3], [4, 5, 6], [7, 8, 0]]
 
-  - name: error mode returns the result when the block fits
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=2', '=2', "error"]
+  - name: error mode (1) returns the result when the block fits
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=2', '=2', "=1"]
     expected: [[1, 2, 3], [4, 0, 0], [7, 0, 0]]
 
-  - name: error mode returns N/A when the block does not fit
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "error"]
+  - name: error mode (1) returns N/A when the block does not fit
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "=1"]
     expected: -2146826246
 
-  - name: wrap mode wraps the overhang modulo host dims
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "wrap"]
+  - name: wrap mode (3) wraps the overhang modulo host dims
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "=3"]
     expected: [[0, 2, 0], [4, 5, 6], [0, 8, 0]]
 
-  - name: expand mode grows the output so the block fits
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "expand"]
+  - name: expand mode (2) grows the output so the block fits
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "=2"]
     expected: [[1, 2, 3, ""], [4, 5, 6, ""], [7, 8, 0, 0], ["", "", 0, 0]]
 
   - name: invalid anchor (row below 1) errors cleanly

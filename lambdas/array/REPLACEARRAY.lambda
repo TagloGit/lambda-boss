@@ -20,7 +20,7 @@ REPLACEARRAY = LAMBDA(
                 "   with           →(Required) Scalar, vector, or 2-D block to stamp in. Blank cells read as 0 (INDEX quirk).¶" &
                 "   at             →(Optional) Anchor (top-left): numeric row (pair with col) or an A1 text address like ""B2"". Default (1,1).¶" &
                 "   col            →(Optional) Anchor column when at is numeric. Ignored when at is a text address. Default 1.¶" &
-                "   overflow       →(Optional) Edge handling when the block runs past the host: clip (default), error, expand, or wrap.¶" &
+                "   overflow       →(Optional) Edge handling when the block runs past the host: (0) clip [default], (1) error, (2) expand, (3) wrap.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=REPLACEARRAY({1,2,3;4,5,6;7,8,9}, {0,0;0,0}, 2, 2)¶" &
                 "Result         →{1,2,3;4,0,0;7,0,0}",
@@ -37,7 +37,7 @@ REPLACEARRAY = LAMBDA(
         baseCol, IFERROR(MIN(COLUMN(replace)), 1),
         atRow, IF(ISOMITTED(at), 1, IF(ISTEXT(at), ROWNUM(at) - baseRow + 1, at)),
         atCol, IF(ISOMITTED(at), 1, IF(ISTEXT(at), COLNUM(at) - baseCol + 1, IF(ISOMITTED(col), 1, col))),
-        mode, LOWER(IF(ISOMITTED(overflow), "clip", overflow)),
+        mode, IF(ISOMITTED(overflow), 0, overflow),
         validAnchor, AND(atRow >= 1, atCol >= 1, atRow = INT(atRow), atCol = INT(atCol)),
     //  Host-sized sequences (clip / error / wrap)
         rseq, SEQUENCE(nRows),
@@ -72,9 +72,9 @@ REPLACEARRAY = LAMBDA(
         expandResult, IF(eMask, INDEX(with, bsrcRow, bsrcCol), hostVal),
     //  Dispatch on overflow mode
         result, IF(NOT(validAnchor), NA(),
-                  IFS(mode = "error", errResult,
-                      mode = "wrap", wrapResult,
-                      mode = "expand", expandResult,
+                  IFS(mode = 1, errResult,
+                      mode = 2, expandResult,
+                      mode = 3, wrapResult,
                       TRUE, clipResult)),
         IF(Help?, Help, result)
 )
