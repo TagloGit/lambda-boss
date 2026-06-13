@@ -49,10 +49,17 @@ The packed XLL lands at `addin/lambda-boss/bin/Release/net48/publish/lambda-boss
 - Default branch: `main`
 - **Never use compound Bash commands** (no `&&`, `;`, or `|` chaining). Use separate Bash tool calls instead — independent calls can run in parallel. Compound commands trigger extra permission prompts.
 - **Never prefix Bash commands with `cd`**. The working directory is already the project root. All commands (`gh`, `git`, `npm`, etc.) work without `cd`.
-- **Passing `gh` bodies (release notes, issue/PR bodies) from PowerShell.** Encoding is *not* the problem: UTF-8 — em-dashes, curly quotes — round-trips correctly inline through PowerShell → `gh` → GitHub (verified). The ASCII-only rule is for `.ps1` *files on disk* (windows-1252), not command-line arguments. Two real constraints decide the method:
-  - **Harness command-length limit (~965 bytes).** The permission layer parses the entire command string and rejects longer commands as malformed (`Command too long for parsing`). Most real bodies exceed this when passed inline.
-  - **Windows PowerShell 5.1 splits embedded straight double-quotes** (`"`) when passing arguments to a native exe like `gh.exe`, breaking one argument into several.
-  - So: **short, quote-free bodies** → pass inline via `--notes`/`--body` with a `@'...'@` here-string. **Anything longer, or containing `"`** → write the body to a temp file **outside the repo** (e.g. under `$env:TEMP`) with the Write tool and use `gh ... --body-file`, then delete it. Never leave a body `.md` file in the repo.
+- **Passing `gh` bodies and commit messages (multi-line text with apostrophes / quotes / `@`).** The Bash tool here is **real git-bash**, so the robust default is a **bash quoted heredoc** — `<<'EOF'` disables every expansion, making apostrophes (`doesn't`), `@`, `"`, `$`, and backticks all literal. No temp file, no delete:
+  ```bash
+  gh issue create --title "..." --body "$(cat <<'EOF'
+  Body text — apostrophes and "quotes" are safe.
+  EOF
+  )"
+  ```
+  Use the same `git commit -F - <<'EOF' … EOF` form for commit messages. Two things to avoid:
+  - **Never type PowerShell `@'...'@` here-strings into the Bash tool.** Bash reads `@` as a literal and `'...'` as an ordinary quote, so it injects stray `@` lines and hard-errors on the first apostrophe. (Don't use the PowerShell tool either: PS 5.1 silently *drops embedded straight double-quotes* when handing the arg to `gh.exe` — verified lossy.)
+  - **Harness command-length limit (~965 bytes).** The permission layer parses the entire command string and rejects longer commands as malformed (`Command too long for parsing`). Only when a body genuinely exceeds this: write it to a temp file **outside the repo** (e.g. under `$env:TEMP`) with the Write tool, use `gh ... --body-file`, then delete it. Never leave a body `.md` file in the repo.
+  - Encoding is *not* a problem: UTF-8 (em-dashes, curly quotes) round-trips correctly through `gh` → GitHub. The ASCII-only rule is for `.ps1` *files on disk* (windows-1252), not command-line arguments.
 - **Always use `Range.Formula2`, never `Range.Formula`.** The legacy `Formula` property silently wraps array refs (e.g. `A1#`) with the implicit-intersection `@` operator on write and returns `@`-prefixed text on read, which scalarises dynamic-array formulas. `Formula2` is the modern dynamic-array-aware property — use it for both read and write, regardless of whether the formula in question is array-shaped.
 
 ## Net48 polyfills
