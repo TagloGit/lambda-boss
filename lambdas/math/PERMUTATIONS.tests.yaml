@@ -1,0 +1,36 @@
+tests:
+  - name: full permutations of 3 letters
+    args: ['={"A";"B";"C"}']
+    expected:
+      - ["A", "B", "C"]
+      - ["A", "C", "B"]
+      - ["B", "A", "C"]
+      - ["B", "C", "A"]
+      - ["C", "A", "B"]
+      - ["C", "B", "A"]
+
+  - name: k-permutations 2 of 3
+    args: ['={"A";"B";"C"}', "=2"]
+    expected:
+      - ["A", "B"]
+      - ["A", "C"]
+      - ["B", "A"]
+      - ["B", "C"]
+      - ["C", "A"]
+      - ["C", "B"]
+
+  - name: delim joins each row
+    args: ['={"A";"B";"C"}', "=2", "|"]
+    expected: [["A|B"], ["A|C"], ["B|A"], ["B|C"], ["C|A"], ["C|B"]]
+
+  - name: row vector input is normalised to column
+    args: ['={"A","B"}']
+    expected: [["A", "B"], ["B", "A"]]
+
+  - name: k greater than count returns NA
+    args: ['={"A";"B"}', "=3"]
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array

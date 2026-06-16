@@ -1,0 +1,50 @@
+/*  FUNCTION NAME:      PERMUTEINDICES
+    DESCRIPTION:*//**Returns a P(n,k) by k matrix of ordered k-permutation indices in 1..n, lexicographic order.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-16  Claude      Initial version
+*/
+PERMUTEINDICES = LAMBDA(
+//  Parameter Declarations
+    [n],
+    [k],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PERMUTEINDICES(n, k)¶" &
+                "DESCRIPTION:   →Returns a P(n,k) by k matrix of ordered k-permutation indices in 1..n, lexicographic order.¶" &
+                "VERSION:       →Jun 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   n              →(Required) Population size. Positive integer.¶" &
+                "   k              →(Optional) Permutation length, 1 ≤ k ≤ n. Default = n (full permutations).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PERMUTEINDICES(3)¶" &
+                "Result         →6x3 matrix: {1,2,3; 1,3,2; 2,1,3; 2,3,1; 3,1,2; 3,2,1}¶" &
+                "NOTE:          →Pair with PERMUTATIONS for value lookup. Returns NA() when n<1, k<1, k>n, or either argument is non-integer.",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(n),
+        kEff, IF(ISOMITTED(k), n, k),
+        valid?, AND(n >= 1, kEff >= 1, kEff <= n, n = INT(n), kEff = INT(kEff)),
+    //  Procedure
+        result, IF(NOT(valid?), NA(),
+                   IF(kEff = 1, SEQUENCE(n),
+                      REDUCE(SEQUENCE(n), SEQUENCE(kEff - 1, 1, 2), LAMBDA(prev, targetK,
+                          LET(
+                              kPrev,    targetK - 1,
+                              newCol,   SEQUENCE(1, n),
+                              mask,     REDUCE(1, SEQUENCE(kPrev), LAMBDA(acc, colNum,
+                                            acc * (INDEX(prev, , colNum) <> newCol))),
+                              buildCol, LAMBDA(srcCol, TOCOL(IFS(mask, srcCol), 2)),
+                              seed,     buildCol(TAKE(prev, , 1)),
+                              prevPart, IF(kPrev = 1, seed,
+                                           REDUCE(seed,
+                                                  SEQUENCE(kPrev - 1, 1, 2),
+                                                  LAMBDA(acc, colIdx,
+                                                      HSTACK(acc, buildCol(INDEX(prev, , colIdx)))))),
+                              HSTACK(prevPart, buildCol(newCol))
+                          )
+                      ))
+                   )),
+        IF(Help?, Help, result)
+)
+);
