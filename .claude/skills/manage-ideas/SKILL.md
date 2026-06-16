@@ -1,15 +1,18 @@
 ---
 name: manage-ideas
-description: "Sync LAMBDA ideas between Notion and GitHub Issues, and refresh the Current Lambdas catalogue in Notion. Usage: /manage-ideas"
+description: "Sync LAMBDA ideas between Notion and GitHub Issues, refresh the Current Lambdas catalogue in Notion, and close idea issues whose LAMBDA has shipped. Usage: /manage-ideas"
 allowed-tools: Bash, Read, Glob, Grep, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Notion__notion-move-pages, mcp__claude_ai_Notion__notion-update-page
 ---
 
 # Manage Ideas — lambda-boss
 
-Keep the Notion ⇄ GitHub idea bridge in sync, in both directions:
+Keep the Notion ⇄ GitHub idea bridge in sync, in both directions, doing the **least work necessary**:
 
 - **Inbound**: sync new LAMBDA ideas from Notion to GitHub Issues.
-- **Outbound**: refresh the "Current Lambdas" Notion page with the LAMBDAs already shipped in this repo, so new ideas can be vetted for duplication.
+- **Outbound**: refresh the "Current Lambdas" Notion catalogue with the LAMBDAs shipped in this repo.
+- **Reconcile**: close `lambda-idea` issues whose LAMBDA has just shipped.
+
+The repo is version-controlled, so **git is the source of truth for what changed**. The catalogue page stamps the commit it was last built from; each run diffs against that commit and only touches what moved. A run where nothing changed and no new idea exists should do almost nothing.
 
 ## Key Notion page IDs
 
@@ -20,80 +23,142 @@ Keep the Notion ⇄ GitHub idea bridge in sync, in both directions:
 | Current Lambdas (catalogue) | `3437b3d23d2f819595bac162a5268640` |
 | Synced to GitHub (archive, child of LAMBDA ideas) | discovered at runtime — created if missing |
 
-## Flow
+---
 
-1. **Refresh Current Lambdas** — rebuild the Notion catalogue from the repo so the Outbound view is current.
-2. **Sync ideas inbound** — fetch `LAMBDA ideas`, create GitHub Issues for any unsynced child pages, move them to `Synced to GitHub`.
-3. Report what was done in both directions.
+## Step 0 — Detect what actually needs doing
+
+Run these cheap probes first, then run only the parts that have work.
+
+1. **Fetch the catalogue page once** (used for the sync marker *and* as the row cache for delta rebuilds):
+
+   ```
+   notion-fetch id: 3437b3d23d2f819595bac162a5268640
+   ```
+
+   Extract the **last-synced commit SHA** from the header line:
+
+   ```
+   _Last synced: <YYYY-MM-DD> · commit `<short-sha>`_
+   ```
+
+   If the header has **no commit SHA** (e.g. a catalogue built by the old version of this skill), treat the outbound delta as a **full rebuild** (Step A, full path).
+
+2. **Compute the lambda delta** against that SHA:
+
+   ```bash
+   git rev-parse --short HEAD
+   ```
+   ```bash
+   git diff --name-status <last-synced-sha> HEAD -- lambdas
+   ```
+
+   Keep only `*.lambda` paths. Classify: `A` = added, `M` = modified, `D` = deleted, `R…` = rename (treat as delete-old + add-new). If `<last-synced-sha>` is missing or `git diff` errors (unknown SHA), fall back to a full rebuild.
+
+3. **Probe the inbound inbox** for unsynced ideas:
+
+   ```
+   notion-fetch id: 3407b3d23d2f80aa9ac4e4903868d7c8
+   ```
+
+   Count child `<page>` elements, excluding the "Synced to GitHub" archive container.
+
+Decide the plan:
+
+| Condition | Run |
+| --- | --- |
+| No lambda delta **and** no SHA-missing fallback | Skip Step A (report "catalogue unchanged") |
+| Lambda delta present (or SHA missing) | Step A |
+| Any **added** (`A`) lambdas | Step B (reconcile) |
+| Any unsynced child pages | Step C (inbound) |
+
+State the plan in one line before doing the work, e.g. _"2 lambdas changed, 1 added, 1 new idea → refresh catalogue, reconcile 1, sync 1."_
 
 ---
 
-## Part A — Refresh "Current Lambdas" (Outbound)
+## Step A — Refresh "Current Lambdas" (delta rebuild)
 
-### A1 — Enumerate the LAMBDAs in the repo
+The catalogue is grouped by library (H2), each with a three-column table: **Name** | **Description** | **Calculation**. You will reassemble the **whole** page and `replace_content` it, but only *re-derive* the rows that changed — unchanged rows are reused verbatim from the page fetched in Step 0.
 
-Use Glob on `lambdas/**/*.lambda`. Group by the library folder (e.g. `array`, `string`). For each library, also read `lambdas/<library>/_library.yaml` to get its `name` and `description`.
+### A1 — Reuse unchanged rows
 
-For every `.lambda` file, extract:
+From the catalogue markdown fetched in Step 0, parse the existing rows keyed by LAMBDA name. Every lambda **not** in the delta keeps its existing row text exactly as-is. Do **not** re-read its `.lambda` file.
 
-- **Name** — the function name, from the `FUNCTION NAME:` header.
+(Full-rebuild fallback: when there is no SHA marker, skip A1 — every lambda is "changed", so derive all rows in A2 as the original skill did.)
+
+### A2 — Derive rows for the delta only
+
+For each added/modified `.lambda` file in the delta, read it and extract:
+
+- **Name** — the function name from the `FUNCTION NAME:` header.
 - **Description** — the one-line blurb inside the `/**...*/` JavaDoc comment on line 2.
 - **Calculation** — the meaningful formula logic from the `//  Procedure` section, **excluding**:
   - the `Help` TEXTSPLIT block,
   - the `//  Check inputs` bindings (`Help?`, `ISOMITTED(...)` guards, default-value normalisers like `IF(ISOMITTED(x), default, x)`),
   - the final `IF(Help?, Help, result)` return.
 
-Collapse to a compact inline formula. Intermediate LET bindings can be inlined or described in prose (e.g. "… where `_count = CEILING(LEN(text)/_size, 1)`"). Aim for a single backticked expression per row; use prose only when inlining would hurt readability.
+  Collapse to a compact inline formula. Intermediate LET bindings can be inlined or described in prose (e.g. "… where `_count = CEILING(LEN(text)/_size, 1)`"). Aim for a single backticked expression per row; prose only when inlining would hurt readability. Prefer fidelity over prettiness — the reader is checking for duplicate *logic*, so the formula must be recognisable, not necessarily runnable.
 
-### A2 — Build the page content
+For each **deleted/renamed-away** lambda, drop its row.
 
-Produce Notion-flavoured Markdown with one H2 per library (sorted alphabetically by library name), each containing:
+For a library that gains its first lambda, or whose folder is new, read `lambdas/<library>/_library.yaml` for its `name` and `description`. (Library headers/descriptions for unchanged libraries are reused from the fetched page.)
 
-- The library's `description` in italics.
-- A three-column table: **Name** | **Description** | **Calculation**.
+### A3 — Reassemble and replace
 
-Rows sorted alphabetically by LAMBDA name.
-
-Header block at the top of the page:
+Build the full page: one H2 per library (sorted alphabetically), library `description` in italics, rows sorted alphabetically by LAMBDA name. Header block:
 
 ```markdown
 Catalogue of LAMBDAs already implemented in [TagloGit/lambda-boss](https://github.com/TagloGit/lambda-boss). Check this list before proposing new LAMBDA ideas to avoid duplicates.
 
-_Last synced: <YYYY-MM-DD>_
+_Last synced: <today YYYY-MM-DD> · commit `<short-sha from git rev-parse>`_
 ```
 
-### A3 — Replace the Current Lambdas page content
+The `<short-sha>` **must** be the `git rev-parse --short HEAD` value from Step 0 — that is what the next run diffs against. Then:
 
 ```
 notion-update-page
   page_id: 3437b3d23d2f819595bac162a5268640
   command: replace_content
-  new_str: <the markdown from A2>
+  new_str: <the reassembled markdown>
 ```
 
-Use `replace_content` (not `update_content`) so the page is fully rebuilt each run — this is the source of truth.
+Use `replace_content` (not `update_content`) — the page is the source of truth and is fully rewritten each run.
 
 ---
 
-## Part B — Sync ideas inbound (Notion → GitHub)
+## Step B — Reconcile shipped ideas (close implemented idea issues)
 
-### B1 — Fetch the LAMBDA ideas page
+Run only when the delta contains **added** (`A`) lambdas — a newly shipped LAMBDA may be the implementation of an open idea issue that was never linked with `Closes #NN`.
 
-```
-notion-fetch id: 3407b3d23d2f80aa9ac4e4903868d7c8
-```
+1. List open idea issues:
 
-Parse the child pages from the `<content>` block. Each `<page>` element is a potential idea. Extract the page URL/ID and title.
+   ```bash
+   gh issue list -R TagloGit/lambda-boss --label lambda-idea --state open --json number,title,body
+   ```
 
-Skip any child page titled "Synced to GitHub" — this is the archive container.
+2. For each newly added LAMBDA, judge whether it implements one of those open issues — match on function name and intent (the issue title is `LAMBDA idea: <name>`; compare against the LAMBDA's name and description). Be conservative: only act on a **confident** match.
 
-If there are no unsynced child pages, skip to Part C.
+3. For a confident match, close the issue and mark it done:
 
-### B2 — Ensure "Synced to GitHub" archive page exists
+   ```bash
+   gh issue edit <NN> -R TagloGit/lambda-boss --add-label "status: done" --remove-label "status: backlog"
+   ```
+   ```bash
+   gh issue close <NN> -R TagloGit/lambda-boss --comment "Shipped as LAMBDA \`<NAME>\` (\`lambdas/<lib>/<NAME>.lambda\`). Closing the idea."
+   ```
 
-Check whether a child page titled "Synced to GitHub" already exists under the LAMBDA ideas page (from Step B1 results).
+   (Remove whichever status label the issue currently carries — usually `status: backlog`.)
 
-If it does NOT exist, create it:
+4. For an **uncertain** match, do not touch the issue; list it under "Possible matches — needs Tim" in the report.
+
+---
+
+## Step C — Sync ideas inbound (Notion → GitHub)
+
+Run only when Step 0 found unsynced child pages.
+
+### C1 — Ensure the "Synced to GitHub" archive exists
+
+From the inbox fetch in Step 0, check for a child page titled "Synced to GitHub". If absent, create it and save its ID for C4:
 
 ```
 notion-create-pages
@@ -101,34 +166,22 @@ notion-create-pages
   pages: [{ properties: { "title": "Synced to GitHub" }, content: "Archive of LAMBDA ideas that have been synced to GitHub Issues." }]
 ```
 
-Save the page ID of the "Synced to GitHub" page for use in Step B4.
+### C2 — Cheap duplicate check (names, not the catalogue)
 
-### B3 — For each unsynced idea page
+Build the set of existing LAMBDA names from a filename Glob — `lambdas/**/*.lambda`, take each basename without extension. This is all the dedup check needs; **do not** rebuild or re-read the catalogue for this. (Step A, if it ran, already gives you the names too.)
 
-Fetch the full content of the idea page:
+### C3 — For each unsynced idea page
 
 ```
 notion-fetch id: <page-id>
 ```
 
-**Duplicate check** — compare the idea's title/intent against the Current Lambdas catalogue you just rebuilt in Part A. If it clearly duplicates an existing LAMBDA, do NOT create an issue. Instead:
+**Duplicate check** — compare the idea's title/intent against the existing LAMBDA names from C2. If it clearly duplicates an existing LAMBDA:
 
 - Leave the Notion page where it is (do not archive it).
-- Add it to the "Skipped (duplicates)" section of the final report, noting the existing LAMBDA it matches.
+- Add it to the "Skipped (duplicates)" section of the report, noting the LAMBDA it matches.
 
-Otherwise, convert the Notion content into a GitHub Issue body:
-
-```markdown
-## Origin
-
-Synced from Notion: [<page-title>](<page-url>)
-
-## Content
-
-<paste the idea page content here, converted to GitHub-flavoured markdown>
-```
-
-Create the GitHub Issue with a HEREDOC body:
+Otherwise, create the GitHub Issue:
 
 ```bash
 gh issue create -R TagloGit/lambda-boss \
@@ -146,9 +199,9 @@ EOF
 )"
 ```
 
-### B4 — Move synced page to archive
+### C4 — Move synced page to archive
 
-After the issue is created successfully, move the Notion page to "Synced to GitHub":
+After the issue is created successfully:
 
 ```
 notion-move-pages
@@ -158,34 +211,41 @@ notion-move-pages
 
 ---
 
-## Part C — Report results
+## Step D — Report results
 
-Summarise both directions:
+Summarise only what ran:
 
 ```
-Current Lambdas refreshed: N LAMBDAs across M libraries.
+Catalogue: refreshed (3 rows changed, 1 added, 0 removed) at commit a1b2c3d.
+  — or — Catalogue: unchanged (no lambda changes since a1b2c3d).
+
+Reconciled (closed implemented idea issues):
+- TagloGit/lambda-boss#NN "Weighted Score Calculator" — shipped as WSCORE
 
 Synced N idea(s) from Notion to GitHub:
 - "Weighted Score Calculator" -> TagloGit/lambda-boss#NN
 
 Skipped as duplicates:
 - "Running Total" — matches existing CUMSUMGRID
+
+Possible matches — needs Tim:
+- TagloGit/lambda-boss#MM "Foo" — maybe shipped as FOOBAR? (unsure)
 ```
 
-If nothing was synced and nothing was skipped: "No new ideas to sync."
-If the catalogue was unchanged from last run, still report "Current Lambdas refreshed".
+If a section is empty, omit it. If nothing ran at all: "Nothing to do — catalogue current, no new ideas."
 
 ## Idempotency
 
-This skill is safe to run repeatedly:
-- Part A rebuilds the catalogue every run — content is replaced, not appended.
-- Ideas already moved to "Synced to GitHub" won't appear as child pages of "LAMBDA ideas" on the next run.
-- The "Synced to GitHub" page is created only if it doesn't exist.
+- The catalogue is rebuilt from git state and stamped with HEAD's SHA; a re-run with no new commits finds an empty delta and skips Step A.
+- Ideas already moved to "Synced to GitHub" don't appear as inbox children next run.
+- The "Synced to GitHub" page is created only if missing.
+- Reconciliation only closes issues on a confident match and is a no-op once they're closed.
 
 ## Behaviour Notes
 
 - Do NOT modify the content of idea pages — sync them as-is.
 - Do NOT create specs or plans from ideas — they go to the backlog for triage.
-- Strip the "LAMBDA: " prefix from page titles when creating issue titles (use "LAMBDA idea: <name>" format).
+- Strip the "LAMBDA: " prefix from idea titles when creating issues (use "LAMBDA idea: <name>").
 - If a Notion page fetch fails, skip it and report the error — don't stop the whole sync.
-- When extracting the Calculation column, prefer fidelity over prettiness — the reader is checking for duplicate *logic*, so the formula must be recognisable, not necessarily runnable.
+- If parsing the existing catalogue for row-reuse fails for a given library/row, re-derive that row from its `.lambda` file rather than dropping it.
+- The first run after this skill update will find no SHA marker → one full rebuild that plants the marker; every run after is incremental.
