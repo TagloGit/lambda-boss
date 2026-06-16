@@ -1,0 +1,36 @@
+tests:
+  - name: E5
+    args: ["=5", "=5"]
+    expected: "E5"
+
+  - name: A1 top-left
+    args: ["=1", "=1"]
+    expected: "A1"
+
+  - name: max column XFD
+    args: ["=16384", "=16384"]
+    expected: "XFD16384"
+
+  - name: multi-letter column AA
+    args: ["=10", "=27"]
+    expected: "AA10"
+
+  - name: inverse of ROWNUM/COLNUM
+    args: ['=ROWNUM("E5")', '=COLNUM("E5")']
+    expected: "E5"
+
+  - name: vertical array of rows lifts
+    args: ['={1;5;17}', "=2"]
+    expected: [["B1"], ["B5"], ["B17"]]
+
+  - name: horizontal array of cols lifts
+    args: ["=3", '={1,2,3}']
+    expected: [["A3", "B3", "C3"]]
+
+  - name: row column-vector broadcasts against col row-vector into a grid
+    args: ['={1;2}', '={1,2,3}']
+    expected: [["A1", "B1", "C1"], ["A2", "B2", "C2"]]
+
+  - name: help text
+    args: []
+    expected_type: array

@@ -2,27 +2,29 @@
     DESCRIPTION:*//**Stamps a scalar, vector, or 2-D block into a host array at an anchor, preserving the host's shape (or growing it in expand mode).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-13  Claude      Initial version
+                        2026-06-16  Claude      Single-scalar anchor: at accepts an A1 address or an encoded pos (drop the col param); add explicit origin per the position convention
+                        2026-06-16  Claude      origin is a workbook reference only (single cell or range; top-left used) — no text-address form, and no ISTEXT test that lifted on a 2-D range
 */
 REPLACEARRAY = LAMBDA(
 //  Parameter Declarations
     [replace],
     [with],
     [at],
-    [col],
     [overflow],
+    [origin],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →REPLACEARRAY(replace, with, [at], [col], [overflow])¶" &
+                "FUNCTION:      →REPLACEARRAY(replace, with, [at], [overflow], [origin])¶" &
                 "DESCRIPTION:   →Stamps a scalar, vector, or 2-D block into a host array at an anchor, preserving the host's shape (or growing it in expand mode).¶" &
-                "VERSION:       →Jun 13 2026¶" &
+                "VERSION:       →Jun 16 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   replace        →(Required) Host array to write into.¶" &
                 "   with           →(Required) Scalar, vector, or 2-D block to stamp in. Blank cells read as 0 (INDEX quirk).¶" &
-                "   at             →(Optional) Anchor (top-left): numeric row (pair with col) or an A1 text address like ""B2"". Default (1,1).¶" &
-                "   col            →(Optional) Anchor column when at is numeric. Ignored when at is a text address. Default 1.¶" &
+                "   at             →(Optional) Anchor (top-left) as a single scalar: an A1 text address like ""B2"" or an encoded pos (row*100000+col, e.g. from POSAT). Default = origin (top-left).¶" &
                 "   overflow       →(Optional) Edge handling when the block runs past the host: (0) clip [default], (1) error, (2) expand, (3) wrap.¶" &
+                "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Defaults to the host's own top-left — inferred for a reference, (1,1) for an array.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=REPLACEARRAY({1,2,3;4,5,6;7,8,9}, {0,0;0,0}, 2, 2)¶" &
+                "Formula        →=REPLACEARRAY({1,2,3;4,5,6;7,8,9}, {0,0;0,0}, ""B2"")¶" &
                 "Result         →{1,2,3;4,0,0;7,0,0}",
                 "→", "¶"
                 ),
@@ -35,8 +37,12 @@ REPLACEARRAY = LAMBDA(
         wCols, COLUMNS(with),
         baseRow, IFERROR(MIN(ROW(replace)), 1),
         baseCol, IFERROR(MIN(COLUMN(replace)), 1),
-        atRow, IF(ISOMITTED(at), 1, IF(ISTEXT(at), ROWNUM(at) - baseRow + 1, at)),
-        atCol, IF(ISOMITTED(at), 1, IF(ISTEXT(at), COLNUM(at) - baseCol + 1, IF(ISOMITTED(col), 1, col))),
+        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
+        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
+        absRow, IF(ISOMITTED(at), originRow, IF(ISTEXT(at), ROWNUM(at), ROWOF(at))),
+        absCol, IF(ISOMITTED(at), originCol, IF(ISTEXT(at), COLNUM(at), COLOF(at))),
+        atRow, absRow - originRow + 1,
+        atCol, absCol - originCol + 1,
         mode, IF(ISOMITTED(overflow), 0, overflow),
         validAnchor, AND(atRow >= 1, atCol >= 1, atRow = INT(atRow), atCol = INT(atCol)),
     //  Host-sized sequences (clip / error / wrap)

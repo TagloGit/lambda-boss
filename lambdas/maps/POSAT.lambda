@@ -1,0 +1,32 @@
+/*  FUNCTION NAME:      POSAT
+    DESCRIPTION:*//**Builds an encoded position integer (row*mult+col) from a row and column number. Inverse of ROWOF/COLOF.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-16  Claude      Initial version
+*/
+POSAT = LAMBDA(
+//  Parameter Declarations
+    [row],
+    [col],
+    [mult],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →POSAT(row, col, [mult])¶" &
+                "DESCRIPTION:   →Builds an encoded position integer (row*mult+col) from a row and column number. The (row,col)→pos converter; inverse of ROWOF/COLOF.¶" &
+                "VERSION:       →Jun 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   row            →(Required) Row number. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &
+                "   col            →(Required) Column number. Also accepts an array of cols — result lifts element-wise (and broadcasts against row).¶" &
+                "   mult           →(Optional) Row multiplier. Default: 100000 (matches CELLTOPOS/ROWOF/COLOF). Must match the mult those decoders use for round-trips.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=POSAT(17, 17)¶" &
+                "Result         →1700017",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(row),
+    //  Procedure
+        m, IF(ISOMITTED(mult), 100000, mult),
+        result, row * m + col,
+        IF(Help?, Help, result)
+)
+);
