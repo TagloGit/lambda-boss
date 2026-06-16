@@ -1,47 +1,55 @@
 tests:
-  - name: stamp 2D block at numeric anchor (clip default)
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=2', '=2']
+  - name: stamp 2D block at encoded-pos anchor (clip default)
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=200002']
+    expected: [[1, 2, 3], [4, 0, 0], [7, 0, 0]]
+
+  - name: stamp 2D block via POSAT-built pos
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=POSAT(2,2)']
     expected: [[1, 2, 3], [4, 0, 0], [7, 0, 0]]
 
   - name: stamp 2D block via text address
     args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', "B2"]
     expected: [[1, 2, 3], [4, 0, 0], [7, 0, 0]]
 
-  - name: anchor defaults to (1,1) when at omitted
+  - name: anchor defaults to origin when at omitted
     args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}']
     expected: [[0, 0, 3], [0, 0, 6], [7, 8, 9]]
 
-  - name: scalar with overwrites single cell
-    args: ['={1,2,3;4,5,6;7,8,9}', '=99', '=2', '=2']
+  - name: scalar with overwrites single cell via text address
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "B2"]
     expected: [[1, 2, 3], [4, 99, 6], [7, 8, 9]]
 
   - name: row vector with stamps along a row
-    args: ['={1,2,3;4,5,6;7,8,9}', '={7,8}', '=1', '=2']
+    args: ['={1,2,3;4,5,6;7,8,9}', '={7,8}', "B1"]
     expected: [[1, 7, 8], [4, 5, 6], [7, 8, 9]]
 
   - name: clip drops the part of the block past the host edge
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3']
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', "C3"]
     expected: [[1, 2, 3], [4, 5, 6], [7, 8, 0]]
 
   - name: error mode (1) returns the result when the block fits
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=2', '=2', "=1"]
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', "B2", "=1"]
     expected: [[1, 2, 3], [4, 0, 0], [7, 0, 0]]
 
   - name: error mode (1) returns N/A when the block does not fit
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "=1"]
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', "C3", "=1"]
     expected: -2146826246
 
   - name: wrap mode (3) wraps the overhang modulo host dims
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "=3"]
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', "C3", "=3"]
     expected: [[0, 2, 0], [4, 5, 6], [0, 8, 0]]
 
   - name: expand mode (2) grows the output so the block fits
-    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', '=3', '=3', "=2"]
+    args: ['={1,2,3;4,5,6;7,8,9}', '={0,0;0,0}', "C3", "=2"]
     expected: [[1, 2, 3, ""], [4, 5, 6, ""], [7, 8, 0, 0], ["", "", 0, 0]]
 
-  - name: invalid anchor (row below 1) errors cleanly
-    args: ['={1,2,3;4,5,6;7,8,9}', '=0', '=0', '=2']
+  - name: invalid anchor (encoded pos above grid) errors cleanly
+    args: ['={1,2,3;4,5,6;7,8,9}', '=0', '=2']
     expected: -2146826246
+
+  - name: explicit origin rebases an in-memory array
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "D4", "=0", "C3"]
+    expected: [[1, 2, 3], [4, 99, 6], [7, 8, 9]]
 
   - name: text address into a real range anchors relative to host
     setup:

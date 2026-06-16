@@ -1,0 +1,55 @@
+/*  FUNCTION NAME:      SUBGRID
+    DESCRIPTION:*//**Reads a rectangular sub-block out of a grid, addressed by its corners in any position encoding. The read-counterpart to REPLACEARRAY.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-16  Claude      Initial version
+*/
+SUBGRID = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [range],
+    [origin],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SUBGRID(grid, range, [origin])¶" &
+                "DESCRIPTION:   →Reads a rectangular sub-block out of a grid (array or reference), addressed by its corners. The read-counterpart to REPLACEARRAY; shares its origin/frame convention so stamp-in and read-out are inverses.¶" &
+                "VERSION:       →Jun 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   grid           →(Required) Array or reference to slice from.¶" &
+                "   range          →(Required) Sub-block corners, auto-detected: A1 text (""C6:D7"" or ""C6""); raw corners {r1,c1,r2,c2}; encoded-pos pair {fromPos,toPos}; or a single encoded pos.¶" &
+                "   origin         →(Optional) Top-left anchor as A1 text or a reference. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SUBGRID({1,2,3;4,5,6;7,8,9}, ""A1:B2"")¶" &
+                "Result         →{1,2;4,5}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+    //  Procedure
+        baseRow, IFERROR(MIN(ROW(grid)), 1),
+        baseCol, IFERROR(MIN(COLUMN(grid)), 1),
+        originRow, IF(ISOMITTED(origin), baseRow, IF(ISTEXT(origin), ROWNUM(origin), IFERROR(MIN(ROW(origin)), baseRow))),
+        originCol, IF(ISOMITTED(origin), baseCol, IF(ISTEXT(origin), COLNUM(origin), IFERROR(MIN(COLUMN(origin)), baseCol))),
+    //  Parse range into absolute corners (A1 text, single pos, pos pair, or raw corners)
+        isText, ISTEXT(range),
+        fromCell, IFERROR(TEXTBEFORE(range, ":"), range),
+        toCell, IFERROR(TEXTAFTER(range, ":"), range),
+        flat, IFERROR(TOROW(range), range),
+        cnt, COUNT(range),
+        pA, IFERROR(INDEX(flat, 1, 1), 0),
+        pB, IFERROR(INDEX(flat, 1, 2), 0),
+        rowA, IF(isText, ROWNUM(fromCell), IF(cnt = 1, ROWOF(range), IF(cnt = 2, ROWOF(pA), INDEX(flat, 1, 1)))),
+        colA, IF(isText, COLNUM(fromCell), IF(cnt = 1, COLOF(range), IF(cnt = 2, COLOF(pA), INDEX(flat, 1, 2)))),
+        rowB, IF(isText, ROWNUM(toCell), IF(cnt = 1, ROWOF(range), IF(cnt = 2, ROWOF(pB), INDEX(flat, 1, 3)))),
+        colB, IF(isText, COLNUM(toCell), IF(cnt = 1, COLOF(range), IF(cnt = 2, COLOF(pB), INDEX(flat, 1, 4)))),
+    //  Local indices into the grid, corner order normalised
+        top, MIN(rowA, rowB) - originRow + 1,
+        bot, MAX(rowA, rowB) - originRow + 1,
+        left, MIN(colA, colB) - originCol + 1,
+        right, MAX(colA, colB) - originCol + 1,
+    //  Loud failure: corners outside the grid's local bounds error rather than clip
+        inBounds, AND(top >= 1, left >= 1, bot <= ROWS(grid), right <= COLUMNS(grid)),
+        result, IF(NOT(inBounds), NA(),
+                   INDEX(grid, SEQUENCE(bot - top + 1, 1, top, 1), SEQUENCE(1, right - left + 1, left, 1))),
+        IF(Help?, Help, result)
+)
+);

@@ -1,44 +1,60 @@
 tests:
-  - name: replace first element of column array (edge)
+  - name: overwrite first element of column array (edge)
     args: ['={"a";"b";"c";"d";"e";"f"}', "X", "=1"]
     expected: [["X"], ["b"], ["c"], ["d"], ["e"], ["f"]]
 
-  - name: replace last element of column array (edge)
+  - name: overwrite last element of column array (edge)
     args: ['={"a";"b";"c";"d";"e";"f"}', "X", "=6"]
     expected: [["a"], ["b"], ["c"], ["d"], ["e"], ["X"]]
 
-  - name: replace middle element of column array
+  - name: overwrite middle element of column array
     args: ['={"a";"b";"c";"d"}', "X", "=3"]
     expected: [["a"], ["b"], ["X"], ["d"]]
 
-  - name: replace third column of row array (row omitted)
-    args: ['={"a","b","c","d","e"}', "X", "=", "=3"]
+  - name: overwrite element of row array (auto-detected horizontal)
+    args: ['={"a","b","c","d","e"}', "X", "=3"]
     expected: [["a", "b", "X", "d", "e"]]
 
-  - name: replace single cell of 2D array
-    args: ['={1,2,3;4,5,6;7,8,9}', "=0", "=2", "=2"]
-    expected: [[1, 2, 3], [4, 0, 6], [7, 8, 9]]
+  - name: overwrite with a numeric value
+    args: ['={1,2,3,4,5}', "=99", "=2"]
+    expected: [[1, 99, 3, 4, 5]]
 
-  - name: overwrite entire row 2 of 2D array (col omitted)
-    args: ['={1,2,3;4,5,6;7,8,9}', "=0", "=2"]
-    expected: [[1, 2, 3], [0, 0, 0], [7, 8, 9]]
+  - name: single-element column array
+    args: ['={"a"}', "X", "=1"]
+    expected: "X"
 
-  - name: overwrite entire column 2 of 2D array (row omitted)
-    args: ['={1,2,3;4,5,6;7,8,9}', "=0", "=", "=2"]
-    expected: [[1, 0, 3], [4, 0, 6], [7, 0, 9]]
+  - name: position past the end fails loud (NA)
+    args: ['={"a";"b";"c"}', "X", "=4"]
+    expected: -2146826246
 
-  - name: replace via real range using setup
+  - name: position below 1 fails loud (NA)
+    args: ['={"a";"b";"c"}', "X", "=0"]
+    expected: -2146826246
+
+  - name: overwrite via real column range using setup
     setup:
       cells:
-        - address: "C5:E7"
+        - address: "B2:B5"
           values:
-            - [1, 2, 3]
-            - [4, 5, 6]
-            - [7, 8, 9]
+            - ["a"]
+            - ["b"]
+            - ["c"]
+            - ["d"]
       names:
-        - { name: "wgrid", refers_to: "C5:E7" }
-    args: ["=wgrid", "=99", "=2", "=2"]
-    expected: [[1, 2, 3], [4, 99, 6], [7, 8, 9]]
+        - { name: "wcol", refers_to: "B2:B5" }
+    args: ["=wcol", "X", "=2"]
+    expected: [["a"], ["X"], ["c"], ["d"]]
+
+  - name: overwrite via real horizontal range using setup
+    setup:
+      cells:
+        - address: "B2:E2"
+          values:
+            - ["a", "b", "c", "d"]
+      names:
+        - { name: "wrow", refers_to: "B2:E2" }
+    args: ["=wrow", "X", "=3"]
+    expected: [["a", "b", "X", "d"]]
 
   - name: help text
     args: []

@@ -1,0 +1,40 @@
+tests:
+  - name: simple Q17 (row 17, col 17)
+    args: ["=17", "=17"]
+    expected: 1700017
+
+  - name: top-left A1
+    args: ["=1", "=1"]
+    expected: 100001
+
+  - name: single-digit row and col
+    args: ["=5", "=5"]
+    expected: 500005
+
+  - name: max column XFD (16384)
+    args: ["=16384", "=16384"]
+    expected: 1638416384
+
+  - name: custom mult 50
+    args: ["=10", "=26", "=50"]
+    expected: 526
+
+  - name: inverse of ROWOF
+    args: ['=ROWOF(1700017)', '=COLOF(1700017)']
+    expected: 1700017
+
+  - name: vertical array of rows lifts
+    args: ['={1;5;17}', "=2"]
+    expected: [[100002], [500002], [1700002]]
+
+  - name: horizontal array of cols lifts
+    args: ["=3", '={1,2,3}']
+    expected: [[300001, 300002, 300003]]
+
+  - name: row column-vector broadcasts against col row-vector into a grid
+    args: ['={1;2}', '={1,2,3}']
+    expected: [[100001, 100002, 100003], [200001, 200002, 200003]]
+
+  - name: help text
+    args: []
+    expected_type: array
