@@ -1,0 +1,81 @@
+/*  FUNCTION NAME:      REPLACEARRAY
+    DESCRIPTION:*//**Stamps a scalar, vector, or 2-D block into a host array at an anchor, preserving the host's shape (or growing it in expand mode).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-13  Claude      Initial version
+*/
+REPLACEARRAY = LAMBDA(
+//  Parameter Declarations
+    [replace],
+    [with],
+    [at],
+    [col],
+    [overflow],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →REPLACEARRAY(replace, with, [at], [col], [overflow])¶" &
+                "DESCRIPTION:   →Stamps a scalar, vector, or 2-D block into a host array at an anchor, preserving the host's shape (or growing it in expand mode).¶" &
+                "VERSION:       →Jun 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   replace        →(Required) Host array to write into.¶" &
+                "   with           →(Required) Scalar, vector, or 2-D block to stamp in. Blank cells read as 0 (INDEX quirk).¶" &
+                "   at             →(Optional) Anchor (top-left): numeric row (pair with col) or an A1 text address like ""B2"". Default (1,1).¶" &
+                "   col            →(Optional) Anchor column when at is numeric. Ignored when at is a text address. Default 1.¶" &
+                "   overflow       →(Optional) Edge handling when the block runs past the host: (0) clip [default], (1) error, (2) expand, (3) wrap.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=REPLACEARRAY({1,2,3;4,5,6;7,8,9}, {0,0;0,0}, 2, 2)¶" &
+                "Result         →{1,2,3;4,0,0;7,0,0}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(replace),
+    //  Procedure
+        nRows, ROWS(replace),
+        nCols, COLUMNS(replace),
+        wRows, ROWS(with),
+        wCols, COLUMNS(with),
+        baseRow, IFERROR(MIN(ROW(replace)), 1),
+        baseCol, IFERROR(MIN(COLUMN(replace)), 1),
+        atRow, IF(ISOMITTED(at), 1, IF(ISTEXT(at), ROWNUM(at) - baseRow + 1, at)),
+        atCol, IF(ISOMITTED(at), 1, IF(ISTEXT(at), COLNUM(at) - baseCol + 1, IF(ISOMITTED(col), 1, col))),
+        mode, IF(ISOMITTED(overflow), 0, overflow),
+        validAnchor, AND(atRow >= 1, atCol >= 1, atRow = INT(atRow), atCol = INT(atCol)),
+    //  Host-sized sequences (clip / error / wrap)
+        rseq, SEQUENCE(nRows),
+        cseq, SEQUENCE(, nCols),
+    //  Clip: drop block cells that fall outside the host
+        clipMask, (rseq >= atRow) * (rseq <= atRow + wRows - 1) * (cseq >= atCol) * (cseq <= atCol + wCols - 1),
+        srcRow, rseq - atRow + 1,
+        srcCol, cseq - atCol + 1,
+        clampRow, IF(srcRow < 1, 1, IF(srcRow > wRows, wRows, srcRow)),
+        clampCol, IF(srcCol < 1, 1, IF(srcCol > wCols, wCols, srcCol)),
+        clipResult, IF(clipMask, INDEX(with, clampRow, clampCol), replace),
+    //  Error: surface #N/A unless the block fits entirely
+        fits, AND(atRow + wRows - 1 <= nRows, atCol + wCols - 1 <= nCols),
+        errResult, IF(fits, clipResult, NA()),
+    //  Wrap: indices wrap modulo host dimensions (toroidal)
+        drow, MOD(rseq - 1 - (atRow - 1), nRows),
+        dcol, MOD(cseq - 1 - (atCol - 1), nCols),
+        wrapMask, (drow < wRows) * (dcol < wCols),
+        wrapResult, IF(wrapMask, INDEX(with, IF(drow < wRows, drow + 1, 1), IF(dcol < wCols, dcol + 1, 1)), replace),
+    //  Expand: grow the output so the whole block fits; new host cells are blank
+        outRows, MAX(nRows, atRow + wRows - 1),
+        outCols, MAX(nCols, atCol + wCols - 1),
+        rseqE, SEQUENCE(outRows),
+        cseqE, SEQUENCE(, outCols),
+        eMask, (rseqE >= atRow) * (rseqE <= atRow + wRows - 1) * (cseqE >= atCol) * (cseqE <= atCol + wCols - 1),
+        bsrcRow, IF(rseqE - atRow + 1 < 1, 1, IF(rseqE - atRow + 1 > wRows, wRows, rseqE - atRow + 1)),
+        bsrcCol, IF(cseqE - atCol + 1 < 1, 1, IF(cseqE - atCol + 1 > wCols, wCols, cseqE - atCol + 1)),
+        hMask, (rseqE <= nRows) * (cseqE <= nCols),
+        hsrcRow, IF(rseqE > nRows, nRows, rseqE),
+        hsrcCol, IF(cseqE > nCols, nCols, cseqE),
+        hostVal, IF(hMask, INDEX(replace, hsrcRow, hsrcCol), ""),
+        expandResult, IF(eMask, INDEX(with, bsrcRow, bsrcCol), hostVal),
+    //  Dispatch on overflow mode
+        result, IF(NOT(validAnchor), NA(),
+                  IFS(mode = 1, errResult,
+                      mode = 2, expandResult,
+                      mode = 3, wrapResult,
+                      TRUE, clipResult)),
+        IF(Help?, Help, result)
+)
+);
