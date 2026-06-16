@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Reads a rectangular sub-block out of a grid, addressed by its corners in any position encoding. The read-counterpart to REPLACEARRAY.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-16  Claude      Initial version
+                        2026-06-16  Claude      origin is a workbook reference only (single cell or range; top-left used) — no text-address form, and no ISTEXT test that lifted on a 2-D range
 */
 SUBGRID = LAMBDA(
 //  Parameter Declarations
@@ -16,7 +17,7 @@ SUBGRID = LAMBDA(
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) Array or reference to slice from.¶" &
                 "   range          →(Required) Sub-block corners, auto-detected: A1 text (""C6:D7"" or ""C6""); raw corners {r1,c1,r2,c2}; encoded-pos pair {fromPos,toPos}; or a single encoded pos.¶" &
-                "   origin         →(Optional) Top-left anchor as A1 text or a reference. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
+                "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=SUBGRID({1,2,3;4,5,6;7,8,9}, ""A1:B2"")¶" &
                 "Result         →{1,2;4,5}",
@@ -27,8 +28,8 @@ SUBGRID = LAMBDA(
     //  Procedure
         baseRow, IFERROR(MIN(ROW(grid)), 1),
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
-        originRow, IF(ISOMITTED(origin), baseRow, IF(ISTEXT(origin), ROWNUM(origin), IFERROR(MIN(ROW(origin)), baseRow))),
-        originCol, IF(ISOMITTED(origin), baseCol, IF(ISTEXT(origin), COLNUM(origin), IFERROR(MIN(COLUMN(origin)), baseCol))),
+        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
+        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
     //  Parse range into absolute corners (A1 text, single pos, pos pair, or raw corners)
         isText, ISTEXT(range),
         fromCell, IFERROR(TEXTBEFORE(range, ":"), range),

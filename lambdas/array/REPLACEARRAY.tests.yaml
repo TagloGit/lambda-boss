@@ -47,8 +47,27 @@ tests:
     args: ['={1,2,3;4,5,6;7,8,9}', '=0', '=2']
     expected: -2146826246
 
-  - name: explicit origin rebases an in-memory array
-    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "D4", "=0", "C3"]
+  - name: single-cell reference origin rebases an in-memory array
+    setup:
+      cells:
+        - address: "G3"
+          values: [[0]]
+      names:
+        - { name: "originCell", refers_to: "G3" }
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "H4", "=0", "=originCell"]
+    expected: [[1, 2, 3], [4, 99, 6], [7, 8, 9]]
+
+  - name: 2D-range origin uses its top-left without lifting
+    setup:
+      cells:
+        - address: "G3:I5"
+          values:
+            - [0, 0, 0]
+            - [0, 0, 0]
+            - [0, 0, 0]
+      names:
+        - { name: "anchor", refers_to: "G3:I5" }
+    args: ['={1,2,3;4,5,6;7,8,9}', "=99", "H4", "=0", "=anchor"]
     expected: [[1, 2, 3], [4, 99, 6], [7, 8, 9]]
 
   - name: text address into a real range anchors relative to host
