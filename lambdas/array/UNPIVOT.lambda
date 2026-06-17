@@ -1,45 +1,62 @@
 /*  FUNCTION NAME:      UNPIVOT
-    DESCRIPTION:*//**Reshapes a 2D crosstab into a tidy 3-column [RowHeading, ColHeading, Value] table.*/
+    DESCRIPTION:*//**Reshapes a 2D crosstab into a tidy [keys..., Column, Value] table; supports multiple key columns and separately-supplied keys/labels.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-02  Claude      Initial version
+                        2026-06-17  Claude      Add keyCols/colLabels for multi-key + separately-supplied headings
 */
 UNPIVOT = LAMBDA(
 //  Parameter Declarations
-    [range],
+    [valueGrid],
+    [keyCols],
+    [colLabels],
     [dropBlanks],
-    [headers],
+    [resultHeaders],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →UNPIVOT(range, dropBlanks, headers)¶" &
-                "DESCRIPTION:   →Reshapes a 2D crosstab into a tidy 3-column [RowHeading, ColHeading, Value] table.¶" &
-                "VERSION:       →Jun 02 2026¶" &
+                "FUNCTION:      →UNPIVOT(valueGrid, keyCols, colLabels, dropBlanks, resultHeaders)¶" &
+                "DESCRIPTION:   →Reshapes a 2D crosstab into a tidy [keys..., Column, Value] table.¶" &
+                "VERSION:       →Jun 17 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   range          →(Required) A 2D range whose first row and first column are headings; the top-left corner cell is ignored.¶" &
+                "   valueGrid      →(Required) The value matrix. When keyCols and/or colLabels are omitted, the embedded first column and/or first row carry the keys/labels (corner cell is ignored).¶" &
+                "   keyCols        →(Optional) H x K identifier column(s), repeated against each value. Omitted -> keys come from valueGrid's first column.¶" &
+                "   colLabels      →(Optional) 1 x W labels for the value columns; become the ""Column"" output values. Omitted -> labels come from valueGrid's first row.¶" &
                 "   dropBlanks     →(Optional) If TRUE, omit rows whose value cell is blank/empty (sparse crosstabs). Default FALSE.¶" &
-                "   headers        →(Optional) TRUE prepends a default header row (Row, Column, Value); or pass a 3-element array of custom column names. Default FALSE.¶" &
+                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Column, Value); or pass a (K+2)-element array of custom column names. Default FALSE.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=UNPIVOT(A1:C3)¶" &
-                "Result         →4-row x 3-col table of (row heading, column heading, value) triples",
+                "Formula        →=UNPIVOT(D5:S26, B5:C26, D4:S4, , {""Jersey"",""Position"",""Team"",""Name""})¶" &
+                "Result         →(H*W) x 4 tidy table with two key columns plus team-code label and player-name value",
                 "→", "¶"
                 ),
     //  Check inputs
-        Help?, ISOMITTED(range),
+        Help?, ISOMITTED(valueGrid),
+        keysEmbed, ISOMITTED(keyCols),
+        labelsEmbed, ISOMITTED(colLabels),
     //  Procedure
+        keyBlock, IF(keysEmbed,
+                     DROP(TAKE(valueGrid, , 1), IF(labelsEmbed, 1, 0)),
+                     keyCols),
+        labelRow, IF(labelsEmbed,
+                     TOROW(DROP(TAKE(valueGrid, 1), , IF(keysEmbed, 1, 0))),
+                     TOROW(colLabels)),
+        vals, IF(keysEmbed,
+                 IF(labelsEmbed, DROP(DROP(valueGrid, 1), , 1), DROP(valueGrid, , 1)),
+                 IF(labelsEmbed, DROP(valueGrid, 1), valueGrid)),
+        nr, ROWS(vals),
+        nc, COLUMNS(vals),
+        nk, COLUMNS(keyBlock),
         drop?, IF(ISOMITTED(dropBlanks), FALSE, dropBlanks),
-        hdrCount, IF(ISOMITTED(headers), 0, ROWS(headers) * COLUMNS(headers)),
-        header?, IF(ISOMITTED(headers), FALSE, IF(hdrCount > 1, TRUE, N(headers))),
-        headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Row", "Column", "Value")),
-        nr, ROWS(range) - 1,
-        nc, COLUMNS(range) - 1,
-        rh, DROP(TAKE(range, , 1), 1),
-        ch, TOROW(DROP(TAKE(range, 1), , 1)),
-        vals, DROP(DROP(range, 1), , 1),
+        hdrCount, IF(ISOMITTED(resultHeaders), 0, ROWS(resultHeaders) * COLUMNS(resultHeaders)),
+        header?, IF(ISOMITTED(resultHeaders), FALSE, IF(hdrCount > 1, TRUE, N(resultHeaders))),
+        defaultHeader, HSTACK("Key" & SEQUENCE(1, nk), "Column", "Value"),
+        headerRow, IF(hdrCount > 1, TOROW(resultHeaders), defaultHeader),
         idx, SEQUENCE(nr * nc, 1, 0),
-        rk, INDEX(rh, INT(idx / nc) + 1, 1),
-        ck, INDEX(ch, 1, MOD(idx, nc) + 1),
-        vv, TOCOL(vals),
-        full, HSTACK(rk, ck, vv),
-        body, IF(drop?, FILTER(full, LEN(vv & "") > 0), full),
+        rowIdx, INT(idx / nc) + 1,
+        colIdx, MOD(idx, nc) + 1,
+        keyRows, CHOOSEROWS(keyBlock, rowIdx),
+        labelCol, INDEX(labelRow, 1, colIdx),
+        valCol, TOCOL(vals),
+        full, HSTACK(keyRows, labelCol, valCol),
+        body, IF(drop?, FILTER(full, LEN(valCol & "") > 0), full),
         result, IF(header?, VSTACK(headerRow, body), body),
         IF(Help?, Help, result)
 )
