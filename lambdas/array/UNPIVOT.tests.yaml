@@ -19,25 +19,25 @@ tests:
       - ["rows", "Two", 11]
       - ["rows", "Three", 12]
 
-  - name: dropBlanks omits empty value cells
-    args: ['={"","One","Two";"These",1,"";"are",3,4}', "=TRUE"]
+  - name: dropBlanks omits empty value cells (now position 4)
+    args: ['={"","One","Two";"These",1,"";"are",3,4}', "=", "=", "=TRUE"]
     expected: [["These", "One", 1], ["are", "One", 3], ["are", "Two", 4]]
 
   - name: dropBlanks FALSE keeps blank value rows
-    args: ['={"","One","Two";"These",1,"";"are",3,4}', "=FALSE"]
+    args: ['={"","One","Two";"These",1,"";"are",3,4}', "=", "=", "=FALSE"]
     expected: [["These", "One", 1], ["These", "Two", ""], ["are", "One", 3], ["are", "Two", 4]]
 
-  - name: headers prepends Row Column Value row
-    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=FALSE", "=TRUE"]
+  - name: default resultHeaders prepends Key1 Column Value row
+    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=", "=", "=FALSE", "=TRUE"]
     expected:
-      - ["Row", "Column", "Value"]
+      - ["Key1", "Column", "Value"]
       - ["These", "One", 1]
       - ["These", "Two", 2]
       - ["are", "One", 3]
       - ["are", "Two", 4]
 
-  - name: headers as custom names array
-    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=FALSE", '={"Region","Metric","Amount"}']
+  - name: custom resultHeaders as 3-element array
+    args: ['={"","One","Two";"These",1,2;"are",3,4}', "=", "=", "=FALSE", '={"Region","Metric","Amount"}']
     expected:
       - ["Region", "Metric", "Amount"]
       - ["These", "One", 1]
@@ -48,6 +48,51 @@ tests:
   - name: single value cell crosstab
     args: ['={"","Col1";"Row1",42}']
     expected: [["Row1", "Col1", 42]]
+
+  - name: supplied keyCols only (labels still embedded)
+    args: ['={"One","Two";1,2;3,4}', '={"A";"B"}']
+    expected: [["A", "One", 1], ["A", "Two", 2], ["B", "One", 3], ["B", "Two", 4]]
+
+  - name: supplied colLabels only (keys still embedded)
+    args: ['={"A",1,2;"B",3,4}', "=", '={"One","Two"}']
+    expected: [["A", "One", 1], ["A", "Two", 2], ["B", "One", 3], ["B", "Two", 4]]
+
+  - name: both keyCols and colLabels supplied; valueGrid is values only
+    args: ['={10,20;30,40}', '={"X";"Y"}', '={"One","Two"}']
+    expected: [["X", "One", 10], ["X", "Two", 20], ["Y", "One", 30], ["Y", "Two", 40]]
+
+  - name: multi-key (K=2) with values-only grid
+    args: ['={10,20;30,40}', '={"X","P";"Y","Q"}', '={"Mon","Tue"}']
+    expected:
+      - ["X", "P", "Mon", 10]
+      - ["X", "P", "Tue", 20]
+      - ["Y", "Q", "Mon", 30]
+      - ["Y", "Q", "Tue", 40]
+
+  - name: multi-key default resultHeaders prepends Key1 Key2 Column Value
+    args: ['={10,20;30,40}', '={"X","P";"Y","Q"}', '={"Mon","Tue"}', "=", "=TRUE"]
+    expected:
+      - ["Key1", "Key2", "Column", "Value"]
+      - ["X", "P", "Mon", 10]
+      - ["X", "P", "Tue", 20]
+      - ["Y", "Q", "Mon", 30]
+      - ["Y", "Q", "Tue", 40]
+
+  - name: multi-key custom (K+2)-element resultHeaders
+    args: ['={10,20;30,40}', '={"X","P";"Y","Q"}', '={"Mon","Tue"}', "=", '={"Region","Product","Day","Sales"}']
+    expected:
+      - ["Region", "Product", "Day", "Sales"]
+      - ["X", "P", "Mon", 10]
+      - ["X", "P", "Tue", 20]
+      - ["Y", "Q", "Mon", 30]
+      - ["Y", "Q", "Tue", 40]
+
+  - name: multi-key with dropBlanks omits empty value cells
+    args: ['={10,"";30,40}', '={"X","P";"Y","Q"}', '={"Mon","Tue"}', "=TRUE"]
+    expected:
+      - ["X", "P", "Mon", 10]
+      - ["Y", "Q", "Mon", 30]
+      - ["Y", "Q", "Tue", 40]
 
   - name: help text
     args: []
