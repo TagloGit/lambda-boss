@@ -1,0 +1,3 @@
+name: Functional
+description: General functional-programming primitives — deferred values, combinators, and higher-order helpers.
+default_prefix: functional
