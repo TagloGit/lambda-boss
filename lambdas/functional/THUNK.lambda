@@ -1,0 +1,27 @@
+/*  FUNCTION NAME:      THUNK
+    DESCRIPTION:*//**Wraps a value in a zero-argument lambda (a "thunk") so it is returned only when the result is called with ().*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-17  Claude      Initial version
+*/
+THUNK = LAMBDA(
+//  Parameter Declarations
+    [x],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →THUNK(x)¶" &
+                "DESCRIPTION:   →Wraps a value in a zero-argument lambda (a ""thunk"") so it is returned only when the result is called with ().¶" &
+                "VERSION:       →Jun 17 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   x              →(Required) The value to defer. Captured by closure and returned when the thunk is called.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=THUNK(42)()¶" &
+                "Result         →42 (call the thunk with () to retrieve the value; =THUNK(42) on its own returns a function, shown as #CALC!)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(x),
+    //  Procedure
+        result, LAMBDA(x),
+        IF(Help?, Help, result)
+)
+);

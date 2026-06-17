@@ -1,0 +1,9 @@
+# Coverage note: the test harness wraps every case as `=THUNK(args)` and cannot
+# append the `()` needed to invoke the returned thunk. Since `=THUNK(value)` yields
+# a function (rendered as #CALC! in a cell), the only behaviour we can assert here
+# is the help table. Verifying THUNK(42)()=42 requires a real worksheet and is a
+# known harness gap, not a missing test.
+tests:
+  - name: help text
+    args: []
+    expected_type: array
