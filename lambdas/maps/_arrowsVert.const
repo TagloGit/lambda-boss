@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowsVert
+    DESCRIPTION:*//**The 2 vertical arrow characters as a vertical array, in canonical order (up, down) matching _dirVert.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_arrowsVert = {"↑";"↓"};

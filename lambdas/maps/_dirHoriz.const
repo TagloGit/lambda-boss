@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirHoriz
+    DESCRIPTION:*//**The 2 scalar position-deltas for the horizontal directions, as a vertical array in canonical order (left, right) matching _arrowsHoriz. Each is a single integer to add to a CELLTOPOS position (column ±1; mult-independent).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_dirHoriz = {-1;1};

@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirOrthog
+    DESCRIPTION:*//**The 4 scalar position-deltas for the orthogonal (cardinal) directions, as a vertical array in canonical order (up, down, left, right) matching _arrowsOrthog. Each is a single integer to add to a CELLTOPOS position (default mult 100000).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_dirOrthog = {-100000;100000;-1;1};

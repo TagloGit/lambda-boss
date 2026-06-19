@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowsOrthog
+    DESCRIPTION:*//**The 4 orthogonal (cardinal) arrow characters as a vertical array, in canonical order (up, down, left, right) matching _dirOrthog.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_arrowsOrthog = {"↑";"↓";"←";"→"};

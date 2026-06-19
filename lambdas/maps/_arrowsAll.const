@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowsAll
+    DESCRIPTION:*//**The 8 compass arrow characters as a vertical array, in canonical order (up, down, left, right, up-left, up-right, down-left, down-right) matching _dirAll.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_arrowsAll = {"↑";"↓";"←";"→";"↖";"↗";"↙";"↘"};
