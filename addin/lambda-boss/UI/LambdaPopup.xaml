@@ -117,8 +117,14 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
-                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="Bold"
-                                   Foreground="#dcdcaa" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="#dcdcaa" />
+                            <Border Visibility="{Binding ConstBadgeVisibility}"
+                                    Background="#3a3d41" CornerRadius="2" Margin="6,0,0,0" Padding="4,0">
+                                <TextBlock Text="const" Foreground="#569cd6" FontSize="10"
+                                           VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
                         <TextBlock Grid.Column="1" Text="{Binding Description}" Foreground="#808080"
                                    FontSize="11" VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" Margin="8,0,8,0" />
