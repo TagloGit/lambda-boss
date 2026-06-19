@@ -144,10 +144,10 @@ public static class LambdaLoader
     }
 
     /// <summary>
-    ///     Loads all .lambda files from a library folder, applies the library's prefix,
-    ///     and returns the prefixed name/formula pairs ready for injection.
+    ///     Loads all .lambda and .const files from a library folder, applies the library's
+    ///     prefix, and returns the prefixed name/formula pairs ready for injection.
     /// </summary>
-    /// <param name="libraryPath">Path to the library folder containing _library.yaml and .lambda files.</param>
+    /// <param name="libraryPath">Path to the library folder containing _library.yaml, .lambda and .const files.</param>
     /// <returns>List of (prefixed name, rewritten formula) tuples.</returns>
     public static IReadOnlyList<(string Name, string Formula)> LoadLibrary(string libraryPath)
     {
@@ -158,28 +158,38 @@ public static class LambdaLoader
         var metadata = LibraryMetadata.LoadFromFile(metadataPath);
         var prefix = metadata.DefaultPrefix;
 
-        var lambdaFiles = Directory.GetFiles(libraryPath, "*.lambda");
         var results = new List<(string Name, string Formula)>();
-        var allNames = new List<string>();
 
-        // First pass: parse all files to collect names
+        // First pass: parse all files to collect names. Lambda and constant names are
+        // tracked separately so the rewriter can apply the correct reference rule to each.
         var parsed = new List<(string Name, string Formula)>();
-        foreach (var file in lambdaFiles)
+        var lambdaNames = new List<string>();
+        var constNames = new List<string>();
+
+        foreach (var file in Directory.GetFiles(libraryPath, "*.lambda"))
         {
             var (name, formula) = LambdaParser.ParseFile(file);
             parsed.Add((name, formula));
-            allNames.Add(name);
+            lambdaNames.Add(name);
         }
 
-        // Second pass: apply prefix rewriting to all formulas
+        foreach (var file in Directory.GetFiles(libraryPath, "*.const"))
+        {
+            var (name, formula) = ConstParser.ParseFile(file);
+            parsed.Add((name, formula));
+            constNames.Add(name);
+        }
+
+        // Second pass: apply prefix rewriting to all formulas. Constant names must be
+        // registered before this pass so lambdas referencing them resolve correctly.
         foreach (var (name, formula) in parsed)
         {
-            var rewrittenFormula = PrefixRewriter.Apply(formula, prefix, allNames);
+            var rewrittenFormula = PrefixRewriter.Apply(formula, prefix, lambdaNames, constNames);
             var prefixedName = string.IsNullOrEmpty(prefix) ? name : $"{prefix}.{name}";
             results.Add((prefixedName, rewrittenFormula));
         }
 
-        Logger.Info($"LoadLibrary: Loaded {results.Count} lambdas from '{metadata.Name}' with prefix '{prefix}'");
+        Logger.Info($"LoadLibrary: Loaded {lambdaNames.Count} lambdas and {constNames.Count} constants from '{metadata.Name}' with prefix '{prefix}'");
 
         return results;
     }

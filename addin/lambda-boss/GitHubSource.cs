@@ -78,7 +78,7 @@ public class GitHubSource
     }
 
     /// <summary>
-    ///     Lists all .lambda filenames in a library folder via the GitHub API.
+    ///     Lists all .lambda and .const filenames in a library folder via the GitHub API.
     /// </summary>
     public async Task<IReadOnlyList<string>> ListLambdaFilesAsync(string libraryName)
     {
@@ -97,7 +97,8 @@ public class GitHubSource
         foreach (var entry in entries)
         {
             var name = entry.GetProperty("name").GetString()!;
-            if (name.EndsWith(".lambda", StringComparison.OrdinalIgnoreCase))
+            if (name.EndsWith(".lambda", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
             {
                 files.Add(name);
             }
@@ -146,28 +147,39 @@ public sealed class FetchedLibrary
     }
 
     /// <summary>
-    ///     Parses all .lambda files and returns prefixed name/formula pairs,
-    ///     applying the library's default prefix.
+    ///     Parses all .lambda and .const files and returns prefixed name/formula pairs,
+    ///     applying the library's default prefix. Constant names are tracked separately
+    ///     so references to them (which carry no parens) are prefixed correctly.
     /// </summary>
     public IReadOnlyList<(string Name, string Formula)> LoadWithPrefix(string? prefixOverride = null)
     {
         var prefix = prefixOverride ?? Metadata.DefaultPrefix;
         var parsed = new List<(string Name, string Formula)>();
-        var allNames = new List<string>();
+        var lambdaNames = new List<string>();
+        var constNames = new List<string>();
 
-        // First pass: parse all files to collect names
-        foreach (var (_, content) in Files)
+        // First pass: parse all files to collect names, branching on extension.
+        foreach (var (fileName, content) in Files)
         {
-            var (name, formula) = LambdaParser.Parse(content);
-            parsed.Add((name, formula));
-            allNames.Add(name);
+            if (fileName.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
+            {
+                var (name, formula) = ConstParser.Parse(content);
+                parsed.Add((name, formula));
+                constNames.Add(name);
+            }
+            else
+            {
+                var (name, formula) = LambdaParser.Parse(content);
+                parsed.Add((name, formula));
+                lambdaNames.Add(name);
+            }
         }
 
         // Second pass: apply prefix rewriting
         var results = new List<(string Name, string Formula)>();
         foreach (var (name, formula) in parsed)
         {
-            var rewrittenFormula = PrefixRewriter.Apply(formula, prefix, allNames);
+            var rewrittenFormula = PrefixRewriter.Apply(formula, prefix, lambdaNames, constNames);
             var prefixedName = string.IsNullOrEmpty(prefix) ? name : $"{prefix}.{name}";
             results.Add((prefixedName, rewrittenFormula));
         }

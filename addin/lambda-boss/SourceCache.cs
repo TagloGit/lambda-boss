@@ -61,6 +61,11 @@ public class SourceCache
             var fileName = Path.GetFileName(filePath);
             files[fileName] = File.ReadAllText(filePath);
         }
+        foreach (var filePath in Directory.GetFiles(dir, "*.const"))
+        {
+            var fileName = Path.GetFileName(filePath);
+            files[fileName] = File.ReadAllText(filePath);
+        }
 
         Logger.Info($"SourceCache: Loaded library '{libraryName}' ({files.Count} files) from cache");
         return new FetchedLibrary(libraryName, metadata, files);

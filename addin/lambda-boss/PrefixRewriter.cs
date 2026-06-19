@@ -16,17 +16,41 @@ public static class PrefixRewriter
     /// </summary>
     /// <param name="formula">The formula text (may include = prefix).</param>
     /// <param name="prefix">The prefix to apply (e.g. "tst").</param>
-    /// <param name="knownNames">The set of function names to prefix.</param>
+    /// <param name="knownNames">The set of function (LAMBDA) names to prefix.</param>
     /// <returns>The rewritten formula with prefixed function names.</returns>
     public static string Apply(string formula, string prefix, IReadOnlyCollection<string> knownNames)
+        => Apply(formula, prefix, knownNames, Array.Empty<string>());
+
+    /// <summary>
+    ///     Applies a prefix to known function (LAMBDA) names and constant names in a formula.
+    ///     Function names are prefixed only when followed by <c>(</c> (a call); constant names
+    ///     are prefixed on a bare word boundary, since constants are referenced without parens.
+    ///     String literals (delimited by " with "" as escape) are preserved unchanged.
+    /// </summary>
+    /// <param name="formula">The formula text (may include = prefix).</param>
+    /// <param name="prefix">The prefix to apply (e.g. "tst").</param>
+    /// <param name="lambdaNames">Function (LAMBDA) names to prefix when followed by <c>(</c>.</param>
+    /// <param name="constNames">Constant names to prefix on a bare word boundary.</param>
+    /// <returns>The rewritten formula with prefixed names.</returns>
+    public static string Apply(
+        string formula,
+        string prefix,
+        IReadOnlyCollection<string> lambdaNames,
+        IReadOnlyCollection<string> constNames)
     {
-        if (string.IsNullOrEmpty(prefix) || knownNames.Count == 0)
+        if (string.IsNullOrEmpty(prefix) || (lambdaNames.Count == 0 && constNames.Count == 0))
             return formula;
 
-        // Build a regex that matches any of the known names followed by (
-        // Use word boundary to avoid partial matches
-        var escapedNames = knownNames.Select(Regex.Escape);
-        var pattern = $@"(?<!\w)({string.Join("|", escapedNames)})(?=\s*\()";
+        // Build one alternation: LAMBDA names require a trailing "(" (a call); constant
+        // names match on a bare word boundary (no parens). The single capture group holds
+        // whichever name matched, so the replacement is "{prefix}.$1" for both classes.
+        var alternatives = new List<string>();
+        if (lambdaNames.Count > 0)
+            alternatives.Add($"(?:{string.Join("|", lambdaNames.Select(Regex.Escape))})(?=\\s*\\()");
+        if (constNames.Count > 0)
+            alternatives.Add($"(?:{string.Join("|", constNames.Select(Regex.Escape))})(?!\\w)");
+
+        var pattern = $@"(?<!\w)({string.Join("|", alternatives)})";
         var nameRegex = new Regex(pattern, RegexOptions.IgnoreCase);
 
         var result = new StringBuilder();

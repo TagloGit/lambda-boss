@@ -127,4 +127,84 @@ public class PrefixRewriterTests
 
         Assert.Equal("=LAMBDA(x, tst.Double (x))", result);
     }
+
+    // --- Constant name prefixing (bare word boundary, no parens required) ---
+
+    [Fact]
+    public void Apply_ConstantReference_NoParens_IsPrefixed()
+    {
+        // A constant is referenced without parens — it must still be prefixed.
+        var formula = "=LAMBDA(x, INDEX(DEFAULTARROWS, x))";
+        var result = PrefixRewriter.Apply(
+            formula, "maps",
+            lambdaNames: Array.Empty<string>(),
+            constNames: new[] { "DEFAULTARROWS" });
+
+        Assert.Equal("=LAMBDA(x, INDEX(maps.DEFAULTARROWS, x))", result);
+    }
+
+    [Fact]
+    public void Apply_LambdaAndConstantTogether_BothPrefixed()
+    {
+        var formula = "=LAMBDA(HSTACK(DEFAULTARROWS, DEFAULTMOVEDELTAS, Helper(x)))";
+        var result = PrefixRewriter.Apply(
+            formula, "maps",
+            lambdaNames: new[] { "Helper" },
+            constNames: new[] { "DEFAULTARROWS", "DEFAULTMOVEDELTAS" });
+
+        Assert.Equal(
+            "=LAMBDA(HSTACK(maps.DEFAULTARROWS, maps.DEFAULTMOVEDELTAS, maps.Helper(x)))",
+            result);
+    }
+
+    [Fact]
+    public void Apply_ConstantPartialName_NotPrefixed()
+    {
+        // "DEFAULTARROWSX" should not match constant "DEFAULTARROWS".
+        var formula = "=LAMBDA(x, DEFAULTARROWSX)";
+        var result = PrefixRewriter.Apply(
+            formula, "maps",
+            lambdaNames: Array.Empty<string>(),
+            constNames: new[] { "DEFAULTARROWS" });
+
+        Assert.Equal(formula, result);
+    }
+
+    [Fact]
+    public void Apply_ConstantInsideStringLiteral_NotPrefixed()
+    {
+        var formula = "=LAMBDA(x, IF(x, DEFAULTARROWS, \"DEFAULTARROWS\"))";
+        var result = PrefixRewriter.Apply(
+            formula, "maps",
+            lambdaNames: Array.Empty<string>(),
+            constNames: new[] { "DEFAULTARROWS" });
+
+        Assert.Contains("maps.DEFAULTARROWS,", result);
+        Assert.Contains("\"DEFAULTARROWS\"", result);
+    }
+
+    [Fact]
+    public void Apply_LambdaNameWithoutParens_NotPrefixed_EvenWithConstants()
+    {
+        // A LAMBDA name used without parens stays unprefixed; only constants match bare.
+        var formula = "=LAMBDA(x, Double + DEFAULTARROWS)";
+        var result = PrefixRewriter.Apply(
+            formula, "lib",
+            lambdaNames: new[] { "Double" },
+            constNames: new[] { "DEFAULTARROWS" });
+
+        Assert.Equal("=LAMBDA(x, Double + lib.DEFAULTARROWS)", result);
+    }
+
+    [Fact]
+    public void Apply_OnlyConstants_EmptyPrefix_ReturnsUnchanged()
+    {
+        var formula = "=LAMBDA(x, DEFAULTARROWS)";
+        var result = PrefixRewriter.Apply(
+            formula, "",
+            lambdaNames: Array.Empty<string>(),
+            constNames: new[] { "DEFAULTARROWS" });
+
+        Assert.Equal(formula, result);
+    }
 }
