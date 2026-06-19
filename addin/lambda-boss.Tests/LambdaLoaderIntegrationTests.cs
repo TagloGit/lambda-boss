@@ -35,4 +35,28 @@ public class LambdaLoaderIntegrationTests
         Assert.Throws<FileNotFoundException>(() =>
             LambdaLoader.LoadLibrary("/nonexistent/path"));
     }
+
+    [Fact]
+    public void LoadLibrary_MapsLibrary_LoadsConstantsAlongsideLambdas()
+    {
+        var libraryPath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..", "lambdas", "maps"));
+
+        var loaded = LambdaLoader.LoadLibrary(libraryPath);
+        var names = loaded.Select(l => l.Name).ToList();
+
+        // The shipped arrow/direction constants load with the library prefix.
+        Assert.Contains("maps._arrowsAll", names);
+        Assert.Contains("maps._dirAll", names);
+
+        // Lambdas in the same library still load.
+        Assert.Contains("maps.CELLTOPOS", names);
+
+        // The constant's literal is preserved (array-row separators intact).
+        var arrowsAll = loaded.Single(l => l.Name == "maps._arrowsAll");
+        Assert.Equal("={\"↑\";\"↓\";\"←\";\"→\";\"↖\";\"↗\";\"↙\";\"↘\"}", arrowsAll.Formula);
+
+        var dirAll = loaded.Single(l => l.Name == "maps._dirAll");
+        Assert.Equal("={-100000;100000;-1;1;-100001;-99999;99999;100001}", dirAll.Formula);
+    }
 }

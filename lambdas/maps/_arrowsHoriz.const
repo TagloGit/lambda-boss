@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowsHoriz
+    DESCRIPTION:*//**The 2 horizontal arrow characters as a vertical array, in canonical order (left, right) matching _dirHoriz.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_arrowsHoriz = {"←";"→"};

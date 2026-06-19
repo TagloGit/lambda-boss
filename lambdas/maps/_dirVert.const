@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirVert
+    DESCRIPTION:*//**The 2 scalar position-deltas for the vertical directions, as a vertical array in canonical order (up, down) matching _arrowsVert. Each is a single integer to add to a CELLTOPOS position (row ±1, i.e. ∓mult; default mult 100000).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_dirVert = {-100000;100000};

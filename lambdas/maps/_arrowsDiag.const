@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowsDiag
+    DESCRIPTION:*//**The 4 diagonal arrow characters as a vertical array, in canonical order (up-left, up-right, down-left, down-right) matching _dirDiag.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_arrowsDiag = {"↖";"↗";"↙";"↘"};
