@@ -148,9 +148,13 @@ public class LibraryProvider
                     };
                     libraries.Add(info);
 
-                    // Parse individual lambdas for search
+                    // Parse individual lambdas for search. Constants (.const) are
+                    // injectable but not surfaced in the popup search list (out of scope),
+                    // so skip them here rather than fail LambdaParser.Parse.
                     foreach (var (fileName, content) in fetched.Files)
                     {
+                        if (fileName.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
+                            continue;
                         try
                         {
                             var (name, formula) = LambdaParser.Parse(content);
@@ -213,6 +217,8 @@ public class LibraryProvider
 
                     foreach (var (fileName, content) in fetched.Files)
                     {
+                        if (fileName.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
+                            continue;
                         try
                         {
                             var (name, formula) = LambdaParser.Parse(content);

@@ -82,6 +82,26 @@ public class SourceCacheTests : IDisposable
     }
 
     [Fact]
+    public void Store_ThenLoad_RoundTripsConstFiles()
+    {
+        var metadata = LibraryMetadata.LoadFromString(
+            "name: maps\ndescription: Map helpers\ndefault_prefix: maps");
+        var files = new Dictionary<string, string>
+        {
+            ["Helper.lambda"] = "Helper = LAMBDA(x, x);",
+            ["DEFAULTARROWS.const"] = "DEFAULTARROWS = {\"↑\";\"↓\"};"
+        };
+        _cache.Store(_config, new FetchedLibrary("maps", metadata, files));
+
+        var loaded = _cache.Load(_config, "maps");
+
+        Assert.NotNull(loaded);
+        Assert.Equal(2, loaded.Files.Count);
+        Assert.Contains("Helper.lambda", loaded.Files.Keys);
+        Assert.Contains("DEFAULTARROWS.const", loaded.Files.Keys);
+    }
+
+    [Fact]
     public void Load_WhenNotCached_ReturnsNull()
     {
         var loaded = _cache.Load(_config, "nonexistent");

@@ -212,12 +212,18 @@ public class LambdaHarnessTests
     private void InjectAllLambdas()
     {
         var lambdasDir = FindLambdasDirectory();
-        var files = Directory.GetFiles(lambdasDir, "*.lambda", SearchOption.AllDirectories);
 
         var pending = new List<(string name, string formula)>();
-        foreach (var file in files)
+        foreach (var file in Directory.GetFiles(lambdasDir, "*.lambda", SearchOption.AllDirectories))
         {
             var (n, f) = LambdaParser.ParseFile(file);
+            pending.Add((n, f));
+        }
+        // Constants (.const) are defined-name literals a lambda may reference by bare name;
+        // inject them too so dependent lambdas resolve. The retry loop handles ordering.
+        foreach (var file in Directory.GetFiles(lambdasDir, "*.const", SearchOption.AllDirectories))
+        {
+            var (n, f) = ConstParser.ParseFile(file);
             pending.Add((n, f));
         }
 

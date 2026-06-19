@@ -41,7 +41,7 @@ public class LocalDirectorySource
     }
 
     /// <summary>
-    ///     Reads a complete library from disk: metadata + all .lambda file contents.
+    ///     Reads a complete library from disk: metadata + all .lambda and .const file contents.
     /// </summary>
     public FetchedLibrary FetchLibrary(string libraryName)
     {
@@ -52,6 +52,11 @@ public class LocalDirectorySource
 
         var files = new Dictionary<string, string>();
         foreach (var filePath in Directory.GetFiles(libraryDir, "*.lambda"))
+        {
+            var fileName = Path.GetFileName(filePath);
+            files[fileName] = File.ReadAllText(filePath);
+        }
+        foreach (var filePath in Directory.GetFiles(libraryDir, "*.const"))
         {
             var fileName = Path.GetFileName(filePath);
             files[fileName] = File.ReadAllText(filePath);
