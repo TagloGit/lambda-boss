@@ -64,7 +64,8 @@ public partial class LambdaPopup
                     ? $"{l.LibraryInfo.DisplayName} [Local]"
                     : l.LibraryInfo.DisplayName,
                 Description = l.Description,
-                LibraryInfo = l.LibraryInfo
+                LibraryInfo = l.LibraryInfo,
+                IsConstant = l.IsConstant
             })
             .ToList();
     }
@@ -541,6 +542,16 @@ internal class LambdaDisplayItem
     public string LibraryLabel { get; init; } = "";
     public string Description { get; init; } = "";
     public LibraryInfo LibraryInfo { get; init; } = null!;
+
+    /// <summary>
+    ///     Whether this entry is a named-range constant rather than a LAMBDA.
+    /// </summary>
+    public bool IsConstant { get; init; }
+
+    /// <summary>
+    ///     Shows the "const" badge only for constant entries.
+    /// </summary>
+    public Visibility ConstBadgeVisibility => IsConstant ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     ///     Tooltip value for the description. Returns null for empty descriptions so WPF

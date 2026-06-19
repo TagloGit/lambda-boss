@@ -127,6 +127,34 @@ public class LibraryProviderLocalTests : IDisposable
     }
 
     [Fact]
+    public async Task RefreshAsync_IncludesConstantsInSearchList()
+    {
+        var libDir = Path.Combine(_tempDir, "maps");
+        Directory.CreateDirectory(libDir);
+        File.WriteAllText(Path.Combine(libDir, "_library.yaml"),
+            "name: maps\ndescription: Map helpers\ndefault_prefix: maps");
+        File.WriteAllText(Path.Combine(libDir, "Helper.lambda"), "Helper = LAMBDA(x, x);");
+        File.WriteAllText(Path.Combine(libDir, "_arrowsAll.const"),
+            "/*  CONSTANT NAME:      _arrowsAll\n    DESCRIPTION:*//**The compass arrows.*/\n_arrowsAll = {\"↑\";\"↓\"};");
+
+        var localConfig = new LocalSourceConfig { Path = _tempDir };
+        var provider = new LibraryProvider(
+            Array.Empty<RepoConfig>(),
+            localSources: new[] { localConfig });
+
+        var lambdas = await provider.GetAllLambdasAsync();
+
+        Assert.Equal(2, lambdas.Count);
+
+        var lambda = lambdas.Single(l => l.Name == "Helper");
+        Assert.False(lambda.IsConstant);
+
+        var constant = lambdas.Single(l => l.Name == "_arrowsAll");
+        Assert.True(constant.IsConstant);
+        Assert.Equal("The compass arrows.", constant.Description);
+    }
+
+    [Fact]
     public async Task RefreshAsync_AlwaysReadsFreshFromDisk()
     {
         CreateTestLibrary("math", "m", "Double");

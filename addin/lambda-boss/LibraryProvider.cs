@@ -148,31 +148,8 @@ public class LibraryProvider
                     };
                     libraries.Add(info);
 
-                    // Parse individual lambdas for search. Constants (.const) are
-                    // injectable but not surfaced in the popup search list (out of scope),
-                    // so skip them here rather than fail LambdaParser.Parse.
-                    foreach (var (fileName, content) in fetched.Files)
-                    {
-                        if (fileName.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
-                            continue;
-                        try
-                        {
-                            var (name, formula) = LambdaParser.Parse(content);
-                            var description = LambdaParser.ExtractDescription(content) ?? "";
-                            lambdas.Add(new LambdaInfo
-                            {
-                                Name = name,
-                                Formula = formula,
-                                LibraryInfo = info,
-                                FileName = fileName,
-                                Description = description
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"LibraryProvider: Failed to parse '{fileName}' in {libName}", ex);
-                        }
-                    }
+                    // Parse individual lambdas and constants for search.
+                    PopulateSearchEntries(fetched, info, lambdas, libName);
                 }
             }
             catch (Exception ex)
@@ -215,28 +192,7 @@ public class LibraryProvider
                     };
                     libraries.Add(info);
 
-                    foreach (var (fileName, content) in fetched.Files)
-                    {
-                        if (fileName.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
-                            continue;
-                        try
-                        {
-                            var (name, formula) = LambdaParser.Parse(content);
-                            var description = LambdaParser.ExtractDescription(content) ?? "";
-                            lambdas.Add(new LambdaInfo
-                            {
-                                Name = name,
-                                Formula = formula,
-                                LibraryInfo = info,
-                                FileName = fileName,
-                                Description = description
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Error($"LibraryProvider: Failed to parse '{fileName}' in local {libName}", ex);
-                        }
-                    }
+                    PopulateSearchEntries(fetched, info, lambdas, $"local {libName}");
                 }
             }
             catch (Exception ex)
@@ -249,6 +205,39 @@ public class LibraryProvider
         _lambdas = lambdas;
 
         Logger.Info($"LibraryProvider: Loaded {libraries.Count} libraries, {lambdas.Count} lambdas");
+    }
+
+    /// <summary>
+    ///     Parses every file in a fetched library into <see cref="LambdaInfo"/> search entries,
+    ///     branching on extension: .const files parse as constants, everything else as LAMBDAs.
+    /// </summary>
+    private static void PopulateSearchEntries(
+        FetchedLibrary fetched, LibraryInfo info, List<LambdaInfo> lambdas, string libLabel)
+    {
+        foreach (var (fileName, content) in fetched.Files)
+        {
+            try
+            {
+                var isConstant = fileName.EndsWith(".const", StringComparison.OrdinalIgnoreCase);
+                var (name, formula) = isConstant
+                    ? ConstParser.Parse(content)
+                    : LambdaParser.Parse(content);
+                var description = LambdaParser.ExtractDescription(content) ?? "";
+                lambdas.Add(new LambdaInfo
+                {
+                    Name = name,
+                    Formula = formula,
+                    LibraryInfo = info,
+                    FileName = fileName,
+                    Description = description,
+                    IsConstant = isConstant
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"LibraryProvider: Failed to parse '{fileName}' in {libLabel}", ex);
+            }
+        }
     }
 }
 
@@ -287,5 +276,10 @@ public sealed class LambdaInfo
     ///     Empty string when no description was found.
     /// </summary>
     public string Description { get; init; } = "";
+
+    /// <summary>
+    ///     Whether this entry is a named-range constant (.const) rather than a LAMBDA.
+    /// </summary>
+    public bool IsConstant { get; init; }
 }
 
