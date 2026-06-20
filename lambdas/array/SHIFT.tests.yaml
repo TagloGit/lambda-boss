@@ -3,20 +3,20 @@ tests:
     args: ['={6,3,6,1,2}', '=0', '=1']
     expected: [["", 6, 3, 6, 1]]
 
-  - name: pad shift right by 1 with numeric fill
-    args: ['={6,3,6,1,2}', '=0', '=1', 'pad', '=0']
+  - name: pad shift right by 1 with numeric fill (mode 0)
+    args: ['={6,3,6,1,2}', '=0', '=1', '=0', '=0']
     expected: [[0, 6, 3, 6, 1]]
 
-  - name: wrap shift right by 1 (the 2 rolls around)
-    args: ['={6,3,6,1,2}', '=0', '=1', 'wrap']
+  - name: wrap shift right by 1 (mode 1, the 2 rolls around)
+    args: ['={6,3,6,1,2}', '=0', '=1', '=1']
     expected: [[2, 6, 3, 6, 1]]
 
   - name: pad shift left by 1 (negative dCols)
-    args: ['={6,3,6,1,2}', '=0', '=-1', 'pad', '=0']
+    args: ['={6,3,6,1,2}', '=0', '=-1', '=0', '=0']
     expected: [[3, 6, 1, 2, 0]]
 
   - name: vertical pad shift down by 1
-    args: ['={1;2;3;4}', '=1', '=0', 'pad', '=0']
+    args: ['={1;2;3;4}', '=1', '=0', '=0', '=0']
     expected: [[0], [1], [2], [3]]
 
   - name: zero shift returns array unchanged
@@ -24,24 +24,20 @@ tests:
     expected: [[1, 2], [3, 4]]
 
   - name: shift beyond bounds pads entirely
-    args: ['={1,2,3}', '=0', '=5', 'pad', '=0']
+    args: ['={1,2,3}', '=0', '=5', '=0', '=0']
     expected: [[0, 0, 0]]
 
   - name: 2D pad shift down and right by 1
-    args: ['={1,2,3;4,5,6;7,8,9}', '=1', '=1', 'pad', '=0']
+    args: ['={1,2,3;4,5,6;7,8,9}', '=1', '=1', '=0', '=0']
     expected: [[0, 0, 0], [0, 1, 2], [0, 4, 5]]
 
   - name: 2D wrap shift down by 1 (bottom row reappears at top)
-    args: ['={1,2,3;4,5,6;7,8,9}', '=1', '=0', 'wrap']
+    args: ['={1,2,3;4,5,6;7,8,9}', '=1', '=0', '=1']
     expected: [[7, 8, 9], [1, 2, 3], [4, 5, 6]]
 
   - name: 2D wrap shift right by 1 (last column reappears at left)
-    args: ['={1,2,3;4,5,6;7,8,9}', '=0', '=1', 'wrap']
+    args: ['={1,2,3;4,5,6;7,8,9}', '=0', '=1', '=1']
     expected: [[3, 1, 2], [6, 4, 5], [9, 7, 8]]
-
-  - name: mode is case-insensitive (WRAP)
-    args: ['={6,3,6,1,2}', '=0', '=1', 'WRAP']
-    expected: [[2, 6, 3, 6, 1]]
 
   - name: help text
     args: []
