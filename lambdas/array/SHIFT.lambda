@@ -1,0 +1,54 @@
+/*  FUNCTION NAME:      SHIFT
+    DESCRIPTION:*//**Displaces a 1-D or 2-D array by dRows down and dCols right, returning an array of the same shape; exposed edges are padded with fill or wrapped toroidally.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-20  Claude      Initial version
+*/
+SHIFT = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [dRows],
+    [dCols],
+    [mode],
+    [fill],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SHIFT(array, dRows, dCols, [mode], [fill])¶" &
+                "DESCRIPTION:   →Displaces a 1-D or 2-D array by dRows down and dCols right, returning an array of the same shape; exposed edges are padded with fill or wrapped toroidally.¶" &
+                "VERSION:       →Jun 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 1-D or 2-D array/range to displace.¶" &
+                "   dRows          →(Required) Vertical displacement. Positive = data moves down (each cell pulls from the row above). Default 0.¶" &
+                "   dCols          →(Required) Horizontal displacement. Positive = data moves right (each cell pulls from the column to its left). Default 0.¶" &
+                "   mode           →(Optional) ""pad"" (default) fills exposed edges with fill; ""wrap"" rolls values off one edge back in at the opposite edge (toroidal).¶" &
+                "   fill           →(Optional) Value for exposed edge cells in pad mode. Default blank """".¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SHIFT({6,3,6,1,2}, 0, 1)¶" &
+                "Result         →{"""",6,3,6,1}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        n, ROWS(array),
+        m, COLUMNS(array),
+        dr, IF(ISOMITTED(dRows), 0, dRows),
+        dc, IF(ISOMITTED(dCols), 0, dCols),
+        wrapMode, IF(ISOMITTED(mode), FALSE, LOWER(mode) = "wrap"),
+        fillVal, IF(ISOMITTED(fill), "", fill),
+        rseq, SEQUENCE(n),
+        cseq, SEQUENCE(1, m),
+        srcRow, rseq - dr,
+        srcCol, cseq - dc,
+    //  Wrap: indices wrap modulo the row / column count (toroidal)
+        wrapRow, MOD(srcRow - 1, n) + 1,
+        wrapCol, MOD(srcCol - 1, m) + 1,
+        wrapResult, INDEX(array, wrapRow, wrapCol),
+    //  Pad: mask out-of-range source cells to fill, clamp indices so INDEX never errors
+        inRange, (srcRow >= 1) * (srcRow <= n) * (srcCol >= 1) * (srcCol <= m),
+        clampRow, IF(srcRow < 1, 1, IF(srcRow > n, n, srcRow)),
+        clampCol, IF(srcCol < 1, 1, IF(srcCol > m, m, srcCol)),
+        padResult, IF(inRange, INDEX(array, clampRow, clampCol), fillVal),
+        result, IF(wrapMode, wrapResult, padResult),
+        IF(Help?, Help, result)
+)
+);

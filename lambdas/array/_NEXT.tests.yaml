@@ -1,0 +1,24 @@
+tests:
+  - name: next neighbour, horizontal, default blank fill
+    args: ['={6,3,6,1,2}']
+    expected: [[3, 6, 1, 2, ""]]
+
+  - name: next neighbour with numeric fill
+    args: ['={6,3,6,1,2}', '=0']
+    expected: [[3, 6, 1, 2, 0]]
+
+  - name: next neighbour two ahead with blank fill
+    args: ['={6,3,6,1,2}', '=""', '=2']
+    expected: [[6, 1, 2, "", ""]]
+
+  - name: vertical column input stays vertical
+    args: ['={10;20;30}', '=0']
+    expected: [[20], [30], [0]]
+
+  - name: n beyond length pads entirely
+    args: ['={1,2,3}', '=0', '=5']
+    expected: [[0, 0, 0]]
+
+  - name: help text
+    args: []
+    expected_type: array

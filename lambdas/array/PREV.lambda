@@ -1,0 +1,36 @@
+/*  FUNCTION NAME:      PREV
+    DESCRIPTION:*//**For each element of a 1-D array, returns its previous neighbour as a same-size, same-orientation array; the leading n slots are padded. Pad-only sugar over SHIFT.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-20  Claude      Initial version
+*/
+PREV = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [fill],
+    [n],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PREV(array, [fill], [n])¶" &
+                "DESCRIPTION:   →For each element of a 1-D array, returns its previous neighbour (the element n positions earlier) as a same-size, same-orientation array; the leading n slots are padded. Pad-only sugar over SHIFT — for a cyclic look-behind use SHIFT directly with mode=""wrap"".¶" &
+                "VERSION:       →Jun 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 1-D array/range. Treated as a row when ROWS(array)=1 and COLUMNS(array)>1; otherwise as a column.¶" &
+                "   fill           →(Optional) Boundary fill value for the exposed leading slots. Default blank """".¶" &
+                "   n              →(Optional) Shift distance. Default 1 = immediate neighbour.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PREV({6,3,6,1,2})¶" &
+                "Result         →{"""",6,3,6,1}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        shiftN, IF(ISOMITTED(n), 1, n),
+        fillVal, IF(ISOMITTED(fill), "", fill),
+        result, IF(horiz,
+                    SHIFT(array, 0, shiftN, "pad", fillVal),
+                    SHIFT(array, shiftN, 0, "pad", fillVal)),
+        IF(Help?, Help, result)
+)
+);
