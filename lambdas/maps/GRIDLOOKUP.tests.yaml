@@ -39,6 +39,30 @@ tests:
     args: ["=C3", "=SEQUENCE(10,10)", "=TRUE"]
     expected: 41
 
+  - name: reverse lookup via encoded position integer (A5 = 500001)
+    args: ["=500001", "=SEQUENCE(10,10)", "=TRUE"]
+    expected: 41
+
+  - name: reverse lookup via encoded position integer (J10 = 1000010)
+    args: ["=1000010", "=SEQUENCE(10,10)", "=TRUE"]
+    expected: 100
+
+  - name: off-grid position (row 0) returns NA by default
+    args: ["=11", "=SEQUENCE(10,10)", "=TRUE"]
+    expected: -2146826246
+
+  - name: off-grid position returns if_invalid when supplied
+    args: ["=11", "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
+    expected: -1
+
+  - name: in-sheet address outside grid (K2) returns NA by default
+    args: ['="K2"', "=SEQUENCE(10,10)", "=TRUE"]
+    expected: -2146826246
+
+  - name: error input is replaced by if_invalid (not propagated)
+    args: ["=1/0", "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
+    expected: -1
+
   - name: match_mode 1 finds next larger value
     args: ["=99.5", "=SEQUENCE(10,10)", "=FALSE", "=1"]
     expected: "J10"
@@ -51,6 +75,14 @@ tests:
     args: ["=9999", "=SEQUENCE(10,10)", "=FALSE", "=-1"]
     expected: "J10"
 
+  - name: forward miss returns NA by default
+    args: ["=999", "=SEQUENCE(10,10)"]
+    expected: -2146826246
+
+  - name: forward miss returns if_invalid when supplied
+    args: ["=999", "=SEQUENCE(10,10)", "=FALSE", "=0", "=-1"]
+    expected: -1
+
   - name: forward lookup lifts over vertical array of values
     args: ['={1;41;100}', "=SEQUENCE(10,10)"]
     expected: [["A1"], ["A5"], ["J10"]]
@@ -58,6 +90,10 @@ tests:
   - name: reverse lookup lifts over vertical array of addresses
     args: ['={"A1";"A5";"J10"}', "=SEQUENCE(10,10)", "=TRUE"]
     expected: [[1], [41], [100]]
+
+  - name: reverse lift over positions with one off-grid uses if_invalid
+    args: ['={500001;11}', "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
+    expected: [[41], [-1]]
 
   - name: help text
     args: []
