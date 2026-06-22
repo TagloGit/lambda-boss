@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _mult
+    DESCRIPTION:*//**The default multiple used in positional lambda calculations (multiple of row increment)*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-19  Claude      Initial version
+*/
+_mult = 100000;
