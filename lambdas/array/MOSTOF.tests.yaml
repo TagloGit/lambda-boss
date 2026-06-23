@@ -1,0 +1,24 @@
+tests:
+  - name: letters counted, largest tally first
+    args: ['={"A","A","B","B","B","C"}']
+    expected: [["B", 3], ["A", 2], ["C", 1]]
+
+  - name: numbers counted, largest tally first
+    args: ["={1,2,2,3,3,3}"]
+    expected: [[3, 3], [2, 2], [1, 1]]
+
+  - name: vertical array input
+    args: ['={"A";"B";"B"}']
+    expected: [["B", 2], ["A", 1]]
+
+  - name: weights sum per group by default
+    args: ['={"A","B","A","B","A"}', "={10,5,20,3,1}"]
+    expected: [["A", 31], ["B", 8]]
+
+  - name: weights with explicit AVERAGE function
+    args: ['={"A","B","A"}', "={10,20,40}", "=AVERAGE"]
+    expected: [["A", 25], ["B", 20]]
+
+  - name: help text
+    args: []
+    expected_type: array
