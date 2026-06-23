@@ -1,20 +1,22 @@
 /*  FUNCTION NAME:      MOSTOF
-    DESCRIPTION:*//**Returns a value/count table for an array, sorted most-frequent first.*/
+    DESCRIPTION:*//**Returns a value/tally table for an array, sorted largest tally first.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-23  Claude      Initial version
 */
 MOSTOF = LAMBDA(
 //  Parameter Declarations
     [values],
+    [weights],
     [function],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MOSTOF(values, [function])¶" &
-                "DESCRIPTION:   →Returns a two-column table of distinct values and their tally, sorted by tally descending (most-frequent first).¶" &
+                "FUNCTION:      →MOSTOF(values, [weights], [function])¶" &
+                "DESCRIPTION:   →Returns a two-column table of distinct values and their tally, sorted by tally descending (largest first). A simpler GROUPBY for the common most-common case.¶" &
                 "VERSION:       →Jun 23 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   values         →(Required) A 1D array of values to tally.¶" &
-                "   function       →(Optional) Aggregation applied per group. Defaults to ROWS (a count). Pass a built-in by name (SUM, AVERAGE, MAX, ...) to aggregate the values instead.¶" &
+                "   values         →(Required) A 1D array of values to group and tally.¶" &
+                "   weights        →(Optional) A 1D array, same length as values, aggregated per group. Omit to tally a simple count of occurrences.¶" &
+                "   function       →(Optional) Aggregation applied per group. Defaults to ROWS (a count) when weights is omitted, or SUM when weights is supplied. Pass a built-in by name (SUM, AVERAGE, MAX, ...) to override.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MOSTOF({""A"",""A"",""B"",""B"",""B"",""C""})¶" &
                 "Result         →B 3 / A 2 / C 1",
@@ -22,10 +24,12 @@ MOSTOF = LAMBDA(
                 ),
     //  Check inputs
         Help?, ISOMITTED(values),
+        HasWeights?, NOT(ISOMITTED(weights)),
     //  Procedure
-        _arr, IF(ROWS(values)=1, TRANSPOSE(values), values),
-        _fn, IF(ISOMITTED(function), ROWS, function),
-        result, GROUPBY(_arr, _arr, _fn, , 0, -2),
+        _keys, IF(ROWS(values)=1, TRANSPOSE(values), values),
+        _vals, IF(HasWeights?, IF(ROWS(weights)=1, TRANSPOSE(weights), weights), _keys),
+        _fn, IF(ISOMITTED(function), IF(HasWeights?, SUM, ROWS), function),
+        result, GROUPBY(_keys, _vals, _fn, , 0, -2),
         IF(Help?, Help, result)
 )
 );
