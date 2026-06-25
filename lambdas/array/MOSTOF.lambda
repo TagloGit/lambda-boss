@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns a value/tally table for an array, sorted largest tally first.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-23  Claude      Initial version
+                        2026-06-24  Claude      Pass explicit field_headers (0) to GROUPBY; blank arg threw #VALUE! on single-value input
 */
 MOSTOF = LAMBDA(
 //  Parameter Declarations
@@ -12,7 +13,7 @@ MOSTOF = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →MOSTOF(values, [weights], [function])¶" &
                 "DESCRIPTION:   →Returns a two-column table of distinct values and their tally, sorted by tally descending (largest first). A simpler GROUPBY for the common most-common case.¶" &
-                "VERSION:       →Jun 23 2026¶" &
+                "VERSION:       →Jun 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   values         →(Required) A 1D array of values to group and tally.¶" &
                 "   weights        →(Optional) A 1D array, same length as values, aggregated per group. Omit to tally a simple count of occurrences.¶" &
@@ -29,7 +30,7 @@ MOSTOF = LAMBDA(
         _keys, IF(ROWS(values)=1, TRANSPOSE(values), values),
         _vals, IF(HasWeights?, IF(ROWS(weights)=1, TRANSPOSE(weights), weights), _keys),
         _fn, IF(ISOMITTED(function), IF(HasWeights?, SUM, ROWS), function),
-        result, GROUPBY(_keys, _vals, _fn, , 0, -2),
+        result, GROUPBY(_keys, _vals, _fn, 0, 0, -2),
         IF(Help?, Help, result)
 )
 );
