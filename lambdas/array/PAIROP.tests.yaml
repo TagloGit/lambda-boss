@@ -31,6 +31,30 @@ tests:
     args: ['={10,3;8,5;2,1;9,9}', '=LAMBDA(a,b,a-b)', '=TRUE']
     expected: [[2, -2], [-7, -8]]
 
+  - name: sliding horizontal vector overlaps neighbours
+    args: ['={10,3,8,5}', '=LAMBDA(a,b,a-b)', '=FALSE', '=TRUE']
+    expected: [[7, -5, 3]]
+
+  - name: sliding vertical vector returns vertical
+    args: ['={10;3;8;5}', '=LAMBDA(a,b,a-b)', '=FALSE', '=TRUE']
+    expected: [[7], [-5], [3]]
+
+  - name: sliding with custom op pairwise sum
+    args: ['={10,3,8,5}', '=LAMBDA(a,b,a+b)', '=FALSE', '=TRUE']
+    expected: [[13, 11, 13]]
+
+  - name: sliding 2D pairs adjacent columns overlapping
+    args: ['={10,3,8,5;20,6,16,10}', '=LAMBDA(a,b,a-b)', '=FALSE', '=TRUE']
+    expected: [[7, -5, 3], [14, -10, 6]]
+
+  - name: sliding 2D byRow pairs overlapping rows
+    args: ['={10,3;8,5;2,1;9,9}', '=LAMBDA(a,b,a-b)', '=TRUE', '=TRUE']
+    expected: [[2, -2], [6, 4], [-7, -8]]
+
+  - name: sliding single element passes through
+    args: ['={5}', '=LAMBDA(a,b,a-b)', '=FALSE', '=TRUE']
+    expected: 5
+
   - name: help text
     args: []
     expected_type: array
