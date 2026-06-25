@@ -22,3 +22,11 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: single value array
+    args: ['={"A"}']
+    expected: [["A", 1]]
+
+  - name: single distinct value, multiple rows
+    args: ['={"A";"A";"A"}']
+    expected: [["A", 3]]
