@@ -83,6 +83,34 @@ tests:
     args: ['={"alpha";"charlie"}', "=testTbl", "={1,2}"]
     expected: [["alpha", 100], ["charlie", 400]]
 
+  - name: 3 lookups crossed with 3 reordered columns -> full 3x3 grid
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ['={"charlie";"alpha";"bravo"}', "=testTbl", "={3,1,2}"]
+    expected: [["w", "charlie", 400], ["x", "alpha", 100], ["y", "bravo", 200]]
+
+  - name: case-sensitive lookups crossed with multi-column return
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ['={"Bravo";"alpha"}', "=testTbl", "={1,2}", "=1", "=NA()", "=0", "=1", "=TRUE"]
+    expected: [["Bravo", 300], ["alpha", 100]]
+
   - name: reverse lookup via smart default (return col 1 looks up last col)
     setup:
       cells:
