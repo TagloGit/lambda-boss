@@ -1,0 +1,116 @@
+tests:
+  - name: scalar lookup, default return (last col), default lookup col
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ["bravo", "=testTbl"]
+    expected: "y"
+
+  - name: explicit return col and lookup col
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ["Bravo", "=testTbl", "=2", "=1"]
+    expected: 200
+
+  - name: case-sensitive match finds Bravo not bravo
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ["Bravo", "=testTbl", "=2", "=1", "=NA()", "=0", "=1", "=TRUE"]
+    expected: 300
+
+  - name: multi-column reordered return {3,1}
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ["charlie", "=testTbl", "={3,1}"]
+    expected: [["w", "charlie"]]
+
+  - name: vertical array of lookups, single return col
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ['={"alpha";"charlie"}', "=testTbl", "=2"]
+    expected: [[100], [400]]
+
+  - name: array of lookups crossed with multi-column return
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ['={"alpha";"charlie"}', "=testTbl", "={1,2}"]
+    expected: [["alpha", 100], ["charlie", 400]]
+
+  - name: reverse lookup via smart default (return col 1 looks up last col)
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ["z", "=testTbl", "=1"]
+    expected: "Bravo"
+
+  - name: if_not_found returned on no match
+    setup:
+      cells:
+        - address: "G3:I6"
+          values:
+            - ["alpha", 100, "x"]
+            - ["bravo", 200, "y"]
+            - ["Bravo", 300, "z"]
+            - ["charlie", 400, "w"]
+      names:
+        - { name: "testTbl", refers_to: "G3:I6" }
+    args: ["zzz", "=testTbl", "=2", "=1", "missing"]
+    expected: "missing"
+
+  - name: help text
+    args: []
+    expected_type: array
