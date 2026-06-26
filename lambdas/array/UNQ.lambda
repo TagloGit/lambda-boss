@@ -1,0 +1,29 @@
+/*  FUNCTION NAME:      UNQ
+    DESCRIPTION:*//**Returns the unique values of an array, auto-orienting: a row stays a row, a column stays a column, a 2D grid flattens to one column.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-26  Claude      Initial version
+*/
+UNQ = LAMBDA(
+//  Parameter Declarations
+    [array],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →UNQ(array)¶" &
+                "DESCRIPTION:   →Returns the unique values of an array, auto-orienting by shape.¶" &
+                "VERSION:       →Jun 26 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array         →(Required) A 1D row, 1D column, or 2D array. A row returns a row of distinct values, a column returns a column, and a 2D grid flattens (row by row) into a single column of distinct values.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=UNQ({1,2,2,3})¶" &
+                "Result         →{1,2,3}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        result, IF(ROWS(array) = 1, UNIQUE(array, TRUE),
+                   IF(COLUMNS(array) = 1, UNIQUE(array),
+                      UNIQUE(TOCOL(array)))),
+        IF(Help?, Help, result)
+)
+);
