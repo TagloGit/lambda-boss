@@ -1,0 +1,24 @@
+tests:
+  - name: horizontal row stays a row
+    args: ['={1,2,2,3}']
+    expected: [[1, 2, 3]]
+
+  - name: vertical column stays a column
+    args: ['={1;2;2;3}']
+    expected: [[1], [2], [3]]
+
+  - name: 2D grid flattens to a column
+    args: ['={1,2;2,3}']
+    expected: [[1], [2], [3]]
+
+  - name: string row deduplicates
+    args: ['={"a","b","a"}']
+    expected: [["a", "b"]]
+
+  - name: single value returns scalar
+    args: ['={5}']
+    expected: 5
+
+  - name: help text
+    args: []
+    expected_type: array
