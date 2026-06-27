@@ -444,6 +444,14 @@ public partial class LambdaPopup
                 ExcelAsyncUtil.QueueAsMacro(() => RefactorCommand.Run());
             }),
         new SlashCommand(
+            "Unnest",
+            "Explode the active cell's nested formula into a =LET(...) with one named step per call",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => UnnestCommand.Run());
+            }),
+        new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",
             () =>
