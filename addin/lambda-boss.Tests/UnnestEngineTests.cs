@@ -264,6 +264,114 @@ public class UnnestEngineTests
         Assert.All(parsed.Bindings, b => Assert.True(b.IsCalculation));
     }
 
+    // ---------------- scope: opaque LAMBDA / nested LET (#278) ----------------
+
+    [Fact]
+    public void Unnest_InnerLambda_KeptIntactAndNotDecomposed()
+    {
+        // BYROW's lambda binds 'r'; SUM(r) / MAX(r) inside it must NOT be
+        // hoisted (they'd reference an unbound 'r' at the top level). The whole
+        // lambda stays inline in byrow1's RHS.
+        var result = UnnestEngine.Unnest("=ROUND(BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r))), 2)");
+
+        var step = Assert.Single(result.Steps);
+        Assert.Equal("byrow1", step.Name);
+        Assert.Equal("BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r)))", step.Rhs);
+        Assert.Contains("ROUND(byrow1, 2)", result.SynthesisedLet);
+
+        // Round-trips, and no binding ever references the bound param 'r'.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal(new[] { "byrow1" }, parsed.Bindings.Select(b => b.Name).ToArray());
+    }
+
+    [Fact]
+    public void Unnest_StructureAroundLambda_DecomposesButLeavesLambdaIntact()
+    {
+        // SQRT(A1:B3) (BYROW's first arg) is outside the lambda → a step;
+        // AVERAGE / BYROW outside too → steps. SUM(r) inside the lambda stays.
+        var result = UnnestEngine.Unnest(
+            "=ROUND(AVERAGE(BYROW(SQRT(A1:B3), LAMBDA(r, SUM(r)))), 2)");
+
+        Assert.Equal(
+            new[] { "sqrt1", "byrow1", "average1" },
+            result.Steps.Select(s => s.Name).ToArray());
+        Assert.Equal("BYROW(sqrt1, LAMBDA(r, SUM(r)))",
+            Assert.Single(result.Steps, s => s.Name == "byrow1").Rhs);
+
+        // SUM(r) was never extracted as its own step.
+        Assert.DoesNotContain(result.Steps, s => s.Rhs == "SUM(r)");
+    }
+
+    [Fact]
+    public void Unnest_NestedDoubleLambda_AllParamDependentNodesStayInline()
+    {
+        // Mirrors the reported case: two nested lambdas (binds r, then a/b).
+        // Everything inside either lambda must stay inline.
+        const string formula =
+            "=ROUND(BYROW(A1:B3, LAMBDA(r, SUM(PAIROP(r, LAMBDA(a, b, SQRT(SUMSQ(VSTACK(a, b)))), , 1)))), 2)";
+        var result = UnnestEngine.Unnest(formula);
+
+        var step = Assert.Single(result.Steps);
+        Assert.Equal("byrow1", step.Name);
+        // The full nested-lambda payload survives verbatim in the RHS.
+        Assert.Contains("LAMBDA(a, b, SQRT(SUMSQ(VSTACK(a, b))))", step.Rhs);
+        // None of the lambda-interior nodes leaked out as their own step
+        // (a node "leaks" only if it became a step, i.e. carries that
+        // OriginLabel — its appearance inside the kept lambda's RHS is fine).
+        Assert.DoesNotContain(result.Steps,
+            s => s.OriginLabel is "VSTACK" or "SUMSQ" or "PAIROP" or "SQRT" or "SUM");
+    }
+
+    [Fact]
+    public void Unnest_NestedLetSubExpression_IsOpaque()
+    {
+        // A nested LET binds 'x' inside itself; the engine treats it as opaque
+        // (it is never the root here, so the top-level refusal doesn't apply).
+        var result = UnnestEngine.Unnest("=ROUND(LET(x, A1, x + 1), 2)");
+
+        Assert.Null(result.Diagnostic);
+        Assert.Empty(result.Steps);
+        Assert.Equal("=ROUND(LET(x, A1, x + 1), 2)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_RootLambda_ZeroStepsNoOp()
+    {
+        var result = UnnestEngine.Unnest("=LAMBDA(x, x + 1)");
+
+        Assert.Null(result.Diagnostic);
+        Assert.Empty(result.Steps);
+        Assert.Equal("=LAMBDA(x, x + 1)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ReportedFormula_DecomposesOuterNestKeepsLambdasIntact()
+    {
+        const string formula =
+            "=ROUND(MIN(BIROW(HSTACK(IFS(SEQUENCE(6), \"Vienna\"), " +
+            "PERMUTATIONS(XLOOKUP(G141:I141,t[Concat], t[City]),3)), " +
+            "LAMBDA(r, SUM(PAIROP(r, LAMBDA(a,b, SQRT(SUMSQ(PAIROP(XV(VSTACK(a,b), " +
+            "t[[City]:[Y-Coordinates]], {2,3}),,1)))*100),,1)))))+45,)";
+
+        var result = UnnestEngine.Unnest(formula);
+
+        Assert.Null(result.Diagnostic);
+
+        // Outer (non-lambda) structure decomposes — e.g. the XLOOKUP inside HSTACK
+        // becomes its own step.
+        Assert.Contains(result.Steps, s => s.OriginLabel == "XLOOKUP");
+
+        // Nothing from inside the lambdas leaks out as its own step.
+        Assert.DoesNotContain(result.Steps,
+            s => s.OriginLabel is "VSTACK" or "SUMSQ" or "XV" or "PAIROP" or "SQRT" or "SUM");
+        // The param-dependent expression stays inline within the kept lambda.
+        Assert.Contains("VSTACK(a, b)", result.SynthesisedLet);
+
+        // The whole thing still round-trips through LetParser.
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.NotEmpty(parsed.Bindings);
+    }
+
     // ---------------- guards ----------------
 
     [Fact]

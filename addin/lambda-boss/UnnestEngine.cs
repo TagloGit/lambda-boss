@@ -12,7 +12,12 @@ namespace LambdaBoss;
 ///     to step names. Reference operators (range <c>:</c> and intersection
 ///     <c>space</c>) are treated as leaves, never steps — matching the parser's
 ///     "ranges are non-steps" rule. Unary expressions and postfix <c>%</c>/<c>#</c>
-///     also stay inline.
+///     also stay inline. A name-binding construct (a <c>LAMBDA(...)</c> or a
+///     nested <c>LET(...)</c>) is <em>opaque</em>: its body binds names that
+///     exist only inside it, so the engine never descends into it nor emits it
+///     as a step — hoisting a sub-expression out of that scope would leave the
+///     bound names unbound (issue #278). Decomposing inside a lambda via a
+///     scoped nested LET is a future enhancement (issue #279).
 ///
 ///     <para>
 ///     The decomposition is maximally granular by default; the dialog's per-row
@@ -180,12 +185,36 @@ public static class UnnestEngine
     }
 
     /// <summary>
+    ///     True when <paramref name="node" /> is a name-binding construct — a
+    ///     <c>LAMBDA(...)</c> or a (nested) <c>LET(...)</c>. Both bind names
+    ///     scoped to their own body: a <c>LAMBDA</c>'s parameters and a
+    ///     <c>LET</c>'s bindings exist only inside the construct. Hoisting any
+    ///     sub-expression out of that scope into the top-level LET would leave
+    ///     those names unbound and break the formula, so the engine treats the
+    ///     whole construct as opaque — it is never descended into and never
+    ///     emitted as a step, staying inline in its parent's RHS verbatim.
+    ///     (Top-level LET is refused earlier, so only nested LETs reach here.
+    ///     Decomposing inside a lambda via a scoped nested LET is issue #279.)
+    /// </summary>
+    private static bool IsScopeIntroducing(FormulaNode node)
+    {
+        if (node is not FunctionCallNode fc) return false;
+        var name = FunctionBaseName(fc.Name);
+        return name is "lambda" or "let";
+    }
+
+    /// <summary>
     ///     Post-order walk appending step candidates leaf-first. The root is
     ///     never a step (it becomes the LET body), so <paramref name="isRoot" />
     ///     suppresses its own emission while still descending into its children.
+    ///     A scope-introducing node (<see cref="IsScopeIntroducing" />) is opaque
+    ///     — neither descended into nor emitted — so nothing escapes its scope.
     /// </summary>
     private static void CollectSteps(FormulaNode node, bool isRoot, List<FormulaNode> sink)
     {
+        if (IsScopeIntroducing(node))
+            return;
+
         foreach (var child in Children(node))
             CollectSteps(child, isRoot: false, sink);
 
