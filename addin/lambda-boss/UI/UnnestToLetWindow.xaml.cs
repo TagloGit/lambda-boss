@@ -17,14 +17,13 @@ namespace LambdaBoss.UI;
 ///     inlines the step back into its parent), plus a live preview of the
 ///     synthesised LET. Save returns the preview text via
 ///     <see cref="SavedFormula" />; Cancel discards.
-///
 ///     <para>
-///     The code-behind is intentionally thin: every row-state change (rename
-///     or Include toggle) calls back into the supplied <c>recompute</c>
-///     delegate (which wraps <see cref="UnnestEngine.Recompute" />), and the
-///     result replaces the preview + RHS text in place. Row Keys drive the
-///     identity round-trip with the engine. There are no reorder controls —
-///     step order is forced by data dependency.
+///         The code-behind is intentionally thin: every row-state change (rename
+///         or Include toggle) calls back into the supplied <c>recompute</c>
+///         delegate (which wraps <see cref="UnnestEngine.Recompute" />), and the
+///         result replaces the preview + RHS text in place. Row Keys drive the
+///         identity round-trip with the engine. There are no reorder controls —
+///         step order is forced by data dependency.
 ///     </para>
 /// </summary>
 public partial class UnnestToLetWindow
@@ -34,11 +33,11 @@ public partial class UnnestToLetWindow
     private readonly Func<IReadOnlyList<UnnestRowState>, UnnestResult> _recompute;
     private readonly ObservableCollection<UnnestStepRowVm> _rows = [];
 
-    private UnnestResult _result;
-
     // Tracks the last name-validation outcome so the status bar can choose
     // between a validation error and the summary count.
     private bool _namesValid = true;
+
+    private UnnestResult _result;
 
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
@@ -270,7 +269,7 @@ public class UnnestStepRowVm : INotifyPropertyChanged
     private static readonly Brush DefaultNameBorderBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3e3e3e"));
 
-    private bool _include = true;
+    private bool _include;
     private bool _isNameValid = true;
     private string _name;
     private string _rhs;
