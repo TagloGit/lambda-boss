@@ -3,11 +3,16 @@ using Xunit;
 namespace LambdaBoss.Tests;
 
 /// <summary>
-///     Spec 0009 / issue #271 — <see cref="UnnestEngine" /> tests for the non-LET
-///     decomposition path. Covers the worked example, function-only and
+///     Spec 0009 / issues #271, #273 — <see cref="UnnestEngine" /> tests. The
+///     non-LET path (#271) covers the worked example, function-only and
 ///     operator-only formulas, the single-root no-op, function-derived + calcN
 ///     naming with collision suffixing, Include-toggle inlining + re-parenting,
-///     and round-trip safety through <see cref="LetParser" />.
+///     and round-trip safety through <see cref="LetParser" />. The existing-LET
+///     path (#273) covers calc-binding + body explosion with value bindings and
+///     binding order preserved, new-step insertion before each owning binding,
+///     auto-naming around existing binding names, the already-decomposed no-op,
+///     inner-lambda opacity, Include-toggle inlining, round-trip, and the
+///     malformed-LET refusal.
 /// </summary>
 public class UnnestEngineTests
 {
@@ -372,18 +377,166 @@ public class UnnestEngineTests
         Assert.NotEmpty(parsed.Bindings);
     }
 
-    // ---------------- guards ----------------
+    // ---------------- existing-LET explosion (#273) ----------------
 
     [Fact]
-    public void Unnest_ExistingLet_RefusesWithDiagnostic()
+    public void Unnest_ExistingLet_ExplodesCalcBindingsAndBodyPreservesValueBindings()
     {
-        var result = UnnestEngine.Unnest("=LET(x, A1, x+1)");
+        // a, A1 is a value binding (preserved verbatim). b's RHS nests SQRT
+        // (→ sqrt1 inserted before b); the body nests b * 2 (→ calc1 before body).
+        var result = UnnestEngine.Unnest("=LET(a, A1, b, ROUND(SQRT(A2), 2), a + b * 2)");
+
+        Assert.Null(result.Diagnostic);
+        Assert.Collection(result.Steps,
+            s => AssertStep(s, "sqrt1", "SQRT(A2)", UnnestStepOrigin.Function),
+            s => AssertStep(s, "calc1", "b * 2", UnnestStepOrigin.Operator));
+
+        const string expected =
+            "=LET(\n" +
+            "    a, A1,\n" +
+            "    sqrt1, SQRT(A2),\n" +
+            "    b, ROUND(sqrt1, 2),\n" +
+            "    calc1, b * 2,\n" +
+            "    a + calc1\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ExistingLet_NewStepsInsertedBeforeEachOwningBinding()
+    {
+        // Two calc bindings each nest a SQRT; each new step lands just before
+        // its own binding and existing binding order is preserved.
+        var result = UnnestEngine.Unnest("=LET(p, SQRT(A1) + 1, q, SQRT(B1) * 2, p + q)");
+
+        Assert.Collection(result.Steps,
+            s => Assert.Equal("sqrt1", s.Name),
+            s => Assert.Equal("sqrt2", s.Name));
+
+        const string expected =
+            "=LET(\n" +
+            "    sqrt1, SQRT(A1),\n" +
+            "    p, sqrt1 + 1,\n" +
+            "    sqrt2, SQRT(B1),\n" +
+            "    q, sqrt2 * 2,\n" +
+            "    p + q\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ExistingLet_AutoNameAvoidsExistingBindingNames()
+    {
+        // 'sqrt1' is already a (value) binding name, so the SQRT step extracted
+        // from r's RHS must skip ahead to 'sqrt2'.
+        var result = UnnestEngine.Unnest("=LET(sqrt1, X1, r, SQRT(A2) + 1, r)");
+
+        var step = Assert.Single(result.Steps);
+        Assert.Equal("sqrt2", step.Name);
+
+        const string expected =
+            "=LET(\n" +
+            "    sqrt1, X1,\n" +
+            "    sqrt2, SQRT(A2),\n" +
+            "    r, sqrt2 + 1,\n" +
+            "    r\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ExistingLet_AlreadyDecomposed_IsNoOp()
+    {
+        // No calc binding RHS or body nests anything → nothing to extract →
+        // the original LET is returned verbatim (no cosmetic re-spacing).
+        const string formula = "=LET(a, A1, b, SUM(a), a + b)";
+        var result = UnnestEngine.Unnest(formula);
+
+        Assert.Null(result.Diagnostic);
+        Assert.Empty(result.Steps);
+        Assert.Equal(formula, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ExistingLet_InnerLambdaStaysOpaque()
+    {
+        // ROUND wraps a BYROW whose lambda binds 'r'; BYROW becomes its own step
+        // but the lambda interior (SUM(r) + MAX(r)) is never hoisted out.
+        var result = UnnestEngine.Unnest(
+            "=LET(a, A1, b, ROUND(BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r))), 2), a + b)");
+
+        var step = Assert.Single(result.Steps);
+        Assert.Equal("byrow1", step.Name);
+        Assert.Equal("BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r)))", step.Rhs);
+        Assert.DoesNotContain(result.Steps, s => s.OriginLabel is "SUM" or "MAX");
+
+        const string expected =
+            "=LET(\n" +
+            "    a, A1,\n" +
+            "    byrow1, BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r))),\n" +
+            "    b, ROUND(byrow1, 2),\n" +
+            "    a + b\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_ExistingLet_UnIncludeNewStep_InlinesItBackIntoBody()
+    {
+        const string formula = "=LET(a, A1, b, ROUND(SQRT(A2), 2), a + b * 2)";
+        var initial = UnnestEngine.Unnest(formula);
+
+        // Drop calc1 (the body's 'b * 2'); keep sqrt1.
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "calc1"))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(formula, states);
+
+        var calc1 = Assert.Single(result.Steps, s => s.Name == "calc1");
+        Assert.False(calc1.Include);
+
+        const string expected =
+            "=LET(\n" +
+            "    a, A1,\n" +
+            "    sqrt1, SQRT(A2),\n" +
+            "    b, ROUND(sqrt1, 2),\n" +
+            "    a + b * 2\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ExistingLet_SynthesisedLetRoundTripsThroughLetParser()
+    {
+        var result = UnnestEngine.Unnest("=LET(a, A1, b, ROUND(SQRT(A2), 2), a + b * 2)");
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+
+        Assert.Equal(
+            new[] { "a", "sqrt1", "b", "calc1" },
+            parsed.Bindings.Select(b => b.Name).ToArray());
+        Assert.Equal("a + calc1", parsed.Body);
+        // 'a' is the only non-calculation (value) binding; the rest are steps.
+        var a = Assert.Single(parsed.Bindings, b => b.Name == "a");
+        Assert.False(a.IsCalculation);
+    }
+
+    [Fact]
+    public void Unnest_MalformedLet_RefusesWithDiagnosticNoDialog()
+    {
+        // Even arg count → LetParser rejects it as a malformed LET.
+        const string formula = "=LET(a, A1, b, B1)";
+        var result = UnnestEngine.Unnest(formula);
 
         Assert.NotNull(result.Diagnostic);
-        Assert.Equal(UnnestDiagnosticKind.ExistingLet, result.Diagnostic!.Kind);
+        Assert.Equal(UnnestDiagnosticKind.MalformedLet, result.Diagnostic!.Kind);
+        Assert.StartsWith("Could not parse LET formula:", result.Diagnostic.Message);
         Assert.Empty(result.Steps);
-        Assert.Equal("=LET(x, A1, x+1)", result.SynthesisedLet);
+        Assert.Equal(formula, result.SynthesisedLet);
     }
+
+    // ---------------- guards ----------------
 
     [Fact]
     public void Unnest_MalformedFormula_RefusesWithDiagnostic()

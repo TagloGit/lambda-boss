@@ -77,9 +77,12 @@ public enum UnnestDiagnosticKind
     MalformedFormula,
 
     /// <summary>
-    ///     The active cell holds a <c>=LET(...)</c>. Existing-LET explosion is
-    ///     handled separately (issue #273); the non-LET engine refuses rather
-    ///     than mis-parsing the LET as a function call.
+    ///     The active cell holds a <c>=LET(...)</c> whose top-level structure
+    ///     couldn't be parsed by <see cref="LetParser" /> (wrong argument
+    ///     count, unbalanced parens, an invalid binding name, …). The engine
+    ///     refuses rather than attempt an explosion over a malformed LET — the
+    ///     command surfaces the message instead of opening the dialog, matching
+    ///     <c>ConvertLetToLambdaCommand</c>'s wording.
     /// </summary>
-    ExistingLet
+    MalformedLet
 }
