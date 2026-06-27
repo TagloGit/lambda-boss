@@ -1,0 +1,286 @@
+using Xunit;
+
+namespace LambdaBoss.Tests;
+
+/// <summary>
+///     Spec 0009 / issue #271 — <see cref="UnnestEngine" /> tests for the non-LET
+///     decomposition path. Covers the worked example, function-only and
+///     operator-only formulas, the single-root no-op, function-derived + calcN
+///     naming with collision suffixing, Include-toggle inlining + re-parenting,
+///     and round-trip safety through <see cref="LetParser" />.
+/// </summary>
+public class UnnestEngineTests
+{
+    private const string WorkedExample =
+        "=ROUND(SQRT(SUMSQ(XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]]) - $I$92:$J$92)) * 100, 0)";
+
+    // ---------------- worked example ----------------
+
+    [Fact]
+    public void Unnest_WorkedExample_ProducesSpecLeafFirstSteps()
+    {
+        var result = UnnestEngine.Unnest(WorkedExample);
+
+        Assert.Null(result.Diagnostic);
+        Assert.Collection(result.Steps,
+            s => AssertStep(s, "xlookup1",
+                "XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]])", UnnestStepOrigin.Function),
+            s => AssertStep(s, "calc1", "xlookup1 - $I$92:$J$92", UnnestStepOrigin.Operator),
+            s => AssertStep(s, "sumsq1", "SUMSQ(calc1)", UnnestStepOrigin.Function),
+            s => AssertStep(s, "sqrt1", "SQRT(sumsq1)", UnnestStepOrigin.Function),
+            s => AssertStep(s, "calc2", "sqrt1 * 100", UnnestStepOrigin.Operator));
+    }
+
+    [Fact]
+    public void Unnest_WorkedExample_SynthesisesExpectedLet()
+    {
+        var result = UnnestEngine.Unnest(WorkedExample);
+
+        const string expected =
+            "=LET(\n" +
+            "    xlookup1, XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]]),\n" +
+            "    calc1, xlookup1 - $I$92:$J$92,\n" +
+            "    sumsq1, SUMSQ(calc1),\n" +
+            "    sqrt1, SQRT(sumsq1),\n" +
+            "    calc2, sqrt1 * 100,\n" +
+            "    ROUND(calc2, 0)\n" +
+            ")";
+
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    // ---------------- function-only / operator-only ----------------
+
+    [Fact]
+    public void Unnest_FunctionOnlyFormula_NamesEachNestedCall()
+    {
+        var result = UnnestEngine.Unnest("=ROUND(SQRT(SUM(A1:A10)), 2)");
+
+        Assert.Collection(result.Steps,
+            s => AssertStep(s, "sum1", "SUM(A1:A10)", UnnestStepOrigin.Function),
+            s => AssertStep(s, "sqrt1", "SQRT(sum1)", UnnestStepOrigin.Function));
+        Assert.Contains("ROUND(sqrt1, 2)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_OperatorOnlyFormula_NamesEachOperatorCalcN()
+    {
+        var result = UnnestEngine.Unnest("=A1+B1*C1-D1");
+
+        // ((A1 + (B1*C1)) - D1): the '-' is root (body); '*' then '+' are steps.
+        Assert.Collection(result.Steps,
+            s => AssertStep(s, "calc1", "B1 * C1", UnnestStepOrigin.Operator),
+            s => AssertStep(s, "calc2", "A1 + calc1", UnnestStepOrigin.Operator));
+        Assert.Contains("calc2 - D1", result.SynthesisedLet);
+    }
+
+    // ---------------- single-leaf / single-root no-op ----------------
+
+    [Fact]
+    public void Unnest_SingleRootOperator_ZeroStepsNoOp()
+    {
+        var result = UnnestEngine.Unnest("=A1+B1");
+
+        Assert.Empty(result.Steps);
+        Assert.Equal("=A1+B1", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_SingleLeaf_ZeroStepsNoOp()
+    {
+        var result = UnnestEngine.Unnest("=A1");
+
+        Assert.Empty(result.Steps);
+        Assert.Equal("=A1", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_LoneFunctionWithLeafArgs_ZeroSteps()
+    {
+        // The function IS the root → body; its leaf args nest nothing.
+        var result = UnnestEngine.Unnest("=SUM(A1, B1)");
+
+        Assert.Empty(result.Steps);
+        Assert.Equal("=SUM(A1, B1)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_BareRange_IsLeafNotStep()
+    {
+        // ':' is a reference operator — never a step.
+        var result = UnnestEngine.Unnest("=A1:B5");
+
+        Assert.Empty(result.Steps);
+        Assert.Equal("=A1:B5", result.SynthesisedLet);
+    }
+
+    // ---------------- naming: function-derived, calcN, collision suffixing ----------------
+
+    [Fact]
+    public void Unnest_RepeatedFunction_EachGetsOwnSuffix()
+    {
+        var result = UnnestEngine.Unnest("=SQRT(A1) + SQRT(B1)");
+
+        Assert.Collection(result.Steps,
+            s => Assert.Equal("sqrt1", s.Name),
+            s => Assert.Equal("sqrt2", s.Name));
+        Assert.Contains("sqrt1 + sqrt2", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_NameCollidesWithWorkbookDefinedName_SuffixSkipsAhead()
+    {
+        var defined = new[] { "sumsq1", "calc1" };
+        var result = UnnestEngine.Unnest(WorkedExample, defined);
+
+        var sumsq = Assert.Single(result.Steps, s => s.Origin == UnnestStepOrigin.Function && s.OriginLabel == "SUMSQ");
+        Assert.Equal("sumsq2", sumsq.Name);
+
+        // Both operator steps must avoid the reserved 'calc1'.
+        var calcs = result.Steps.Where(s => s.Origin == UnnestStepOrigin.Operator).Select(s => s.Name).ToList();
+        Assert.Equal(new[] { "calc2", "calc3" }, calcs);
+    }
+
+    [Fact]
+    public void Unnest_FunctionName_StripsXlfnPrefix()
+    {
+        var result = UnnestEngine.Unnest("=SUM(_xlfn.SEQUENCE(3))");
+
+        var step = Assert.Single(result.Steps);
+        Assert.Equal("sequence1", step.Name);
+        Assert.Equal("_xlfn.SEQUENCE", step.OriginLabel);
+    }
+
+    // ---------------- include-toggle inlining + re-parenting ----------------
+
+    [Fact]
+    public void Recompute_UnIncludeOperatorStep_InlinesIntoParentAndReParentsChildren()
+    {
+        var initial = UnnestEngine.Unnest(WorkedExample);
+
+        // Flip calc1 (the '-' operator) off; keep everything else.
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "calc1"))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(WorkedExample, states);
+
+        // calc1 row is still reported but excluded.
+        var calc1 = Assert.Single(result.Steps, s => s.Name == "calc1");
+        Assert.False(calc1.Include);
+
+        // sumsq1 now inlines calc1's RHS — xlookup1 re-parents up into it.
+        var sumsq = Assert.Single(result.Steps, s => s.Name == "sumsq1");
+        Assert.Equal("SUMSQ(xlookup1 - $I$92:$J$92)", sumsq.Rhs);
+
+        const string expected =
+            "=LET(\n" +
+            "    xlookup1, XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]]),\n" +
+            "    sumsq1, SUMSQ(xlookup1 - $I$92:$J$92),\n" +
+            "    sqrt1, SQRT(sumsq1),\n" +
+            "    calc2, sqrt1 * 100,\n" +
+            "    ROUND(calc2, 0)\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_UnIncludeAllSteps_NoOpRewrite()
+    {
+        var initial = UnnestEngine.Unnest(WorkedExample);
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(WorkedExample, states);
+
+        Assert.Equal(WorkedExample, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_RenameStep_UsesCustomNameAndBodyReferencesIt()
+    {
+        var initial = UnnestEngine.Unnest(WorkedExample);
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name == "calc2" ? "dist" : s.Name))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(WorkedExample, states);
+
+        Assert.Single(result.Steps, s => s.Name == "dist");
+        Assert.Contains("dist, sqrt1 * 100,", result.SynthesisedLet);
+        Assert.Contains("ROUND(dist, 0)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_RenameClashesWithAutoSuffix_AutoNamesAvoidIt()
+    {
+        // Rename the first SQRT step to 'sqrt2'; the second must not also
+        // auto-name to 'sqrt2'.
+        var initial = UnnestEngine.Unnest("=SQRT(A1) + SQRT(B1)");
+        var states = new List<UnnestRowState>
+        {
+            new(initial.Steps[0].Key, "sqrt2"),
+            new(initial.Steps[1].Key, ""), // empty → re-auto-name
+        };
+
+        var result = UnnestEngine.Recompute("=SQRT(A1) + SQRT(B1)", states);
+
+        Assert.Equal("sqrt2", result.Steps[0].Name);
+        Assert.NotEqual("sqrt2", result.Steps[1].Name);
+    }
+
+    // ---------------- round-trip through LetParser ----------------
+
+    [Fact]
+    public void Unnest_WorkedExample_RoundTripsThroughLetParser()
+    {
+        var result = UnnestEngine.Unnest(WorkedExample);
+
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+
+        Assert.Equal(
+            new[] { "xlookup1", "calc1", "sumsq1", "sqrt1", "calc2" },
+            parsed.Bindings.Select(b => b.Name).ToArray());
+        Assert.Equal("ROUND(calc2, 0)", parsed.Body);
+        // Every binding RHS classifies as a calculation (function or operator).
+        Assert.All(parsed.Bindings, b => Assert.True(b.IsCalculation));
+    }
+
+    // ---------------- guards ----------------
+
+    [Fact]
+    public void Unnest_ExistingLet_RefusesWithDiagnostic()
+    {
+        var result = UnnestEngine.Unnest("=LET(x, A1, x+1)");
+
+        Assert.NotNull(result.Diagnostic);
+        Assert.Equal(UnnestDiagnosticKind.ExistingLet, result.Diagnostic!.Kind);
+        Assert.Empty(result.Steps);
+        Assert.Equal("=LET(x, A1, x+1)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_MalformedFormula_RefusesWithDiagnostic()
+    {
+        var result = UnnestEngine.Unnest("=SUM(A1,");
+
+        Assert.NotNull(result.Diagnostic);
+        Assert.Equal(UnnestDiagnosticKind.MalformedFormula, result.Diagnostic!.Kind);
+    }
+
+    [Fact]
+    public void Unnest_NullFormula_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => UnnestEngine.Unnest(null!));
+    }
+
+    private static void AssertStep(
+        UnnestStepRow step, string name, string rhs, UnnestStepOrigin origin)
+    {
+        Assert.Equal(name, step.Name);
+        Assert.Equal(rhs, step.Rhs);
+        Assert.Equal(origin, step.Origin);
+        Assert.True(step.Include);
+    }
+}
