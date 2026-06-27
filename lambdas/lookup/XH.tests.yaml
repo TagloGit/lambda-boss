@@ -1,0 +1,69 @@
+tests:
+  - name: scalar lookup, default return (last row), default lookup row
+    setup:
+      cells:
+        - address: "G3:J5"
+          values:
+            - ["alpha", "bravo", "Bravo", "charlie"]
+            - [100, 200, 300, 400]
+            - ["x", "y", "z", "w"]
+      names:
+        - { name: "hTbl", refers_to: "G3:J5" }
+    args: ["bravo", "=hTbl"]
+    expected: "y"
+
+  - name: case-sensitive match finds Bravo not bravo
+    setup:
+      cells:
+        - address: "G3:J5"
+          values:
+            - ["alpha", "bravo", "Bravo", "charlie"]
+            - [100, 200, 300, 400]
+            - ["x", "y", "z", "w"]
+      names:
+        - { name: "hTbl", refers_to: "G3:J5" }
+    args: ["Bravo", "=hTbl", "=2", "=1", "=NA()", "=0", "=1", "=TRUE"]
+    expected: 300
+
+  - name: multi-row reordered return {3,1}
+    setup:
+      cells:
+        - address: "G3:J5"
+          values:
+            - ["alpha", "bravo", "Bravo", "charlie"]
+            - [100, 200, 300, 400]
+            - ["x", "y", "z", "w"]
+      names:
+        - { name: "hTbl", refers_to: "G3:J5" }
+    args: ["charlie", "=hTbl", "={3,1}"]
+    expected: [["w"], ["charlie"]]
+
+  - name: horizontal array of lookups, single return row
+    setup:
+      cells:
+        - address: "G3:J5"
+          values:
+            - ["alpha", "bravo", "Bravo", "charlie"]
+            - [100, 200, 300, 400]
+            - ["x", "y", "z", "w"]
+      names:
+        - { name: "hTbl", refers_to: "G3:J5" }
+    args: ['={"alpha","charlie"}', "=hTbl", "=2"]
+    expected: [[100, 400]]
+
+  - name: if_not_found returned on no match
+    setup:
+      cells:
+        - address: "G3:J5"
+          values:
+            - ["alpha", "bravo", "Bravo", "charlie"]
+            - [100, 200, 300, 400]
+            - ["x", "y", "z", "w"]
+      names:
+        - { name: "hTbl", refers_to: "G3:J5" }
+    args: ["zzz", "=hTbl", "=2", "=1", "missing"]
+    expected: "missing"
+
+  - name: help text
+    args: []
+    expected_type: array

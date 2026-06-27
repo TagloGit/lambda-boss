@@ -1,0 +1,51 @@
+/*  FUNCTION NAME:      XH
+    DESCRIPTION:*//**Horizontal table lookup that matches in one row and returns one or more rows by index, with case-sensitive matching and array-of-lookups support.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-26  Claude      Initial version
+*/
+XH = LAMBDA(
+//  Parameter Declarations
+    [Lookup_value],
+    [Table],
+    [Return_row_no],
+    [Lookup_row_no],
+    [If_not_found],
+    [Match_mode],
+    [Search_mode],
+    [Case_sensitive],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →XH(Lookup_value, Table, [Return_row_no], [Lookup_row_no], [If_not_found], [Match_mode], [Search_mode], [Case_sensitive])¶" &
+                "DESCRIPTION:   →Horizontal table lookup that matches in one row and returns one or more rows by index, with case-sensitive matching and array-of-lookups support.¶" &
+                "VERSION:       →Jun 26 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Lookup_value   →(Required) Value to find in the lookup row. Also accepts an array of values — result lifts to one column per value.¶" &
+                "   Table          →(Required) Multi-row table of data (no header column needed).¶" &
+                "   Return_row_no  →(Optional) Row index(es) to return; negative counts from the bottom (-1 = last). Accepts a list like {3,1,4} for reordered/non-contiguous rows. Default -1.¶" &
+                "   Lookup_row_no  →(Optional) Row index to search; negative from bottom. Default: last row when returning row 1, else first row.¶" &
+                "   If_not_found   →(Optional) Value returned when no match is found. Default #N/A.¶" &
+                "   Match_mode     →(Optional) XMATCH match mode: (0) exact [default], (-1) exact-or-next-smaller, (1) exact-or-next-larger, (2) wildcard. Ignored when Case_sensitive is TRUE.¶" &
+                "   Search_mode    →(Optional) XMATCH search mode: (1) first-to-last [default], (-1) last-to-first, (2) binary ascending, (-2) binary descending. Ignored when Case_sensitive is TRUE.¶" &
+                "   Case_sensitive →(Optional) TRUE for case-sensitive exact match (R is not r). Exact match only. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=XH(""Bravo"", A1:D3, {3,1})¶" &
+                "Result         →returns rows 3 and 1 from the column whose first row equals Bravo",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(Lookup_value),
+    //  Procedure
+        result, TRANSPOSE(
+                  XV(
+                    Lookup_value,
+                    TRANSPOSE(Table),
+                    IF(ISOMITTED(Return_row_no), -1, Return_row_no),
+                    IF(ISOMITTED(Lookup_row_no), 0, Lookup_row_no),
+                    IF(ISOMITTED(If_not_found), NA(), If_not_found),
+                    IF(ISOMITTED(Match_mode), 0, Match_mode),
+                    IF(ISOMITTED(Search_mode), 1, Search_mode),
+                    IF(ISOMITTED(Case_sensitive), FALSE, Case_sensitive)
+                  )),
+        IF(Help?, Help, result)
+)
+);
