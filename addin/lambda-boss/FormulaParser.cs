@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace LambdaBoss;
 
 /// <summary>
@@ -7,14 +5,12 @@ namespace LambdaBoss;
 ///     the comma-separated, US-function-named text that <c>Range.Formula2</c>
 ///     returns. It builds an expression tree (<see cref="FormulaAst" />) for
 ///     structure-aware rewriting (spec 0009 <c>/Unnest</c>); it never evaluates.
-///
 ///     The grammar is deliberately conservative: lexing of strings, brackets, and
 ///     references is exact and opaque (a sheet-qualified / structured / 3-D
 ///     reference stays a single leaf token), while genuinely ambiguous corners
 ///     (comma-as-union, space-as-intersection) are accepted structurally without
 ///     trying to resolve their semantics. A successful parse round-trips
 ///     character-for-character via <see cref="FormulaAst.ToFormula" />.
-///
 ///     Operator precedence, tightest-binding first:
 ///     reference <c>:</c> · intersection (space) · spill <c>#</c> · <c>@</c> ·
 ///     <c>%</c> · <c>^</c> · unary <c>+ -</c> · <c>* /</c> · <c>+ -</c> ·
@@ -28,7 +24,7 @@ internal static class FormulaParser
         // Longest-first so a prefix match never shadows a longer literal.
         "#GETTING_DATA", "#DIV/0!", "#SPILL!", "#BLOCKED!", "#CONNECT!",
         "#UNKNOWN!", "#EXTERNAL!", "#FIELD!", "#VALUE!", "#NULL!", "#NAME?",
-        "#CALC!", "#BUSY!", "#REF!", "#NUM!", "#N/A",
+        "#CALC!", "#BUSY!", "#REF!", "#NUM!", "#N/A"
     };
 
     /// <summary>
@@ -100,12 +96,30 @@ internal static class FormulaParser
                     i++;
                     tokens.Add(new FormulaToken(FormulaTokenType.Operator, lead, "#", start));
                 }
+
                 continue;
             }
 
-            if (c == '(') { i++; tokens.Add(new FormulaToken(FormulaTokenType.LParen, lead, "(", start)); continue; }
-            if (c == ')') { i++; tokens.Add(new FormulaToken(FormulaTokenType.RParen, lead, ")", start)); continue; }
-            if (c == ',') { i++; tokens.Add(new FormulaToken(FormulaTokenType.Comma, lead, ",", start)); continue; }
+            if (c == '(')
+            {
+                i++;
+                tokens.Add(new FormulaToken(FormulaTokenType.LParen, lead, "(", start));
+                continue;
+            }
+
+            if (c == ')')
+            {
+                i++;
+                tokens.Add(new FormulaToken(FormulaTokenType.RParen, lead, ")", start));
+                continue;
+            }
+
+            if (c == ',')
+            {
+                i++;
+                tokens.Add(new FormulaToken(FormulaTokenType.Comma, lead, ",", start));
+                continue;
+            }
 
             // Numeric literal (incl. leading-dot and scientific).
             if (char.IsDigit(c) || (c == '.' && i + 1 < n && char.IsDigit(s[i + 1])))
@@ -127,14 +141,18 @@ internal static class FormulaParser
             // Multi-character comparison operators.
             if (c == '<')
             {
-                if (i + 1 < n && (s[i + 1] == '=' || s[i + 1] == '>')) { i += 2; }
+                if (i + 1 < n && (s[i + 1] == '=' || s[i + 1] == '>'))
+                    i += 2;
                 else i++;
                 tokens.Add(new FormulaToken(FormulaTokenType.Operator, lead, s[start..i], start));
                 continue;
             }
+
             if (c == '>')
             {
-                if (i + 1 < n && s[i + 1] == '=') { i += 2; } else i++;
+                if (i + 1 < n && s[i + 1] == '=')
+                    i += 2;
+                else i++;
                 tokens.Add(new FormulaToken(FormulaTokenType.Operator, lead, s[start..i], start));
                 continue;
             }
@@ -153,16 +171,25 @@ internal static class FormulaParser
         return tokens;
     }
 
-    private static bool IsWhitespace(char c) => c is ' ' or '\t' or '\r' or '\n';
+    private static bool IsWhitespace(char c)
+    {
+        return c is ' ' or '\t' or '\r' or '\n';
+    }
 
-    private static bool IsOperatorChar(char c) =>
-        c is '+' or '-' or '*' or '/' or '^' or '&' or '=' or '<' or '>' or ':' or '%' or '@' or ';';
+    private static bool IsOperatorChar(char c)
+    {
+        return c is '+' or '-' or '*' or '/' or '^' or '&' or '=' or '<' or '>' or ':' or '%' or '@' or ';';
+    }
 
-    private static bool IsNameStart(char c) =>
-        char.IsLetter(c) || c == '_' || c == '$' || c == '?' || c == '\\';
+    private static bool IsNameStart(char c)
+    {
+        return char.IsLetter(c) || c == '_' || c == '$' || c == '?' || c == '\\';
+    }
 
-    private static bool IsNameChar(char c) =>
-        char.IsLetterOrDigit(c) || c == '_' || c == '.' || c == '?' || c == '$' || c == '\\';
+    private static bool IsNameChar(char c)
+    {
+        return char.IsLetterOrDigit(c) || c == '_' || c == '.' || c == '?' || c == '$' || c == '\\';
+    }
 
     private static int SkipString(string s, int i)
     {
@@ -172,11 +199,18 @@ internal static class FormulaParser
         {
             if (s[i] == '"')
             {
-                if (i + 1 < s.Length && s[i + 1] == '"') { i += 2; continue; }
+                if (i + 1 < s.Length && s[i + 1] == '"')
+                {
+                    i += 2;
+                    continue;
+                }
+
                 return i + 1;
             }
+
             i++;
         }
+
         throw new FormatException("Unterminated string literal in formula.");
     }
 
@@ -188,8 +222,19 @@ internal static class FormulaParser
         while (i < s.Length)
         {
             var c = s[i];
-            if (c == '"') { i = SkipString(s, i); continue; }
-            if (c == '{') { depth++; i++; continue; }
+            if (c == '"')
+            {
+                i = SkipString(s, i);
+                continue;
+            }
+
+            if (c == '{')
+            {
+                depth++;
+                i++;
+                continue;
+            }
+
             if (c == '}')
             {
                 depth--;
@@ -197,21 +242,20 @@ internal static class FormulaParser
                 if (depth == 0) return i;
                 continue;
             }
+
             i++;
         }
+
         throw new FormatException("Unterminated array constant in formula.");
     }
 
     private static int MatchErrorLiteral(string s, int i)
     {
         foreach (var lit in ErrorLiterals)
-        {
             if (i + lit.Length <= s.Length &&
                 string.CompareOrdinal(s, i, lit, 0, lit.Length) == 0)
-            {
                 return lit.Length;
-            }
-        }
+
         return 0;
     }
 
@@ -224,6 +268,7 @@ internal static class FormulaParser
             i++;
             while (i < n && char.IsDigit(s[i])) i++;
         }
+
         // Scientific suffix: only consume 'E' when a valid exponent follows.
         if (i < n && (s[i] == 'E' || s[i] == 'e'))
         {
@@ -235,6 +280,7 @@ internal static class FormulaParser
                 while (i < n && char.IsDigit(s[i])) i++;
             }
         }
+
         return i;
     }
 
@@ -284,7 +330,12 @@ internal static class FormulaParser
                 // ':' is part of this reference only for a 3-D sheet range —
                 // i.e. when a sheet-name-then-'!' follows. Otherwise it is the
                 // range operator and belongs to the parser, so stop here.
-                if (IsThreeDColon(s, i)) { i++; continue; }
+                if (IsThreeDColon(s, i))
+                {
+                    i++;
+                    continue;
+                }
+
                 break;
             }
 
@@ -308,11 +359,18 @@ internal static class FormulaParser
         {
             if (s[i] == '\'')
             {
-                if (i + 1 < s.Length && s[i + 1] == '\'') { i += 2; continue; }
+                if (i + 1 < s.Length && s[i + 1] == '\'')
+                {
+                    i += 2;
+                    continue;
+                }
+
                 return i + 1;
             }
+
             i++;
         }
+
         throw new FormatException("Unterminated quoted sheet/workbook name in formula.");
     }
 
@@ -324,8 +382,19 @@ internal static class FormulaParser
         while (i < s.Length)
         {
             var c = s[i];
-            if (c == '\'') { i += 2; continue; }
-            if (c == '[') { depth++; i++; continue; }
+            if (c == '\'')
+            {
+                i += 2;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                depth++;
+                i++;
+                continue;
+            }
+
             if (c == ']')
             {
                 depth--;
@@ -333,8 +402,10 @@ internal static class FormulaParser
                 if (depth == 0) return i;
                 continue;
             }
+
             i++;
         }
+
         throw new FormatException("Unterminated structured-reference bracket in formula.");
     }
 
@@ -349,10 +420,18 @@ internal static class FormulaParser
         var j = colonIndex + 1;
         if (j < n && s[j] == '\'')
         {
-            try { j = SkipSingleQuoted(s, j); }
-            catch (FormatException) { return false; }
+            try
+            {
+                j = SkipSingleQuoted(s, j);
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+
             return j < n && s[j] == '!';
         }
+
         while (j < n && (char.IsLetterOrDigit(s[j]) || s[j] == '_' || s[j] == '.' || s[j] == ' '))
             j++;
         return j < n && s[j] == '!';
@@ -374,10 +453,15 @@ internal static class FormulaParser
 
         private FormulaToken Peek => _tokens[_pos];
 
-        private FormulaToken Advance() => _tokens[_pos++];
+        private FormulaToken Advance()
+        {
+            return _tokens[_pos++];
+        }
 
-        private bool IsOp(string symbol) =>
-            Peek.Type == FormulaTokenType.Operator && Peek.Text == symbol;
+        private bool IsOp(string symbol)
+        {
+            return Peek.Type == FormulaTokenType.Operator && Peek.Text == symbol;
+        }
 
         public FormulaAst ParseFormula()
         {
@@ -394,7 +478,10 @@ internal static class FormulaParser
             return new FormulaAst(_source, equals, root, Peek);
         }
 
-        private FormulaNode ParseExpression() => ParseComparison();
+        private FormulaNode ParseExpression()
+        {
+            return ParseComparison();
+        }
 
         private FormulaNode ParseComparison()
         {
@@ -405,6 +492,7 @@ internal static class FormulaParser
                 var right = ParseConcat();
                 left = new BinaryNode(left, op.Text, op, right);
             }
+
             return left;
         }
 
@@ -417,6 +505,7 @@ internal static class FormulaParser
                 var right = ParseAdditive();
                 left = new BinaryNode(left, op.Text, op, right);
             }
+
             return left;
         }
 
@@ -429,6 +518,7 @@ internal static class FormulaParser
                 var right = ParseMultiplicative();
                 left = new BinaryNode(left, op.Text, op, right);
             }
+
             return left;
         }
 
@@ -441,6 +531,7 @@ internal static class FormulaParser
                 var right = ParseUnary();
                 left = new BinaryNode(left, op.Text, op, right);
             }
+
             return left;
         }
 
@@ -452,6 +543,7 @@ internal static class FormulaParser
                 var operand = ParseUnary();
                 return new UnaryNode(op, operand);
             }
+
             return ParseExponent();
         }
 
@@ -465,6 +557,7 @@ internal static class FormulaParser
                 var right = ParsePercent();
                 left = new BinaryNode(left, op.Text, op, right);
             }
+
             return left;
         }
 
@@ -476,6 +569,7 @@ internal static class FormulaParser
                 var op = Advance();
                 operand = new PostfixNode(operand, op);
             }
+
             return operand;
         }
 
@@ -487,6 +581,7 @@ internal static class FormulaParser
                 var operand = ParseAt();
                 return new UnaryNode(op, operand);
             }
+
             return ParseIntersection();
         }
 
@@ -499,6 +594,7 @@ internal static class FormulaParser
                 var right = ParseRange();
                 left = new BinaryNode(left, " ", null, right);
             }
+
             return left;
         }
 
@@ -511,6 +607,7 @@ internal static class FormulaParser
                 var right = ParseSpill();
                 left = new BinaryNode(left, op.Text, op, right);
             }
+
             return left;
         }
 
@@ -522,6 +619,7 @@ internal static class FormulaParser
                 var op = Advance();
                 operand = new PostfixNode(operand, op);
             }
+
             return operand;
         }
 
@@ -569,7 +667,8 @@ internal static class FormulaParser
         ///     slots become <see cref="EmptyArgNode" />. Shared by function calls
         ///     and grouping/union parens.
         /// </summary>
-        private (FormulaToken Open, List<FormulaNode> Items, List<FormulaToken> Commas, FormulaToken Close) ParseArgList()
+        private (FormulaToken Open, List<FormulaNode> Items, List<FormulaToken> Commas, FormulaToken Close)
+            ParseArgList()
         {
             var open = Advance(); // '('
             var items = new List<FormulaNode>();
@@ -605,20 +704,24 @@ internal static class FormulaParser
             }
         }
 
-        private static bool IsComparisonOp(string s) =>
-            s is "=" or "<>" or "<" or "<=" or ">" or ">=";
+        private static bool IsComparisonOp(string s)
+        {
+            return s is "=" or "<>" or "<" or "<=" or ">" or ">=";
+        }
 
         /// <summary>
         ///     True when <paramref name="t" /> can begin an operand — used to spot
         ///     the space-as-intersection operator. Leading <c>+ - @</c> are
         ///     excluded so <c>A1 -B1</c> stays subtraction, not intersection.
         /// </summary>
-        private static bool IsOperandStart(FormulaToken t) =>
-            t.Type is FormulaTokenType.Number
+        private static bool IsOperandStart(FormulaToken t)
+        {
+            return t.Type is FormulaTokenType.Number
                 or FormulaTokenType.String
                 or FormulaTokenType.Error
                 or FormulaTokenType.Name
                 or FormulaTokenType.Array
                 or FormulaTokenType.LParen;
+        }
     }
 }
