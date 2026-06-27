@@ -56,10 +56,27 @@ public class UnnestEngineTests
     {
         var result = UnnestEngine.Unnest("=ROUND(SQRT(SUM(A1:A10)), 2)");
 
+        // SUM is a 1–3 letter base, so the plain "sum1" looks like a cell
+        // reference (Excel rejects it as a name); the namer separates it as
+        // "sum_1". SQRT is longer, so "sqrt1" stands.
         Assert.Collection(result.Steps,
-            s => AssertStep(s, "sum1", "SUM(A1:A10)", UnnestStepOrigin.Function),
-            s => AssertStep(s, "sqrt1", "SQRT(sum1)", UnnestStepOrigin.Function));
+            s => AssertStep(s, "sum_1", "SUM(A1:A10)", UnnestStepOrigin.Function),
+            s => AssertStep(s, "sqrt1", "SQRT(sum_1)", UnnestStepOrigin.Function));
         Assert.Contains("ROUND(sqrt1, 2)", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ShortFunctionNames_ProduceValidExcelNames()
+    {
+        // Every 1–3 letter function base + digits collides with the cell-ref
+        // pattern; the namer must separate each so the dialog never flags an
+        // auto-name as invalid.
+        var result = UnnestEngine.Unnest("=ABS(MAX(LOG(A1), MIN(B1, C1)))");
+
+        foreach (var step in result.Steps)
+            Assert.True(
+                ExcelNameValidator.Validate(step.Name).IsValid,
+                $"Auto-name '{step.Name}' is not a valid Excel defined name.");
     }
 
     [Fact]

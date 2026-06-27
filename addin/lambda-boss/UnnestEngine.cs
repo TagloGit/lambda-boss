@@ -361,13 +361,28 @@ public static class UnnestEngine
     ///     Allocates the smallest <c>base + N</c> (N ≥ 1) not already in
     ///     <paramref name="used" />, and records it. A base used once still gets
     ///     its <c>1</c> suffix, so renumbering never shifts as the formula grows.
+    ///
+    ///     <para>
+    ///     A short base (1–3 letters) followed by digits looks like a cell
+    ///     reference — <c>SUM1</c>, <c>LOG2</c>, <c>ABS1</c> are all valid cell
+    ///     addresses (the column letters are ≤ <c>XFD</c>), so Excel refuses
+    ///     them as defined names and the dialog would flag the auto-name as
+    ///     invalid. When <c>base + N</c> fails <see cref="ExcelNameValidator" />
+    ///     for that (or any other) reason, an underscore separator is inserted
+    ///     (<c>sum_1</c>) so the auto-name is always a legal name. Longer bases
+    ///     (<c>sumsq1</c>, <c>sqrt1</c>, <c>calc1</c>) are unaffected.
+    ///     </para>
     /// </summary>
     private static string AllocateName(string baseName, HashSet<string> used)
     {
         var n = 1;
         while (true)
         {
-            var candidate = baseName + n.ToString(CultureInfo.InvariantCulture);
+            var suffix = n.ToString(CultureInfo.InvariantCulture);
+            var plain = baseName + suffix;
+            var candidate = ExcelNameValidator.Validate(plain).IsValid
+                ? plain
+                : baseName + "_" + suffix;
             if (used.Add(candidate))
                 return candidate;
             n++;
