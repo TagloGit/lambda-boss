@@ -2,21 +2,24 @@
     DESCRIPTION:*//**Returns all ordered k-permutations of items, lexicographic order. With delim, joins each row into a single string.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-16  Claude      Initial version
+                        2026-06-27  Claude      Add optional repetition flag (forwarded to PERMUTEINDICES)
 */
 PERMUTATIONS = LAMBDA(
 //  Parameter Declarations
     [items],
     [k],
     [delim],
+    [repetition],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →PERMUTATIONS(items, k, [delim])¶" &
+                "FUNCTION:      →PERMUTATIONS(items, k, [delim], [repetition])¶" &
                 "DESCRIPTION:   →Returns all ordered k-permutations of items, lexicographic order. With delim, joins each row into a single string.¶" &
-                "VERSION:       →Jun 16 2026¶" &
+                "VERSION:       →Jun 27 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   items          →(Required) 1-D array of items (row or column).¶" &
-                "   k              →(Optional) Permutation length, 1 ≤ k ≤ count(items). Default = count(items).¶" &
+                "   k              →(Optional) Permutation length. Without repetition, 1 ≤ k ≤ count(items); default = count(items). With repetition, any k ≥ 1.¶" &
                 "   delim          →(Optional) If provided, TEXTJOIN each permutation row into a single string.¶" &
+                "   repetition     →(Optional) FALSE (default) = distinct items. TRUE = allow repeats, giving the full n^k cartesian product.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=PERMUTATIONS({""A"";""B"";""C""}, 2, ""|"")¶" &
                 "Result         →6x1: {""A|B""; ""A|C""; ""B|A""; ""B|C""; ""C|A""; ""C|B""}¶" &
@@ -29,7 +32,8 @@ PERMUTATIONS = LAMBDA(
         itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
         nItems,   ROWS(itemsCol),
         kEff,     IF(ISOMITTED(k), nItems, k),
-        idx,      PERMUTEINDICES(nItems, kEff),
+        rep,      IF(ISOMITTED(repetition), FALSE, repetition),
+        idx,      PERMUTEINDICES(nItems, kEff, rep),
         vals,     INDEX(itemsCol, idx),
         result,   IF(ISOMITTED(delim),
                      vals,

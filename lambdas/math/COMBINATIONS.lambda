@@ -2,21 +2,24 @@
     DESCRIPTION:*//**Returns all unordered k-combinations of items, lexicographic order. With delim, joins each row into a single string.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-29  Claude      Initial version
+                        2026-06-27  Claude      Add optional repetition flag (forwarded to COMBININDICES)
 */
 COMBINATIONS = LAMBDA(
 //  Parameter Declarations
     [items],
     [k],
     [delim],
+    [repetition],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →COMBINATIONS(items, k, [delim])¶" &
+                "FUNCTION:      →COMBINATIONS(items, k, [delim], [repetition])¶" &
                 "DESCRIPTION:   →Returns all unordered k-combinations of items, lexicographic order. With delim, joins each row into a single string.¶" &
-                "VERSION:       →Apr 29 2026¶" &
+                "VERSION:       →Jun 27 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   items          →(Required) 1-D array of items (row or column).¶" &
-                "   k              →(Required) Combination size, 1 ≤ k ≤ count(items).¶" &
+                "   k              →(Required) Combination size. Without repetition, 1 ≤ k ≤ count(items). With repetition, any k ≥ 1.¶" &
                 "   delim          →(Optional) If provided, TEXTJOIN each combination row into a single string.¶" &
+                "   repetition     →(Optional) FALSE (default) = distinct items. TRUE = allow repeats (multisets), C(n+k-1, k) rows.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=COMBINATIONS({""A"";""B"";""C"";""D""}, 3, ""|"")¶" &
                 "Result         →4x1: {""A|B|C""; ""A|B|D""; ""A|C|D""; ""B|C|D""}¶" &
@@ -28,7 +31,8 @@ COMBINATIONS = LAMBDA(
     //  Procedure
         itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
         nItems,   ROWS(itemsCol),
-        idx,      COMBININDICES(nItems, k),
+        rep,      IF(ISOMITTED(repetition), FALSE, repetition),
+        idx,      COMBININDICES(nItems, k, rep),
         vals,     INDEX(itemsCol, idx),
         result,   IF(ISOMITTED(delim),
                      vals,
