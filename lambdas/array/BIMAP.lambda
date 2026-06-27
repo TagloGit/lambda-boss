@@ -1,0 +1,48 @@
+/*  FUNCTION NAME:      BIMAP
+    DESCRIPTION:*//**Applies a LAMBDA to each element of an array and tiles each element's array result into a block grid, padding ragged blocks with blanks.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-06-27  Claude      Initial version
+*/
+BIMAP = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [function],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →BIMAP(array, function)¶" &
+                "DESCRIPTION:   →Applies a LAMBDA to each element of an array and tiles each element's array result into a block grid, padding ragged blocks with blanks.¶" &
+                "VERSION:       →Jun 27 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 2D array.¶" &
+                "   function       →(Required) A LAMBDA applied to each single element; may return a multi-cell array of any shape. Each result is laid into its own block, so an m-by-n input whose cells each return p-by-q yields an (m*p)-by-(n*q) grid. Ragged widths are padded to the per-column maximum and ragged heights to the per-row maximum, with blanks as filler.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=BIMAP({1,2}, LAMBDA(x, x*{1;10}))¶" &
+                "Result         →{1,2;10,20}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        th, MAP(array, LAMBDA(a, LAMBDA(function(a)))),
+        colWidth, IF(SEQUENCE(ROWS(array)), BYCOL(MAP(th, LAMBDA(t, IFERROR(COLUMNS((@t)()), 1))), MAX)),
+        tw, MAP(th, colWidth, LAMBDA(t, w, LAMBDA(HSTACK(t, w)))),
+        build, LAMBDA(build, a,
+                  LET(
+                      nRows, ROWS(a),
+                      nCols, COLUMNS(a),
+                      tx, (@a)(),
+                      IF(
+                          nRows = 1,
+                          IF(
+                              nCols = 1,
+                              EXPAND(IFERROR((@tx)(), ""), , INDEX(tx, 1, 2)),
+                              IFNA(HSTACK(build(build, TAKE(a, , nCols / 2)), build(build, DROP(a, , nCols / 2))), "")
+                          ),
+                          IFNA(VSTACK(build(build, TAKE(a, nRows / 2)), build(build, DROP(a, nRows / 2))), "")
+                      )
+                  )
+               ),
+        result, build(build, tw),
+        IF(Help?, Help, result)
+)
+);

@@ -1,0 +1,24 @@
+tests:
+  - name: each element expands to a column, 1x2 in -> 2x2 out
+    args: ['={1,2}', '=LAMBDA(x, x*{1;10})']
+    expected: [[1, 2], [10, 20]]
+
+  - name: each cell returns a 2x2 block, 2x2 in -> 4x4 out
+    args: ['={1,2;3,4}', '=LAMBDA(x, x*{1,1;1,1})']
+    expected:
+      - [1, 1, 2, 2]
+      - [1, 1, 2, 2]
+      - [3, 3, 4, 4]
+      - [3, 3, 4, 4]
+
+  - name: scalar-returning function behaves like MAP
+    args: ['={1,2;3,4}', '=LAMBDA(x, x*10)']
+    expected: [[10, 20], [30, 40]]
+
+  - name: ragged heights in a column padded with blanks
+    args: ['={1;2}', '=LAMBDA(x, SEQUENCE(1, x))']
+    expected: [[1, ""], [1, 2]]
+
+  - name: help text
+    args: []
+    expected_type: array
