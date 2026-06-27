@@ -12,10 +12,10 @@ namespace LambdaBoss.Commands;
 ///     explode each nested function-call / operator node into a named LET
 ///     step, opens <see cref="UnnestToLetWindow" /> on the popup's UI thread,
 ///     and on Save writes the synthesised LET back via
-///     <c>activeCell.Formula2</c>. Engine diagnostics (a malformed formula or
-///     an already-LET cell — existing-LET explosion is issue #273) surface via
-///     <see cref="MessageBox" />; empty/literal active cells close the popup
-///     silently (mirrors <c>/Refactor</c>'s pattern).
+///     <c>activeCell.Formula2</c>. An already-<c>=LET(...)</c> cell is exploded
+///     binding-by-binding (issue #273). Engine diagnostics (a malformed formula
+///     or a malformed LET) surface via <see cref="MessageBox" />; empty/literal
+///     active cells close the popup silently (mirrors <c>/Refactor</c>'s pattern).
 /// </summary>
 internal static class UnnestCommand
 {
