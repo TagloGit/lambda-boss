@@ -31,6 +31,18 @@ tests:
     args: ['={"A";"B"}', "=3"]
     expected: -2146826246
 
+  - name: repetition gives AA AB BA BB
+    args: ['={"A";"B"}', "=2", "=", "=TRUE"]
+    expected:
+      - ["A", "A"]
+      - ["A", "B"]
+      - ["B", "A"]
+      - ["B", "B"]
+
+  - name: repetition with delim joins each row
+    args: ['={"A";"B"}', "=2", "|", "=TRUE"]
+    expected: [["A|A"], ["A|B"], ["B|A"], ["B|B"]]
+
   - name: help text
     args: []
     expected_type: array

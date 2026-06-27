@@ -47,6 +47,24 @@ tests:
     expected:
       - ["A", "B", "C"]
 
+  - name: repetition gives multisets of size 2
+    args: ['={"A";"B";"C"}', "=2", "=", "=TRUE"]
+    expected:
+      - ["A", "A"]
+      - ["A", "B"]
+      - ["A", "C"]
+      - ["B", "B"]
+      - ["B", "C"]
+      - ["C", "C"]
+
+  - name: repetition with delim allows k greater than count
+    args: ['={"A";"B"}', "=3", "|", "=TRUE"]
+    expected:
+      - ["A|A|A"]
+      - ["A|A|B"]
+      - ["A|B|B"]
+      - ["B|B|B"]
+
   - name: help text
     args: []
     expected_type: array
