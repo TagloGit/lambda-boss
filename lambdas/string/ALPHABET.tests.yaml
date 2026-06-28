@@ -1,0 +1,24 @@
+tests:
+  - name: default returns the uppercase alphabet
+    args: []
+    expected: [["A"], ["B"], ["C"], ["D"], ["E"], ["F"], ["G"], ["H"], ["I"], ["J"], ["K"], ["L"], ["M"], ["N"], ["O"], ["P"], ["Q"], ["R"], ["S"], ["T"], ["U"], ["V"], ["W"], ["X"], ["Y"], ["Z"]]
+
+  - name: vowels uppercase
+    args: ['=0', '=1']
+    expected: [["A"], ["E"], ["I"], ["O"], ["U"]]
+
+  - name: vowels lowercase
+    args: ['=1', '=1']
+    expected: [["a"], ["e"], ["i"], ["o"], ["u"]]
+
+  - name: consonants uppercase
+    args: ['=0', '=2']
+    expected: [["B"], ["C"], ["D"], ["F"], ["G"], ["H"], ["J"], ["K"], ["L"], ["M"], ["N"], ["P"], ["Q"], ["R"], ["S"], ["T"], ["V"], ["W"], ["X"], ["Y"], ["Z"]]
+
+  - name: lowercase all letters first and last
+    args: ['=1', '=0']
+    expected_type: array
+
+  - name: help text
+    args: ['=0', '=0', '=TRUE']
+    expected_type: array
