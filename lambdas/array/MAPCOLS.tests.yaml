@@ -23,6 +23,18 @@ tests:
     args: ['={1,2,3;4,5,6}', '=1', '=LAMBDA(vec, vec*10)', '=-1']
     expected: [[10, 1, 2, 3], [40, 4, 5, 6]]
 
+  - name: in-place expansion splices extra columns at source
+    args: ['={1,2,3;4,5,6}', '=2', '=LAMBDA(vec, HSTACK(vec, vec*10))']
+    expected: [[1, 2, 20, 3], [4, 5, 50, 6]]
+
+  - name: append expansion keeps source and stacks wider block
+    args: ['={1,2,3;4,5,6}', '=2', '=LAMBDA(vec, HSTACK(vec, vec*10))', '=1']
+    expected: [[1, 2, 3, 2, 20], [4, 5, 6, 5, 50]]
+
+  - name: variable-width expansion concatenates independently
+    args: ['={1,2;4,9}', '={1,2}', '=LAMBDA(vec, IF(SUM(vec)>10, HSTACK(vec, vec, vec), HSTACK(vec, vec)))']
+    expected: [[1, 1, 2, 2, 2], [4, 4, 9, 9, 9]]
+
   - name: help text
     args: []
     expected_type: array
