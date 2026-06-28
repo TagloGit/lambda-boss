@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      MAPCOLS
-    DESCRIPTION:*//**Applies a function to selected columns of an array, placing results in-place, appended at right, or prepended at left.*/
+    DESCRIPTION:*//**Applies a function to selected columns of an array, placing results in-place, appended at right, or prepended at left. fnc may widen a column into multiple columns.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-26  Claude      Initial version
+                        2026-06-28  Claude      Support column expansion (fnc returns m x k)
 */
 MAPCOLS = LAMBDA(
 //  Parameter Declarations
@@ -13,17 +14,17 @@ MAPCOLS = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →MAPCOLS(array, cols, fnc, [placement], [keep_source])¶" &
-                "DESCRIPTION:   →Applies a function to selected columns of an array, placing results in-place, appended at right, or prepended at left.¶" &
-                "VERSION:       →Jun 26 2026¶" &
+                "DESCRIPTION:   →Applies a function to selected columns of an array, placing results in-place, appended at right, or prepended at left. fnc may widen a column into multiple columns.¶" &
+                "VERSION:       →Jun 28 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   array          →(Required) A 2D array.¶" &
                 "   cols           →(Required) Index list of columns to transform; negative counts from the end (-1 = last). Order is preserved when results land in a new position.¶" &
-                "   fnc            →(Required) A LAMBDA taking one column and returning a column of the same height.¶" &
+                "   fnc            →(Required) A LAMBDA taking one column (height m) and returning an m-row block of one or more columns. Selected columns may expand by different widths; each expands independently and blocks are concatenated.¶" &
                 "   placement      →(Optional) Where results land: (0) in place [default], (1) append at right, (-1) prepend at left.¶" &
                 "   keep_source    →(Optional) When placement is non-zero, keep the source columns (TRUE [default]) or drop them (FALSE). Ignored when in place.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=MAPCOLS({1,2,3;4,5,6}, 2, LAMBDA(c, c*10))¶" &
-                "Result         →{1,20,3;4,50,6}",
+                "Formula        →=MAPCOLS({1,2,3;4,5,6}, 2, LAMBDA(c, HSTACK(c, c*10)))¶" &
+                "Result         →{1,2,20,3;4,5,50,6}",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -35,20 +36,22 @@ MAPCOLS = LAMBDA(
         keepSrc, IF(ISOMITTED(keep_source), TRUE, keep_source),
         colsFlat, TOROW(cols),
         selCols, IF(colsFlat < 0, n + colsFlat + 1, colsFlat),
-        sub, INDEX(array, SEQUENCE(m), selCols),
-        transformed, BICOL(sub, fnc),
-        posInSel, IFNA(MATCH(SEQUENCE(1, n), selCols, 0), 0),
-        fromT, INDEX(transformed, SEQUENCE(m), IF(posInSel = 0, 1, posInSel)),
-        inPlace, IF(posInSel = 0, array, fromT),
-        keptMask, posInSel = 0,
+        colAt, LAMBDA(j, INDEX(array, SEQUENCE(m), j)),
+        isSel, LAMBDA(j, ISNUMBER(MATCH(j, selCols, 0))),
+    //  Walk every column 1..n, expanding selected ones in place
+        inPlace, DROP(REDUCE(0, SEQUENCE(1, n), LAMBDA(acc, j,
+                    HSTACK(acc, IF(isSel(j), fnc(colAt(j)), colAt(j))))), , 1),
+    //  Concatenate fnc(col) over the selected columns, in selCols order
+        mapped, DROP(REDUCE(0, selCols, LAMBDA(acc, j,
+                    HSTACK(acc, fnc(colAt(j))))), , 1),
+        keptMask, ISNA(MATCH(SEQUENCE(1, n), selCols, 0)),
         nKept, SUM(--keptMask),
-        keptIdx, FILTER(SEQUENCE(1, n), keptMask, 1),
-        remaining, INDEX(array, SEQUENCE(m), keptIdx),
+        remaining, IF(nKept = 0, "", INDEX(array, SEQUENCE(m), FILTER(SEQUENCE(1, n), keptMask, 1))),
         result, IFS(
-                    place = 1, IF(keepSrc, HSTACK(array, transformed),
-                                 IF(nKept = 0, transformed, HSTACK(remaining, transformed))),
-                    place = -1, IF(keepSrc, HSTACK(transformed, array),
-                                  IF(nKept = 0, transformed, HSTACK(transformed, remaining))),
+                    place = 1, IF(keepSrc, HSTACK(array, mapped),
+                                 IF(nKept = 0, mapped, HSTACK(remaining, mapped))),
+                    place = -1, IF(keepSrc, HSTACK(mapped, array),
+                                  IF(nKept = 0, mapped, HSTACK(mapped, remaining))),
                     TRUE, inPlace
                 ),
         IF(Help?, Help, result)
