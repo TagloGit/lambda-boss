@@ -104,12 +104,13 @@ Every step row has a live-validated name editor (same `ExcelNameValidator` + col
 When the active cell's formula is already a `=LET(...)`:
 
 1. Parse the LET via the existing `LetParser` (shallow — splits top-level bindings).
-2. Promote **each calculation binding** to a toggleable **binding-step** row, keyed by its existing name (its name is preserved — the author's choice survives).
+2. Promote **every binding** to a toggleable **binding-step** row, keyed by its existing name (its name is preserved — the author's choice survives). **Value bindings (inputs) are toggleable too** — surfaced as rows badged "input", so an input can be inlined back into its use sites like any other step. They carry no sub-steps (their RHS is a leaf).
 3. Parse **the body** and **each calculation binding's RHS** with the expression parser, exploding any *further* nesting into extra sub-steps inserted **before the binding (or body) that first uses them**, preserving the existing bindings' names and relative order.
-4. Existing **value bindings** are left untouched (they're already inputs — hoisting their leaves is `/Refactor`'s job).
-5. On `FormatException` from `LetParser`, refuse with the same error wording `ConvertLetToLambdaCommand` uses — no dialog.
+4. On `FormatException` from `LetParser`, refuse with the same error wording `ConvertLetToLambdaCommand` uses — no dialog.
 
-This makes `/Unnest` **bidirectional**: a fully-nested formula explodes into max-granularity steps (default direction), and a fully-*unnested* LET surfaces every binding as a toggleable step the author can **inline back (re-nest)**. The renderer resolves a binding reference **across scopes** — it renders to the binding's name when the binding-step is included, or inlines (renders through) its RHS when it isn't — the cross-scope analogue of the node-identity inlining already used for sub-steps. Un-including a binding inlines it at every downstream reference.
+This makes `/Unnest` **bidirectional**: a fully-nested formula explodes into max-granularity steps (default direction), and a fully-*unnested* LET surfaces every binding as a toggleable step the author can **inline back (re-nest)**. The renderer resolves a binding reference **across scopes** — it renders to the binding's name when the binding-step is included, or inlines (renders through) its RHS when it isn't — the cross-scope analogue of the node-identity inlining already used for sub-steps. Un-including a binding inlines it at every downstream reference, so inlining an input keeps a kept calc step that *uses* it (e.g. inline `in` while keeping `ave, AVERAGE(in)` → `ave, AVERAGE(E5#)`).
+
+> **Known limitation (issue #287).** The renderer isn't scope-aware: a binding named the same as a `LAMBDA` parameter would be wrongly substituted *inside* that lambda. This is rare (auto-named steps never collide; `/Debug`'s scratch output seeds params as `name_in`) and is fixed under #287 alongside lambda-invariant hoisting, reusing #279's shared free-variable analysis.
 
 **Fully nested means no LET.** Un-including *every* step collapses the formula all the way to a single bare expression — and because a bare formula can't carry named inputs, the **value bindings are inlined too** (back to their leaf expressions). The LET (with its inputs) reappears the moment one step is kept. This is what makes the round-trip exact: a non-LET formula taken through `/Unnest` (and optionally `/Refactor`, which hoists leaves into inputs) returns to its original bare form when every step is inlined again, with no residual `=LET(input, …)` wrapper.
 
@@ -123,7 +124,7 @@ A new WPF window modelled on `RefactorToLetWindow`:
 - **Steps section** — one row per step, in leaf-first (topological) order, with an **Include all** tri-state checkbox in the section header (checked = all included, unchecked = all inlined, indeterminate = mixed) for one-click include-all / inline-all (the quick "nest everything" action). Each row shows:
   - **Step name** (editable, live-validated).
   - **RHS** (read-only — the node's expression with child references already substituted to step names).
-  - **Origin** badge — "function: SUMSQ" or "operator: −", to orient the author.
+  - **Origin** badge — "function: SUMSQ", "operator: −", or "input" (an existing-LET value binding), to orient the author.
   - **Include** checkbox (default on) — when off, the step is inlined back into its parent everywhere it's referenced, and the row's children re-parent to the grandparent. No warning.
 - **Preview pane** — read-only, shows the synthesised LET via `FormulaFormatter.AppendLet`, updating live as the author renames or toggles Include.
 - **Save** — writes the synthesised LET to the active cell. **Cancel** — closes with no change.
@@ -155,7 +156,7 @@ On Save, the active cell's formula is overwritten with the synthesised `=LET(...
 - [ ] Each step row exposes a live-validated name editor (reusing `ExcelNameValidator` + `LetToLambdaWindow` collision rules) and an Include checkbox (default on). Un-including a step inlines its RHS into the parent and re-parents its children.
 - [ ] The Preview pane shows the synthesised LET formatted via `FormulaFormatter`, updating as the author edits.
 - [ ] Existing LET formulas: parsed via `LetParser`; the body and each calc binding RHS are exploded into new steps inserted before first use; existing bindings preserved; on `FormatException`, refuse with a clear error and no dialog.
-- [ ] Bidirectional (issue #285): each existing calc binding is surfaced as a toggleable binding-step under its preserved name; un-including a binding inlines its RHS at every downstream reference; un-including *every* step collapses to a bare nested formula with **no LET** (value bindings inlined too), while keeping any one step retains the LET and its inputs; a shared binding stays shared while included and only duplicates when deliberately un-included; the all-included no-edit case is a verbatim no-op.
+- [ ] Bidirectional (issue #285): every existing binding — calc *and value* — is surfaced as a toggleable binding-step under its preserved name (value bindings badged "input"); un-including a binding inlines its RHS at every downstream reference (inlining an input keeps any calc step that uses it, with the input folded in); un-including *every* step collapses to a bare nested formula with **no LET**; a shared binding stays shared while included and only duplicates when deliberately un-included; the all-included no-edit case is a verbatim no-op.
 - [ ] The Steps header has an Include-all tri-state checkbox driving include-all / inline-all and reflecting mixed state.
 - [ ] Save writes the synthesised LET into the active cell via `Range.Formula2`. Cancel closes with no change.
 - [ ] The synthesised LET parses cleanly via `LetParser` (round-trip), and the full chain `/Unnest → /Refactor → /LET to LAMBDA` produces a working LAMBDA for the worked example.
@@ -170,7 +171,8 @@ On Save, the active cell's formula is overwritten with the synthesised `=LET(...
 - **Naming steps from cell labels or heuristics.** No neighbouring-cell reading; names derive from the node only.
 - **Reordering steps.** Order is forced by dependency; no reorder controls.
 - **Demoting/promoting between steps and inputs** beyond the Include toggle's inline behaviour.
-- **Demoting individual value bindings to inline leaves.** Inputs are inlined *only* in the full collapse (no step kept) so the bare formula carries no named inputs; there's no per-input toggle to fold a single input back inline while a LET is still present (that targeted `/Refactor` reverse stays out of scope).
+- **Hoisting *new* leaves into inputs.** `/Unnest` never creates value bindings — extracting a formula's leaves into named inputs is `/Refactor`'s job. (`/Unnest` only *inlines* existing inputs, via their toggle.)
+- **Hoisting a lambda-invariant sub-expression out of a `LAMBDA` body** (param-independent extraction — e.g. recovering `ave, AVERAGE(E5#)` from a fully-nested `BYROW(E5#, LAMBDA(r, … AVERAGE(E5#) …))`). The lambda body stays opaque to step collection (issue #278); re-extraction is issue #287, pending #279's shared free-variable analysis.
 - **Common-subexpression elimination when re-nesting.** Inlining a shared binding duplicates it at each use site (no CSE), matching the forward direction.
 - **Persistence of dialog state across opens** — each `/Unnest` invocation starts fresh.
 - **Editing the preview pane directly** — all edits via the row controls.

@@ -202,26 +202,29 @@ public static class UnnestEngine
 
         var bindings = parsed.Bindings;
 
-        // Build the ordered step list. For each calc binding: its nested
-        // sub-steps (leaf-first) followed by the binding-step itself; then the
-        // body's sub-steps. Value (and unparseable) bindings contribute none.
-        // The order is fully determined by the source, so step keys are stable.
-        var calcRootByIndex = new Dictionary<int, FormulaNode>();
-        var calcSubsByIndex = new Dictionary<int, List<FormulaNode>>();
+        // Build the ordered step list. EVERY binding becomes a toggleable
+        // binding-step under its name — value bindings (inputs) too, so an input
+        // can be inlined like any other step (issue #285 follow-up): for each
+        // binding, its nested sub-steps (calc bindings only — leaf-first)
+        // followed by the binding-step itself; then the body's sub-steps. An
+        // unparseable binding contributes none and is kept verbatim. The order
+        // is fully determined by the source, so step keys are stable.
+        var rootByIndex = new Dictionary<int, FormulaNode>();
+        var subsByIndex = new Dictionary<int, List<FormulaNode>>();
         var descs = new List<StepDesc>();
 
         for (var i = 0; i < bindings.Count; i++)
         {
-            if (!bindings[i].IsCalculation) continue;
             var root = TryParseScope(bindings[i].RhsText);
-            if (root is null) continue; // Unparseable RHS — kept verbatim, no steps.
+            if (root is null) continue; // Unparseable RHS — kept verbatim, no step.
 
             var subs = new List<FormulaNode>();
-            CollectSteps(root, isRoot: true, subs);
-            calcRootByIndex[i] = root;
-            calcSubsByIndex[i] = subs;
+            if (bindings[i].IsCalculation)
+                CollectSteps(root, isRoot: true, subs); // a value binding's leaf RHS nests nothing
+            rootByIndex[i] = root;
+            subsByIndex[i] = subs;
             foreach (var s in subs) descs.Add(new StepDesc(s, -1));
-            descs.Add(new StepDesc(root, i)); // the binding itself
+            descs.Add(new StepDesc(root, i)); // the binding itself (value or calc)
         }
 
         var bodyRoot = TryParseScope(parsed.Body);
@@ -257,22 +260,38 @@ public static class UnnestEngine
             var renamed = state is { } s && !string.IsNullOrWhiteSpace(s.Name) ? s.Name : null;
 
             string name;
+            UnnestStepOrigin origin;
+            string originLabel;
             if (d.IsBinding)
             {
                 // Preserve the existing binding name (the author's choice) unless
                 // the dialog explicitly renamed it.
                 name = renamed ?? bindings[d.BindingIndex].Name;
                 bindingByName[bindings[d.BindingIndex].Name] = new BindingStep(name, include, d.Node);
+
+                // A value binding is an input — badge it as such rather than by
+                // its leaf node's (function/operator) shape.
+                if (bindings[d.BindingIndex].IsCalculation)
+                {
+                    origin = OriginOf(d.Node);
+                    originLabel = OriginLabelOf(d.Node);
+                }
+                else
+                {
+                    origin = UnnestStepOrigin.Value;
+                    originLabel = "";
+                }
             }
             else
             {
                 name = renamed ?? AllocateName(BaseNameOf(d.Node), used);
                 subNameOf[d.Node] = name;
                 if (include) subIncluded.Add(d.Node);
+                origin = OriginOf(d.Node);
+                originLabel = OriginLabelOf(d.Node);
             }
 
-            rows.Add(new UnnestStepRow(
-                key, name, Rhs: "", OriginOf(d.Node), OriginLabelOf(d.Node), include));
+            rows.Add(new UnnestStepRow(key, name, Rhs: "", origin, originLabel, include));
         }
 
         // Fill each row's RHS now that every name + binding mapping is known.
@@ -293,41 +312,24 @@ public static class UnnestEngine
         if (!changed)
             return new UnnestResult(formula, rows, formula);
 
-        // Fully nested → no LET. When no step is kept (every binding-step and
-        // sub-step inlined) the result is a single bare expression — and a bare
-        // formula can't carry named inputs, so the value bindings are inlined
-        // too (re-hoisting their leaves is /Refactor's job). The LET reappears
-        // the moment one step is included. This makes a non-LET formula a true
-        // round-trip: unnest → re-unnest → inline-all returns the original.
-        if (!rows.Any(r => r.Include))
-        {
-            var inlineAll = new Dictionary<string, BindingStep>(
-                bindingByName, StringComparer.OrdinalIgnoreCase);
-            foreach (var b in bindings)
-                if (!inlineAll.ContainsKey(b.Name)) // a value (or unparseable) binding
-                    inlineAll[b.Name] = new BindingStep(
-                        b.Name, include: false, TryParseScope(b.RhsText), b.RhsText);
-
-            var collapsed = bodyRoot is not null
-                ? Render(bodyRoot, subNameOf, subIncluded, isRoot: true, inlineAll)
-                : parsed.Body;
-            return new UnnestResult(formula, rows, "=" + collapsed);
-        }
-
-        // Emit value bindings verbatim and, for each calc binding, its included
-        // sub-steps then the binding itself (skipped when inlined); then the
-        // body's included sub-steps; then the body.
+        // Emit each binding's included sub-steps then the binding itself (skipped
+        // when inlined — including value bindings, so an inlined input folds its
+        // leaf into every use site); then the body's included sub-steps; then the
+        // body. When every binding is inlined, no binding survives and the LET
+        // collapses to a bare nested formula (fully nested → no LET); the LET
+        // reappears the moment one step is kept. An unparseable binding can't be
+        // toggled, so it's emitted verbatim and keeps the LET alive.
         var letBindings = new List<(string Name, string Value)>();
         for (var i = 0; i < bindings.Count; i++)
         {
             var b = bindings[i];
-            if (!b.IsCalculation || !calcRootByIndex.TryGetValue(i, out var root))
+            if (!rootByIndex.TryGetValue(i, out var root))
             {
-                letBindings.Add((b.Name, b.RhsText));
+                letBindings.Add((b.Name, b.RhsText)); // unparseable — kept verbatim
                 continue;
             }
 
-            foreach (var sub in calcSubsByIndex[i])
+            foreach (var sub in subsByIndex[i])
                 if (subIncluded.Contains(sub))
                     letBindings.Add((subNameOf[sub], Render(sub, subNameOf, subIncluded, isRoot: true, bindingByName)));
 
@@ -344,8 +346,8 @@ public static class UnnestEngine
             ? Render(bodyRoot, subNameOf, subIncluded, isRoot: true, bindingByName)
             : parsed.Body;
 
-        // Every binding inlined and no value bindings left → a bare nested
-        // formula (a LET with no bindings would be malformed).
+        // Every binding (calc and value) inlined → a bare nested formula
+        // (a LET with no bindings would be malformed).
         var synthesised = letBindings.Count == 0
             ? "=" + bodyText
             : BuildLetFromBindings(letBindings, bodyText);

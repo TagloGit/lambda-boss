@@ -10,7 +10,15 @@ public enum UnnestStepOrigin
     Function,
 
     /// <summary>A binary-operator node — e.g. <c>a - b</c>, <c>x * 100</c>, <c>p &amp; q</c>.</summary>
-    Operator
+    Operator,
+
+    /// <summary>
+    ///     An existing-LET <em>value</em> binding (an input) — e.g. <c>in, E5#</c>,
+    ///     <c>rate, 0.05</c>. Surfaced as a toggleable row so an input can be
+    ///     inlined back into its use sites like any other step (issue #285); the
+    ///     dialog badges it "input".
+    /// </summary>
+    Value
 }
 
 /// <summary>

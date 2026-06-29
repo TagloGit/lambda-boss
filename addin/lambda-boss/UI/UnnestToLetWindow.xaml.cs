@@ -334,9 +334,12 @@ public class UnnestStepRowVm : INotifyPropertyChanged
         _name = step.Name;
         _rhs = step.Rhs;
         _include = step.Include;
-        BadgeText = step.Origin == UnnestStepOrigin.Function
-            ? "function: " + step.OriginLabel
-            : "operator: " + step.OriginLabel;
+        BadgeText = step.Origin switch
+        {
+            UnnestStepOrigin.Function => "function: " + step.OriginLabel,
+            UnnestStepOrigin.Operator => "operator: " + step.OriginLabel,
+            _ => "input" // UnnestStepOrigin.Value — an existing-LET input binding
+        };
     }
 
     public string Key { get; }

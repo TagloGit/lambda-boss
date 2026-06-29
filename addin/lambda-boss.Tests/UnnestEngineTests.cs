@@ -385,14 +385,14 @@ public class UnnestEngineTests
     [Fact]
     public void Unnest_ExistingLet_ExplodesCalcBindingsAndBodyPreservesValueBindings()
     {
-        // a, A1 is a value binding (preserved verbatim, never a step). b is a calc
-        // binding → a toggleable binding-step under its own name; its RHS nests
-        // SQRT (→ sqrt1 inserted before b); the body nests b * 2 (→ calc1 before
-        // body).
+        // a, A1 is a value binding → a toggleable input row (badged Value). b is
+        // a calc binding → a binding-step under its own name; its RHS nests SQRT
+        // (→ sqrt1 inserted before b); the body nests b * 2 (→ calc1 before body).
         var result = UnnestEngine.Unnest("=LET(a, A1, b, ROUND(SQRT(A2), 2), a + b * 2)");
 
         Assert.Null(result.Diagnostic);
         Assert.Collection(result.Steps,
+            s => AssertStep(s, "a", "A1", UnnestStepOrigin.Value),
             s => AssertStep(s, "sqrt1", "SQRT(A2)", UnnestStepOrigin.Function),
             s => AssertStep(s, "b", "ROUND(sqrt1, 2)", UnnestStepOrigin.Function),
             s => AssertStep(s, "calc1", "b * 2", UnnestStepOrigin.Operator));
@@ -440,8 +440,10 @@ public class UnnestEngineTests
         // from r's RHS must skip ahead to 'sqrt2'.
         var result = UnnestEngine.Unnest("=LET(sqrt1, X1, r, SQRT(A2) + 1, r)");
 
-        // The SQRT sub-step skips ahead to sqrt2; r is the binding-step itself.
+        // sqrt1 is the value-binding input row; the SQRT sub-step skips ahead to
+        // sqrt2 (avoiding the reserved sqrt1); r is the calc binding-step itself.
         Assert.Collection(result.Steps,
+            s => Assert.Equal("sqrt1", s.Name),
             s => Assert.Equal("sqrt2", s.Name),
             s => Assert.Equal("r", s.Name));
 
@@ -459,16 +461,20 @@ public class UnnestEngineTests
     public void Unnest_ExistingLet_AlreadyDecomposed_ShowsBindingStepsButIsNoOp()
     {
         // No calc binding RHS or body nests anything further, so there's nothing
-        // to change: the LET is returned verbatim (no cosmetic re-spacing). But
-        // the calc binding b is still surfaced as a toggleable binding-step (so
-        // it can be inlined/re-nested), while the value binding a is not.
+        // to change: the LET is returned verbatim (no cosmetic re-spacing). Both
+        // bindings are surfaced as toggleable rows — a as a Value input, b as a
+        // function binding-step — so either can be inlined/re-nested.
         const string formula = "=LET(a, A1, b, SUM(a), a + b)";
         var result = UnnestEngine.Unnest(formula);
 
         Assert.Null(result.Diagnostic);
-        var b = Assert.Single(result.Steps);
-        AssertStep(b, "b", "SUM(a)", UnnestStepOrigin.Function);
-        Assert.Equal("SUM", b.OriginLabel);
+        Assert.Collection(result.Steps,
+            s => AssertStep(s, "a", "A1", UnnestStepOrigin.Value),
+            s =>
+            {
+                AssertStep(s, "b", "SUM(a)", UnnestStepOrigin.Function);
+                Assert.Equal("SUM", s.OriginLabel);
+            });
         Assert.Equal(formula, result.SynthesisedLet);
     }
 
@@ -480,8 +486,10 @@ public class UnnestEngineTests
         var result = UnnestEngine.Unnest(
             "=LET(a, A1, b, ROUND(BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r))), 2), a + b)");
 
-        // byrow1 is the exploded sub-step; b is the binding-step itself.
+        // a is the value-binding input row; byrow1 is the exploded sub-step; b is
+        // the calc binding-step itself.
         Assert.Collection(result.Steps,
+            s => Assert.Equal("a", s.Name),
             s =>
             {
                 Assert.Equal("byrow1", s.Name);
@@ -656,15 +664,15 @@ public class UnnestEngineTests
     [Fact]
     public void Recompute_LetWithInput_OneStepKept_KeepsLetWithInput()
     {
-        // The LET (and its input) reappears as soon as one step is kept: with
-        // base1 included, rate is still needed as a named input.
+        // The LET reappears as soon as one step is kept. Keep the rate input and
+        // base1, inline total — rate stays a named input feeding base1.
         const string formula =
             "=LET(rate, 0.05, base1, A1 * rate, total, base1 + 10, total)";
         var initial = UnnestEngine.Unnest(formula);
 
-        // Keep base1, inline total.
+        // Keep rate (the input) and base1; inline total.
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name == "base1"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name is "rate" or "base1"))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
@@ -716,6 +724,67 @@ public class UnnestEngineTests
             "    c + 1\n" +
             ")";
         Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Unnest_ExistingLet_ValueBindingIsToggleableInputRow()
+    {
+        // The value binding 'in' is now surfaced as a toggleable input row
+        // (badged Value), so it can be inlined like any other step.
+        var result = UnnestEngine.Unnest(
+            "=LET(in, E5#, ave, AVERAGE(in), BYROW(in, LAMBDA(r, IF(MAX(r) > ave, MAX(r), MIN(r)))))");
+
+        Assert.Null(result.Diagnostic);
+        Assert.Collection(result.Steps,
+            s => AssertStep(s, "in", "E5#", UnnestStepOrigin.Value),
+            s => AssertStep(s, "ave", "AVERAGE(in)", UnnestStepOrigin.Function));
+    }
+
+    [Fact]
+    public void Recompute_InlineInputKeepCalcStep_InlinesInputEverywhereKeepsStep()
+    {
+        // Tim's case: inline the input 'in' (E5#) but keep the calc step 'ave'.
+        // E5# folds into every use site (ave's RHS and the body), ave stays a
+        // named binding referenced inside the lambda.
+        const string formula =
+            "=LET(in, E5#, ave, AVERAGE(in), BYROW(in, LAMBDA(r, IF(MAX(r) > ave, MAX(r), MIN(r)))))";
+        var initial = UnnestEngine.Unnest(formula);
+
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "in"))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(formula, states);
+
+        const string expected =
+            "=LET(\n" +
+            "    ave, AVERAGE(E5#),\n" +
+            "    BYROW(E5#, LAMBDA(r, IF(MAX(r) > ave, MAX(r), MIN(r))))\n" +
+            ")";
+        Assert.Equal(expected, result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Recompute_InlineInputAndStep_CollapsesToBareFormula()
+    {
+        // Inlining both the input and the calc step fully nests it — no LET. The
+        // calc step's AVERAGE(E5#) lands inside the lambda body (where /Unnest
+        // can't currently re-extract it — that's the param-invariant hoisting of
+        // issue #287).
+        const string formula =
+            "=LET(in, E5#, ave, AVERAGE(in), BYROW(in, LAMBDA(r, IF(MAX(r) > ave, MAX(r), MIN(r)))))";
+        var initial = UnnestEngine.Unnest(formula);
+
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(formula, states);
+
+        Assert.Equal(
+            "=BYROW(E5#, LAMBDA(r, IF(MAX(r) > AVERAGE(E5#), MAX(r), MIN(r))))",
+            result.SynthesisedLet);
+        Assert.False(LetParser.IsLetFormula(result.SynthesisedLet));
     }
 
     [Fact]
