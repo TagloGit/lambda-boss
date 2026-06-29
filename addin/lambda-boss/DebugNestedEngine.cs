@@ -191,6 +191,213 @@ public static class DebugNestedEngine
         return new DebugWatch(scopeKey, debugSteps, "result", finalEval);
     }
 
+    // ---------------- scratch-sheet extraction (new approach) ----------------
+
+    /// <summary>
+    ///     The minimum set of free names a scope's body references, classified
+    ///     (<see cref="DebugInput" />) so the scratch-sheet generator knows how to
+    ///     supply each: a <see cref="DebugInputKind.Param" /> /
+    ///     <see cref="DebugInputKind.EnclosingParam" /> needs a sample value, a
+    ///     <see cref="DebugInputKind.LetBinding" /> carries its enclosing-LET
+    ///     definition to rebuild, and an <see cref="DebugInputKind.External" />
+    ///     resolves on its own. Names bound <em>within</em> the body (its own
+    ///     nested <c>LET</c>/<c>LAMBDA</c>) are not inputs. Returns an empty list
+    ///     when the formula or scope can't be found.
+    /// </summary>
+    public static IReadOnlyList<DebugInput> AnalyzeInputs(string formula, string scopeKey)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+
+        List<ScopeInfo> infos;
+        try
+        {
+            infos = WalkScopes(formula);
+        }
+        catch (FormatException)
+        {
+            return Array.Empty<DebugInput>();
+        }
+
+        var target = infos.FirstOrDefault(s => s.Key == scopeKey);
+        if (target is null) return Array.Empty<DebugInput>();
+
+        FormulaNode body;
+        try
+        {
+            body = FormulaParser.Parse(target.BodyText).Root;
+        }
+        catch (FormatException)
+        {
+            return Array.Empty<DebugInput>();
+        }
+
+        var order = new List<string>();
+        CollectFreeNames(body, new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            order, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        var ownParams = new HashSet<string>(target.Params, StringComparer.OrdinalIgnoreCase);
+        var enclParams = new HashSet<string>(target.EnclosingParams, StringComparer.OrdinalIgnoreCase);
+        var letByName = target.EnclosingLet
+            .GroupBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last().Rhs, StringComparer.OrdinalIgnoreCase);
+
+        var inputs = new List<DebugInput>(order.Count);
+        foreach (var name in order)
+        {
+            if (ownParams.Contains(name))
+                inputs.Add(new DebugInput(name, DebugInputKind.Param, null));
+            else if (enclParams.Contains(name))
+                inputs.Add(new DebugInput(name, DebugInputKind.EnclosingParam, null));
+            else if (letByName.TryGetValue(name, out var def))
+                inputs.Add(new DebugInput(name, DebugInputKind.LetBinding, def));
+            else
+                inputs.Add(new DebugInput(name, DebugInputKind.External, null));
+        }
+
+        return inputs;
+    }
+
+    /// <summary>
+    ///     Assembles the debuggable multiline <c>=LET(...)</c> for a scope: each
+    ///     parameter seeded with the supplied expression (a live slice for a known
+    ///     iterator, or a probe-captured literal), followed by the body decomposed
+    ///     into leaf-first steps (reusing <see cref="UnnestEngine" />), then the
+    ///     body. Seeding the params as the <em>first</em> bindings means a later
+    ///     <c>/LET to LAMBDA</c> lifts exactly them into the lambda's signature.
+    ///     Enclosing-LET names referenced by the body (e.g. <c>convert</c>) are
+    ///     left as free names — the scratch sheet rebuilds them as sheet-scoped
+    ///     defined names, so they resolve without becoming parameters. Returns
+    ///     the empty string when the formula or scope can't be read.
+    /// </summary>
+    public static string BuildDebugLet(
+        string formula,
+        string scopeKey,
+        IReadOnlyList<DebugPin> paramSeeds,
+        IReadOnlyCollection<string>? definedNames = null)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        if (scopeKey is null) throw new ArgumentNullException(nameof(scopeKey));
+        if (paramSeeds is null) throw new ArgumentNullException(nameof(paramSeeds));
+
+        List<ScopeInfo> infos;
+        try
+        {
+            infos = WalkScopes(formula);
+        }
+        catch (FormatException)
+        {
+            return "";
+        }
+
+        var target = infos.FirstOrDefault(s => s.Key == scopeKey);
+        if (target is null) return "";
+
+        // Prefix '=' so a body that is itself a LET takes UnnestEngine's
+        // existing-LET path (which decomposes it) rather than being treated as
+        // an opaque scope-introducing call.
+        var un = UnnestEngine.Unnest("=" + target.BodyText, definedNames);
+        if (un.Diagnostic is not null) return "";
+
+        List<(string Name, string Value)> innerBindings;
+        string finalBody;
+        if (LetParser.IsLetFormula(un.SynthesisedLet))
+        {
+            var parsed = LetParser.Parse(un.SynthesisedLet);
+            innerBindings = parsed.Bindings.Select(b => (b.Name, b.RhsText)).ToList();
+            finalBody = parsed.Body;
+        }
+        else
+        {
+            innerBindings = new List<(string, string)>();
+            finalBody = target.BodyText;
+        }
+
+        var bindings = paramSeeds
+            .Select(p => (p.Param, p.Expression))
+            .Concat(innerBindings)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.Append('=');
+        FormulaFormatter.AppendLet(sb, 0, bindings, finalBody);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    ///     Collects, in first-encounter order, the plain-identifier names that are
+    ///     free in <paramref name="node" /> — i.e. not bound by a <c>LET</c> or
+    ///     <c>LAMBDA</c> nested within it, and not a function-call name. Cell
+    ///     references and structured/table references are skipped (they aren't
+    ///     debug inputs); a name shadowed by an inner binding is correctly
+    ///     excluded for that sub-tree.
+    /// </summary>
+    private static void CollectFreeNames(
+        FormulaNode node, HashSet<string> bound, List<string> order, HashSet<string> seen)
+    {
+        switch (node)
+        {
+            case LeafNode leaf when leaf.TokenType == FormulaTokenType.Name:
+                var name = leaf.Text;
+                if (IsPlainName(name) && !bound.Contains(name) && seen.Add(name))
+                    order.Add(name);
+                return;
+
+            case FunctionCallNode lam when IsLambdaCall(lam, out var lamCall):
+            {
+                var (ps, body) = SplitLambda(lamCall);
+                var inner = new HashSet<string>(bound, StringComparer.OrdinalIgnoreCase);
+                foreach (var p in ps) inner.Add(p);
+                CollectFreeNames(body, inner, order, seen);
+                return;
+            }
+
+            case FunctionCallNode let when IsLet(let):
+            {
+                var args = let.Arguments;
+                var inner = new HashSet<string>(bound, StringComparer.OrdinalIgnoreCase);
+                var i = 0;
+                for (; i + 1 < args.Count; i += 2)
+                {
+                    CollectFreeNames(args[i + 1], inner, order, seen);
+                    inner.Add(args[i].ToFormula().Trim());
+                }
+
+                if (i < args.Count)
+                    CollectFreeNames(args[i], inner, order, seen);
+                return;
+            }
+
+            case FunctionCallNode call:
+                foreach (var arg in call.Arguments)
+                    CollectFreeNames(arg, bound, order, seen);
+                return;
+
+            default:
+                foreach (var child in Children(node))
+                    CollectFreeNames(child, bound, order, seen);
+                return;
+        }
+    }
+
+    /// <summary>
+    ///     True for a bare Excel identifier (a defined name or lambda parameter):
+    ///     starts with a letter or underscore, then letters/digits/<c>_ . ?</c>.
+    ///     This deliberately rejects cell addresses like <c>A1</c> (which contain
+    ///     no separator but end in digits after column letters) only loosely — a
+    ///     name like <c>data</c> or <c>convert</c> matches, while a pure reference
+    ///     token carrying <c>! : $ [ ]</c> never does. Cell-address-shaped names
+    ///     fall through to the External bucket, which is harmless.
+    /// </summary>
+    private static bool IsPlainName(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return false;
+        if (!char.IsLetter(s[0]) && s[0] != '_') return false;
+        foreach (var c in s)
+            if (!char.IsLetterOrDigit(c) && c != '_' && c != '.' && c != '?')
+                return false;
+        return true;
+    }
+
     // ---------------- evaluable-formula assembly ----------------
 
     /// <summary>
@@ -262,15 +469,18 @@ public static class DebugNestedEngine
         public List<string> HostSourceArgs = new();
         public List<string> Params = new();
         public List<string> EnclosingParams = new();
+        public List<(string Name, string Rhs)> EnclosingLet = new();
         public string BodyText = "";
         public int? ParentIndex;
     }
+
+    private static readonly (string Name, string Rhs)[] EmptyLet = Array.Empty<(string, string)>();
 
     private static List<ScopeInfo> WalkScopes(string formula)
     {
         var ast = FormulaParser.Parse(formula);
         var sink = new List<ScopeInfo>();
-        Visit(ast.Root, hostName: "", Empty, Empty, depth: 0, parentIndex: null, sink);
+        Visit(ast.Root, hostName: "", Empty, Empty, EmptyLet, depth: 0, parentIndex: null, sink);
         return sink;
     }
 
@@ -279,6 +489,7 @@ public static class DebugNestedEngine
         string hostName,
         IReadOnlyList<string> hostArgs,
         IReadOnlyList<string> enclosing,
+        IReadOnlyList<(string Name, string Rhs)> enclosingLet,
         int depth,
         int? parentIndex,
         List<ScopeInfo> sink)
@@ -294,6 +505,7 @@ public static class DebugNestedEngine
                 HostSourceArgs = hostArgs.ToList(),
                 Params = paramNames,
                 EnclosingParams = enclosing.ToList(),
+                EnclosingLet = enclosingLet.ToList(),
                 BodyText = body.ToFormula().Trim(),
                 ParentIndex = parentIndex
             };
@@ -303,7 +515,25 @@ public static class DebugNestedEngine
             // Descend into the body to find nested lambda scopes; the body's own
             // params join the enclosing set for them.
             var childEnclosing = enclosing.Concat(paramNames).ToList();
-            Visit(body, hostName: "", Empty, childEnclosing, depth + 1, myIndex, sink);
+            Visit(body, hostName: "", Empty, childEnclosing, enclosingLet, depth + 1, myIndex, sink);
+            return;
+        }
+
+        // A LET binds names visible to its later bindings and body — thread them
+        // so a lambda nested inside the LET knows which free names it can rebuild.
+        if (node is FunctionCallNode letCall && IsLet(letCall))
+        {
+            var args = letCall.Arguments;
+            var acc = enclosingLet.ToList();
+            var i = 0;
+            for (; i + 1 < args.Count; i += 2)
+            {
+                Visit(args[i + 1], "LET", Empty, enclosing, acc, depth, parentIndex, sink);
+                acc.Add((args[i].ToFormula().Trim(), args[i + 1].ToFormula().Trim()));
+            }
+
+            if (i < args.Count)
+                Visit(args[i], "LET", Empty, enclosing, acc, depth, parentIndex, sink);
             return;
         }
 
@@ -317,12 +547,17 @@ public static class DebugNestedEngine
                 .ToList();
             var name = CleanName(call.Name);
             foreach (var arg in call.Arguments)
-                Visit(arg, name, sourceArgs, enclosing, depth, parentIndex, sink);
+                Visit(arg, name, sourceArgs, enclosing, enclosingLet, depth, parentIndex, sink);
             return;
         }
 
         foreach (var child in Children(node))
-            Visit(child, hostName, hostArgs, enclosing, depth, parentIndex, sink);
+            Visit(child, hostName, hostArgs, enclosing, enclosingLet, depth, parentIndex, sink);
+    }
+
+    private static bool IsLet(FunctionCallNode call)
+    {
+        return CleanName(call.Name).Equals("LET", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsLambdaCall(FormulaNode node, out FunctionCallNode call)

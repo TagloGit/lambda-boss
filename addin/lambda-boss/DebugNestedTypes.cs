@@ -73,6 +73,38 @@ public sealed record DebugDiscovery(
     DebugDiagnostic? Diagnostic = null);
 
 /// <summary>
+///     Spec 0010 (spike) — how a free name referenced by a lambda body is
+///     classified, which decides how it's supplied on the scratch sheet:
+///     <see cref="Param" />/<see cref="EnclosingParam" /> need a sample value
+///     (live slice or probe-captured), a <see cref="LetBinding" /> is
+///     reconstructed from its real definition as a sheet-scoped name, and an
+///     <see cref="External" /> name (table column, workbook name, cell ref)
+///     resolves on its own (modulo sheet-local ref qualification).
+/// </summary>
+public enum DebugInputKind
+{
+    /// <summary>A parameter bound by the scope's own lambda.</summary>
+    Param,
+
+    /// <summary>A parameter bound by an enclosing lambda.</summary>
+    EnclosingParam,
+
+    /// <summary>A binding from an enclosing <c>LET</c> (its definition is reconstructable).</summary>
+    LetBinding,
+
+    /// <summary>Anything else — a table ref, workbook name, or cell reference.</summary>
+    External
+}
+
+/// <summary>
+///     A free name referenced by a lambda body, classified by
+///     <see cref="DebugInputKind" />. <see cref="Definition" /> is the enclosing
+///     <c>LET</c> binding's RHS text for a <see cref="DebugInputKind.LetBinding" />
+///     (so it can be rebuilt on the scratch sheet); null otherwise.
+/// </summary>
+public sealed record DebugInput(string Name, DebugInputKind Kind, string? Definition);
+
+/// <summary>
 ///     The computed value of a step's <see cref="DebugStep.EvaluableFormula" />
 ///     for the pinned example, as Excel rendered it (mechanism C). <see cref="Display" />
 ///     is the formatted text — a scalar, an Excel error string (<c>#VALUE!</c>,

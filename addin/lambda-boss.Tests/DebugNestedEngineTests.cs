@@ -178,4 +178,79 @@ public class DebugNestedEngineTests
         Assert.Contains("LAMBDA(a, b, a + b)", pairop.Rhs);
         Assert.StartsWith("=LET(r, CHOOSEROWS(data, 1),", pairop.EvaluableFormula);
     }
+
+    // ---------------- scratch-sheet extraction (new approach) ----------------
+
+    // A LET-wrapped formula like Tim's: `convert` and `both` are parent-LET
+    // bindings; the inner lambda body references `r` (its param) and `convert`.
+    private const string LetWrapped =
+        "=LET(convert, data[Amount], both, VSTACK(convert, convert), " +
+        "BYROW(both, LAMBDA(r, LET(m, MAX(r), IF(m > AVERAGE(convert), m, 0)))))";
+
+    [Fact]
+    public void AnalyzeInputs_ClassifiesParamAndEnclosingLetBinding()
+    {
+        var inputs = DebugNestedEngine.AnalyzeInputs(LetWrapped, "scope0");
+
+        // `r` is the lambda param; `convert` is an enclosing-LET binding whose
+        // definition we can rebuild. `both` (unreferenced by the body) and `m`
+        // (bound inside the body's own LET) are correctly excluded.
+        Assert.Collection(inputs,
+            i =>
+            {
+                Assert.Equal("r", i.Name);
+                Assert.Equal(DebugInputKind.Param, i.Kind);
+                Assert.Null(i.Definition);
+            },
+            i =>
+            {
+                Assert.Equal("convert", i.Name);
+                Assert.Equal(DebugInputKind.LetBinding, i.Kind);
+                Assert.Equal("data[Amount]", i.Definition);
+            });
+    }
+
+    [Fact]
+    public void AnalyzeInputs_UnknownName_ClassifiesAsExternal()
+    {
+        var inputs = DebugNestedEngine.AnalyzeInputs(
+            "=BYROW(rng, LAMBDA(r, r + factor))", "scope0");
+
+        Assert.Collection(inputs,
+            i => Assert.Equal(DebugInputKind.Param, i.Kind),
+            i =>
+            {
+                Assert.Equal("factor", i.Name);
+                Assert.Equal(DebugInputKind.External, i.Kind);
+            });
+    }
+
+    [Fact]
+    public void AnalyzeInputs_InnerScope_ParamAndEnclosingParam()
+    {
+        var inputs = DebugNestedEngine.AnalyzeInputs(Nested, "scope1");
+
+        // Inner LAMBDA(a, b) body `a + b`: both are its own params.
+        Assert.All(inputs, i => Assert.Equal(DebugInputKind.Param, i.Kind));
+        Assert.Equal(new[] { "a", "b" }, inputs.Select(i => i.Name));
+    }
+
+    [Fact]
+    public void BuildDebugLet_SeedsParamFirstThenUnnestedBody()
+    {
+        var seeds = new[] { new DebugPin("r", "CHOOSEROWS(both, 1)") };
+
+        var let = DebugNestedEngine.BuildDebugLet(LetWrapped, "scope0", seeds);
+
+        Assert.StartsWith("=LET(", let);
+
+        // Round-trips through LetParser, param seeded first, enclosing-LET name
+        // `convert` left free (rebuilt on the sheet, not a binding), body intact.
+        var parsed = LetParser.Parse(let);
+        Assert.Equal("r", parsed.Bindings[0].Name);
+        Assert.Equal("CHOOSEROWS(both, 1)", parsed.Bindings[0].RhsText);
+        Assert.Contains(parsed.Bindings, b => b.RhsText == "AVERAGE(convert)");
+        Assert.DoesNotContain(parsed.Bindings, b => b.Name == "convert");
+        Assert.Equal("IF(calc1, m, 0)", parsed.Body);
+    }
 }
