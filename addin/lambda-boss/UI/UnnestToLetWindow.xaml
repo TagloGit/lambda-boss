@@ -43,12 +43,22 @@
                  VerticalScrollBarVisibility="Auto"
                  MaxHeight="80" />
 
-        <TextBlock Grid.Row="2"
-                   Text="Steps"
-                   FontSize="13"
-                   FontWeight="Bold"
-                   Foreground="#dcdcaa"
-                   Margin="0,12,0,4" />
+        <DockPanel Grid.Row="2" Margin="0,12,0,4">
+            <CheckBox x:Name="SelectAllCheck"
+                      DockPanel.Dock="Right"
+                      Content="Include all"
+                      IsThreeState="True"
+                      VerticalAlignment="Center"
+                      Foreground="#cccccc"
+                      Cursor="Hand"
+                      Click="SelectAllCheck_Click"
+                      ToolTip="Include every step, or inline every step at once (collapse back to a nested formula)" />
+            <TextBlock Text="Steps"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Foreground="#dcdcaa"
+                       VerticalAlignment="Center" />
+        </DockPanel>
 
         <Border Grid.Row="3"
                 Background="#252526"

@@ -99,24 +99,26 @@ Every step row has a live-validated name editor (same `ExcelNameValidator` + col
 - If the active cell is empty or holds a literal value (no `=`-prefixed formula), the command does nothing — no dialog, no error. Same pattern as `/Refactor` and `/Gather`.
 - If the active cell's formula has **no step candidates** (it's a single leaf, a single bare reference, or a lone function with the whole thing as root and nothing nested — e.g. `=A1+B1` has one operator node which is the root → body only, zero steps), the dialog still opens, shows zero steps, and Save is a no-op rewrite. *(Confirm the exact zero-step threshold during planning — see Open Questions.)*
 
-### Existing-LET handling
+### Existing-LET handling — bidirectional (issue #285)
 
 When the active cell's formula is already a `=LET(...)`:
 
 1. Parse the LET via the existing `LetParser` (shallow — splits top-level bindings).
-2. Parse **the body** and **each calculation binding's RHS** with the new expression parser, exploding their nested step candidates into new steps.
-3. New steps are inserted **before the binding (or body) that first uses them**, preserving the existing bindings' names and relative order.
-4. Existing **value bindings** are left untouched (they're already inputs).
+2. Promote **each calculation binding** to a toggleable **binding-step** row, keyed by its existing name (its name is preserved — the author's choice survives).
+3. Parse **the body** and **each calculation binding's RHS** with the expression parser, exploding any *further* nesting into extra sub-steps inserted **before the binding (or body) that first uses them**, preserving the existing bindings' names and relative order.
+4. Existing **value bindings** are left untouched (they're already inputs — hoisting their leaves is `/Refactor`'s job).
 5. On `FormatException` from `LetParser`, refuse with the same error wording `ConvertLetToLambdaCommand` uses — no dialog.
 
-The primary target is the non-LET nested formula (the "written for brevity during a case" case). Existing-LET support is for re-unnesting a partially-decomposed LET; if it proves fiddly, the plan may scope v1 to non-LET formulas only and treat an existing LET as an explode-the-body-only operation. *(Confirm during planning.)*
+This makes `/Unnest` **bidirectional**: a fully-nested formula explodes into max-granularity steps (default direction), and a fully-*unnested* LET surfaces every binding as a toggleable step the author can **inline back (re-nest)**. The renderer resolves a binding reference **across scopes** — it renders to the binding's name when the binding-step is included, or inlines (renders through) its RHS when it isn't — the cross-scope analogue of the node-identity inlining already used for sub-steps. Un-including a binding inlines it at every downstream reference; un-including all of them collapses the LET back into a single nested expression (a bare formula when there are no value bindings, or inputs-plus-nested-body when there are).
+
+**Sharing vs. duplication.** While a binding is included it stays a single *shared* binding (no duplication, even if referenced many times). Only deliberately un-including a shared binding duplicates its RHS at each use site — the same no-CSE stance the non-LET path takes, and the expected meaning of "nest it." The default state (all bindings included, nothing further to explode, no renames) returns the LET verbatim — a true no-op.
 
 ### Dialog (`UnnestToLetWindow`)
 
 A new WPF window modelled on `RefactorToLetWindow`:
 
 - **Active cell address and original formula** (read-only header).
-- **Steps section** — one row per step, in leaf-first (topological) order. Each row shows:
+- **Steps section** — one row per step, in leaf-first (topological) order, with an **Include all** tri-state checkbox in the section header (checked = all included, unchecked = all inlined, indeterminate = mixed) for one-click include-all / inline-all (the quick "nest everything" action). Each row shows:
   - **Step name** (editable, live-validated).
   - **RHS** (read-only — the node's expression with child references already substituted to step names).
   - **Origin** badge — "function: SUMSQ" or "operator: −", to orient the author.
@@ -151,6 +153,8 @@ On Save, the active cell's formula is overwritten with the synthesised `=LET(...
 - [ ] Each step row exposes a live-validated name editor (reusing `ExcelNameValidator` + `LetToLambdaWindow` collision rules) and an Include checkbox (default on). Un-including a step inlines its RHS into the parent and re-parents its children.
 - [ ] The Preview pane shows the synthesised LET formatted via `FormulaFormatter`, updating as the author edits.
 - [ ] Existing LET formulas: parsed via `LetParser`; the body and each calc binding RHS are exploded into new steps inserted before first use; existing bindings preserved; on `FormatException`, refuse with a clear error and no dialog.
+- [ ] Bidirectional (issue #285): each existing calc binding is surfaced as a toggleable binding-step under its preserved name; un-including a binding inlines its RHS at every downstream reference; un-including all collapses the LET to a single nested expression; a shared binding stays shared while included and only duplicates when deliberately un-included; value bindings stay as inputs; the all-included no-edit case is a verbatim no-op.
+- [ ] The Steps header has an Include-all tri-state checkbox driving include-all / inline-all and reflecting mixed state.
 - [ ] Save writes the synthesised LET into the active cell via `Range.Formula2`. Cancel closes with no change.
 - [ ] The synthesised LET parses cleanly via `LetParser` (round-trip), and the full chain `/Unnest → /Refactor → /LET to LAMBDA` produces a working LAMBDA for the worked example.
 - [ ] Unit tests cover: the parser (precedence, function calls, nested calls, operator chains, structured refs, array constants, string literals, spill/`%`/`@`); step extraction (worked example, function-only formula, operator-only formula, single-leaf/single-root no-op); function-derived and `calcN` naming with collision suffixing; Include-toggle inlining and re-parenting; existing-LET explosion; round-trip through `LetParser`; and end-to-end through `LetToLambdaBuilder` after a `/Refactor` pass.
@@ -164,7 +168,8 @@ On Save, the active cell's formula is overwritten with the synthesised `=LET(...
 - **Naming steps from cell labels or heuristics.** No neighbouring-cell reading; names derive from the node only.
 - **Reordering steps.** Order is forced by dependency; no reorder controls.
 - **Demoting/promoting between steps and inputs** beyond the Include toggle's inline behaviour.
-- **Reverse direction** (collapsing a LET's steps back into a single nested expression).
+- **Collapsing value bindings back into inline leaves.** Re-nesting (issue #285) inlines *calculation* bindings; value bindings (inputs) stay as named bindings — folding their leaves back inline is `/Refactor`'s reverse and remains out of scope.
+- **Common-subexpression elimination when re-nesting.** Inlining a shared binding duplicates it at each use site (no CSE), matching the forward direction.
 - **Persistence of dialog state across opens** — each `/Unnest` invocation starts fresh.
 - **Editing the preview pane directly** — all edits via the row controls.
 

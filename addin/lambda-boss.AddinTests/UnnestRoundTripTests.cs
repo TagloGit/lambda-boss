@@ -141,6 +141,62 @@ public class UnnestRoundTripTests
     }
 
     [Fact]
+    public void Unnest_ThenReNestAll_ProducesNestedFormulaExcelAccepts()
+    {
+        // Issue #285 — the reverse direction. Unnest the nested formula into a
+        // LET, then re-open /Unnest on that LET and inline every binding-step
+        // (deselect-all). The result must be a bare nested formula that Excel
+        // accepts and computes to the same value as the original.
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            SeedLeaves(ws);
+
+            var original = ws.Range["D1"];
+            var reNested = ws.Range["D2"];
+            try
+            {
+                original.Formula2 = NestedFormula;
+                _excel.Application.Calculate();
+                var expected = Convert.ToDouble(original.Value);
+
+                // /Unnest the nested formula into a LET of named steps.
+                var let = UnnestEngine.Unnest(NestedFormula).SynthesisedLet;
+                Assert.True(LetParser.IsLetFormula(let));
+
+                // Re-open /Unnest on the LET: every calc binding is now a
+                // toggleable binding-step. Inline them all.
+                var reopened = UnnestEngine.Unnest(let);
+                Assert.NotEmpty(reopened.Steps);
+                var inlineAll = reopened.Steps
+                    .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+                    .ToList();
+                var collapsed = UnnestEngine.Recompute(let, inlineAll).SynthesisedLet;
+                _output.WriteLine($"Re-nested:\n{collapsed}");
+
+                // Collapsed back to a single expression (no LET wrapper).
+                Assert.False(LetParser.IsLetFormula(collapsed));
+
+                reNested.Formula2 = collapsed;
+                _excel.Application.Calculate();
+                var actual = Convert.ToDouble(reNested.Value);
+
+                _output.WriteLine($"Original = {expected}, re-nested = {actual}");
+                Assert.Equal(expected, actual);
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(original);
+                Marshal.ReleaseComObject(reNested);
+            }
+        }
+        finally
+        {
+            CleanupSheet(ws);
+        }
+    }
+
+    [Fact]
     public void EmptyOrLiteralCell_HasNoFormula_SoCommandNoOps()
     {
         var ws = _excel.AddWorksheet();
