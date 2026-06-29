@@ -237,7 +237,11 @@ internal static class DebugLambdaCommand
 
         SetCell(sheet, 1, 1, "Debug Lambda");
         SetCell(sheet, 2, 1, "Source");
-        SetCell(sheet, 2, 2, formula);
+        // The source is an informational echo, not a live formula — write it as
+        // text so Excel doesn't enter it (the Value2 setter would route a leading
+        // '=' through the legacy formula path, scalarising dynamic-array refs with
+        // '@' and resolving any sheet-local refs against this sheet).
+        SetFormulaText(sheet, 2, 2, formula);
         SetCell(sheet, 3, 1, "Lambda");
         SetCell(sheet, 3, 2, scopeLabel);
 
@@ -293,6 +297,22 @@ internal static class DebugLambdaCommand
     {
         try { sheet.Cells[row, col].Value2 = text; }
         catch (Exception ex) { Logger.Error($"DebugLambda/SetCell({row},{col})", ex); }
+    }
+
+    /// <summary>
+    ///     Writes <paramref name="text" /> that may start with <c>=</c> as literal
+    ///     text (forcing the cell to text format first) so Excel displays it
+    ///     verbatim instead of entering it as a formula.
+    /// </summary>
+    private static void SetFormulaText(dynamic sheet, int row, int col, string text)
+    {
+        try
+        {
+            dynamic cell = sheet.Cells[row, col];
+            cell.NumberFormat = "@";
+            cell.Value2 = text;
+        }
+        catch (Exception ex) { Logger.Error($"DebugLambda/SetFormulaText({row},{col})", ex); }
     }
 
     private static void DefineName(
