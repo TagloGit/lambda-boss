@@ -253,4 +253,27 @@ public class DebugNestedEngineTests
         Assert.DoesNotContain(parsed.Bindings, b => b.Name == "convert");
         Assert.Equal("IF(calc1, m, 0)", parsed.Body);
     }
+
+    [Fact]
+    public void BuildCaptureFormula_WrapsExpressionInEnclosingLetContext()
+    {
+        // A param slice and an enclosing-LET binding both evaluate correctly once
+        // wrapped in the parent LET's bindings.
+        Assert.Equal(
+            "=LET(convert, data[Amount], both, VSTACK(convert, convert), CHOOSEROWS(both, 1))",
+            DebugNestedEngine.BuildCaptureFormula(LetWrapped, "scope0", "CHOOSEROWS(both, 1)"));
+
+        Assert.Equal(
+            "=LET(convert, data[Amount], both, VSTACK(convert, convert), convert)",
+            DebugNestedEngine.BuildCaptureFormula(LetWrapped, "scope0", "convert"));
+    }
+
+    [Fact]
+    public void BuildCaptureFormula_NoEnclosingLet_JustPrefixesEquals()
+    {
+        Assert.Equal(
+            "=CHOOSEROWS(rng, 1)",
+            DebugNestedEngine.BuildCaptureFormula(
+                "=BYROW(rng, LAMBDA(r, r + 1))", "scope0", "CHOOSEROWS(rng, 1)"));
+    }
 }

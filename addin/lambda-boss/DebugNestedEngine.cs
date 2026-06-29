@@ -324,6 +324,45 @@ public static class DebugNestedEngine
     }
 
     /// <summary>
+    ///     Wraps <paramref name="expression" /> in the chosen scope's enclosing
+    ///     <c>LET</c> context so it can be evaluated to a concrete value on the
+    ///     source sheet (where sheet-local references and tables resolve). Used to
+    ///     snapshot an input for the scratch sheet: pass a parameter's slice
+    ///     expression (<c>CHOOSEROWS(both, 1)</c>) or an enclosing-LET binding's
+    ///     name (<c>convert</c>) and evaluate the result. Returns null when the
+    ///     formula or scope can't be read.
+    /// </summary>
+    public static string? BuildCaptureFormula(string formula, string scopeKey, string expression)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        if (scopeKey is null) throw new ArgumentNullException(nameof(scopeKey));
+        if (expression is null) throw new ArgumentNullException(nameof(expression));
+
+        List<ScopeInfo> infos;
+        try
+        {
+            infos = WalkScopes(formula);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        var target = infos.FirstOrDefault(s => s.Key == scopeKey);
+        if (target is null) return null;
+
+        if (target.EnclosingLet.Count == 0)
+            return "=" + expression;
+
+        var sb = new StringBuilder();
+        sb.Append("=LET(");
+        foreach (var (name, rhs) in target.EnclosingLet)
+            sb.Append(name).Append(", ").Append(rhs).Append(", ");
+        sb.Append(expression).Append(')');
+        return sb.ToString();
+    }
+
+    /// <summary>
     ///     Collects, in first-encounter order, the plain-identifier names that are
     ///     free in <paramref name="node" /> — i.e. not bound by a <c>LET</c> or
     ///     <c>LAMBDA</c> nested within it, and not a function-call name. Cell

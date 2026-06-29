@@ -452,6 +452,14 @@ public partial class LambdaPopup
                 ExcelAsyncUtil.QueueAsMacro(() => UnnestCommand.Run());
             }),
         new SlashCommand(
+            "Debug Lambda",
+            "Extract a nested LAMBDA to a scratch sheet as an editable LET wired to sample inputs",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => DebugLambdaCommand.Run());
+            }),
+        new SlashCommand(
             "Debug Nested",
             "Pin a nested LAMBDA to one example and watch each step of its body compute a live value",
             () =>
