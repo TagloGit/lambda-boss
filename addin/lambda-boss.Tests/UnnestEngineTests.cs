@@ -636,10 +636,10 @@ public class UnnestEngineTests
     }
 
     [Fact]
-    public void Recompute_UnnestedLet_UnIncludeAll_KeepsValueBindingsAsInputs()
+    public void Recompute_UnnestedLet_UnIncludeAll_InlinesValueBindingsToBareFormula()
     {
-        // With a value binding present, deselect-all collapses the calc steps but
-        // leaves the value binding as a named input (its leaf is /Refactor's job).
+        // Fully nested means no LET at all: deselect-all inlines the value binding
+        // (input) too, so even a LET with inputs round-trips to a bare formula.
         const string formula =
             "=LET(rate, 0.05, base1, A1 * rate, total, base1 + 10, total)";
         var initial = UnnestEngine.Unnest(formula);
@@ -649,10 +649,31 @@ public class UnnestEngineTests
 
         var result = UnnestEngine.Recompute(formula, states);
 
+        Assert.Equal("=A1 * 0.05 + 10", result.SynthesisedLet);
+        Assert.False(LetParser.IsLetFormula(result.SynthesisedLet));
+    }
+
+    [Fact]
+    public void Recompute_LetWithInput_OneStepKept_KeepsLetWithInput()
+    {
+        // The LET (and its input) reappears as soon as one step is kept: with
+        // base1 included, rate is still needed as a named input.
+        const string formula =
+            "=LET(rate, 0.05, base1, A1 * rate, total, base1 + 10, total)";
+        var initial = UnnestEngine.Unnest(formula);
+
+        // Keep base1, inline total.
+        var states = initial.Steps
+            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name == "base1"))
+            .ToList();
+
+        var result = UnnestEngine.Recompute(formula, states);
+
         const string expected =
             "=LET(\n" +
             "    rate, 0.05,\n" +
-            "    A1 * rate + 10\n" +
+            "    base1, A1 * rate,\n" +
+            "    base1 + 10\n" +
             ")";
         Assert.Equal(expected, result.SynthesisedLet);
     }

@@ -197,6 +197,65 @@ public class UnnestRoundTripTests
     }
 
     [Fact]
+    public void Unnest_Refactor_ThenReNestAll_RoundTripsToBareFormula()
+    {
+        // Issue #285 follow-up: a LET carrying inputs must still fully nest.
+        // Unnest → Refactor hoists A1/B1 into value bindings, so the LET now has
+        // inputs. Re-opening /Unnest and inlining every step must collapse the
+        // inputs too, yielding a bare formula (no LET) that Excel accepts and
+        // computes to the original value — the true round-trip.
+        var ws = _excel.AddWorksheet();
+        var sheetName = (string)ws.Name;
+        try
+        {
+            SeedLeaves(ws);
+
+            var original = ws.Range["D1"];
+            var reNested = ws.Range["D2"];
+            try
+            {
+                original.Formula2 = NestedFormula;
+                _excel.Application.Calculate();
+                var expected = Convert.ToDouble(original.Value);
+
+                var unnested = UnnestEngine.Unnest(NestedFormula).SynthesisedLet;
+                var refactored = RefactorEngine.Refactor(unnested, sheetName).SynthesisedLet;
+                _output.WriteLine($"Refactored (has inputs):\n{refactored}");
+                // Refactor must have produced at least one value-binding input.
+                Assert.Contains(LetParser.Parse(refactored).Bindings, b => !b.IsCalculation);
+
+                // Re-open /Unnest and inline every step.
+                var reopened = UnnestEngine.Unnest(refactored);
+                Assert.NotEmpty(reopened.Steps);
+                var inlineAll = reopened.Steps
+                    .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+                    .ToList();
+                var collapsed = UnnestEngine.Recompute(refactored, inlineAll).SynthesisedLet;
+                _output.WriteLine($"Re-nested (no LET):\n{collapsed}");
+
+                // No residual LET — the inputs were inlined back to their leaves.
+                Assert.False(LetParser.IsLetFormula(collapsed));
+
+                reNested.Formula2 = collapsed;
+                _excel.Application.Calculate();
+                var actual = Convert.ToDouble(reNested.Value);
+
+                _output.WriteLine($"Original = {expected}, re-nested = {actual}");
+                Assert.Equal(expected, actual);
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(original);
+                Marshal.ReleaseComObject(reNested);
+            }
+        }
+        finally
+        {
+            CleanupSheet(ws);
+        }
+    }
+
+    [Fact]
     public void EmptyOrLiteralCell_HasNoFormula_SoCommandNoOps()
     {
         var ws = _excel.AddWorksheet();

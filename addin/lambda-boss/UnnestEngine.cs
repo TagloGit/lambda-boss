@@ -293,6 +293,27 @@ public static class UnnestEngine
         if (!changed)
             return new UnnestResult(formula, rows, formula);
 
+        // Fully nested → no LET. When no step is kept (every binding-step and
+        // sub-step inlined) the result is a single bare expression — and a bare
+        // formula can't carry named inputs, so the value bindings are inlined
+        // too (re-hoisting their leaves is /Refactor's job). The LET reappears
+        // the moment one step is included. This makes a non-LET formula a true
+        // round-trip: unnest → re-unnest → inline-all returns the original.
+        if (!rows.Any(r => r.Include))
+        {
+            var inlineAll = new Dictionary<string, BindingStep>(
+                bindingByName, StringComparer.OrdinalIgnoreCase);
+            foreach (var b in bindings)
+                if (!inlineAll.ContainsKey(b.Name)) // a value (or unparseable) binding
+                    inlineAll[b.Name] = new BindingStep(
+                        b.Name, include: false, TryParseScope(b.RhsText), b.RhsText);
+
+            var collapsed = bodyRoot is not null
+                ? Render(bodyRoot, subNameOf, subIncluded, isRoot: true, inlineAll)
+                : parsed.Body;
+            return new UnnestResult(formula, rows, "=" + collapsed);
+        }
+
         // Emit value bindings verbatim and, for each calc binding, its included
         // sub-steps then the binding itself (skipped when inlined); then the
         // body's included sub-steps; then the body.
@@ -516,7 +537,14 @@ public static class UnnestEngine
                 // A reference to an existing LET binding: keep its name when the
                 // binding-step is included, else inline its RHS (cross-scope).
                 if (bindings is not null && bindings.TryGetValue(leaf.Text, out var bs))
-                    return bs.Include ? bs.Name : Render(bs.Root, nameOf, included, isRoot: true, bindings);
+                {
+                    if (bs.Include)
+                        return bs.Name;
+                    return bs.Root is not null
+                        ? Render(bs.Root, nameOf, included, isRoot: true, bindings)
+                        : bs.RawText ?? leaf.Text;
+                }
+
                 return leaf.Text;
 
             case EmptyArgNode:
@@ -720,19 +748,23 @@ public static class UnnestEngine
     ///     A promoted existing-LET binding for the renderer's cross-scope lookup:
     ///     its current (possibly renamed) <see cref="Name" />, whether it is
     ///     <see cref="Include" />d (kept as a binding) or inlined at use sites,
-    ///     and its RHS <see cref="Root" /> (rendered when inlining).
+    ///     and its RHS as a parsed <see cref="Root" /> (rendered when inlining).
+    ///     Value bindings folded in for a full collapse may carry only
+    ///     <see cref="RawText" /> when their RHS doesn't parse — inlined verbatim.
     /// </summary>
     private sealed class BindingStep
     {
-        public BindingStep(string name, bool include, FormulaNode root)
+        public BindingStep(string name, bool include, FormulaNode? root, string? rawText = null)
         {
             Name = name;
             Include = include;
             Root = root;
+            RawText = rawText;
         }
 
         public string Name { get; }
         public bool Include { get; }
-        public FormulaNode Root { get; }
+        public FormulaNode? Root { get; }
+        public string? RawText { get; }
     }
 }
