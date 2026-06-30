@@ -276,4 +276,28 @@ public class DebugNestedEngineTests
             DebugNestedEngine.BuildCaptureFormula(
                 "=BYROW(rng, LAMBDA(r, r + 1))", "scope0", "CHOOSEROWS(rng, 1)"));
     }
+
+    [Fact]
+    public void BuildParamProbe_CustomHost_ReplacesBodyWithParamAndIndexes()
+    {
+        // A top-level custom HOF: probe `a` by running PAIROP with the body → a,
+        // then INDEX the result. No enclosing context, so a bare =INDEX(...).
+        var probe = DebugNestedEngine.BuildParamProbe(
+            "=PAIROP(rng, LAMBDA(a, b, a + b))", "scope0", "a", 1);
+
+        Assert.Equal("=INDEX(PAIROP(rng, LAMBDA(a, b, a)), 1)", probe);
+    }
+
+    [Fact]
+    public void BuildParamProbe_NestedCustomHost_PinsEnclosingParam()
+    {
+        // Inner LAMBDA(a, b) under a custom PAIROP, itself under an outer BYROW:
+        // the probe pins the enclosing `r` to the outer iterator's slice so PAIROP
+        // can run, then captures `a`.
+        var probe = DebugNestedEngine.BuildParamProbe(Nested, "scope1", "a", 1);
+
+        Assert.Equal(
+            "=LET(r, CHOOSEROWS(data, 1), INDEX(PAIROP(r, LAMBDA(a, b, a), 1), 1))",
+            probe);
+    }
 }

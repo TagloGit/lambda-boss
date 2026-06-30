@@ -363,6 +363,72 @@ public static class DebugNestedEngine
     }
 
     /// <summary>
+    ///     Builds a probe formula that captures the value bound to
+    ///     <paramref name="paramName" /> on element <paramref name="index" /> of a
+    ///     <em>custom</em> higher-order host (where no slice expression exists). It
+    ///     reruns the host with the lambda's body replaced by the parameter, in the
+    ///     lambda's enclosing context with any enclosing parameters pinned to their
+    ///     own slices, then reads element <paramref name="index" />:
+    ///     <c>=LET(&lt;enclosing LET&gt;, &lt;enclosing param pins&gt;, INDEX(&lt;host with body→param&gt;, index))</c>.
+    ///     This works for a host that feeds scalar parameters (the common custom-HOF
+    ///     case); it returns null when the scope has no identifiable host node or
+    ///     the formula/scope can't be read. A host that can't yield the value (e.g.
+    ///     an array-shaped parameter, or an enclosing parameter that couldn't be
+    ///     pinned) surfaces as an Excel error at evaluation time, which the caller
+    ///     treats as "fill in by hand".
+    /// </summary>
+    public static string? BuildParamProbe(string formula, string scopeKey, string paramName, int index)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        if (scopeKey is null) throw new ArgumentNullException(nameof(scopeKey));
+        if (paramName is null) throw new ArgumentNullException(nameof(paramName));
+
+        List<ScopeInfo> infos;
+        try
+        {
+            infos = WalkScopes(formula);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        var target = infos.FirstOrDefault(s => s.Key == scopeKey);
+        if (target?.HostNode is null || target.BodyNode is null)
+            return null;
+
+        var host = target.HostNode;
+        var body = target.BodyNode;
+
+        // Rebuild the host call text with the lambda body replaced by the bare
+        // parameter, by splicing the original source around the body's span.
+        var modifiedHost =
+            formula[host.Start..body.Start] + paramName + formula[body.End..host.End];
+
+        var k = index.ToString(CultureInfo.InvariantCulture);
+        var extraction = $"INDEX({modifiedHost}, {k})";
+
+        // Pin enclosing-lambda params (e.g. an outer BYROW's row) to their own
+        // slices so the host can actually run; enclosing-LET bindings come first.
+        var enclSet = new HashSet<string>(target.EnclosingParams, StringComparer.OrdinalIgnoreCase);
+        var paramPins = SuggestPins(formula, scopeKey, index)
+            .Where(p => enclSet.Contains(p.Param) && !string.IsNullOrWhiteSpace(p.Expression))
+            .ToList();
+
+        if (target.EnclosingLet.Count == 0 && paramPins.Count == 0)
+            return "=" + extraction;
+
+        var sb = new StringBuilder();
+        sb.Append("=LET(");
+        foreach (var (name, rhs) in target.EnclosingLet)
+            sb.Append(name).Append(", ").Append(rhs).Append(", ");
+        foreach (var pin in paramPins)
+            sb.Append(pin.Param).Append(", ").Append(pin.Expression).Append(", ");
+        sb.Append(extraction).Append(')');
+        return sb.ToString();
+    }
+
+    /// <summary>
     ///     Collects, in first-encounter order, the plain-identifier names that are
     ///     free in <paramref name="node" /> — i.e. not bound by a <c>LET</c> or
     ///     <c>LAMBDA</c> nested within it, and not a function-call name. Cell
@@ -511,6 +577,10 @@ public static class DebugNestedEngine
         public List<(string Name, string Rhs)> EnclosingLet = new();
         public string BodyText = "";
         public int? ParentIndex;
+
+        // Nodes for probe splicing (positions index into the parsed source).
+        public FormulaNode? BodyNode;
+        public FunctionCallNode? HostNode;
     }
 
     private static readonly (string Name, string Rhs)[] EmptyLet = Array.Empty<(string, string)>();
@@ -519,7 +589,7 @@ public static class DebugNestedEngine
     {
         var ast = FormulaParser.Parse(formula);
         var sink = new List<ScopeInfo>();
-        Visit(ast.Root, hostName: "", Empty, Empty, EmptyLet, depth: 0, parentIndex: null, sink);
+        Visit(ast.Root, hostName: "", Empty, Empty, EmptyLet, hostNode: null, depth: 0, parentIndex: null, sink);
         return sink;
     }
 
@@ -529,6 +599,7 @@ public static class DebugNestedEngine
         IReadOnlyList<string> hostArgs,
         IReadOnlyList<string> enclosing,
         IReadOnlyList<(string Name, string Rhs)> enclosingLet,
+        FunctionCallNode? hostNode,
         int depth,
         int? parentIndex,
         List<ScopeInfo> sink)
@@ -546,7 +617,9 @@ public static class DebugNestedEngine
                 EnclosingParams = enclosing.ToList(),
                 EnclosingLet = enclosingLet.ToList(),
                 BodyText = body.ToFormula().Trim(),
-                ParentIndex = parentIndex
+                ParentIndex = parentIndex,
+                BodyNode = body,
+                HostNode = hostNode
             };
             var myIndex = sink.Count;
             sink.Add(info);
@@ -554,7 +627,7 @@ public static class DebugNestedEngine
             // Descend into the body to find nested lambda scopes; the body's own
             // params join the enclosing set for them.
             var childEnclosing = enclosing.Concat(paramNames).ToList();
-            Visit(body, hostName: "", Empty, childEnclosing, enclosingLet, depth + 1, myIndex, sink);
+            Visit(body, hostName: "", Empty, childEnclosing, enclosingLet, hostNode: null, depth + 1, myIndex, sink);
             return;
         }
 
@@ -567,12 +640,12 @@ public static class DebugNestedEngine
             var i = 0;
             for (; i + 1 < args.Count; i += 2)
             {
-                Visit(args[i + 1], "LET", Empty, enclosing, acc, depth, parentIndex, sink);
+                Visit(args[i + 1], "LET", Empty, enclosing, acc, hostNode: null, depth, parentIndex, sink);
                 acc.Add((args[i].ToFormula().Trim(), args[i + 1].ToFormula().Trim()));
             }
 
             if (i < args.Count)
-                Visit(args[i], "LET", Empty, enclosing, acc, depth, parentIndex, sink);
+                Visit(args[i], "LET", Empty, enclosing, acc, hostNode: null, depth, parentIndex, sink);
             return;
         }
 
@@ -586,12 +659,12 @@ public static class DebugNestedEngine
                 .ToList();
             var name = CleanName(call.Name);
             foreach (var arg in call.Arguments)
-                Visit(arg, name, sourceArgs, enclosing, enclosingLet, depth, parentIndex, sink);
+                Visit(arg, name, sourceArgs, enclosing, enclosingLet, hostNode: call, depth, parentIndex, sink);
             return;
         }
 
         foreach (var child in Children(node))
-            Visit(child, hostName, hostArgs, enclosing, enclosingLet, depth, parentIndex, sink);
+            Visit(child, hostName, hostArgs, enclosing, enclosingLet, hostNode, depth, parentIndex, sink);
     }
 
     private static bool IsLet(FunctionCallNode call)

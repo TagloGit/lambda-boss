@@ -52,19 +52,30 @@ back with `/LET to LAMBDA` and pasted into the original formula. The workflow:
 
 ### Status of this direction
 
-- Pure engine (tested): `AnalyzeInputs`, `BuildDebugLet`, `BuildCaptureFormula`.
+- Pure engine (tested): `AnalyzeInputs`, `BuildDebugLet`, `BuildCaptureFormula`,
+  `BuildParamProbe`.
 - `DebugLambdaCommand` + `DebugScopePickerWindow` (COM / sheet generation) —
-  compiles; **not yet exercised in Excel**.
+  compiles and works in Excel for the recognised-iterator case; probe-capture path
+  is wired but is the least-exercised part.
+- **Probe-capture for custom HOFs** (e.g. `PAIROP`): a custom-HOF param with no
+  slice is captured by rerunning the host with the lambda body replaced by the
+  bare param and reading element *k* — `INDEX(<host with body→param>, k)` — with
+  enclosing-lambda params pinned to their own slices and enclosing-LET bindings
+  rebuilt. A param the host can't yield (array-shaped, or an enclosing param that
+  couldn't be pinned) surfaces as an Excel error and falls back to a blank
+  "fill in" cell.
 - The `/Debug Nested` watch window below is **retained until `/Debug Lambda` is
   proven**, then retired.
 
 ### Known gaps / next steps
 
-- **Probe-capture for custom HOFs** (e.g. `PAIROP`) — return each param
-  individually, run the host in context, read the chosen element. Until then those
-  params are blank cells to fill in by hand.
-- **Deep nesting** capture (pinning enclosing-lambda params through a custom-HOF
-  ancestor) is only partial.
+- **Deep custom nesting** — if a custom-HOF param sits under *another* custom HOF
+  (no recognised-iterator slice to pin the enclosing param), the probe can't pin it
+  and the param falls back to a manual cell.
+- **Array-shaped custom-HOF params** — `INDEX(host, k)` assumes a scalar-per-element
+  host; an array-per-element param won't capture cleanly.
+- **Nested example index** — the single picker index is reused at every level
+  (outer element *k*, inner element *k*).
 - **External sheet-local cell refs** in a body (rare) would resolve to the scratch
   sheet — not yet qualified back to the source sheet.
 

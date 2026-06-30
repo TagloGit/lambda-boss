@@ -117,27 +117,35 @@ internal static class DebugLambdaCommand
             foreach (var inp in inputs)
             {
                 string defName;
-                string captureExpr;
+                string? finalFormula;
                 switch (inp.Kind)
                 {
                     case DebugInputKind.Param:
                         defName = inp.Name + "_in";
                         ownParamSeeds.Add(new DebugPin(inp.Name, defName));
-                        seedByName.TryGetValue(inp.Name, out captureExpr!);
+                        var expr = Seed(seedByName, inp.Name);
+                        // A recognised iterator gives a slice; a custom-HOF param
+                        // has no slice, so probe the host for its bound value.
+                        finalFormula = !string.IsNullOrWhiteSpace(expr)
+                            ? DebugNestedEngine.BuildCaptureFormula(formula, scopeKey, expr)
+                            : DebugNestedEngine.BuildParamProbe(formula, scopeKey, inp.Name, index);
                         break;
                     case DebugInputKind.EnclosingParam:
                         defName = inp.Name;
-                        seedByName.TryGetValue(inp.Name, out captureExpr!);
+                        var enclExpr = Seed(seedByName, inp.Name);
+                        finalFormula = string.IsNullOrWhiteSpace(enclExpr)
+                            ? null
+                            : DebugNestedEngine.BuildCaptureFormula(formula, scopeKey, enclExpr);
                         break;
                     case DebugInputKind.LetBinding:
                         defName = inp.Name;
-                        captureExpr = inp.Name; // capture the binding's value in context
+                        finalFormula = DebugNestedEngine.BuildCaptureFormula(formula, scopeKey, inp.Name);
                         break;
                     default:
                         continue; // External — resolves on its own
                 }
 
-                captures.Add(Capture(sourceSheet, scratch, formula, scopeKey, defName, inp.Name, captureExpr));
+                captures.Add(Evaluate(sourceSheet, scratch, finalFormula, defName, inp.Name));
             }
 
             var letText = DebugNestedEngine.BuildDebugLet(formula, scopeKey, ownParamSeeds);
@@ -163,21 +171,27 @@ internal static class DebugLambdaCommand
         }
     }
 
-    private static CapturedInput Capture(
-        dynamic sourceSheet, ScratchCell scratch,
-        string formula, string scopeKey, string defName, string label, string captureExpr)
+    private static string Seed(IReadOnlyDictionary<string, string> seeds, string name)
     {
-        if (string.IsNullOrWhiteSpace(captureExpr))
-            return CapturedInput.Manual(defName, label);
+        return seeds.TryGetValue(name, out var expr) ? expr : "";
+    }
 
-        var capFormula = DebugNestedEngine.BuildCaptureFormula(formula, scopeKey, captureExpr);
-        if (capFormula is null)
+    /// <summary>
+    ///     Evaluates <paramref name="finalFormula" /> in a scratch cell on the
+    ///     source sheet and returns its value snapshot (scalar or spilled block). A
+    ///     null formula, an exception, or an Excel-error result all become a manual
+    ///     "fill in" placeholder.
+    /// </summary>
+    private static CapturedInput Evaluate(
+        dynamic sourceSheet, ScratchCell scratch, string? finalFormula, string defName, string label)
+    {
+        if (finalFormula is null)
             return CapturedInput.Manual(defName, label);
 
         dynamic cell = sourceSheet.Cells[scratch.Row, scratch.Col];
         try
         {
-            cell.Formula2 = capFormula;
+            cell.Formula2 = finalFormula;
 
             var spill = false;
             try { spill = (bool)cell.HasSpill; }
@@ -192,11 +206,16 @@ internal static class DebugLambdaCommand
                 return CapturedInput.FromBlock(defName, label, block, rows, cols);
             }
 
+            // A scalar Excel error (e.g. an un-pinnable probe) → leave it to fill in.
+            var text = (string)cell.Text;
+            if (!string.IsNullOrEmpty(text) && text[0] == '#')
+                return CapturedInput.Manual(defName, label);
+
             return CapturedInput.FromScalar(defName, label, cell.Value2);
         }
         catch (Exception ex)
         {
-            Logger.Error($"DebugLambda/Capture({label})", ex);
+            Logger.Error($"DebugLambda/Evaluate({label})", ex);
             return CapturedInput.Manual(defName, label);
         }
         finally
@@ -311,6 +330,9 @@ internal static class DebugLambdaCommand
             dynamic cell = sheet.Cells[row, col];
             cell.NumberFormat = "@";
             cell.Value2 = text;
+            // Keep it to one row by default (an embedded-newline source formula
+            // would otherwise wrap tall); the user can turn wrap on to inspect.
+            cell.WrapText = false;
         }
         catch (Exception ex) { Logger.Error($"DebugLambda/SetFormulaText({row},{col})", ex); }
     }
