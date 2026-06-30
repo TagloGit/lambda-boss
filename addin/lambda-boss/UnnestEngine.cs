@@ -14,17 +14,26 @@ namespace LambdaBoss;
 ///     <para>
 ///     When the active cell's formula is <em>already</em> a <c>=LET(...)</c>
 ///     (issue #273), the engine takes a second path: <see cref="LetParser" />
-///     splits the top-level bindings, then each <em>calculation</em> binding's
-///     RHS and the body are exploded the same way (their root excluded, since a
-///     calc binding's root already has the binding's name). New steps are
-///     inserted immediately before the binding (or body) they were extracted
-///     from — each new step references only nodes within that one scope, so
-///     "before first use" needs no cross-binding re-parenting. Existing
-///     <em>value</em> bindings are left untouched (they're already inputs), and
-///     existing binding names are reserved so an auto-named step never collides
-///     with one. A malformed LET (<see cref="LetParser" /> throws) is refused
-///     via <see cref="UnnestDiagnosticKind.MalformedLet" />; a calc binding or
-///     body that the expression parser can't read is kept verbatim (no steps).
+///     splits the top-level bindings, and each <em>calculation</em> binding
+///     itself becomes a toggleable step row keyed by its existing name
+///     (issue #285) — so a fully-unnested LET is decomposed in <em>reverse</em>:
+///     un-including a binding inlines its RHS into every downstream reference
+///     (the cross-scope analogue of node-identity inlining, see
+///     <see cref="Render" />), and toggling them all off collapses the LET back
+///     into a single nested expression. Any <em>further</em> nesting inside a
+///     calc binding's RHS (or the body) still explodes into its own sub-step,
+///     inserted immediately before the binding (or body) it came from. Existing
+///     <em>value</em> bindings are left untouched (they're already inputs —
+///     hoisting their leaves is <c>/Refactor</c>'s job), and every existing
+///     binding name is reserved so an auto-named sub-step never collides with
+///     one. While a binding is included it stays a single <em>shared</em>
+///     binding; only deliberately un-including it duplicates its RHS at each use
+///     site (no CSE, matching the non-LET path). The default state (all bindings
+///     included, nothing further to explode, no renames) returns the LET
+///     verbatim — a true no-op. A malformed LET (<see cref="LetParser" /> throws)
+///     is refused via <see cref="UnnestDiagnosticKind.MalformedLet" />; a calc
+///     binding or body that the expression parser can't read is kept verbatim
+///     (no steps).
 ///     </para>
 ///
 ///     Reference operators (range <c>:</c> and intersection
@@ -147,17 +156,28 @@ public static class UnnestEngine
     // ---------------- existing-LET path (issue #273) ----------------
 
     /// <summary>
-    ///     Explodes an existing <c>=LET(...)</c>. The LET is split into top-level
-    ///     bindings by <see cref="LetParser" /> (a <see cref="FormatException" />
-    ///     there is refused via <see cref="UnnestDiagnosticKind.MalformedLet" />).
-    ///     Each calculation binding's RHS and the body are parsed and exploded
-    ///     leaf-first with their own root excluded — a calc binding's root keeps
-    ///     the binding's existing name — and the new steps are inserted directly
-    ///     before the binding (or body) they came from. Value bindings, binding
-    ///     names, and binding order are preserved. When nothing new is extracted
-    ///     (or every new step is un-included) the original formula is returned
-    ///     unchanged so a fully-decomposed LET is a true no-op rather than a
-    ///     cosmetic re-spacing.
+    ///     Decomposes an existing <c>=LET(...)</c> bidirectionally (issues #273,
+    ///     #285). The LET is split into top-level bindings by
+    ///     <see cref="LetParser" /> (a <see cref="FormatException" /> there is
+    ///     refused via <see cref="UnnestDiagnosticKind.MalformedLet" />). Every
+    ///     <em>calculation</em> binding becomes a toggleable step row under its
+    ///     existing name, and any further nesting inside its RHS (or the body)
+    ///     explodes into extra sub-step rows inserted just before it. Value
+    ///     bindings, binding names, and binding order are preserved. The combined
+    ///     step order — for each calc binding, its sub-steps leaf-first then the
+    ///     binding itself, then the body's sub-steps — is fixed by the source, so
+    ///     each step's key is stable across <see cref="Recompute" />.
+    ///
+    ///     <para>
+    ///     Including a binding emits it (and a reference to it renders to its
+    ///     name); un-including it inlines its RHS at every downstream reference
+    ///     (see <see cref="Render" />'s cross-scope branch), and un-including all
+    ///     of them collapses the LET to a single nested expression. When nothing
+    ///     further is exploded and every binding is included with its original
+    ///     name, the LET is returned verbatim — a true no-op (no cosmetic
+    ///     re-spacing). A calc binding or body the expression parser can't read
+    ///     is kept verbatim and contributes no steps.
+    ///     </para>
     /// </summary>
     private static UnnestResult DecomposeExistingLet(
         string formula,
@@ -182,72 +202,157 @@ public static class UnnestEngine
 
         var bindings = parsed.Bindings;
 
-        // Parse each calc binding's RHS and the body into scopes, collecting
-        // their nested step candidates leaf-first. The global candidate order
-        // (calc bindings in source order, then the body) gives each step a
-        // stable key across Recompute, since the source text never changes.
-        var calcRootByIndex = new Dictionary<int, FormulaNode>();
-        var calcCandidatesByIndex = new Dictionary<int, List<FormulaNode>>();
-        var allCandidates = new List<FormulaNode>();
+        // Build the ordered step list. EVERY binding becomes a toggleable
+        // binding-step under its name — value bindings (inputs) too, so an input
+        // can be inlined like any other step (issue #285 follow-up): for each
+        // binding, its nested sub-steps (calc bindings only — leaf-first)
+        // followed by the binding-step itself; then the body's sub-steps. An
+        // unparseable binding contributes none and is kept verbatim. The order
+        // is fully determined by the source, so step keys are stable.
+        var rootByIndex = new Dictionary<int, FormulaNode>();
+        var subsByIndex = new Dictionary<int, List<FormulaNode>>();
+        var descs = new List<StepDesc>();
 
         for (var i = 0; i < bindings.Count; i++)
         {
-            if (!bindings[i].IsCalculation) continue;
             var root = TryParseScope(bindings[i].RhsText);
-            if (root is null) continue; // Unparseable RHS — kept verbatim, no steps.
+            if (root is null) continue; // Unparseable RHS — kept verbatim, no step.
 
-            var cands = new List<FormulaNode>();
-            CollectSteps(root, isRoot: true, cands);
-            calcRootByIndex[i] = root;
-            calcCandidatesByIndex[i] = cands;
-            allCandidates.AddRange(cands);
+            var subs = new List<FormulaNode>();
+            if (bindings[i].IsCalculation)
+                CollectSteps(root, isRoot: true, subs); // a value binding's leaf RHS nests nothing
+            rootByIndex[i] = root;
+            subsByIndex[i] = subs;
+            foreach (var s in subs) descs.Add(new StepDesc(s, -1));
+            descs.Add(new StepDesc(root, i)); // the binding itself (value or calc)
         }
 
         var bodyRoot = TryParseScope(parsed.Body);
-        var bodyCandidates = new List<FormulaNode>();
+        var bodySubs = new List<FormulaNode>();
         if (bodyRoot is not null)
-            CollectSteps(bodyRoot, isRoot: true, bodyCandidates);
-        allCandidates.AddRange(bodyCandidates);
+            CollectSteps(bodyRoot, isRoot: true, bodySubs);
+        foreach (var s in bodySubs) descs.Add(new StepDesc(s, -1));
 
-        // Reserve defined names AND every existing binding name so an auto-named
-        // step never shadows one.
+        // Reserve defined names, every existing binding name, and any explicit
+        // user rename so an auto-named sub-step never shadows one.
+        var stateByKey = BuildStateLookup(rowStates);
         var used = new HashSet<string>(
             definedNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         foreach (var b in bindings)
             used.Add(b.Name);
+        for (var i = 0; i < descs.Count; i++)
+            if (stateByKey.TryGetValue(KeyOf(i), out var st) && !string.IsNullOrWhiteSpace(st.Name))
+                used.Add(st.Name);
 
-        var (nameOf, included, rows) = AssignAndRender(allCandidates, rowStates, used);
+        // Assign each step a name + Include flag, recording sub-steps by node
+        // identity and binding-steps by their existing name for the renderer.
+        var subNameOf = new Dictionary<FormulaNode, string>();
+        var subIncluded = new HashSet<FormulaNode>();
+        var bindingByName = new Dictionary<string, BindingStep>(StringComparer.OrdinalIgnoreCase);
+        var rows = new List<UnnestStepRow>(descs.Count);
 
-        // Nothing new (or every new step inlined) — return the LET untouched.
-        if (!rows.Any(r => r.Include))
+        for (var i = 0; i < descs.Count; i++)
+        {
+            var d = descs[i];
+            var key = KeyOf(i);
+            stateByKey.TryGetValue(key, out var state);
+            var include = state?.Include ?? true;
+            var renamed = state is { } s && !string.IsNullOrWhiteSpace(s.Name) ? s.Name : null;
+
+            string name;
+            UnnestStepOrigin origin;
+            string originLabel;
+            if (d.IsBinding)
+            {
+                // Preserve the existing binding name (the author's choice) unless
+                // the dialog explicitly renamed it.
+                name = renamed ?? bindings[d.BindingIndex].Name;
+                bindingByName[bindings[d.BindingIndex].Name] = new BindingStep(name, include, d.Node);
+
+                // A value binding is an input — badge it as such rather than by
+                // its leaf node's (function/operator) shape.
+                if (bindings[d.BindingIndex].IsCalculation)
+                {
+                    origin = OriginOf(d.Node);
+                    originLabel = OriginLabelOf(d.Node);
+                }
+                else
+                {
+                    origin = UnnestStepOrigin.Value;
+                    originLabel = "";
+                }
+            }
+            else
+            {
+                name = renamed ?? AllocateName(BaseNameOf(d.Node), used);
+                subNameOf[d.Node] = name;
+                if (include) subIncluded.Add(d.Node);
+                origin = OriginOf(d.Node);
+                originLabel = OriginLabelOf(d.Node);
+            }
+
+            rows.Add(new UnnestStepRow(key, name, Rhs: "", origin, originLabel, include));
+        }
+
+        // Fill each row's RHS now that every name + binding mapping is known.
+        for (var i = 0; i < descs.Count; i++)
+            rows[i] = rows[i] with
+            {
+                Rhs = Render(descs[i].Node, subNameOf, subIncluded, isRoot: true, bindingByName)
+            };
+
+        // No structural change — return the LET verbatim (preserve the no-op
+        // contract). A change is any exploded sub-step, any un-included binding,
+        // or any rename away from an original binding name.
+        var changed = descs.Any(d => !d.IsBinding) || rows.Any(r => !r.Include);
+        for (var i = 0; !changed && i < descs.Count; i++)
+            if (descs[i].IsBinding && rows[i].Name != bindings[descs[i].BindingIndex].Name)
+                changed = true;
+
+        if (!changed)
             return new UnnestResult(formula, rows, formula);
 
-        var rowByNode = new Dictionary<FormulaNode, UnnestStepRow>();
-        for (var i = 0; i < allCandidates.Count; i++)
-            rowByNode[allCandidates[i]] = rows[i];
-
-        // Walk the original bindings in order, emitting each calc binding's new
-        // steps just ahead of it; value bindings pass through verbatim.
+        // Emit each binding's included sub-steps then the binding itself (skipped
+        // when inlined — including value bindings, so an inlined input folds its
+        // leaf into every use site); then the body's included sub-steps; then the
+        // body. When every binding is inlined, no binding survives and the LET
+        // collapses to a bare nested formula (fully nested → no LET); the LET
+        // reappears the moment one step is kept. An unparseable binding can't be
+        // toggled, so it's emitted verbatim and keeps the LET alive.
         var letBindings = new List<(string Name, string Value)>();
         for (var i = 0; i < bindings.Count; i++)
         {
             var b = bindings[i];
-            if (!b.IsCalculation || !calcCandidatesByIndex.TryGetValue(i, out var cands))
+            if (!rootByIndex.TryGetValue(i, out var root))
             {
-                letBindings.Add((b.Name, b.RhsText));
+                letBindings.Add((b.Name, b.RhsText)); // unparseable — kept verbatim
                 continue;
             }
 
-            AppendIncludedSteps(letBindings, cands, rowByNode);
-            letBindings.Add((b.Name, Render(calcRootByIndex[i], nameOf, included, isRoot: true)));
+            foreach (var sub in subsByIndex[i])
+                if (subIncluded.Contains(sub))
+                    letBindings.Add((subNameOf[sub], Render(sub, subNameOf, subIncluded, isRoot: true, bindingByName)));
+
+            var bs = bindingByName[b.Name];
+            if (bs.Include)
+                letBindings.Add((bs.Name, Render(root, subNameOf, subIncluded, isRoot: true, bindingByName)));
         }
 
-        AppendIncludedSteps(letBindings, bodyCandidates, rowByNode);
+        foreach (var sub in bodySubs)
+            if (subIncluded.Contains(sub))
+                letBindings.Add((subNameOf[sub], Render(sub, subNameOf, subIncluded, isRoot: true, bindingByName)));
+
         var bodyText = bodyRoot is not null
-            ? Render(bodyRoot, nameOf, included, isRoot: true)
+            ? Render(bodyRoot, subNameOf, subIncluded, isRoot: true, bindingByName)
             : parsed.Body;
 
-        return new UnnestResult(formula, rows, BuildLetFromBindings(letBindings, bodyText));
+        // Every binding (calc and value) inlined → a bare nested formula
+        // (a LET with no bindings would be malformed).
+        var synthesised = letBindings.Count == 0
+            ? "=" + bodyText
+            : BuildLetFromBindings(letBindings, bodyText);
+
+        return new UnnestResult(formula, rows, synthesised);
     }
 
     /// <summary>
@@ -265,24 +370,6 @@ public static class UnnestEngine
         catch (FormatException)
         {
             return null;
-        }
-    }
-
-    /// <summary>
-    ///     Appends each included step in <paramref name="candidates" /> (leaf-first
-    ///     order) as a <c>(name, rhs)</c> binding. Un-included steps are skipped —
-    ///     their RHS was already inlined into the parent's render.
-    /// </summary>
-    private static void AppendIncludedSteps(
-        List<(string Name, string Value)> letBindings,
-        List<FormulaNode> candidates,
-        Dictionary<FormulaNode, UnnestStepRow> rowByNode)
-    {
-        foreach (var node in candidates)
-        {
-            var row = rowByNode[node];
-            if (row.Include)
-                letBindings.Add((row.Name, row.Rhs));
         }
     }
 
@@ -424,12 +511,24 @@ public static class UnnestEngine
     ///     so a step's RHS shows its own structure while its included children
     ///     collapse to names, and an un-included step renders through to its
     ///     structure (re-parenting its children one level up).
+    ///
+    ///     <para>
+    ///     On the existing-LET path <paramref name="bindings" /> maps an existing
+    ///     binding's name to its <see cref="BindingStep" />, so a <em>reference</em>
+    ///     to that binding (a leaf whose text is the binding name) resolves
+    ///     <em>across scopes</em>: it renders to the binding's current name when
+    ///     the binding-step is included, or inlines (renders through) the
+    ///     binding's RHS when it isn't — the cross-scope analogue of the
+    ///     node-identity inlining above. The map is null on the non-LET path,
+    ///     where every leaf renders verbatim.
+    ///     </para>
     /// </summary>
     private static string Render(
         FormulaNode node,
         IReadOnlyDictionary<FormulaNode, string> nameOf,
         ISet<FormulaNode> included,
-        bool isRoot)
+        bool isRoot,
+        IReadOnlyDictionary<string, BindingStep>? bindings = null)
     {
         if (!isRoot && included.Contains(node))
             return nameOf[node];
@@ -437,6 +536,17 @@ public static class UnnestEngine
         switch (node)
         {
             case LeafNode leaf:
+                // A reference to an existing LET binding: keep its name when the
+                // binding-step is included, else inline its RHS (cross-scope).
+                if (bindings is not null && bindings.TryGetValue(leaf.Text, out var bs))
+                {
+                    if (bs.Include)
+                        return bs.Name;
+                    return bs.Root is not null
+                        ? Render(bs.Root, nameOf, included, isRoot: true, bindings)
+                        : bs.RawText ?? leaf.Text;
+                }
+
                 return leaf.Text;
 
             case EmptyArgNode:
@@ -449,7 +559,7 @@ public static class UnnestEngine
                 for (var i = 0; i < fc.Arguments.Count; i++)
                 {
                     if (i > 0) sb.Append(", ");
-                    sb.Append(Render(fc.Arguments[i], nameOf, included, isRoot: false));
+                    sb.Append(Render(fc.Arguments[i], nameOf, included, isRoot: false, bindings));
                 }
 
                 sb.Append(')');
@@ -458,8 +568,8 @@ public static class UnnestEngine
 
             case BinaryNode b:
             {
-                var left = Render(b.Left, nameOf, included, isRoot: false);
-                var right = Render(b.Right, nameOf, included, isRoot: false);
+                var left = Render(b.Left, nameOf, included, isRoot: false, bindings);
+                var right = Render(b.Right, nameOf, included, isRoot: false, bindings);
                 if (b.Operator == ":")
                     return left + ":" + right;       // range — no spaces
                 if (b.Operator == " ")
@@ -468,10 +578,10 @@ public static class UnnestEngine
             }
 
             case UnaryNode u:
-                return u.Operator + Render(u.Operand, nameOf, included, isRoot: false);
+                return u.Operator + Render(u.Operand, nameOf, included, isRoot: false, bindings);
 
             case PostfixNode p:
-                return Render(p.Operand, nameOf, included, isRoot: false) + p.Operator;
+                return Render(p.Operand, nameOf, included, isRoot: false, bindings) + p.Operator;
 
             case ParenNode pn:
             {
@@ -480,7 +590,7 @@ public static class UnnestEngine
                 for (var i = 0; i < pn.Items.Count; i++)
                 {
                     if (i > 0) sb.Append(", ");
-                    sb.Append(Render(pn.Items[i], nameOf, included, isRoot: false));
+                    sb.Append(Render(pn.Items[i], nameOf, included, isRoot: false, bindings));
                 }
 
                 sb.Append(')');
@@ -612,5 +722,51 @@ public static class UnnestEngine
         foreach (var rs in rowStates)
             map[rs.Key] = rs;
         return map;
+    }
+
+    // ---------------- existing-LET step model (issue #285) ----------------
+
+    /// <summary>
+    ///     One entry in the existing-LET step list: either a sub-step exploded
+    ///     from inside a binding (or the body), identified by its
+    ///     <see cref="Node" />, or an existing calc binding promoted to a step
+    ///     (<see cref="BindingIndex" /> &gt;= 0), whose <see cref="Node" /> is the
+    ///     binding's RHS root.
+    /// </summary>
+    private readonly struct StepDesc
+    {
+        public StepDesc(FormulaNode node, int bindingIndex)
+        {
+            Node = node;
+            BindingIndex = bindingIndex;
+        }
+
+        public FormulaNode Node { get; }
+        public int BindingIndex { get; }
+        public bool IsBinding => BindingIndex >= 0;
+    }
+
+    /// <summary>
+    ///     A promoted existing-LET binding for the renderer's cross-scope lookup:
+    ///     its current (possibly renamed) <see cref="Name" />, whether it is
+    ///     <see cref="Include" />d (kept as a binding) or inlined at use sites,
+    ///     and its RHS as a parsed <see cref="Root" /> (rendered when inlining).
+    ///     Value bindings folded in for a full collapse may carry only
+    ///     <see cref="RawText" /> when their RHS doesn't parse — inlined verbatim.
+    /// </summary>
+    private sealed class BindingStep
+    {
+        public BindingStep(string name, bool include, FormulaNode? root, string? rawText = null)
+        {
+            Name = name;
+            Include = include;
+            Root = root;
+            RawText = rawText;
+        }
+
+        public string Name { get; }
+        public bool Include { get; }
+        public FormulaNode? Root { get; }
+        public string? RawText { get; }
     }
 }

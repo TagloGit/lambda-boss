@@ -62,6 +62,7 @@ public partial class UnnestToLetWindow
         NoStepsText.Visibility = _rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         UpdateSaveButtonEnabled(RevalidateNames());
+        UpdateSelectAllState();
     }
 
     /// <summary>Populated on Save; null when cancelled.</summary>
@@ -97,6 +98,58 @@ public partial class UnnestToLetWindow
             SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    ///     Include-all / inline-all in one click. We drive the rows explicitly
+    ///     rather than trusting the three-state checkbox's own toggle: if every
+    ///     row is already included, this inlines them all (collapsing toward a
+    ///     nested formula); otherwise it includes them all. The header's tri-state
+    ///     is then re-derived from the rows by <see cref="UpdateSelectAllState" />.
+    /// </summary>
+    private void SelectAllCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (_rows.Count == 0) return;
+
+        var includeAll = !_rows.All(r => r.Include);
+
+        _suppressRecompute = true;
+        try
+        {
+            foreach (var vm in _rows)
+                vm.Include = includeAll;
+        }
+        finally
+        {
+            _suppressRecompute = false;
+        }
+
+        UpdateSaveButtonEnabled(RevalidateNames());
+        RecomputeAndRefresh();
+    }
+
+    /// <summary>
+    ///     Re-derives the header checkbox from the rows: checked when all are
+    ///     included, unchecked when none, indeterminate when mixed. Disabled when
+    ///     there are no rows. Setting <c>IsChecked</c> here never re-enters
+    ///     <see cref="SelectAllCheck_Click" /> (that only fires on user clicks).
+    /// </summary>
+    private void UpdateSelectAllState()
+    {
+        if (_rows.Count == 0)
+        {
+            SelectAllCheck.IsEnabled = false;
+            SelectAllCheck.IsChecked = false;
+            return;
+        }
+
+        SelectAllCheck.IsEnabled = true;
+        var included = _rows.Count(r => r.Include);
+        SelectAllCheck.IsChecked = included == 0
+            ? false
+            : included == _rows.Count
+                ? true
+                : null;
     }
 
     private void NameTextBox_GotFocus(object sender, RoutedEventArgs e)
@@ -176,6 +229,7 @@ public partial class UnnestToLetWindow
         }
 
         RefreshStatusText();
+        UpdateSelectAllState();
     }
 
     /// <summary>
@@ -280,9 +334,12 @@ public class UnnestStepRowVm : INotifyPropertyChanged
         _name = step.Name;
         _rhs = step.Rhs;
         _include = step.Include;
-        BadgeText = step.Origin == UnnestStepOrigin.Function
-            ? "function: " + step.OriginLabel
-            : "operator: " + step.OriginLabel;
+        BadgeText = step.Origin switch
+        {
+            UnnestStepOrigin.Function => "function: " + step.OriginLabel,
+            UnnestStepOrigin.Operator => "operator: " + step.OriginLabel,
+            _ => "input" // UnnestStepOrigin.Value — an existing-LET input binding
+        };
     }
 
     public string Key { get; }
