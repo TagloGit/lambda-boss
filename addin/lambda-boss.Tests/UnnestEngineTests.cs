@@ -22,6 +22,20 @@ public class UnnestEngineTests
     private const string WorkedExample =
         "=ROUND(SQRT(SUMSQ(XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]]) - $I$92:$J$92)) * 100, 0)";
 
+    // ---------------- bidirectional: re-nesting an unnested LET (#285) ----------------
+
+    // A fully-unnested LET: every binding is a single call/operator referencing
+    // earlier ones — exactly what /Unnest produces. The worked-example output.
+    private const string UnnestedLet =
+        "=LET(\n" +
+        "    xlookup1, XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]]),\n" +
+        "    calc1, xlookup1 - $I$92:$J$92,\n" +
+        "    sumsq1, SUMSQ(calc1),\n" +
+        "    sqrt1, SQRT(sumsq1),\n" +
+        "    calc2, sqrt1 * 100,\n" +
+        "    ROUND(calc2, 0)\n" +
+        ")";
+
     // ---------------- worked example ----------------
 
     [Fact]
@@ -185,7 +199,7 @@ public class UnnestEngineTests
 
         // Flip calc1 (the '-' operator) off; keep everything else.
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "calc1"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, s.Name != "calc1"))
             .ToList();
 
         var result = UnnestEngine.Recompute(WorkedExample, states);
@@ -214,7 +228,7 @@ public class UnnestEngineTests
     {
         var initial = UnnestEngine.Unnest(WorkedExample);
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+            .Select(s => new UnnestRowState(s.Key, s.Name, false))
             .ToList();
 
         var result = UnnestEngine.Recompute(WorkedExample, states);
@@ -246,7 +260,7 @@ public class UnnestEngineTests
         var states = new List<UnnestRowState>
         {
             new(initial.Steps[0].Key, "sqrt2"),
-            new(initial.Steps[1].Key, ""), // empty → re-auto-name
+            new(initial.Steps[1].Key, "") // empty → re-auto-name
         };
 
         var result = UnnestEngine.Recompute("=SQRT(A1) + SQRT(B1)", states);
@@ -490,11 +504,13 @@ public class UnnestEngineTests
         // the calc binding-step itself.
         Assert.Collection(result.Steps,
             s => Assert.Equal("a", s.Name),
+            // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
             s =>
             {
                 Assert.Equal("byrow1", s.Name);
                 Assert.Equal("BYROW(A1:B3, LAMBDA(r, SUM(r) + MAX(r)))", s.Rhs);
             },
+            // ReSharper disable once ParameterOnlyUsedForPreconditionCheck.Local
             s =>
             {
                 Assert.Equal("b", s.Name);
@@ -520,7 +536,7 @@ public class UnnestEngineTests
 
         // Drop calc1 (the body's 'b * 2'); keep sqrt1.
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "calc1"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, s.Name != "calc1"))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
@@ -568,20 +584,6 @@ public class UnnestEngineTests
         Assert.Equal(formula, result.SynthesisedLet);
     }
 
-    // ---------------- bidirectional: re-nesting an unnested LET (#285) ----------------
-
-    // A fully-unnested LET: every binding is a single call/operator referencing
-    // earlier ones — exactly what /Unnest produces. The worked-example output.
-    private const string UnnestedLet =
-        "=LET(\n" +
-        "    xlookup1, XLOOKUP(H94, t[City], t[[X-Coordinates]:[Y-Coordinates]]),\n" +
-        "    calc1, xlookup1 - $I$92:$J$92,\n" +
-        "    sumsq1, SUMSQ(calc1),\n" +
-        "    sqrt1, SQRT(sumsq1),\n" +
-        "    calc2, sqrt1 * 100,\n" +
-        "    ROUND(calc2, 0)\n" +
-        ")";
-
     [Fact]
     public void Unnest_FullyUnnestedLet_ShowsEveryBindingAsToggleableStepNoOp()
     {
@@ -606,7 +608,7 @@ public class UnnestEngineTests
 
         // Inline calc2 (sqrt1 * 100); it folds into the body's ROUND.
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "calc2"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, s.Name != "calc2"))
             .ToList();
 
         var result = UnnestEngine.Recompute(UnnestedLet, states);
@@ -635,7 +637,7 @@ public class UnnestEngineTests
         // the original worked-example formula byte-for-byte.
         var initial = UnnestEngine.Unnest(UnnestedLet);
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+            .Select(s => new UnnestRowState(s.Key, s.Name, false))
             .ToList();
 
         var result = UnnestEngine.Recompute(UnnestedLet, states);
@@ -652,7 +654,7 @@ public class UnnestEngineTests
             "=LET(rate, 0.05, base1, A1 * rate, total, base1 + 10, total)";
         var initial = UnnestEngine.Unnest(formula);
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+            .Select(s => new UnnestRowState(s.Key, s.Name, false))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
@@ -672,7 +674,7 @@ public class UnnestEngineTests
 
         // Keep rate (the input) and base1; inline total.
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name is "rate" or "base1"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, s.Name is "rate" or "base1"))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
@@ -712,7 +714,7 @@ public class UnnestEngineTests
         var initial = UnnestEngine.Unnest(formula);
 
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "a"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, s.Name != "a"))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
@@ -751,7 +753,7 @@ public class UnnestEngineTests
         var initial = UnnestEngine.Unnest(formula);
 
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: s.Name != "in"))
+            .Select(s => new UnnestRowState(s.Key, s.Name, s.Name != "in"))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
@@ -776,7 +778,7 @@ public class UnnestEngineTests
         var initial = UnnestEngine.Unnest(formula);
 
         var states = initial.Steps
-            .Select(s => new UnnestRowState(s.Key, s.Name, Include: false))
+            .Select(s => new UnnestRowState(s.Key, s.Name, false))
             .ToList();
 
         var result = UnnestEngine.Recompute(formula, states);
