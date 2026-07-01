@@ -95,6 +95,30 @@ tests:
     args: ['={500001;11}', "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
     expected: [[41], [-1]]
 
+  - name: origin anchors forward lookup (value 1 -> anchor cell C3)
+    args: ["=1", "=SEQUENCE(10,10)", "=", "=", "=", "=C3"]
+    expected: "C3"
+
+  - name: origin anchors forward lookup (value 41 -> C7)
+    args: ["=41", "=SEQUENCE(10,10)", "=", "=", "=", "=C3"]
+    expected: "C7"
+
+  - name: origin anchors reverse lookup (anchor cell C3 -> value 1)
+    args: ['="C3"', "=SEQUENCE(10,10)", "=TRUE", "=", "=", "=C3"]
+    expected: 1
+
+  - name: origin anchors reverse lookup (C7 -> value 41)
+    args: ['="C7"', "=SEQUENCE(10,10)", "=TRUE", "=", "=", "=C3"]
+    expected: 41
+
+  - name: origin as a range uses its top-left (C3:E5 -> C3 frame)
+    args: ["=1", "=SEQUENCE(10,10)", "=", "=", "=", "=C3:E5"]
+    expected: "C3"
+
+  - name: address outside anchored grid returns NA by default
+    args: ['="A1"', "=SEQUENCE(10,10)", "=TRUE", "=", "=", "=C3"]
+    expected: -2146826246
+
   - name: help text
     args: []
     expected_type: array

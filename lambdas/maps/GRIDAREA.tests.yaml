@@ -73,6 +73,18 @@ tests:
     args: ["=testGrid", "C5", "=3", "=3"]
     expected: [[1, 2], [6, 7]]
 
+  - name: origin anchors grid at M2 - centerCell M2 hits top-left corner
+    args: ["=SEQUENCE(10,10)", "M2", "=3", "=3", "=M2"]
+    expected: [[1, 2], [11, 12]]
+
+  - name: origin anchors grid at M2 - centerCell Q6 = local E5 interior window
+    args: ["=SEQUENCE(10,10)", "Q6", "=3", "=3", "=M2"]
+    expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
+
+  - name: origin as a range uses its top-left (M2:P5 -> M2 frame)
+    args: ["=SEQUENCE(10,10)", "M2", "=3", "=3", "=M2:P5"]
+    expected: [[1, 2], [11, 12]]
+
   - name: help text
     args: []
     expected_type: array
