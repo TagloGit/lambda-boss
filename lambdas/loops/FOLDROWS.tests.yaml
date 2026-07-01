@@ -1,0 +1,24 @@
+tests:
+  - name: running total grows a 2-col table (base case on i=1, queries acc)
+    args: ['={10;20;30}', '=LAMBDA(acc, r, i, HSTACK(INDEX(r,1,1), IF(i=1, INDEX(r,1,1), INDEX(acc, ROWS(acc), 2) + INDEX(r,1,1))))']
+    expected: [[10, 10], [20, 30], [30, 60]]
+
+  - name: fn returning empty string skips the item (running de-duplication)
+    args: ['={5;5;7;5;7;9}', '=LAMBDA(acc, r, i, LET(v, INDEX(r,1,1), IF(i=1, v, IF(ISNUMBER(XMATCH(v, CHOOSECOLS(acc,1))), "", v))))']
+    expected: [[5], [7], [9]]
+
+  - name: seed pre-loads rows and is kept in the output
+    args: ['={2;3}', '=LAMBDA(acc, r, i, INDEX(r,1,1))', '={100}']
+    expected: [[100], [2], [3]]
+
+  - name: fn may append multiple rows per item
+    args: ['={1;2}', '=LAMBDA(acc, r, i, VSTACK(INDEX(r,1,1), INDEX(r,1,1)*10))']
+    expected: [[1], [10], [2], [20]]
+
+  - name: sequential id assignment via MAX of the id column
+    args: ['={"a";"b";"a";"c"}', '=LAMBDA(acc, r, i, LET(k, INDEX(r,1,1), IF(i=1, HSTACK(k, 1), LET(hit, FILTER(CHOOSECOLS(acc,2), CHOOSECOLS(acc,1)=k, 0), IF(@hit=0, HSTACK(k, MAX(CHOOSECOLS(acc,2))+1), HSTACK(k, @hit))))))']
+    expected: [["a", 1], ["b", 2], ["a", 1], ["c", 3]]
+
+  - name: help text
+    args: []
+    expected_type: array

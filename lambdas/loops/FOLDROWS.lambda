@@ -1,0 +1,41 @@
+/*  FUNCTION NAME:      FOLDROWS
+    DESCRIPTION:*//**A REDUCE that grows a table for you: fn receives the table built so far, the current item row, and the 1-based index, and returns the row(s) to append. Owns the empty-state, column-shape and VSTACK bookkeeping.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-01  Claude      Initial version
+*/
+FOLDROWS = LAMBDA(
+//  Parameter Declarations
+    [items],
+    [fn],
+    [seed],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →FOLDROWS(items, fn, [seed])¶" &
+                "DESCRIPTION:   →A REDUCE that grows a table for you. fn receives the table accumulated so far, the current item row, and the 1-based index, and returns the new row(s) to append. FOLDROWS owns the empty-state, column-shape and VSTACK bookkeeping — the return is the full accumulated table with no shape-fixing seed row to strip.¶" &
+                "VERSION:       →Jul 01 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   items          →(Required) The rows to fold over, one logical item per row. A 1-D column or a 2-D table. A single horizontal row is treated as one item — transpose a horizontal list first.¶" &
+                "   fn             →(Required) LAMBDA(accSoFar, currentRow, i). accSoFar is the table built so far, or """" before the first row is appended; currentRow is the current item as a 1-row array; i is the 1-based item index. Return the new row(s) to append, or """" to append nothing (skip). Keep the appended width constant across steps.¶" &
+                "   seed           →(Optional) Initial accumulator rows — kept in the output and used to pin the column count. Default: empty (accSoFar starts as """").¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=FOLDROWS({10;20;30}, LAMBDA(acc, r, i, HSTACK(INDEX(r,1,1), IF(i=1, INDEX(r,1,1), INDEX(acc, ROWS(acc), 2) + INDEX(r,1,1)))))¶" &
+                "Result         →3x2 table: value in col 1, running total in col 2 ({10,10; 20,30; 30,60})",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        hasSeed, NOT(ISOMITTED(seed)),
+        n, ROWS(items),
+        init, IF(hasSeed, seed, ""),
+        result, REDUCE(init, SEQUENCE(n), LAMBDA(acc, i,
+                  LET(
+                    row, CHOOSEROWS(items, i),
+                    ret, fn(acc, row, i),
+                    skip?, AND(ROWS(ret) = 1, COLUMNS(ret) = 1, @ret = ""),
+                    empty?, AND(ROWS(acc) = 1, COLUMNS(acc) = 1, @acc = ""),
+                    IF(skip?, acc, IF(empty?, ret, VSTACK(acc, ret)))
+                  ))),
+        IF(Help?, Help, result)
+)
+);
