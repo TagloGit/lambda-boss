@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Builds the array of which player owns each turn, given a per-turn "pass to next player" flag. Supports any number of players and any starting player.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
+                        2026-07-01  Claude      Live in loops/ next to SCANLEAD (no cross-library dependency resolution). Inline the +1 circular rotation (MOD(cur, nP) + 1) to drop the CIRCPOS/math dependency — PLAYERTURNS is now self-contained in loops.
 */
 PLAYERTURNS = LAMBDA(
 //  Parameter Declarations
@@ -28,7 +29,7 @@ PLAYERTURNS = LAMBDA(
         ps, TOCOL(IF(ISOMITTED(players), {1;2}, players)),
         nP, ROWS(ps),
         s0, IF(ISOMITTED(start), 1, start),
-        idx, SCANLEAD(s0, advance, LAMBDA(cur, a, IF(a, CIRCPOS(1, nP, cur), cur))),
+        idx, SCANLEAD(s0, advance, LAMBDA(cur, a, IF(a, MOD(cur, nP) + 1, cur))),
         result, INDEX(ps, idx),
         IF(Help?, Help, result)
 )
