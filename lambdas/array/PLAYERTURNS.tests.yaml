@@ -1,0 +1,24 @@
+tests:
+  - name: Dots and Boxes - go again on box completion (advance = NOT completion)
+    args: ['={TRUE;TRUE;FALSE;FALSE;TRUE;FALSE}', '={"R";"B"}']
+    expected: [["R"], ["B"], ["R"], ["R"], ["R"], ["B"]]
+
+  - name: three players, always advance, rotates A B C A B
+    args: ['={TRUE;TRUE;TRUE;TRUE;TRUE}', '={"A";"B";"C"}']
+    expected: [["A"], ["B"], ["C"], ["A"], ["B"]]
+
+  - name: default players {1;2}
+    args: ['={TRUE;TRUE;TRUE}']
+    expected: [[1], [2], [1]]
+
+  - name: custom starting player via start index
+    args: ['={TRUE;TRUE}', '={"R";"B"}', '=2']
+    expected: [["B"], ["R"]]
+
+  - name: horizontal advance keeps horizontal orientation
+    args: ['={TRUE,TRUE,TRUE}']
+    expected: [[1, 2, 1]]
+
+  - name: help text
+    args: []
+    expected_type: array

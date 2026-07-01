@@ -1,0 +1,20 @@
+tests:
+  - name: gcd of the whole list, no seed
+    args: ['={12;18;30}', '=GCD']
+    expected: 6
+
+  - name: running maximum reduces to the max
+    args: ['={3;7;2;9}', '=MAX']
+    expected: 9
+
+  - name: string join with a custom reducer
+    args: ['={"a";"b";"c"}', '=LAMBDA(x, y, x & "-" & y)']
+    expected: "a-b-c"
+
+  - name: single-element input returns that element
+    args: ['={42}', '=MAX']
+    expected: 42
+
+  - name: help text
+    args: []
+    expected_type: array

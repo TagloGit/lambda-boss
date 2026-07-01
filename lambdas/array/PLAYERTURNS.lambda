@@ -1,0 +1,35 @@
+/*  FUNCTION NAME:      PLAYERTURNS
+    DESCRIPTION:*//**Builds the array of which player owns each turn, given a per-turn "pass to next player" flag. Supports any number of players and any starting player.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-01  Claude      Initial version
+*/
+PLAYERTURNS = LAMBDA(
+//  Parameter Declarations
+    [advance],
+    [players],
+    [start],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PLAYERTURNS(advance, [players], [start])¶" &
+                "DESCRIPTION:   →Builds a same-length array of which player owns each turn. Play stays with the current player or passes to the next based on the per-turn advance flag. Any number of players; the previous-turn alignment is handled internally via SCANLEAD (no seed-offset trick).¶" &
+                "VERSION:       →Jul 01 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   advance        →(Required) 1-D boolean, one per turn. TRUE = play moves to the next player AFTER this turn (i.e. the current player did not earn another go). A go-again trigger is just NOT(...).¶" &
+                "   players        →(Optional) Player labels in turn order. Default {1;2}. Any length gives N-player support.¶" &
+                "   start          →(Optional) 1-based index of the starting player. Default 1.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PLAYERTURNS({TRUE;TRUE;TRUE;TRUE;TRUE}, {""A"";""B"";""C""})¶" &
+                "Result         →{A;B;C;A;B}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(advance),
+    //  Procedure
+        ps, TOCOL(IF(ISOMITTED(players), {1;2}, players)),
+        nP, ROWS(ps),
+        s0, IF(ISOMITTED(start), 1, start),
+        idx, SCANLEAD(s0, advance, LAMBDA(cur, a, IF(a, CIRCPOS(1, nP, cur), cur))),
+        result, INDEX(ps, idx),
+        IF(Help?, Help, result)
+)
+);
