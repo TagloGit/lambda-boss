@@ -1,0 +1,28 @@
+tests:
+  - name: manhattan distance to single target
+    args: ['={0,1,0;0,0,0}', '=1']
+    expected: [[1, 0, 1], [2, 1, 2]]
+
+  - name: chebyshev metric (diagonals count as 1)
+    args: ['={0,1,0;0,0,0}', '=1', '=1']
+    expected: [[1, 0, 1], [1, 1, 1]]
+
+  - name: euclidean metric (straight-line)
+    args: ['={0,1,0;0,0,0}', '=1', '=2']
+    expected: [[1, 0, 1], [1.4142135623730951, 1, 1.4142135623730951]]
+
+  - name: membership - nearest of any target value
+    args: ['={1,0,0,2}', '={1,2}']
+    expected: [[0, 1, 1, 0]]
+
+  - name: test predicate - threshold match
+    args: ['={1,5,1;1,1,1}', '=5', '=0', '=LAMBDA(v,t, v>=t)']
+    expected: [[1, 0, 1], [2, 1, 2]]
+
+  - name: no match returns NA grid
+    args: ['={0,0;0,0}', '=9']
+    expected: [[-2146826246, -2146826246], [-2146826246, -2146826246]]
+
+  - name: help text
+    args: []
+    expected_type: array
