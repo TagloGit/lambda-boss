@@ -112,7 +112,23 @@ tests:
             - [0, 0, 0]
       names:
         - { name: "theMap", refers_to: "G3:I5" }
-    args: ["=theMap", '="G3"', "=", "=", "=TRUE", "=", "=", "=", "=LAMBDA(costFrom,costTo,cellFrom,cellTo,distFrom,dirDelta,prevDir,GRIDLOOKUP(cellTo,theMap,TRUE)+1)"]
+    args: ["=theMap", '="G3"', "=", "=", "=TRUE", "=", "=", "=", "=LAMBDA(costFrom,costTo,cellFrom,cellTo,distFrom,dirDelta,prevDir,GRIDLOOKUP(theMap,cellTo,TRUE)+1)"]
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
+  - name: in-memory array map, no origin, defaults to (1,1) frame
+    args: ["={0,0,0;0,0,0;0,0,0}", '="A1"', "=", "=", "=TRUE"]
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
+  - name: origin anchors in-memory map at G3 - full 4-way distance grid
+    args: ["={0,0,0;0,0,0;0,0,0}", '="G3"', "=", "=", "=TRUE", "=", "=", "=", "=", "=G3"]
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
+  - name: origin anchors in-memory map at G3 - 8-way distances to targets
+    args: ["={0,0,0;0,0,0;0,0,0}", '="G3"', "=", '={"G3";"I5";"I3"}', "=FALSE", "=", "=", "=", "=", "=G3"]
+    expected: [[0], [2], [2]]
+
+  - name: origin as a range uses its top-left (G3:I5 -> G3 frame)
+    args: ["={0,0,0;0,0,0;0,0,0}", '="G3"', "=", "=", "=TRUE", "=", "=", "=", "=", "=G3:I5"]
     expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
 
   - name: help text
