@@ -47,6 +47,18 @@ tests:
     args: ['={TRUE,TRUE,TRUE,TRUE,TRUE}', '={"A","B","C"}']
     expected: [["A", "B", "C", "A", "B"]]
 
+  - name: text start is matched as a player label
+    args: ['={TRUE;TRUE;TRUE}', '={"R";"B";"G"}', 'B']
+    expected: [["B"], ["G"], ["R"]]
+
+  - name: numeric players keep index semantics (start is an index, not a label)
+    args: ['={TRUE;TRUE;TRUE}', '={2;3;5}', '=2']
+    expected: [[3], [5], [2]]
+
+  - name: text start not among players errors rather than silently defaulting
+    args: ['={TRUE}', '={"R";"B"}', 'Z']
+    expected: -2146826246
+
   - name: help text
     args: []
     expected_type: array
