@@ -1,0 +1,37 @@
+/*  FUNCTION NAME:      PLAYERTURNS
+    DESCRIPTION:*//**Builds the array of which player owns each turn, given a per-turn "pass to next player" flag. Supports any number of players and any starting player.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-01  Claude      Initial version
+                        2026-07-01  Claude      Live in loops/ next to SCANLEAD (no cross-library dependency resolution). Inline the +1 circular rotation (MOD(cur, nP) + 1) to drop the CIRCPOS/math dependency — PLAYERTURNS is now self-contained in loops.
+                        2026-07-01  Claude      start accepts a player label (text) as well as a 1-based index (number); type decides, so numeric player labels keep pure index semantics.
+*/
+PLAYERTURNS = LAMBDA(
+//  Parameter Declarations
+    [advance],
+    [players],
+    [start],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PLAYERTURNS(advance, [players], [start])¶" &
+                "DESCRIPTION:   →Builds a same-length array of which player owns each turn. Play stays with the current player or passes to the next based on the per-turn advance flag. Any number of players; the previous-turn alignment is handled internally via SCANLEAD (no seed-offset trick).¶" &
+                "VERSION:       →Jul 01 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   advance        →(Required) 1-D boolean, one per turn. TRUE = play moves to the next player AFTER this turn (i.e. the current player did not earn another go). A go-again trigger is just NOT(...).¶" &
+                "   players        →(Optional) Player labels in turn order. Default {1;2}. Any length gives N-player support.¶" &
+                "   start          →(Optional) The starting player. A number is a 1-based index into players; a text value is matched against players as a label (so start = ""B"" begins on player B). With numeric player labels, start is always an index — pass the label's position. Default 1.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PLAYERTURNS({TRUE;TRUE;TRUE;TRUE;TRUE}, {""A"";""B"";""C""})¶" &
+                "Result         →{A;B;C;A;B}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(advance),
+    //  Procedure
+        ps, TOCOL(IF(ISOMITTED(players), {1;2}, players)),
+        nP, ROWS(ps),
+        s0, IF(ISOMITTED(start), 1, IF(ISTEXT(start), XMATCH(start, ps), start)),
+        idx, SCANLEAD(s0, advance, LAMBDA(cur, a, IF(a, MOD(cur, nP) + 1, cur))),
+        result, INDEX(ps, idx),
+        IF(Help?, Help, result)
+)
+);

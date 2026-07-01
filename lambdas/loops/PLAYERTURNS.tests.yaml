@@ -1,0 +1,64 @@
+tests:
+  - name: Dots and Boxes - go again on box completion (advance = NOT completion)
+    args: ['={TRUE;TRUE;FALSE;FALSE;TRUE;FALSE}', '={"R";"B"}']
+    expected: [["R"], ["B"], ["R"], ["R"], ["R"], ["B"]]
+
+  - name: three players, always advance, rotates A B C A B
+    args: ['={TRUE;TRUE;TRUE;TRUE;TRUE}', '={"A";"B";"C"}']
+    expected: [["A"], ["B"], ["C"], ["A"], ["B"]]
+
+  - name: default players {1;2}
+    args: ['={TRUE;TRUE;TRUE}']
+    expected: [[1], [2], [1]]
+
+  - name: custom starting player via start index
+    args: ['={TRUE;TRUE}', '={"R";"B"}', '=2']
+    expected: [["B"], ["R"]]
+
+  - name: horizontal advance keeps horizontal orientation
+    args: ['={TRUE,TRUE,TRUE}']
+    expected: [[1, 2, 1]]
+
+  - name: horizontal real range input keeps horizontal orientation
+    setup:
+      cells:
+        - address: "C3:E3"
+          values:
+            - ["TRUE", "TRUE", "TRUE"]
+      names:
+        - { name: "adv", refers_to: "C3:E3" }
+    args: ['=adv', '={"A";"B";"C"}']
+    expected: [["A", "B", "C"]]
+
+  - name: vertical real range input keeps vertical orientation
+    setup:
+      cells:
+        - address: "C3:C5"
+          values:
+            - ["TRUE"]
+            - ["TRUE"]
+            - ["TRUE"]
+      names:
+        - { name: "adv", refers_to: "C3:C5" }
+    args: ['=adv', '={"A";"B";"C"}']
+    expected: [["A"], ["B"], ["C"]]
+
+  - name: horizontal advance with horizontal players
+    args: ['={TRUE,TRUE,TRUE,TRUE,TRUE}', '={"A","B","C"}']
+    expected: [["A", "B", "C", "A", "B"]]
+
+  - name: text start is matched as a player label
+    args: ['={TRUE;TRUE;TRUE}', '={"R";"B";"G"}', 'B']
+    expected: [["B"], ["G"], ["R"]]
+
+  - name: numeric players keep index semantics (start is an index, not a label)
+    args: ['={TRUE;TRUE;TRUE}', '={2;3;5}', '=2']
+    expected: [[3], [5], [2]]
+
+  - name: text start not among players errors rather than silently defaulting
+    args: ['={TRUE}', '={"R";"B"}', 'Z']
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array

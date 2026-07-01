@@ -1,0 +1,33 @@
+/*  FUNCTION NAME:      SCAN1
+    DESCRIPTION:*//**Seedless inclusive scan: uses the first element as the seed, so out[1] equals the first element. No identity value to invent.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-01  Claude      Initial version
+*/
+SCAN1 = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [fn],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SCAN1(array, fn)¶" &
+                "DESCRIPTION:   →Seedless inclusive scan. Uses array's first element as the seed and folds fn over the rest, so out[1] is the first element unchanged. For running max/min/gcd/join where there is no natural identity to seed a plain SCAN with.¶" &
+                "VERSION:       →Jul 01 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) 1-D values; the first element is the seed. Vertical or horizontal; the result matches the orientation.¶" &
+                "   fn             →(Required) LAMBDA(acc, current) returning the new accumulator.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SCAN1({3;7;2;9}, MAX)¶" &
+                "Result         →{3;7;7;9} (running maximum)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        wasRow, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        flat, TOCOL(array),
+        col, IF(ROWS(flat) = 1, flat,
+                VSTACK(INDEX(flat, 1, 1), SCAN(INDEX(flat, 1, 1), DROP(flat, 1), fn))),
+        result, IF(wasRow, TRANSPOSE(col), col),
+        IF(Help?, Help, result)
+)
+);
