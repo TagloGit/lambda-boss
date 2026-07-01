@@ -5,6 +5,7 @@
                         2026-05-20  Claude      Rename internal LET variables for readability; logic and parameter names unchanged
                         2026-05-27  Claude      Mazelam signature now takes cellFrom/cellTo as A1 string addresses instead of separate rowFrom/colFrom/rowTo/colTo numerics
                         2026-05-27  Claude      Mazelam is now guaranteed to receive only in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates have their toPos substituted with fromPos before the call. Prevents non-scalar return shapes (e.g. GRIDLOOKUP on an off-grid address) from poisoning the proposals array.
+                        2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory map can be anchored to a worksheet position — the coordinate frame (rowArr/colArr, offsets) derives from origin, so st/Targets addresses and the distance grid map into the anchored frame. Matches SUBGRID/GRIDLOOKUP/GRIDAREA convention; replaces the old noRowCol (1,1)-fallback.
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -17,11 +18,12 @@ MAZE = LAMBDA(
     [Show_Steps],
     [Cus_Dir],
     [Mazelam],
+    [origin],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MAZE(mp, st, [Cost], [Targets], [No_Diag], [Allowmp], [Show_Steps], [Cus_Dir], [Mazelam])¶" &
+                "FUNCTION:      →MAZE(mp, st, [Cost], [Targets], [No_Diag], [Allowmp], [Show_Steps], [Cus_Dir], [Mazelam], [origin])¶" &
                 "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. Coordinate frame, cost surface, and walkability are separate parameters so the function works for icon-text maps, dynamically computed cost surfaces, or simple uniform-cost mazes.¶" &
-                "VERSION:       →May 27 2026¶" &
+                "VERSION:       →Jul 01 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   mp            →(Required) Map range. Defines the coordinate frame — its ROW/COLUMN determine what addresses like ""Q17"" mean. Values inside mp are not used for cost.¶" &
                 "   st            →(Required) Start cell address(es) as A1 text (e.g. ""C3""). Accepts an array of addresses for multi-source BFS.¶" &
@@ -32,6 +34,7 @@ MAZE = LAMBDA(
                 "   Show_Steps    →(Optional) TRUE returns step count; default returns cumulative cost.¶" &
                 "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
                 "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
+                "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory map to a worksheet position, so st/Targets addresses and the returned grid are read in that frame. Defaults to the map's own top-left — inferred for a reference, (1,1) for an array.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MAZE(mp, ""C3"", , , TRUE)¶" &
                 "Result         →4-way distance grid from C3 covering all reachable cells in mp",
@@ -43,12 +46,15 @@ MAZE = LAMBDA(
         M, 100000,
         defaultDirs, {100000, -100000, 1, -1, 100001, -100001, 99999, -99999},
         moveSet, IF(ISOMITTED(Cus_Dir), TAKE(defaultDirs, , 8 - 4 * No_Diag), TOROW(Cus_Dir, 3)),
-        noRowCol, IF(ISERR(@ROW(mp)), 1, 0),
-        colArr, IF(noRowCol, SEQUENCE(, COLUMNS(mp)), COLUMN(mp)),
-        rowArr, IF(noRowCol, SEQUENCE(ROWS(mp)), ROW(mp)),
+        baseRow, IFERROR(MIN(ROW(mp)), 1),
+        baseCol, IFERROR(MIN(COLUMN(mp)), 1),
+        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
+        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
+        colArr, SEQUENCE(, COLUMNS(mp), originCol),
+        rowArr, SEQUENCE(ROWS(mp), , originRow),
         posGrid, rowArr * M + colArr,
-        rowOffset, @rowArr - 1,
-        colOffset, @colArr - 1,
+        rowOffset, originRow - 1,
+        colOffset, originCol - 1,
         naRow, HSTACK(0, 0, 0, 0),
         startPos, TOCOL(ROWNUM(st) * M + COLNUM(st)),
         costGrid, IF(ISOMITTED(Cost), mp - mp + 1, Cost),
