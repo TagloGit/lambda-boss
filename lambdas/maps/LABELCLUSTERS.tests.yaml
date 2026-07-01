@@ -1,0 +1,32 @@
+tests:
+  - name: two orthogonally-adjacent cells share a cluster
+    args: ['={"B2";"B3"}']
+    expected: [[1], [1]]
+
+  - name: split region discovered out of order still merges (transitive closure)
+    args: ['={"A1";"A3";"A2"}']
+    expected: [[1], [1], [1]]
+
+  - name: isolated cell gets its own id, numbered by first appearance
+    args: ['={"B2";"B3";"E5"}']
+    expected: [[1], [1], [2]]
+
+  - name: diagonal pair merges under default 8-way connectivity
+    args: ['={"B2";"C3"}']
+    expected: [[1], [1]]
+
+  - name: diagonal pair splits under 4-way deltas
+    args: ['={"B2";"C3"}', '={-100000;100000;-1;1}']
+    expected: [[1], [2]]
+
+  - name: same position on different sheets stays partitioned by group
+    args: ['={"A1";"A2";"A1";"A2"}', '={-100000;100000;-1;1}', '={"S1";"S1";"S2";"S2"}']
+    expected: [[1], [1], [2], [2]]
+
+  - name: accepts encoded position integers directly
+    args: ['={200002;300002}']
+    expected: [[1], [1]]
+
+  - name: help text
+    args: []
+    expected_type: array

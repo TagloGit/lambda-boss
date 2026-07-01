@@ -1,0 +1,49 @@
+/*  FUNCTION NAME:      LABELCLUSTERS
+    DESCRIPTION:*//**Labels each input cell with an integer connected-component id, so adjacent cells (directly or transitively) in the same group share an id. Order-independent via min-label relaxation.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-01  Claude      Initial version
+*/
+LABELCLUSTERS = LAMBDA(
+//  Parameter Declarations
+    [cells],
+    [deltas],
+    [group],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →LABELCLUSTERS(cells, [deltas], [group])¶" &
+                "DESCRIPTION:   →Labels each input cell with an integer cluster id such that two cells in the same group share an id whenever they are adjacent, directly or transitively. Uses full transitive closure (min-label relaxation) so the result is independent of input order.¶" &
+                "VERSION:       →Jul 01 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   cells          →(Required) A column of cells — A1 address text (e.g. ""B7"") OR encoded scalar positions (row*100000+col). Auto-detected per element via ISNUMBER; text is normalised internally via CELLTOPOS.¶" &
+                "   deltas         →(Optional) A 1-D array of scalar position deltas defining connectivity. Default: the 8 compass directions ({-100000;100000;-1;1;-100001;-99999;99999;100001}). Pass {-100000;100000;-1;1} for 4-way, or any custom stencil (e.g. knight moves). Assumes the library default mult=100000.¶" &
+                "   group          →(Optional) Column of area / sheet keys (numeric or text). Adjacency is only tested between cells sharing the same key, so multi-sheet maps stay partitioned. Omitted: all cells treated as one group.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=LABELCLUSTERS({""A1"";""A3"";""A2""})¶" &
+                "Result         →{1;1;1} (A2 bridges A1 and A3 into one cluster)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(cells),
+    //  Procedure
+        wasRow, AND(ROWS(cells) = 1, COLUMNS(cells) > 1),
+        cellsC, IF(wasRow, TRANSPOSE(cells), cells),
+        n, ROWS(cellsC),
+        pos, MAP(cellsC, LAMBDA(c, IF(ISNUMBER(c), c, CELLTOPOS(c)))),
+        grpRaw, IF(ISOMITTED(group), SEQUENCE(n, , 0, 0), IF(wasRow, TRANSPOSE(group), group)),
+        gi, XMATCH(grpRaw, UNIQUE(grpRaw)),
+        BIG, 1000000000000,
+        K, gi * BIG + pos,
+        dts, IF(ISOMITTED(deltas), {-100000;100000;-1;1;-100001;-99999;99999;100001}, deltas),
+        relaxStep, LAMBDA(lab,
+                      REDUCE(lab, dts, LAMBDA(acc, dlt,
+                        LET(nl, XLOOKUP(K + dlt, K, lab, n + 1),
+                            IF(nl < acc, nl, acc))))),
+        relax, LAMBDA(self, lab,
+                 LET(nxt, relaxStep(lab),
+                     IF(SUM(--(nxt <> lab)) = 0, lab, self(self, nxt)))),
+        finalLab, relax(relax, SEQUENCE(n)),
+        ids, XMATCH(finalLab, SORT(UNIQUE(finalLab))),
+        result, IF(wasRow, TRANSPOSE(ids), ids),
+        IF(Help?, Help, result)
+)
+);
