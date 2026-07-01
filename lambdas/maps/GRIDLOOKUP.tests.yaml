@@ -1,34 +1,34 @@
 tests:
   - name: find 41 in 10x10 SEQUENCE grid
-    args: ["=41", "=SEQUENCE(10,10)"]
+    args: ["=SEQUENCE(10,10)", "=41"]
     expected: "A5"
 
   - name: find 1 in 10x10 SEQUENCE grid (top-left)
-    args: ["=1", "=SEQUENCE(10,10)"]
+    args: ["=SEQUENCE(10,10)", "=1"]
     expected: "A1"
 
   - name: find 100 in 10x10 SEQUENCE grid (bottom-right)
-    args: ["=100", "=SEQUENCE(10,10)"]
+    args: ["=SEQUENCE(10,10)", "=100"]
     expected: "J10"
 
   - name: find 5 in 2x5 SEQUENCE grid
-    args: ["=5", "=SEQUENCE(2,5)"]
+    args: ["=SEQUENCE(2,5)", "=5"]
     expected: "E1"
 
   - name: find 6 in 2x5 SEQUENCE grid
-    args: ["=6", "=SEQUENCE(2,5)"]
+    args: ["=SEQUENCE(2,5)", "=6"]
     expected: "A2"
 
   - name: reverse lookup A1 in 10x10 SEQUENCE grid
-    args: ['="A1"', "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", '="A1"', "=TRUE"]
     expected: 1
 
   - name: reverse lookup J10 in 10x10 SEQUENCE grid
-    args: ['="J10"', "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", '="J10"', "=TRUE"]
     expected: 100
 
   - name: reverse lookup A5 in 10x10 SEQUENCE grid
-    args: ['="A5"', "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", '="A5"', "=TRUE"]
     expected: 41
 
   - name: reverse lookup from cell containing address string
@@ -36,87 +36,87 @@ tests:
       cells:
         - address: "C3"
           values: "A5"
-    args: ["=C3", "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", "=C3", "=TRUE"]
     expected: 41
 
   - name: reverse lookup via encoded position integer (A5 = 500001)
-    args: ["=500001", "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", "=500001", "=TRUE"]
     expected: 41
 
   - name: reverse lookup via encoded position integer (J10 = 1000010)
-    args: ["=1000010", "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", "=1000010", "=TRUE"]
     expected: 100
 
   - name: off-grid position (row 0) returns NA by default
-    args: ["=11", "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", "=11", "=TRUE"]
     expected: -2146826246
 
   - name: off-grid position returns if_invalid when supplied
-    args: ["=11", "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
+    args: ["=SEQUENCE(10,10)", "=11", "=TRUE", "=0", "=-1"]
     expected: -1
 
   - name: in-sheet address outside grid (K2) returns NA by default
-    args: ['="K2"', "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", '="K2"', "=TRUE"]
     expected: -2146826246
 
   - name: error input is replaced by if_invalid (not propagated)
-    args: ["=1/0", "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
+    args: ["=SEQUENCE(10,10)", "=1/0", "=TRUE", "=0", "=-1"]
     expected: -1
 
   - name: match_mode 1 finds next larger value
-    args: ["=99.5", "=SEQUENCE(10,10)", "=FALSE", "=1"]
+    args: ["=SEQUENCE(10,10)", "=99.5", "=FALSE", "=1"]
     expected: "J10"
 
   - name: match_mode -1 finds next smaller value
-    args: ["=41.5", "=SEQUENCE(10,10)", "=FALSE", "=-1"]
+    args: ["=SEQUENCE(10,10)", "=41.5", "=FALSE", "=-1"]
     expected: "A5"
 
   - name: find cell of MAX via match_mode 1 with large sentinel
-    args: ["=9999", "=SEQUENCE(10,10)", "=FALSE", "=-1"]
+    args: ["=SEQUENCE(10,10)", "=9999", "=FALSE", "=-1"]
     expected: "J10"
 
   - name: forward miss returns NA by default
-    args: ["=999", "=SEQUENCE(10,10)"]
+    args: ["=SEQUENCE(10,10)", "=999"]
     expected: -2146826246
 
   - name: forward miss returns if_invalid when supplied
-    args: ["=999", "=SEQUENCE(10,10)", "=FALSE", "=0", "=-1"]
+    args: ["=SEQUENCE(10,10)", "=999", "=FALSE", "=0", "=-1"]
     expected: -1
 
   - name: forward lookup lifts over vertical array of values
-    args: ['={1;41;100}', "=SEQUENCE(10,10)"]
+    args: ["=SEQUENCE(10,10)", '={1;41;100}']
     expected: [["A1"], ["A5"], ["J10"]]
 
   - name: reverse lookup lifts over vertical array of addresses
-    args: ['={"A1";"A5";"J10"}', "=SEQUENCE(10,10)", "=TRUE"]
+    args: ["=SEQUENCE(10,10)", '={"A1";"A5";"J10"}', "=TRUE"]
     expected: [[1], [41], [100]]
 
   - name: reverse lift over positions with one off-grid uses if_invalid
-    args: ['={500001;11}', "=SEQUENCE(10,10)", "=TRUE", "=0", "=-1"]
+    args: ["=SEQUENCE(10,10)", '={500001;11}', "=TRUE", "=0", "=-1"]
     expected: [[41], [-1]]
 
   - name: origin anchors forward lookup (value 1 -> anchor cell C3)
-    args: ["=1", "=SEQUENCE(10,10)", "=", "=", "=", "=C3"]
+    args: ["=SEQUENCE(10,10)", "=1", "=", "=", "=", "=C3"]
     expected: "C3"
 
   - name: origin anchors forward lookup (value 41 -> C7)
-    args: ["=41", "=SEQUENCE(10,10)", "=", "=", "=", "=C3"]
+    args: ["=SEQUENCE(10,10)", "=41", "=", "=", "=", "=C3"]
     expected: "C7"
 
   - name: origin anchors reverse lookup (anchor cell C3 -> value 1)
-    args: ['="C3"', "=SEQUENCE(10,10)", "=TRUE", "=", "=", "=C3"]
+    args: ["=SEQUENCE(10,10)", '="C3"', "=TRUE", "=", "=", "=C3"]
     expected: 1
 
   - name: origin anchors reverse lookup (C7 -> value 41)
-    args: ['="C7"', "=SEQUENCE(10,10)", "=TRUE", "=", "=", "=C3"]
+    args: ["=SEQUENCE(10,10)", '="C7"', "=TRUE", "=", "=", "=C3"]
     expected: 41
 
   - name: origin as a range uses its top-left (C3:E5 -> C3 frame)
-    args: ["=1", "=SEQUENCE(10,10)", "=", "=", "=", "=C3:E5"]
+    args: ["=SEQUENCE(10,10)", "=1", "=", "=", "=", "=C3:E5"]
     expected: "C3"
 
   - name: address outside anchored grid returns NA by default
-    args: ['="A1"', "=SEQUENCE(10,10)", "=TRUE", "=", "=", "=C3"]
+    args: ["=SEQUENCE(10,10)", '="A1"', "=TRUE", "=", "=", "=C3"]
     expected: -2146826246
 
   - name: help text
