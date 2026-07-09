@@ -1,0 +1,44 @@
+tests:
+  - name: all positions of a single character
+    args: ["KTTKBPK", "K"]
+    expected: [[1], [4], [7]]
+
+  - name: overlapping matches (default)
+    args: ["aaaa", "aa"]
+    expected: [[1], [2], [3]]
+
+  - name: non-overlapping matches consume the substring
+    args: ["aaaa", "aa", "=", "=FALSE"]
+    expected: [[1], [3]]
+
+  - name: case-sensitive match finds only exact case
+    args: ["abcABC", "abc", "=TRUE"]
+    expected: 1
+
+  - name: case-insensitive match finds both cases (default)
+    args: ["abcABC", "abc", "=FALSE"]
+    expected: [[1], [4]]
+
+  - name: case-sensitive multi-match
+    args: ["aAaA", "A", "=TRUE"]
+    expected: [[2], [4]]
+
+  - name: no match returns error by default
+    args: ["HELLO", "Z"]
+    expected: -2146826246
+
+  - name: no match returns if_not_found sentinel
+    args: ["HELLO", "Z", "=", "=", "none"]
+    expected: "none"
+
+  - name: searchFor longer than inText yields no match
+    args: ["ab", "abc"]
+    expected: -2146826246
+
+  - name: empty searchFor is guarded and returns sentinel
+    args: ["abc", "", "=", "=", "empty"]
+    expected: "empty"
+
+  - name: help text
+    args: []
+    expected_type: array

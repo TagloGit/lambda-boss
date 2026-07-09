@@ -1,0 +1,47 @@
+/*  FUNCTION NAME:      SEARCHALL
+    DESCRIPTION:*//**Returns a spilled column of the 1-based start positions of every occurrence of a substring within a string.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-09  Claude      Initial version
+*/
+SEARCHALL = LAMBDA(
+//  Parameter Declarations
+    [inText],
+    [searchFor],
+    [match_case],
+    [overlapping],
+    [if_not_found],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SEARCHALL(inText, searchFor, [match_case], [overlapping], [if_not_found])¶" &
+                "DESCRIPTION:   →Returns a spilled column of the 1-based start positions of every occurrence of a substring within a string.¶" &
+                "VERSION:       →Jul 09 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   inText         →(Required) Text to search within.¶" &
+                "   searchFor      →(Required) Substring to locate.¶" &
+                "   match_case     →(Optional) FALSE (default) matches case-insensitively; TRUE matches case-sensitively (EXACT).¶" &
+                "   overlapping    →(Optional) TRUE (default) counts overlapping matches; FALSE consumes searchFor after each hit (non-overlapping).¶" &
+                "   if_not_found   →(Optional) Value returned when no match is found. Default #N/A.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SEARCHALL(""KTTKBPK"", ""K"")¶" &
+                "Result         →{1;4;7}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(inText),
+        caseFlag, IF(ISOMITTED(match_case), FALSE, match_case),
+        overlapFlag, IF(ISOMITTED(overlapping), TRUE, overlapping),
+        notFound, IF(ISOMITTED(if_not_found), NA(), if_not_found),
+    //  Procedure
+        lw, LEN(inText),
+        ls, LEN(searchFor),
+        idx, SEQUENCE(MAX(lw - ls + 1, 1)),
+        segs, MID(inText, idx, ls),
+        isMatch, IF(caseFlag, EXACT(segs, searchFor), segs = searchFor),
+        allPos, FILTER(idx, isMatch),
+        ends, SCAN(0, allPos, LAMBDA(lastEnd, p, IF(p > lastEnd, p + ls - 1, lastEnd))),
+        nonOv, FILTER(allPos, ends = allPos + ls - 1),
+        chosen, IF(overlapFlag, allPos, nonOv),
+        result, IF(ls = 0, notFound, IFERROR(chosen, notFound)),
+        IF(Help?, Help, result)
+)
+);
