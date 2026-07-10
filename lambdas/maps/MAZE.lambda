@@ -1,64 +1,65 @@
 /*  FUNCTION NAME:      MAZE
-    DESCRIPTION:*//**Generalized breadth-first / weighted shortest-path search over a grid. Coordinate frame, cost surface, and walkability are separate parameters, with an optional user-supplied per-edge cost LAMBDA.*/
+    DESCRIPTION:*//**Generalized breadth-first / weighted shortest-path search over a grid. The cost surface and walkability mask are the primary inputs — grid shape and position derive from whichever is supplied — with an optional user-supplied per-edge cost LAMBDA.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version (body recreated from issue 184; parameter names preserved)
                         2026-05-20  Claude      Rename internal LET variables for readability; logic and parameter names unchanged
                         2026-05-27  Claude      Mazelam signature now takes cellFrom/cellTo as A1 string addresses instead of separate rowFrom/colFrom/rowTo/colTo numerics
                         2026-05-27  Claude      Mazelam is now guaranteed to receive only in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates have their toPos substituted with fromPos before the call. Prevents non-scalar return shapes (e.g. GRIDLOOKUP on an off-grid address) from poisoning the proposals array.
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory map can be anchored to a worksheet position — the coordinate frame (rowArr/colArr, offsets) derives from origin, so st/Targets addresses and the distance grid map into the anchored frame. Matches SUBGRID/GRIDLOOKUP/GRIDAREA convention; replaces the old noRowCol (1,1)-fallback.
+                        2026-07-10  Claude      Remove mp parameter — its values were never used, only its shape and position. st is promoted to first (the only always-required argument); grid shape now derives from Costs, else AllowMp, and the default anchor from the first of those that is a workbook reference (origin still overrides). Uniform-cost default switched from mp-mp+1 to SEQUENCE, fixing silently-unreachable text cells. New order: st, Costs, AllowMp, Targets, No_Diag, Show_Steps, Cus_Dir, Mazelam, origin (#299)
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
-    [mp],
     [st],
-    [Cost],
+    [Costs],
+    [AllowMp],
     [Targets],
     [No_Diag],
-    [Allowmp],
     [Show_Steps],
     [Cus_Dir],
     [Mazelam],
     [origin],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MAZE(mp, st, [Cost], [Targets], [No_Diag], [Allowmp], [Show_Steps], [Cus_Dir], [Mazelam], [origin])¶" &
-                "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. Coordinate frame, cost surface, and walkability are separate parameters so the function works for icon-text maps, dynamically computed cost surfaces, or simple uniform-cost mazes.¶" &
-                "VERSION:       →Jul 01 2026¶" &
+                "FUNCTION:      →MAZE(st, [Costs], [AllowMp], [Targets], [No_Diag], [Show_Steps], [Cus_Dir], [Mazelam], [origin])¶" &
+                "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. The cost surface (Costs) and walkability mask (AllowMp) are the primary inputs; grid shape and worksheet position derive from whichever is supplied.¶" &
+                "VERSION:       →Jul 10 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   mp            →(Required) Map range. Defines the coordinate frame — its ROW/COLUMN determine what addresses like ""Q17"" mean. Values inside mp are not used for cost.¶" &
                 "   st            →(Required) Start cell address(es) as A1 text (e.g. ""C3""). Accepts an array of addresses for multi-source BFS.¶" &
-                "   Cost          →(Optional) Per-cell step cost, same shape as mp. Defaults to uniform 1 (every step costs 1).¶" &
+                "   Costs         →(Optional*) Per-cell step cost. Defines the grid shape and, if a reference, the default anchor. Defaults to uniform 1 (every step costs 1).¶" &
+                "   AllowMp       →(Optional*) Boolean walkability mask. Defines shape/anchor when Costs is omitted; defaults to everywhere walkable. *At least one of Costs / AllowMp must be supplied — the grid needs a shape. When both are supplied Costs defines the frame, and cells not covered by AllowMp are unwalkable.¶" &
                 "   Targets       →(Optional) A1 address(es) of cells to report distance for. Omitted returns the full distance grid covering all reachable cells.¶" &
                 "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
-                "   Allowmp       →(Optional) Boolean walkability mask, same shape as mp. Defaults to everywhere walkable.¶" &
                 "   Show_Steps    →(Optional) TRUE returns step count; default returns cumulative cost.¶" &
                 "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
                 "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
-                "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory map to a worksheet position, so st/Targets addresses and the returned grid are read in that frame. Defaults to the map's own top-left — inferred for a reference, (1,1) for an array.¶" &
+                "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp, so st/Targets addresses and the returned grid are read in that frame. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=MAZE(mp, ""C3"", , , TRUE)¶" &
-                "Result         →4-way distance grid from C3 covering all reachable cells in mp",
+                "Formula        →=MAZE(""C3"", , walkMask, , TRUE)¶" &
+                "Result         →4-way uniform-cost distance grid from C3 covering all reachable cells in walkMask",
                 "→", "¶"
                 ),
     //  Check inputs
-        Help?, ISOMITTED(mp),
+        Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
     //  Procedure
         M, 100000,
         defaultDirs, {100000, -100000, 1, -1, 100001, -100001, 99999, -99999},
         moveSet, IF(ISOMITTED(Cus_Dir), TAKE(defaultDirs, , 8 - 4 * No_Diag), TOROW(Cus_Dir, 3)),
-        baseRow, IFERROR(MIN(ROW(mp)), 1),
-        baseCol, IFERROR(MIN(COLUMN(mp)), 1),
+        nRows, IF(ISOMITTED(Costs), ROWS(AllowMp), ROWS(Costs)),
+        nCols, IF(ISOMITTED(Costs), COLUMNS(AllowMp), COLUMNS(Costs)),
+        baseRow, IFERROR(IF(ISOMITTED(Costs), NA(), MIN(ROW(Costs))), IFERROR(IF(ISOMITTED(AllowMp), NA(), MIN(ROW(AllowMp))), 1)),
+        baseCol, IFERROR(IF(ISOMITTED(Costs), NA(), MIN(COLUMN(Costs))), IFERROR(IF(ISOMITTED(AllowMp), NA(), MIN(COLUMN(AllowMp))), 1)),
         originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
         originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
-        colArr, SEQUENCE(, COLUMNS(mp), originCol),
-        rowArr, SEQUENCE(ROWS(mp), , originRow),
+        colArr, SEQUENCE(, nCols, originCol),
+        rowArr, SEQUENCE(nRows, , originRow),
         posGrid, rowArr * M + colArr,
         rowOffset, originRow - 1,
         colOffset, originCol - 1,
         naRow, HSTACK(0, 0, 0, 0),
         startPos, TOCOL(ROWNUM(st) * M + COLNUM(st)),
-        costGrid, IF(ISOMITTED(Cost), mp - mp + 1, Cost),
-        walkMask, IF(ISOMITTED(Allowmp), mp = mp, Allowmp),
+        costGrid, IF(ISOMITTED(Costs), SEQUENCE(nRows, nCols, 1, 0), Costs),
+        walkMask, IF(ISOMITTED(AllowMp), SEQUENCE(nRows, nCols, 1, 0) > 0, AllowMp),
         recurse, LAMBDA(self, pool, frontier, iter,
             LET(
                 frontPos, TAKE(frontier, , 1),
@@ -81,7 +82,7 @@ MAZE = LAMBDA(
                     IF(
                         toRow * toCol,
                         LET(
-                            inBounds, (toRow >= 1) * (toRow <= ROWS(mp)) * (toCol >= 1) * (toCol <= COLUMNS(mp)),
+                            inBounds, (toRow >= 1) * (toRow <= nRows) * (toCol >= 1) * (toCol <= nCols),
                             safeToPos, IF(inBounds, toPos, fromPos),
                             safeCostTo, IF(inBounds, IFERROR(costTo, costFrom), costFrom),
                             walkOK, IFERROR(INDEX(walkMask, toRow, toCol), 0),
