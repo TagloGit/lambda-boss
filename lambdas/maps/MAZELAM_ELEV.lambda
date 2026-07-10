@@ -27,7 +27,7 @@ MAZELAM_ELEV = LAMBDA(
                 "   dirDelta       →(Required) This step's direction. (Unused.)¶" &
                 "   prevDir        →(Required) Previous direction. (Unused.)¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=MAZE(elevationMap, ""A1"", elevationMap, , , , , , MAZELAM_ELEV)¶" &
+                "Formula        →=MAZE(""A1"", elevationMap, , , , , , MAZELAM_ELEV)¶" &
                 "Result         →Distance grid where uphill is penalised 2x and downhill is rewarded 0.5x",
                 "→", "¶"
                 ),

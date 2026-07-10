@@ -16,7 +16,7 @@ MAZELAM_DIAG = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →MAZELAM_DIAG(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir)¶" &
-                "DESCRIPTION:   →Stock Mazelam for MAZE: diagonal steps cost 1.5x the destination cell's Cost; cardinal steps cost 1x. Pass by name to MAZE: =MAZE(mp, ""C3"", , , , , , , MAZELAM_DIAG).¶" &
+                "DESCRIPTION:   →Stock Mazelam for MAZE: diagonal steps cost 1.5x the destination cell's Cost; cardinal steps cost 1x. Pass by name to MAZE: =MAZE(""C3"", myCosts, , , , , , MAZELAM_DIAG).¶" &
                 "VERSION:       →May 27 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   costFrom       →(Required) Cost at the source cell. (Unused by this Mazelam.)¶" &
@@ -27,7 +27,7 @@ MAZELAM_DIAG = LAMBDA(
                 "   dirDelta       →(Required) This step's direction, encoded row*100000+col. (Unused.)¶" &
                 "   prevDir        →(Required) Previous direction. (Unused.)¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=MAZE(myMap, ""A1"", , , , , , , MAZELAM_DIAG)¶" &
+                "Formula        →=MAZE(""A1"", myCosts, , , , , , MAZELAM_DIAG)¶" &
                 "Result         →Distance grid where diagonal moves cost 1.5x and cardinals cost 1x",
                 "→", "¶"
                 ),
