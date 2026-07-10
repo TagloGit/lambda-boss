@@ -1,0 +1,116 @@
+/*  FUNCTION NAME:      WALK
+    DESCRIPTION:*//**Deterministic trajectory tracing over a grid: follows a single walker from st under an ordered direction-priority rule (or a custom Walklam), drawing the one route it takes onto the map. Sibling of MAZE (same frame, addresses, direction encoding) but simulation, not search.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-10  Claude      Initial version (#302)
+*/
+WALK = LAMBDA(
+//  Parameter Declarations
+    [st],
+    [Costs],
+    [AllowMp],
+    [Targets],
+    [Dirs],
+    [Show_Steps],
+    [Walklam],
+    [origin],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →WALK(st, [Costs], [AllowMp], [Targets], [Dirs], [Show_Steps], [Walklam], [origin])¶" &
+                "DESCRIPTION:   →Deterministic trajectory tracing over a grid: follows a single walker from st under an ordered direction-priority rule (or a custom Walklam), drawing the one route it takes onto the map. Sibling of MAZE (same frame, addresses, direction encoding) but simulation, not search: the rule defines the route, and getting stuck is a valid outcome. Halts on blocked, on stepping onto a target, or on a repeated (cell, direction) state (cycle).¶" &
+                "VERSION:       →Jul 10 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   st            →(Required) Start cell address as A1 text (e.g. ""C3""). Single cell — one walker, one route.¶" &
+                "   Costs         →(Optional*) Per-cell step cost. Defines the grid shape and, if a reference, the default anchor. Costs do not drive the route — they accumulate along it. Defaults to uniform 1.¶" &
+                "   AllowMp       →(Optional*) Boolean walkability mask. Defines shape/anchor when Costs is omitted; defaults to everywhere walkable. *At least one of Costs / AllowMp must be supplied — the grid needs a shape.¶" &
+                "   Targets       →(Optional) A1 address(es). The walk halts the moment it steps onto any target, so at most one target is ever reached; the rest return NA.¶" &
+                "   Dirs          →(Optional) ORDERED move list, encoded rowDelta*100000+colDelta (down=100000, right=1, left=-1, up=-100000). Order is the rule: each step takes the first direction in the list whose destination is walkable. Default {100000,1,-1,-100000} (down, right, left, up).¶" &
+                "   Show_Steps    →(Optional) TRUE shows step numbers (0,1,2,...) instead of cumulative cost. A cell crossed more than once shows its last visit.¶" &
+                "   Walklam       →(Optional) Custom step rule: LAMBDA(cell, prevDir, distSoFar, stepNum, dirOK, dirCost) returning the chosen direction delta, or NA() to halt. cell is the A1 address of the current cell; dirOK/dirCost are rows aligned with Dirs giving each candidate's walkability and destination cost. The returned move is validated — off-grid or unwalkable halts as blocked.¶" &
+                "   origin        →(Optional) Top-left anchor as a workbook reference (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=WALK(""C3"", costs, walkMask, , {100000,-1,1})¶" &
+                "Result         →Route grid: try down, else left, else right (up impossible); each visited cell shows cumulative cost, blanks elsewhere",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
+    //  Procedure
+        M, 100000,
+        moveSet, IF(ISOMITTED(Dirs), {100000, 1, -1, -100000}, TOROW(Dirs, 3)),
+        nRows, IF(ISOMITTED(Costs), ROWS(AllowMp), ROWS(Costs)),
+        nCols, IF(ISOMITTED(Costs), COLUMNS(AllowMp), COLUMNS(Costs)),
+        baseRow, IFERROR(IF(ISOMITTED(Costs), NA(), MIN(ROW(Costs))), IFERROR(IF(ISOMITTED(AllowMp), NA(), MIN(ROW(AllowMp))), 1)),
+        baseCol, IFERROR(IF(ISOMITTED(Costs), NA(), MIN(COLUMN(Costs))), IFERROR(IF(ISOMITTED(AllowMp), NA(), MIN(COLUMN(AllowMp))), 1)),
+        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
+        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
+        colArr, SEQUENCE(, nCols, originCol),
+        rowArr, SEQUENCE(nRows, , originRow),
+        posGrid, rowArr * M + colArr,
+        rowOffset, originRow - 1,
+        colOffset, originCol - 1,
+        costGrid, IF(ISOMITTED(Costs), SEQUENCE(nRows, nCols, 1, 0), Costs),
+        walkMask, IF(ISOMITTED(AllowMp), SEQUENCE(nRows, nCols, 1, 0) > 0, AllowMp),
+        targetPos, IF(ISOMITTED(Targets), {0}, TOCOL(ROWNUM(Targets) * M + COLNUM(Targets))),
+        startPos, INDEX(TOCOL(ROWNUM(st) * M + COLNUM(st)), 1),
+        recurse, LAMBDA(self, walkLog, pos, prevDir, dist, stepNum,
+            LET(
+                candPos, pos + moveSet,
+                candRow, INT(candPos / M) - rowOffset,
+                candCol, MOD(candPos, M) - colOffset,
+                candIn, (candRow >= 1) * (candRow <= nRows) * (candCol >= 1) * (candCol <= nCols),
+                safeRow, IF(candIn, candRow, 1),
+                safeCol, IF(candIn, candCol, 1),
+                dirOK, IFERROR(INDEX(walkMask, safeRow, safeCol) * candIn, 0) > 0,
+                dirCost, IFERROR(INDEX(costGrid, safeRow, safeCol) * candIn, 0),
+                chosenDir, IF(
+                    ISOMITTED(Walklam),
+                    IFERROR(INDEX(moveSet, XMATCH(TRUE, dirOK)), NA()),
+                    IFERROR(Walklam(ADDRESS(INT(pos / M), MOD(pos, M), 4), prevDir, dist, stepNum, dirOK, dirCost), NA())
+                ),
+                IF(
+                    NOT(ISNUMBER(chosenDir)),
+                    walkLog,
+                    LET(
+                        nextPos, pos + chosenDir,
+                        nextRow, INT(nextPos / M) - rowOffset,
+                        nextCol, MOD(nextPos, M) - colOffset,
+                        nextOK, IF(
+                            (nextRow >= 1) * (nextRow <= nRows) * (nextCol >= 1) * (nextCol <= nCols),
+                            IFERROR(INDEX(walkMask, nextRow, nextCol) * 1, 0),
+                            0
+                        ),
+                        IF(
+                            nextOK,
+                            LET(
+                                newDist, dist + INDEX(costGrid, nextRow, nextCol),
+                                newLog, VSTACK(walkLog, HSTACK(nextPos, newDist, stepNum + 1, chosenDir)),
+                                isCycle, SUM((TAKE(walkLog, , 1) = nextPos) * (CHOOSECOLS(walkLog, 4) = chosenDir)) > 0,
+                                isTgt, ISNUMBER(XMATCH(nextPos, targetPos)),
+                                IF(isCycle + isTgt, newLog, self(self, newLog, nextPos, chosenDir, newDist, stepNum + 1))
+                            ),
+                            walkLog
+                        )
+                    )
+                )
+            )
+        ),
+        seedLog, HSTACK(startPos, 0, 0, 0),
+        startRowIdx, INT(startPos / M) - rowOffset,
+        startColIdx, MOD(startPos, M) - colOffset,
+        startOK, IF(
+            (startRowIdx >= 1) * (startRowIdx <= nRows) * (startColIdx >= 1) * (startColIdx <= nCols),
+            IFERROR(INDEX(walkMask, startRowIdx, startColIdx) * 1, 0),
+            0
+        ),
+        startIsTgt, ISNUMBER(XMATCH(startPos, targetPos)),
+        finalLog, IF(startOK * NOT(startIsTgt), recurse(recurse, seedLog, startPos, 0, 0, 0), seedLog),
+        finalMap, SORT(finalLog, 3, -1),
+        outCol, IF(IF(ISOMITTED(Show_Steps), FALSE, Show_Steps), 3, 2),
+        output, IF(
+            ISOMITTED(Targets),
+            IFNA(VLOOKUP(posGrid, finalMap, outCol, FALSE), ""),
+            MAP(Targets, LAMBDA(tgt, IFNA(VLOOKUP(ROWNUM(tgt) * M + COLNUM(tgt), finalMap, outCol, FALSE), NA())))
+        ),
+        IF(Help?, Help, output)
+)
+);

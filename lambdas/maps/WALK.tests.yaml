@@ -1,0 +1,65 @@
+tests:
+  - name: default priority (down,right,left,up) walks, revisits show last value, halts on cycle
+    args: ['="A1"', "=", "={1,1,1;1,1,1;1,1,1}"]
+    expected: [[0, "", ""], [1, "", ""], [2, 5, 6]]
+
+  - name: motivating case - down else left else right, walker gets stuck in a pocket
+    args: ['="B1"', "=", "={1,1,1;0,1,0;0,1,0;0,0,0}", "=", "={100000,-1,1}"]
+    expected: [["", 0, ""], ["", 1, ""], ["", 2, ""], ["", "", ""]]
+
+  - name: Costs define shape and accumulate along the route without driving it
+    args: ['="A1"', "={1,5;2,7}"]
+    expected: [[0, ""], [11, 18]]
+
+  - name: Show_Steps returns step numbers instead of cumulative cost
+    args: ['="A1"', "={1,5;2,7}", "=", "=", "=", "=TRUE"]
+    expected: [[0, ""], [3, 4]]
+
+  - name: walk halts on stepping onto a target - scalar target returns its cost
+    args: ['="A1"', "=", "={1,1,1;1,1,1;1,1,1}", '="A3"']
+    expected: 2
+
+  - name: multiple targets - only the first hit is non-NA
+    args: ['="A1"', "=", "={1,1,1;1,1,1;1,1,1}", '={"A3","C3"}']
+    expected: [[2, -2146826246]]
+
+  - name: start cell is itself a target - route is just the start at 0
+    args: ['="A1"', "=", "={1,1,1;1,1,1;1,1,1}", '="A1"']
+    expected: 0
+
+  - name: unwalkable start - route is just the start cell
+    args: ['="A1"', "=", "={0,1;1,1}"]
+    expected: [[0, ""], ["", ""]]
+
+  - name: water flow - down, down-left, down-right around an obstacle
+    args: ['="B1"', "=", "={1,1,1,1;1,1,1,1;1,0,1,1;1,1,1,1}", "=", "={100000,99999,100001}"]
+    expected: [["", 0, "", ""], ["", 1, "", ""], [2, "", "", ""], [3, "", "", ""]]
+
+  - name: custom Walklam - always down until blocked, using the dirOK sibling context
+    args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),100000,NA()))"]
+    expected: [["", 0, ""], ["", 1, ""], ["", 2, ""]]
+
+  - name: real range AllowMp anchors the frame - st and route read in the H3 frame
+    setup:
+      cells:
+        - address: "H3:J5"
+          values:
+            - [1, 1, 1]
+            - [1, 1, 1]
+            - [1, 1, 1]
+      names:
+        - { name: "walkRng", refers_to: "H3:J5" }
+    args: ['="H3"', "=", "=walkRng"]
+    expected: [[0, "", ""], [1, "", ""], [2, 5, 6]]
+
+  - name: origin anchors in-memory Costs at G3
+    args: ['="G3"', "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=", "=", "=G3"]
+    expected: [[0, "", ""], [1, "", ""], [2, 5, 6]]
+
+  - name: st supplied but neither Costs nor AllowMp returns help text
+    args: ['="C3"']
+    expected_type: array
+
+  - name: help text
+    args: []
+    expected_type: array
