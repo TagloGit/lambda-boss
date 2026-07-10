@@ -16,7 +16,7 @@ SCANWHILE = LAMBDA(
                 "DESCRIPTION:   →SCAN counterpart to REDUCEWHILE. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEWHILE — swap the name to switch views.¶" &
                 "VERSION:       →May 04 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   seed           →(Required) Initial accumulator. Number/boolean/array → type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) → free-form text/state accumulation.¶" &
+                "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
                 "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
                 "   continue       →(Required) LAMBDA(acc, i) returning TRUE to keep going, FALSE to halt.¶" &

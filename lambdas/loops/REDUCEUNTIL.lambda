@@ -17,7 +17,7 @@ REDUCEUNTIL = LAMBDA(
                 "DESCRIPTION:   →REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. Returns whatever the user passed in (scalar / array / state-string).¶" &
                 "VERSION:       →May 04 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   seed           →(Required) Initial accumulator. Number/boolean/array → type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) → free-form text/state accumulation.¶" &
+                "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
                 "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
                 "   stop           →(Optional) LAMBDA(acc, i) returning TRUE to halt. Default never stops (= REDUCEI).¶" &
