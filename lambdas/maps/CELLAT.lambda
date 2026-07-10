@@ -10,7 +10,7 @@ CELLAT = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →CELLAT(row, col)¶" &
-                "DESCRIPTION:   →Builds a relative A1 address string (no $) from a row and column number. The (row,col)→address converter; inverse of ROWNUM/COLNUM. A thin, family-consistent wrapper over ADDRESS.¶" &
+                "DESCRIPTION:   →Builds a relative A1 address string (no $) from a row and column number. The (row,col)->address converter; inverse of ROWNUM/COLNUM. A thin, family-consistent wrapper over ADDRESS.¶" &
                 "VERSION:       →Jun 16 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   row            →(Required) Row number. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &

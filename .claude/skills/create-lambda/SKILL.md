@@ -360,6 +360,7 @@ Tell the user:
 - **Carriage returns:** The Write tool on Windows may produce `\r\n`. After writing, verify with format tests. If CR errors occur, re-write the file content ensuring `\n`-only line endings.
 - **Missing trailing comma:** Every LET variable line (including `Help?` and `result`) must end with a comma.
 - **Help string alignment:** Keep the `→` and `¶` delimiters consistent. The last Help string line must NOT end with `¶" &` — it ends with just `",`.
+- **Never let the `→` (or `¶`) delimiter appear inside Help *content*.** `TEXTSPLIT(..., "→", "¶")` builds a 2-column grid, so any row carrying a stray `→` in its prose (e.g. `array → type-preserved`, `(row,col)→address`) splits into extra columns and `TEXTSPLIT` pads *every other row* with `#N/A` — the whole help table renders broken. In prose, write the arrow as `->` (ASCII) instead of `→`. If the content genuinely needs the `→` glyph (e.g. a lambda that outputs compass arrows), switch that one file's column delimiter to a character absent from all its content — `¦` works well — updating both the label separators and the `TEXTSPLIT` delimiter arg. Grep new help blocks with `→[^¶"]*→` before committing; any hit is a broken row.
 - **Parameter brackets:** ALL parameters must be `[param]`, not `param`.
 - **Tab characters:** Never use tabs. Use spaces for all indentation.
 

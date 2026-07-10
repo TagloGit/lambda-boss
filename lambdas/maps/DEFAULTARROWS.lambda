@@ -8,15 +8,15 @@ DEFAULTARROWS = LAMBDA(
     [ShowHelp],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →DEFAULTARROWS()¶" &
-                "DESCRIPTION:   →Returns the 8 default compass arrow characters as a vertical array, in canonical order matching DEFAULTMOVEDELTAS.¶" &
-                "VERSION:       →Apr 15 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the arrow list.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=DEFAULTARROWS()¶" &
-                "Result         →{↑;↓;←;→;↖;↗;↙;↘}",
-                "→", "¶"
+                "FUNCTION:      ¦DEFAULTARROWS()¶" &
+                "DESCRIPTION:   ¦Returns the 8 default compass arrow characters as a vertical array, in canonical order matching DEFAULTMOVEDELTAS.¶" &
+                "VERSION:       ¦Apr 15 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   ShowHelp       ¦(Optional) Pass TRUE to show this help text instead of the arrow list.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=DEFAULTARROWS()¶" &
+                "Result         ¦{↑;↓;←;→;↖;↗;↙;↘}",
+                "¦", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),

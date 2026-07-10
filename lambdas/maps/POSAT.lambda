@@ -11,7 +11,7 @@ POSAT = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →POSAT(row, col, [mult])¶" &
-                "DESCRIPTION:   →Builds an encoded position integer (row*mult+col) from a row and column number. The (row,col)→pos converter; inverse of ROWOF/COLOF.¶" &
+                "DESCRIPTION:   →Builds an encoded position integer (row*mult+col) from a row and column number. The (row,col)->pos converter; inverse of ROWOF/COLOF.¶" &
                 "VERSION:       →Jun 16 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   row            →(Required) Row number. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &
