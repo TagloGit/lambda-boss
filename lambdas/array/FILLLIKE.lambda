@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      FILLLIKE
+    DESCRIPTION:*//**Constant array with the same shape as an existing array.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-16  Claude      Initial version
+*/
+FILLLIKE = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [value],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →FILLLIKE(array, [value])¶" &
+                "DESCRIPTION:   →Constant array with the same shape as an existing array. Copies the shape, not the contents. Handy for building default MAZE inputs: FILLLIKE(map) is a uniform cost grid, FILLLIKE(map, TRUE) an all-walkable mask.¶" &
+                "VERSION:       →Jul 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array         →(Required) The array whose shape to copy. Contents are ignored; only ROWS x COLUMNS matter.¶" &
+                "   value         →(Optional) The fill value - number, text, or boolean. Default 1.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=FILLLIKE({1,2;3,4})¶" &
+                "Result         →2-row x 2-col array of 1s",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        v, IF(ISOMITTED(value), 1, value),
+        result, EXPAND(v, ROWS(array), COLUMNS(array), v),
+        IF(Help?, Help, result)
+)
+);
