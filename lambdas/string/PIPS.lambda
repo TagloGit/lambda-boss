@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      PIPS
+    DESCRIPTION:*//**Returns the pip value (1-6) of a Unicode die face.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-16  Claude      Initial version
+*/
+PIPS = LAMBDA(
+//  Parameter Declarations
+    [Dice],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PIPS(Dice)¶" &
+                "DESCRIPTION:   →Returns the pip value (1-6) of a Unicode die face.¶" &
+                "VERSION:       →Jul 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Dice           →(Required) A Unicode die face ⚀-⚅ (U+2680-U+2685). Also accepts a range or array of dice - result lifts element-wise. Non-dice or blanks return #N/A.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PIPS(""⚄"")¶" &
+                "Result         →5",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(Dice),
+    //  Procedure
+        result, IFERROR(
+                    LET(v, UNICODE(Dice) - 9855,
+                        IF((v >= 1) * (v <= 6), v, NA())),
+                    NA()),
+        IF(Help?, Help, result)
+)
+);
