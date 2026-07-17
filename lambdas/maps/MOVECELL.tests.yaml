@@ -83,6 +83,93 @@ tests:
     args: ['={"E5","F3","B2"}', '="↘"']
     expected: [["F6", "G4", "C3"]]
 
+  - name: clip at right edge of text bounds (overflow omitted defaults to clip)
+    args: ["D2", '="→"', "=5", "=", '="A1:E5"']
+    expected: "E2"
+
+  - name: clip diagonal slides along wall (col clamps, row continues)
+    args: ["B2", '="↘"', "=2", "=", '="A1:C5"']
+    expected: "C4"
+
+  - name: clip within bounds is a no-op
+    args: ["B2", '="→"', "=2", "=", '="A1:E5"']
+    expected: "D2"
+
+  - name: error mode returns NA when move exits bounds
+    args: ["E2", '="→"', "=2", "=", '="A1:E5"', "=1"]
+    expected: -2146826246
+
+  - name: error mode in bounds returns address
+    args: ["C3", '="→"', "=1", "=", '="A1:E5"', "=1"]
+    expected: "D3"
+
+  - name: stick mode refuses out-of-bounds move
+    args: ["E2", '="→"', "=1", "=", '="A1:E5"', "=2"]
+    expected: "E2"
+
+  - name: stick mode in bounds proceeds
+    args: ["D2", '="→"', "=1", "=", '="A1:E5"', "=2"]
+    expected: "E2"
+
+  - name: wrap right edge to left edge
+    args: ["E3", '="→"', "=1", "=", '="A1:E5"', "=3"]
+    expected: "A3"
+
+  - name: wrap multi-cell overshoot
+    args: ["A1", '="→"', "=7", "=", '="A1:E5"', "=3"]
+    expected: "C1"
+
+  - name: wrap upward off the top reappears at the bottom
+    args: ["A1", '="↑"', "=1", "=", '="A1:E5"', "=3"]
+    expected: "A5"
+
+  - name: bounce reflects off right edge
+    args: ["D2", '="→"', "=3", "=", '="A1:E5"', "=4"]
+    expected: "C2"
+
+  - name: bounce reflects off top edge
+    args: ["B2", '="↑"', "=3", "=", '="A1:E5"', "=4"]
+    expected: "B3"
+
+  - name: bounce on single-row area stays on the row
+    args: ["C1", '="↓"', "=3", "=", '="A1:E1"', "=4"]
+    expected: "C1"
+
+  - name: bounds omitted with overflow supplied clips to sheet
+    args: ["A1", '="←"', "=1", "=", "=", "=0"]
+    expected: "A1"
+
+  - name: sheet bounds error mode above row 1
+    args: ["A1", '="↑"', "=1", "=", "=", "=1"]
+    expected: -2146826246
+
+  - name: reference bounds via named range
+    setup:
+      names:
+        - { name: "Board", refers_to: "G3:I5" }
+    args: ["H4", '="↘"', "=5", "=", "=Board"]
+    expected: "I5"
+
+  - name: single-cell text bounds is a 1x1 area
+    args: ["C3", '="→"', "=1", "=", '="C3"']
+    expected: "C3"
+
+  - name: reversed-corner text bounds are normalised
+    args: ["D2", '="→"', "=5", "=", '="E5:A1"']
+    expected: "E2"
+
+  - name: knight move refused by stick bounds
+    args: ["B4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())', '="A3:E7"', "=2"]
+    expected: "B4"
+
+  - name: steps array traces wrapping path
+    args: ["E1", '="→"', "=SEQUENCE(3)", "=", '="A1:E5"', "=3"]
+    expected: [["A1"], ["B1"], ["C1"]]
+
+  - name: cells column x steps row grid clips element-wise
+    args: ['={"C1";"D1"}', '="→"', "={1,2}", "=", '="A1:E5"']
+    expected: [["D1", "E1"], ["E1", "E1"]]
+
   - name: help text
     args: []
     expected_type: array

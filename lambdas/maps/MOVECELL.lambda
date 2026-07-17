@@ -1,11 +1,12 @@
 /*  FUNCTION NAME:      MOVECELL
-    DESCRIPTION:*//**Returns the A1 address of the cell reached by moving steps cells from cell in direction dir, using a moves table of {glyph, dRow, dCol}.*/
+    DESCRIPTION:*//**Returns the A1 address of the cell reached by moving steps cells from cell in direction dir, using a moves table of {glyph, dRow, dCol}. Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      cell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
                         2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
                         2026-05-14  Claude      Array-lift on cell via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
                         2026-06-03  Claude      Add steps arg (default 1); replaces REDUCE-loop pattern. Drop dispatcher in favour of native broadcasting so cell AND steps lift (cells column x steps row = grid)
+                        2026-07-17  Claude      Add bounds + overflow params: confine moves to an area (text rect or reference; sheet when omitted) with clip/error/stick/wrap/bounce behaviour. Switch help delimiter to ¦ (content needs arrow glyphs)
 */
 MOVECELL = LAMBDA(
 //  Parameter Declarations
@@ -13,20 +14,24 @@ MOVECELL = LAMBDA(
     [dir],
     [steps],
     [moves],
+    [bounds],
+    [overflow],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MOVECELL(cell, dir, [steps], [moves])¶" &
-                "DESCRIPTION:   →Returns the A1 address of the cell reached by moving steps cells from cell in direction dir, using a moves table of {glyph, dRow, dCol}.¶" &
-                "VERSION:       →Jun 03 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   cell           →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Output of MOVECELL itself can be fed back in. Also accepts an array/range of addresses — result lifts element-wise.¶" &
-                "   dir            →(Required) Direction glyph matching a value in the first column of moves. Treated as a scalar (single direction applied to every cell in array input).¶" &
-                "   steps          →(Optional) Number of cells to move in dir. Default 1. Negative reverses the direction; 0 returns cell unchanged. Also accepts an array of step counts — result lifts (e.g. SEQUENCE(5) traces the path). Pass cells as a column and steps as a row to build a cell×steps grid.¶" &
-                "   moves          →(Optional) 3-column table: {glyph, dRow, dCol}. Defaults to ARROWMOVES(). Use HSTACK(customGlyphs, KNIGHTDELTAS()) for knight moves.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MOVECELL(""A1"", ""→"", 3)¶" &
-                "Result         →D1",
-                "→", "¶"
+                "FUNCTION:      ¦MOVECELL(cell, dir, [steps], [moves], [bounds], [overflow])¶" &
+                "DESCRIPTION:   ¦Returns the A1 address of the cell reached by moving steps cells from cell in direction dir, using a moves table of {glyph, dRow, dCol}. Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).¶" &
+                "VERSION:       ¦Jul 17 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   cell           ¦(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Output of MOVECELL itself can be fed back in. Also accepts an array/range of addresses — result lifts element-wise.¶" &
+                "   dir            ¦(Required) Direction glyph matching a value in the first column of moves (e.g. ""→""). Treated as a scalar (single direction applied to every cell in array input).¶" &
+                "   steps          ¦(Optional) Number of cells to move in dir. Default 1. Negative reverses the direction; 0 returns cell unchanged. Also accepts an array of step counts — result lifts (e.g. SEQUENCE(5) traces the path). Pass cells as a column and steps as a row to build a cell×steps grid.¶" &
+                "   moves          ¦(Optional) 3-column table: {glyph, dRow, dCol}. Defaults to ARROWMOVES(). Use HSTACK(customGlyphs, KNIGHTDELTAS()) for knight moves.¶" &
+                "   bounds         ¦(Optional) Confining rectangle: an A1 text rect (e.g. ""C3:H10"") or a workbook reference (a named Board range works; corner order is normalised). A single cell is a 1x1 area. Omitted while overflow is supplied = the whole sheet.¶" &
+                "   overflow       ¦(Optional) Out-of-bounds behaviour: (0) clip [default] — clamp row and col to the nearest edge, so diagonals slide along walls, (1) error — returns NA(), (2) stick — move refused, returns cell unchanged, (3) wrap — torus wrap-around, (4) bounce — reflect off the edges. Bounds handling only runs when bounds or overflow is supplied.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=MOVECELL(""D2"", ""→"", 5, , ""A1:E5"")¶" &
+                "Result         ¦E2 (clipped at the area's right edge)",
+                "¦", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(cell),
@@ -40,7 +45,43 @@ MOVECELL = LAMBDA(
         pos, CELLTOPOS(cell, safeMult),
         curRow, INT(pos / safeMult),
         curCol, MOD(pos, safeMult),
-        result, ADDRESS(curRow + dR * nStep, curCol + dC * nStep, 4),
+        tgtRow, curRow + dR * nStep,
+        tgtCol, curCol + dC * nStep,
+        bounded?, NOT(AND(ISOMITTED(bounds), ISOMITTED(overflow))),
+        mode, IF(ISOMITTED(overflow), 0, overflow),
+        cornerPosA, IF(ISOMITTED(bounds), 1 * safeMult + 1,
+                     IF(ISREF(bounds), MIN(ROW(bounds)) * safeMult + MIN(COLUMN(bounds)),
+                        CELLTOPOS(IFERROR(TEXTBEFORE(bounds, ":"), bounds), safeMult))),
+        cornerPosB, IF(ISOMITTED(bounds), 1048576 * safeMult + 16384,
+                     IF(ISREF(bounds), MAX(ROW(bounds)) * safeMult + MAX(COLUMN(bounds)),
+                        CELLTOPOS(IFERROR(TEXTAFTER(bounds, ":"), bounds), safeMult))),
+        rowCornerA, INT(cornerPosA / safeMult),
+        colCornerA, MOD(cornerPosA, safeMult),
+        rowCornerB, INT(cornerPosB / safeMult),
+        colCornerB, MOD(cornerPosB, safeMult),
+        loRow, MIN(rowCornerA, rowCornerB),
+        hiRow, MAX(rowCornerA, rowCornerB),
+        loCol, MIN(colCornerA, colCornerB),
+        hiCol, MAX(colCornerA, colCornerB),
+        inArea, (tgtRow >= loRow) * (tgtRow <= hiRow) * (tgtCol >= loCol) * (tgtCol <= hiCol),
+        clampRow, IF(tgtRow < loRow, loRow, IF(tgtRow > hiRow, hiRow, tgtRow)),
+        clampCol, IF(tgtCol < loCol, loCol, IF(tgtCol > hiCol, hiCol, tgtCol)),
+        wrapRow, loRow + MOD(tgtRow - loRow, hiRow - loRow + 1),
+        wrapCol, loCol + MOD(tgtCol - loCol, hiCol - loCol + 1),
+        bounceRow, IF(hiRow = loRow, loRow,
+                    LET(phase, MOD(tgtRow - loRow, 2 * (hiRow - loRow)),
+                        IF(phase <= hiRow - loRow, loRow + phase, loRow + 2 * (hiRow - loRow) - phase))),
+        bounceCol, IF(hiCol = loCol, loCol,
+                    LET(phase, MOD(tgtCol - loCol, 2 * (hiCol - loCol)),
+                        IF(phase <= hiCol - loCol, loCol + phase, loCol + 2 * (hiCol - loCol) - phase))),
+        boundedResult, IFS(
+                        mode = 1, IF(inArea, ADDRESS(tgtRow, tgtCol, 4), NA()),
+                        mode = 2, IF(inArea, ADDRESS(tgtRow, tgtCol, 4), ADDRESS(curRow, curCol, 4)),
+                        mode = 3, ADDRESS(wrapRow, wrapCol, 4),
+                        mode = 4, ADDRESS(bounceRow, bounceCol, 4),
+                        TRUE, ADDRESS(clampRow, clampCol, 4)
+                        ),
+        result, IF(bounded?, boundedResult, ADDRESS(tgtRow, tgtCol, 4)),
         IF(Help?, Help, result)
 )
 );
