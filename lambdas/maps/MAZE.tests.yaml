@@ -51,7 +51,7 @@ tests:
     args: ['="C3"', "=costRng", "=", '="E5"', "=FALSE"]
     expected: 4
 
-  - name: Show_Steps returns the body's step counter for the path to a target
+  - name: Show_Steps returns the number of moves on the path to a target
     setup:
       cells:
         - address: "C3:E5"
@@ -62,7 +62,7 @@ tests:
       names:
         - { name: "costRng", refers_to: "C3:E5" }
     args: ['="C3"', "=costRng", "=", '="E5"', "=FALSE", "=TRUE"]
-    expected: 4
+    expected: 2
 
   - name: custom Mazelam — inline LAMBDA, diagonals cost 1.5x (default uniform Costs)
     setup:
@@ -166,7 +166,7 @@ tests:
 
   - name: Show_Steps numeric 1 matches the TRUE step-counter output
     args: ['="A1"', "={2,2,2;2,2,2;2,2,2}", "=", '="C3"', "=FALSE", "=1"]
-    expected: 4
+    expected: 2
 
   - name: st supplied but neither Costs nor AllowMp returns help text
     args: ['="C3"']
