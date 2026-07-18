@@ -3,6 +3,8 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-07  Claude      Initial version
                         2026-05-14  Claude      Array-lift on Item via dispatcher: MAP over multi-item input, otherwise scalar body unchanged
+                        2026-07-18  Claude      Item now optional (omitted returns whole data column under HeaderName); LookupCol now optional (defaults to first table column)
+                        2026-07-18  Claude      Row mode: omitted HeaderName returns the matched row's other columns; works with or without a header row; array Items stack rows
 */
 TLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -13,14 +15,14 @@ TLOOKUP = LAMBDA(
     [If_not_found],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →TLOOKUP(Table, Item, LookupCol, HeaderName, [If_not_found])¶" &
+                "FUNCTION:      →TLOOKUP(Table, [Item], [LookupCol], [HeaderName], [If_not_found])¶" &
                 "DESCRIPTION:   →Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.¶" &
-                "VERSION:       →May 14 2026¶" &
+                "VERSION:       →Jul 18 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   Table          →(Required) Full table including its header row (e.g. tblData[#All]).¶" &
-                "   Item           →(Required) Value to find in LookupCol to identify the row. Also accepts an array of items — result lifts element-wise.¶" &
-                "   LookupCol      →(Required) Column to search for Item (e.g. tblData[Person]). Excluding headers.¶" &
-                "   HeaderName     →(Required) Header text identifying the column whose value should be returned.¶" &
+                "   Table          →(Required) Full table including its header row (e.g. tblData[#All]). Row mode (HeaderName omitted) also accepts a data-only table (e.g. tblData).¶" &
+                "   Item           →(Optional) Value to find in LookupCol to identify the row. Also accepts an array of items - result lifts element-wise (row mode stacks one row per item). If omitted, returns the entire data column under HeaderName (header row excluded).¶" &
+                "   LookupCol      →(Optional) Column to search for Item (e.g. tblData[Person]). Excluding headers. Defaults to the first column of Table.¶" &
+                "   HeaderName     →(Optional) Header text identifying the column whose value should be returned. If omitted (row mode), returns the matched row; when LookupCol is also omitted the first (key) column is dropped from the result. Note: in row mode an Item equal to the header text matches the header row - pass a data-only Table if keys could collide with headers.¶" &
                 "   If_not_found   →(Optional) Value to return when Item or HeaderName is not found. Defaults to #N/A.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=TLOOKUP(tblData[#All], ""Tim"", tblData[Person], ""Age"")¶" &
@@ -31,18 +33,40 @@ TLOOKUP = LAMBDA(
         Help?, ISOMITTED(Table),
     //  Procedure
         notFound, IF(ISOMITTED(If_not_found), NA(), If_not_found),
+        lookCol, IF(ISOMITTED(LookupCol), DROP(TAKE(Table, , 1), 1), LookupCol),
+        colIdx, MATCH(HeaderName, INDEX(Table, 1, ), 0),
+        wholeCol, IFERROR(DROP(INDEX(Table, , colIdx), 1), notFound),
         scalar, LAMBDA(it,
                   IFERROR(
                     INDEX(
                         Table,
-                        MATCH(it, LookupCol, 0) + 1,
-                        MATCH(HeaderName, INDEX(Table, 1, ), 0)
+                        MATCH(it, lookCol, 0) + 1,
+                        colIdx
                     ),
                     notFound
                   )),
-        result, IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
-                    MAP(Item, scalar),
-                    scalar(Item)),
+    //  Row mode: HeaderName omitted - match Item against the lookup column and return the whole row.
+    //  With LookupCol omitted, match spans the full first column (a header row simply never matches),
+    //  so headered and header-less tables both work; the key column is dropped from the result.
+    //  With LookupCol given (data-only by convention), the row-count difference vs Table supplies the offset.
+        keyDropped?, ISOMITTED(LookupCol),
+        fullLook, IF(ISOMITTED(LookupCol), TAKE(Table, , 1), LookupCol),
+        rowOffset, ROWS(Table) - ROWS(fullLook),
+        rowWidth, COLUMNS(Table) - IF(keyDropped?, 1, 0),
+        rowFor, LAMBDA(it,
+                  LET(fullRow, INDEX(Table, MATCH(it, fullLook, 0) + rowOffset, ),
+                      IF(keyDropped?, DROP(fullRow, , 1), fullRow))),
+        rowResult, IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
+                      DROP(REDUCE(0, Item, LAMBDA(acc, it,
+                          VSTACK(acc, IFERROR(rowFor(it), EXPAND(notFound, 1, rowWidth, notFound))))), 1),
+                      IFERROR(rowFor(Item), notFound)),
+        result, IF(AND(ISOMITTED(HeaderName), NOT(ISOMITTED(Item))),
+                    rowResult,
+                    IF(ISOMITTED(Item),
+                        wholeCol,
+                        IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
+                            MAP(Item, scalar),
+                            scalar(Item)))),
         IF(Help?, Help, result)
 )
 );
