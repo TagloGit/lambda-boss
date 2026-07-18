@@ -134,6 +134,90 @@ tests:
     args: ["=tblAll", '={"Tim";"Jordan";"Alex"}', "=tblPerson", "Age", "=-1"]
     expected: [[42], [-1], [25]]
 
+  - name: omitted LookupCol defaults to first table column
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "Tim", "=", "Age"]
+    expected: 42
+
+  - name: omitted LookupCol with array of items lifts
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Alex"}', "=", "Age"]
+    expected: [[42], [25]]
+
+  - name: omitted Item returns whole numeric column under header
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=", "=", "Age"]
+    expected: [[42], [30], [25]]
+
+  - name: omitted Item returns whole string column under header
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=", "=", "City"]
+    expected: [["Sydney"], ["Melbourne"], ["Perth"]]
+
+  - name: whole column mode with header not found returns NA by default
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=", "=", "Salary"]
+    expected: -2146826246
+
+  - name: whole column mode with header not found uses fallback
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=", "=", "Salary", "none"]
+    expected: "none"
+
   - name: help text
     args: []
     expected_type: array
