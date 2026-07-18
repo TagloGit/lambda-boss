@@ -132,6 +132,42 @@ tests:
     args: ['="G3"', "={1,1,1;1,1,1;1,1,1}", "=walkRng", "=", "=TRUE"]
     expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
 
+  - name: path mode - diagonal straight line, default (1,1) frame
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", '="C3"', "=FALSE", "=2"]
+    expected: [["A1"], ["B2"], ["C3"]]
+
+  - name: path mode - 4-way detour around blocked cell
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "={TRUE,FALSE,TRUE;TRUE,TRUE,TRUE;TRUE,TRUE,TRUE}", '="C1"', "=TRUE", "=2"]
+    expected: [["A1"], ["A2"], ["B2"], ["C2"], ["C1"]]
+
+  - name: path mode - weighted costs steer the path around expensive cells
+    args: ['="A1"', "={1,9,9;1,9,9;1,1,1}", "=", '="C3"', "=TRUE", "=2"]
+    expected: [["A1"], ["A2"], ["A3"], ["B3"], ["C3"]]
+
+  - name: path mode - target equals start returns the single cell
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", '="A1"', "=TRUE", "=2"]
+    expected: "A1"
+
+  - name: path mode - unreachable target returns NA
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "={TRUE,TRUE,FALSE;TRUE,TRUE,FALSE;TRUE,FALSE,TRUE}", '="C3"', "=TRUE", "=2"]
+    expected: -2146826246
+
+  - name: path mode - multi-cell Targets returns NA
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", '={"B2";"C3"}', "=TRUE", "=2"]
+    expected: -2146826246
+
+  - name: path mode - anchored frame via origin returns addresses in that frame
+    args: ['="G3"', "={1,1,1;1,1,1;1,1,1}", "=", '="I5"', "=FALSE", "=2", "=", "=", "=G3"]
+    expected: [["G3"], ["H4"], ["I5"]]
+
+  - name: path mode - multi-source st back-walks to the nearest start
+    args: ['={"A1";"A3"}', "={1,1,1;1,1,1;1,1,1}", "=", '="C3"', "=TRUE", "=2"]
+    expected: [["A3"], ["B3"], ["C3"]]
+
+  - name: Show_Steps numeric 1 matches the TRUE step-counter output
+    args: ['="A1"', "={2,2,2;2,2,2;2,2,2}", "=", '="C3"', "=FALSE", "=1"]
+    expected: 4
+
   - name: st supplied but neither Costs nor AllowMp returns help text
     args: ['="C3"']
     expected_type: array
