@@ -218,6 +218,106 @@ tests:
     args: ["=tblAll", "=", "=", "Salary", "none"]
     expected: "none"
 
+  - name: row mode with headered table drops key column
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "Tim"]
+    expected: [[42, "Sydney"]]
+
+  - name: row mode with header-less table drops key column
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblData", refers_to: "C4:E6" }
+    args: ["=tblData", "Sam"]
+    expected: [[30, "Melbourne"]]
+
+  - name: row mode with explicit LookupCol returns whole row (headered table)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", "Sam", "=tblPerson"]
+    expected: [["Sam", 30, "Melbourne"]]
+
+  - name: row mode with explicit LookupCol returns whole row (header-less table)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblData", refers_to: "C4:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblData", "Alex", "=tblPerson"]
+    expected: [["Alex", 25, "Perth"]]
+
+  - name: row mode with array of items stacks rows
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Alex"}']
+    expected: [[42, "Sydney"], [25, "Perth"]]
+
+  - name: row mode item not found returns NA by default
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "Jordan"]
+    expected: -2146826246
+
+  - name: row mode array with missing item fills its row with fallback
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Jordan"}', "=", "=", "missing"]
+    expected: [[42, "Sydney"], ["missing", "missing"]]
+
   - name: help text
     args: []
     expected_type: array
