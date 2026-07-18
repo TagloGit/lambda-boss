@@ -7,6 +7,7 @@
                         2026-05-27  Claude      Mazelam is now guaranteed to receive only in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates have their toPos substituted with fromPos before the call. Prevents non-scalar return shapes (e.g. GRIDLOOKUP on an off-grid address) from poisoning the proposals array.
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory map can be anchored to a worksheet position — the coordinate frame (rowArr/colArr, offsets) derives from origin, so st/Targets addresses and the distance grid map into the anchored frame. Matches SUBGRID/GRIDLOOKUP/GRIDAREA convention; replaces the old noRowCol (1,1)-fallback.
                         2026-07-10  Claude      Remove mp parameter — its values were never used, only its shape and position. st is promoted to first (the only always-required argument); grid shape now derives from Costs, else AllowMp, and the default anchor from the first of those that is a workbook reference (origin still overrides). Uniform-cost default switched from mp-mp+1 to SEQUENCE, fixing silently-unreachable text cells. New order: st, Costs, AllowMp, Targets, No_Diag, Show_Steps, Cus_Dir, Mazelam, origin (#299)
+                        2026-07-18  Claude      Show_Steps promoted to numeric enum: (0) cumulative cost [default], (1) step counter (TRUE still accepted), (2) path — back-walks the pool's dirDelta predecessor pointers from a single target to return the shortest path as an Nx1 column of A1 addresses
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -23,14 +24,14 @@ MAZE = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →MAZE(st, [Costs], [AllowMp], [Targets], [No_Diag], [Show_Steps], [Cus_Dir], [Mazelam], [origin])¶" &
                 "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. The cost surface (Costs) and walkability mask (AllowMp) are the primary inputs; grid shape and worksheet position derive from whichever is supplied.¶" &
-                "VERSION:       →Jul 10 2026¶" &
+                "VERSION:       →Jul 18 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   st            →(Required) Start cell address(es) as A1 text (e.g. ""C3""). Accepts an array of addresses for multi-source BFS.¶" &
                 "   Costs         →(Optional*) Per-cell step cost. Defines the grid shape and, if a reference, the default anchor. Defaults to uniform 1 (every step costs 1).¶" &
                 "   AllowMp       →(Optional*) Boolean walkability mask. Defines shape/anchor when Costs is omitted; defaults to everywhere walkable. *At least one of Costs / AllowMp must be supplied — the grid needs a shape. When both are supplied Costs defines the frame, and cells not covered by AllowMp are unwalkable.¶" &
                 "   Targets       →(Optional) A1 address(es) of cells to report distance for. Omitted returns the full distance grid covering all reachable cells.¶" &
                 "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
-                "   Show_Steps    →(Optional) TRUE returns step count; default returns cumulative cost.¶" &
+                "   Show_Steps    →(Optional) Output mode: (0) cumulative cost [default], (1) step counter (TRUE also accepted), (2) path - the traversed cells as an Nx1 column of A1 addresses from st to the target. Mode 2 requires exactly one Targets cell; returns #N/A when Targets is omitted, multi-cell, or unreachable.¶" &
                 "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
                 "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
                 "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp, so st/Targets addresses and the returned grid are read in that frame. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
@@ -136,11 +137,41 @@ MAZE = LAMBDA(
         seed, IFNA(HSTACK(startPos, 0, 0, 0), 0),
         finalPool, recurse(recurse, seed, seed, 0),
         output, LET(
-            outCol, IF(ISOMITTED(Show_Steps), 2, 3),
+            mode, IF(ISOMITTED(Show_Steps), 0, Show_Steps * 1),
             IF(
-                ISOMITTED(Targets),
-                IFNA(VLOOKUP(posGrid, finalPool, outCol, ), ""),
-                MAP(Targets, LAMBDA(tgt, IFNA(VLOOKUP(ROWNUM(tgt) * M + COLNUM(tgt), finalPool, outCol, ), NA())))
+                mode = 2,
+                IF(
+                    ISOMITTED(Targets),
+                    NA(),
+                    IF(
+                        ROWS(Targets) * COLUMNS(Targets) > 1,
+                        NA(),
+                        LET(
+                            tgtPos, ROWNUM(Targets) * M + COLNUM(Targets),
+                            nSteps, VLOOKUP(tgtPos, finalPool, 3, ),
+                            posChain, IF(
+                                nSteps = 0,
+                                tgtPos,
+                                REDUCE(tgtPos, SEQUENCE(nSteps), LAMBDA(acc, iter,
+                                    LET(
+                                        cur, INDEX(acc, 1, 1),
+                                        delta, VLOOKUP(cur, finalPool, 4, ),
+                                        IF(delta = 0, acc, VSTACK(cur - delta, acc))
+                                    )
+                                ))
+                            ),
+                            ADDRESS(INT(posChain / M), MOD(posChain, M), 4)
+                        )
+                    )
+                ),
+                LET(
+                    outCol, IF(mode = 1, 3, 2),
+                    IF(
+                        ISOMITTED(Targets),
+                        IFNA(VLOOKUP(posGrid, finalPool, outCol, ), ""),
+                        MAP(Targets, LAMBDA(tgt, IFNA(VLOOKUP(ROWNUM(tgt) * M + COLNUM(tgt), finalPool, outCol, ), NA())))
+                    )
+                )
             )
         ),
         IF(Help?, Help, output)
