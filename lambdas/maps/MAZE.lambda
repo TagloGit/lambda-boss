@@ -8,6 +8,7 @@
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory map can be anchored to a worksheet position — the coordinate frame (rowArr/colArr, offsets) derives from origin, so st/Targets addresses and the distance grid map into the anchored frame. Matches SUBGRID/GRIDLOOKUP/GRIDAREA convention; replaces the old noRowCol (1,1)-fallback.
                         2026-07-10  Claude      Remove mp parameter — its values were never used, only its shape and position. st is promoted to first (the only always-required argument); grid shape now derives from Costs, else AllowMp, and the default anchor from the first of those that is a workbook reference (origin still overrides). Uniform-cost default switched from mp-mp+1 to SEQUENCE, fixing silently-unreachable text cells. New order: st, Costs, AllowMp, Targets, No_Diag, Show_Steps, Cus_Dir, Mazelam, origin (#299)
                         2026-07-18  Claude      Show_Steps promoted to numeric enum: (0) cumulative cost [default], (1) step counter (TRUE still accepted), (2) path — back-walks the pool's dirDelta predecessor pointers from a single target to return the shortest path as an Nx1 column of A1 addresses
+                        2026-07-18  Claude      Fix step counter inflation: the frontier-rows SEQUENCE omitted its step argument, so each proposal's step number gained the source cell's index within the sorted frontier. Now a true zero column — stepNum is uniformly iter+1, i.e. the number of moves on the path
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -74,7 +75,7 @@ MAZE = LAMBDA(
                 toCol, MOD(toPos, M) - colOffset,
                 costFrom, INDEX(costGrid, fromRow, fromCol),
                 costTo, INDEX(costGrid, toRow, toCol),
-                stepNum, TOCOL(SEQUENCE(ROWS(frontier), , 0) + SEQUENCE(, COUNTA(moveSet), iter + 1, 0)),
+                stepNum, TOCOL(SEQUENCE(ROWS(frontier), , 0, 0) + SEQUENCE(, COUNTA(moveSet), iter + 1, 0)),
                 distFrom, TOCOL(frontDist + SEQUENCE(, COUNTA(moveSet), 0, 0)),
                 dirDelta, TOCOL(moveSet + SEQUENCE(COUNTA(frontPos), , 0, 0)),
                 prevDir, TOCOL(frontPrev + SEQUENCE(, COUNTA(moveSet), 0, 0)),
