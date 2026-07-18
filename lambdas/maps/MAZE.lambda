@@ -9,6 +9,7 @@
                         2026-07-10  Claude      Remove mp parameter — its values were never used, only its shape and position. st is promoted to first (the only always-required argument); grid shape now derives from Costs, else AllowMp, and the default anchor from the first of those that is a workbook reference (origin still overrides). Uniform-cost default switched from mp-mp+1 to SEQUENCE, fixing silently-unreachable text cells. New order: st, Costs, AllowMp, Targets, No_Diag, Show_Steps, Cus_Dir, Mazelam, origin (#299)
                         2026-07-18  Claude      Show_Steps promoted to numeric enum: (0) cumulative cost [default], (1) step counter (TRUE still accepted), (2) path — back-walks the pool's dirDelta predecessor pointers from a single target to return the shortest path as an Nx1 column of A1 addresses
                         2026-07-18  Claude      Fix step counter inflation: the frontier-rows SEQUENCE omitted its step argument, so each proposal's step number gained the source cell's index within the sorted frontier. Now a true zero column — stepNum is uniformly iter+1, i.e. the number of moves on the path
+                        2026-07-18  Claude      Help table extracted to MAZEHELP — the combined formula exceeded Excel's 8192-character limit on saved formulas; the Help? branch now delegates via IF(Help?, MAZEHELP(), output)
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -21,26 +22,8 @@ MAZE = LAMBDA(
     [Cus_Dir],
     [Mazelam],
     [origin],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MAZE(st, [Costs], [AllowMp], [Targets], [No_Diag], [Show_Steps], [Cus_Dir], [Mazelam], [origin])¶" &
-                "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. The cost surface (Costs) and walkability mask (AllowMp) are the primary inputs; grid shape and worksheet position derive from whichever is supplied.¶" &
-                "VERSION:       →Jul 18 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   st            →(Required) Start cell address(es) as A1 text (e.g. ""C3""). Accepts an array of addresses for multi-source BFS.¶" &
-                "   Costs         →(Optional*) Per-cell step cost. Defines the grid shape and, if a reference, the default anchor. Defaults to uniform 1 (every step costs 1).¶" &
-                "   AllowMp       →(Optional*) Boolean walkability mask. Defines shape/anchor when Costs is omitted; defaults to everywhere walkable. *At least one of Costs / AllowMp must be supplied — the grid needs a shape. When both are supplied Costs defines the frame, and cells not covered by AllowMp are unwalkable.¶" &
-                "   Targets       →(Optional) A1 address(es) of cells to report distance for. Omitted returns the full distance grid covering all reachable cells.¶" &
-                "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
-                "   Show_Steps    →(Optional) Output mode: (0) cumulative cost [default], (1) step counter (TRUE also accepted), (2) path - the traversed cells as an Nx1 column of A1 addresses from st to the target. Mode 2 requires exactly one Targets cell; returns #N/A when Targets is omitted, multi-cell, or unreachable.¶" &
-                "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
-                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
-                "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp, so st/Targets addresses and the returned grid are read in that frame. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MAZE(""C3"", , walkMask, , TRUE)¶" &
-                "Result         →4-way uniform-cost distance grid from C3 covering all reachable cells in walkMask",
-                "→", "¶"
-                ),
+//  Help — full help table lives in MAZEHELP (the combined formula exceeded Excel's 8192-character limit)
+    LET(
     //  Check inputs
         Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
     //  Procedure
@@ -175,6 +158,6 @@ MAZE = LAMBDA(
                 )
             )
         ),
-        IF(Help?, Help, output)
+        IF(Help?, MAZEHELP(), output)
 )
 );

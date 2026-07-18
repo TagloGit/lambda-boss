@@ -1,0 +1,45 @@
+/*  FUNCTION NAME:      MAZEHELP
+    DESCRIPTION:*//**Returns the help table for MAZE. Split out of MAZE because the combined formula exceeded Excel's 8192-character limit on saved formulas.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-18  Claude      Initial version — MAZE help table extracted verbatim from MAZE so the MAZE formula fits Excel's 8192-character limit
+*/
+MAZEHELP = LAMBDA(
+//  Parameter Declarations
+    [ShowHelp],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MAZEHELP()¶" &
+                "DESCRIPTION:   →Returns the help table for MAZE. A bare call returns the MAZE help table; pass TRUE for this table.¶" &
+                "VERSION:       →Jul 18 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   ShowHelp      →(Optional) TRUE returns this help table instead of the MAZE help table.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAZEHELP()¶" &
+                "Result         →The MAZE help table",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, TEXTSPLIT(
+                "FUNCTION:      →MAZE(st, [Costs], [AllowMp], [Targets], [No_Diag], [Show_Steps], [Cus_Dir], [Mazelam], [origin])¶" &
+                "DESCRIPTION:   →Generalized BFS / weighted shortest-path search over a grid. The cost surface (Costs) and walkability mask (AllowMp) are the primary inputs; grid shape and worksheet position derive from whichever is supplied.¶" &
+                "VERSION:       →Jul 18 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   st            →(Required) Start cell address(es) as A1 text (e.g. ""C3""). Accepts an array of addresses for multi-source BFS.¶" &
+                "   Costs         →(Optional*) Per-cell step cost. Defines the grid shape and, if a reference, the default anchor. Defaults to uniform 1 (every step costs 1).¶" &
+                "   AllowMp       →(Optional*) Boolean walkability mask. Defines shape/anchor when Costs is omitted; defaults to everywhere walkable. *At least one of Costs / AllowMp must be supplied — the grid needs a shape. When both are supplied Costs defines the frame, and cells not covered by AllowMp are unwalkable.¶" &
+                "   Targets       →(Optional) A1 address(es) of cells to report distance for. Omitted returns the full distance grid covering all reachable cells.¶" &
+                "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
+                "   Show_Steps    →(Optional) Output mode: (0) cumulative cost [default], (1) step counter (TRUE also accepted), (2) path - the traversed cells as an Nx1 column of A1 addresses from st to the target. Mode 2 requires exactly one Targets cell; returns #N/A when Targets is omitted, multi-cell, or unreachable.¶" &
+                "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
+                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
+                "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp, so st/Targets addresses and the returned grid are read in that frame. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAZE(""C3"", , walkMask, , TRUE)¶" &
+                "Result         →4-way uniform-cost distance grid from C3 covering all reachable cells in walkMask",
+                "→", "¶"
+                ),
+        IF(Help?, result, Help)
+)
+);

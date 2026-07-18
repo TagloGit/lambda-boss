@@ -1,0 +1,8 @@
+tests:
+  - name: bare call returns the MAZE help table
+    args: []
+    expected_type: array
+
+  - name: help text
+    args: ["=TRUE"]
+    expected_type: array

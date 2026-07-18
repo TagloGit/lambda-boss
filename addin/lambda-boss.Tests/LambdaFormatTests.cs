@@ -84,6 +84,12 @@ public class LambdaFormatTests
     {
         var content = ReadFile(relativePath);
 
+        // A lambda may delegate its help table to a companion *HELP lambda when the
+        // combined formula would exceed Excel's 8192-character limit on saved formulas
+        // (e.g. MAZE -> MAZEHELP). The companion itself carries the inline TEXTSPLIT.
+        if (Regex.IsMatch(content, @"IF\(Help\?,\s*\w+HELP\(\)"))
+            return;
+
         // Must contain the TEXTSPLIT with → and ¶ delimiters
         Assert.Matches(@"TEXTSPLIT\(", content);
         Assert.Contains("\"→\"", content);
