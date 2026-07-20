@@ -4,6 +4,7 @@
                         2026-05-04  Claude      Initial version
                         2026-05-04  Claude      Adopt new "user accumulator preserved by type" contract from SCANUNTIL.
                         2026-07-20  Claude      continue now receives the current element: LAMBDA(acc, current, i), matching fn's signature.
+                        2026-07-20  Claude      continue is now a pre-check: evaluated before fn with the pre-step accumulator and the incoming element; the element that fails it is never consumed.
 */
 SCANWHILE = LAMBDA(
 //  Parameter Declarations
@@ -20,10 +21,10 @@ SCANWHILE = LAMBDA(
                 "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
                 "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
-                "   continue       →(Required) LAMBDA(acc, current, i) returning TRUE to keep going, FALSE to halt — same signature as fn. acc is the post-fn accumulator; current is the element just consumed.¶" &
+                "   continue       →(Required) LAMBDA(acc, current, i) returning TRUE to keep going, FALSE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when continue returns FALSE.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=SCANWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, a <= 20))¶" &
-                "Result         →column {1; 4; 9; 18; 28} — running sums per iteration (last three identical once stop fires)¶" &
+                "Formula        →=SCANWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v <= 9))¶" &
+                "Result         →column {1; 4; 9; 18; 18} — running sums; halts before consuming 10, so the final row repeats¶" &
                 "NOTE:          →Mechanically equivalent to SCANUNTIL with the predicate negated. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
                 "→", "¶"
                 ),

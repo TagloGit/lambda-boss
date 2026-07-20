@@ -7,13 +7,13 @@ tests:
     args: ['=0', '={1;2;3;4;5}', '=LAMBDA(a, v, i, a + v)']
     expected: 15
 
-  - name: scalar number seed - stop fires immediately on iter 1
+  - name: stop TRUE from the start - seed returned untouched, nothing consumed
     args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, TRUE)']
-    expected: 1
+    expected: 0
 
-  - name: stop condition sees the current element
+  - name: element-based stop halts before consuming the trigger
     args: ['=0', '={1;3;5;9;10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, v = 9)']
-    expected: 18
+    expected: 9
 
   - name: scalar boolean seed - any case equals 2
     args: ['=FALSE', '={1;2;3;4}', '=LAMBDA(a, v, i, OR(a, v = 2))']
