@@ -1,0 +1,75 @@
+/*  FUNCTION NAME:      UNTILE
+    DESCRIPTION:*//**Extracts items from repeated key-shaped sections of a tiled map into a flat Section/Item/Value table.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-20  Claude      Initial version
+*/
+UNTILE = LAMBDA(
+//  Parameter Declarations
+    [map],
+    [key],
+    [items],
+    [section_names],
+    [h_buffer],
+    [v_buffer],
+    [headers],
+    [if_invalid],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →UNTILE(map, key, items, [section_names], [h_buffer], [v_buffer], [headers], [if_invalid])¶" &
+                "DESCRIPTION:   →Extracts items from repeated key-shaped sections of a tiled map into a flat Section/Item/Value table. Returns #VALUE! when the map does not tile cleanly with the key size and buffers.¶" &
+                "VERSION:       →Jul 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   map           →(Required) The tiled grid: identical key-shaped sections repeated left-to-right, top-to-bottom (range or array).¶" &
+                "   key           →(Required) One section template whose cells hold item labels at the positions to read. Its size defines the section size; the section grid dimensions are derived from it.¶" &
+                "   items         →(Required) Item labels to extract, matched against the key (row or column). Duplicate labels in the key resolve to the first match.¶" &
+                "   section_names →(Optional) One name per section, left-to-right then top-to-bottom (row or column). Fewer names than sections reads only the first N sections (partial last row); more names than sections returns #VALUE!. Omitted -> sections numbered 1..N.¶" &
+                "   h_buffer      →(Optional) Blank columns between horizontally adjacent sections. Default 0.¶" &
+                "   v_buffer      →(Optional) Blank rows between vertically adjacent sections. Default 0.¶" &
+                "   headers       →(Optional) TRUE prepends the default header row {Section, Item, Value}; or pass a 3-element array of custom column names. Default FALSE.¶" &
+                "   if_invalid    →(Optional) Value placed in the Value column when an item is not found in the key. Default NA().¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=UNTILE({1,2,3,4}, {""x"",""y""}, {""x"",""y""})¶" &
+                "Result         →4x3 table: rows (1,x,1) (1,y,2) (2,x,3) (2,y,4)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(map),
+        hBuf, IF(ISOMITTED(h_buffer), 0, h_buffer),
+        vBuf, IF(ISOMITTED(v_buffer), 0, v_buffer),
+        invalid, IF(ISOMITTED(if_invalid), NA(), if_invalid),
+    //  Procedure
+        theMult, 100000,
+        mapRows, ROWS(map),
+        mapCols, COLUMNS(map),
+        keyRows, ROWS(key),
+        keyCols, COLUMNS(key),
+        gridRows, (mapRows + vBuf) / (keyRows + vBuf),
+        gridCols, (mapCols + hBuf) / (keyCols + hBuf),
+        geomOK, AND(gridRows = INT(gridRows), gridCols = INT(gridCols), gridRows >= 1, gridCols >= 1),
+        allSec, gridRows * gridCols,
+        secNames, IF(ISOMITTED(section_names), SEQUENCE(allSec), TOCOL(section_names)),
+        nSec, ROWS(secNames),
+        itemsRow, TOROW(items),
+        nItems, COLUMNS(itemsRow),
+        matchPos, XMATCH(itemsRow, TOCOL(key)),
+        itemRel, INT((matchPos - 1) / keyCols) * theMult + MOD(matchPos - 1, keyCols),
+        baseRow, IFERROR(MIN(ROW(map)), 1),
+        baseCol, IFERROR(MIN(COLUMN(map)), 1),
+        mapOrigin, baseRow * theMult + baseCol,
+        secPos, TOCOL(SEQUENCE(gridRows, 1, 0, keyRows + vBuf) * theMult + SEQUENCE(1, gridCols, 0, keyCols + hBuf)),
+        secUsed, TAKE(secPos, nSec) + mapOrigin,
+        posGrid, secUsed + itemRel,
+        vals, GRIDLOOKUP(map, posGrid, TRUE, , invalid),
+        idx, SEQUENCE(nSec * nItems, 1, 0),
+        secCol, CHOOSEROWS(secNames, INT(idx / nItems) + 1),
+        itemCol, INDEX(itemsRow, 1, MOD(idx, nItems) + 1),
+        valCol, TOCOL(vals),
+        body, HSTACK(secCol, itemCol, valCol),
+        hdrCount, IF(ISOMITTED(headers), 0, ROWS(headers) * COLUMNS(headers)),
+        header?, IF(ISOMITTED(headers), FALSE, IF(hdrCount > 1, TRUE, N(headers))),
+        headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Section", "Item", "Value")),
+        table, IF(header?, VSTACK(headerRow, body), body),
+        result, IF(OR(NOT(geomOK), nSec > allSec), VALUE("!"), table),
+        IF(Help?, Help, result)
+)
+);

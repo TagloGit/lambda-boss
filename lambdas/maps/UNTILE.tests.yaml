@@ -1,0 +1,68 @@
+tests:
+  - name: two side-by-side sections, no buffers, default section numbers
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}']
+    expected: [[1, "x", 1], [1, "y", 2], [2, "x", 3], [2, "y", 4]]
+
+  - name: vertical stack with v_buffer gap row
+    args: ['={10,0;0,20;99,99;30,0;0,40}', '={"a","";"","b"}', '={"a","b"}', "=", "=", "=1"]
+    expected: [[1, "a", 10], [1, "b", 20], [2, "a", 30], [2, "b", 40]]
+
+  - name: section names with default headers
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', '={"N","S"}', "=", "=", "=TRUE"]
+    expected: [["Section", "Item", "Value"], ["N", "x", 1], ["N", "y", 2], ["S", "x", 3], ["S", "y", 4]]
+
+  - name: custom header row
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', "=", "=", "=", '={"Sec","It","Val"}']
+    expected: [["Sec", "It", "Val"], [1, "x", 1], [1, "y", 2], [2, "x", 3], [2, "y", 4]]
+
+  - name: fewer names than sections reads only the first N sections
+    args: ['={1,2,3,4,5,6}', '={"x","y"}', '={"x","y"}', '={"A","B"}']
+    expected: [["A", "x", 1], ["A", "y", 2], ["B", "x", 3], ["B", "y", 4]]
+
+  - name: items as column, order preserved
+    args: ['={1,2,3,4}', '={"x","y"}', '={"y";"x"}']
+    expected: [[1, "y", 2], [1, "x", 1], [2, "y", 4], [2, "x", 3]]
+
+  - name: single section, single item
+    args: ['={5,6}', '={"x","y"}', "x"]
+    expected: [[1, "x", 5]]
+
+  - name: geometry misfit returns VALUE error
+    args: ['={1,2,3,4,5}', '={"x","y"}', '={"x","y"}']
+    expected: -2146826273
+
+  - name: more names than sections returns VALUE error
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', '={"A","B","C"}']
+    expected: -2146826273
+
+  - name: item missing from key defaults to NA in value cells
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","z"}']
+    expected: [[1, "x", 1], [1, "z", -2146826246], [2, "x", 3], [2, "z", -2146826246]]
+
+  - name: item missing from key uses if_invalid
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","z"}', "=", "=", "=", "=", "?"]
+    expected: [[1, "x", 1], [1, "z", "?"], [2, "x", 3], [2, "z", "?"]]
+
+  - name: real ranges with both buffers via setup
+    setup:
+      cells:
+        - address: "F3:J7"
+          values:
+            - ["A1s", "", "", "A2s", ""]
+            - ["", 10, "", "", 20]
+            - ["", "", "", "", ""]
+            - ["B1s", "", "", "B2s", ""]
+            - ["", 30, "", "", 40]
+        - address: "L3:M4"
+          values:
+            - ["name", ""]
+            - ["", "score"]
+      names:
+        - { name: "mapRng", refers_to: "F3:J7" }
+        - { name: "keyRng", refers_to: "L3:M4" }
+    args: ["=mapRng", "=keyRng", '={"name","score"}', '={"NW","NE","SW","SE"}', "=1", "=1"]
+    expected: [["NW", "name", "A1s"], ["NW", "score", 10], ["NE", "name", "A2s"], ["NE", "score", 20], ["SW", "name", "B1s"], ["SW", "score", 30], ["SE", "name", "B2s"], ["SE", "score", 40]]
+
+  - name: help text
+    args: []
+    expected_type: array
