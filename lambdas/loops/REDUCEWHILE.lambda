@@ -1,10 +1,11 @@
 /*  FUNCTION NAME:      REDUCEWHILE
-    DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. fn and continue share one signature: LAMBDA(acc, current, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
+    DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is a pre-check: evaluated before each fn call with the pre-step accumulator and the incoming element, so the element that fails it is never consumed. fn and continue share one signature: LAMBDA(acc, current, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
                         2026-05-03  Claude      Accept horizontal or vertical cases (inherits from REDUCEUNTIL)
                         2026-05-04  Claude      Inherits new "user accumulator preserved by type" contract from REDUCEUNTIL.
                         2026-07-20  Claude      continue now receives the current element: LAMBDA(acc, current, i), matching fn's signature.
+                        2026-07-20  Claude      continue is now a pre-check: evaluated before fn with the pre-step accumulator and the incoming element; the element that fails it is never consumed.
 */
 REDUCEWHILE = LAMBDA(
 //  Parameter Declarations
@@ -15,16 +16,16 @@ REDUCEWHILE = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REDUCEWHILE(seed, cases, fn, continue)¶" &
-                "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked after each fn call. Returns whatever the user passed in (scalar / array / state-string).¶" &
+                "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked before each fn call — the element that fails it is never consumed. Returns whatever the user passed in (scalar / array / state-string).¶" &
                 "VERSION:       →Jul 20 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
                 "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
-                "   continue       →(Required) LAMBDA(acc, current, i) returning TRUE to keep going, FALSE to halt — same signature as fn. acc is the post-fn accumulator; current is the element just consumed.¶" &
+                "   continue       →(Required) LAMBDA(acc, current, i) returning TRUE to keep going, FALSE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when continue returns FALSE.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=REDUCEWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, a <= 20))¶" &
-                "Result         →28 (number — halts on iter 5 once sum is no longer ≤ 20)¶" &
+                "Formula        →=REDUCEWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v <= 9))¶" &
+                "Result         →18 (number — sums while elements stay ≤ 9; halts before consuming 10)¶" &
                 "NOTE:          →Mechanically equivalent to REDUCEUNTIL with the predicate negated. Use whichever phrasing reads more naturally.",
                 "→", "¶"
                 ),
