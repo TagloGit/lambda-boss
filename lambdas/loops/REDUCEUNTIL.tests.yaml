@@ -1,6 +1,6 @@
 tests:
   - name: scalar number seed - sum stops once total exceeds 20
-    args: ['=0', '={1;3;5;9;10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a > 20)']
+    args: ['=0', '={1;3;5;9;10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, a > 20)']
     expected: 28
 
   - name: scalar number seed - no stop traverses all cases (REDUCEI behaviour)
@@ -8,8 +8,12 @@ tests:
     expected: 15
 
   - name: scalar number seed - stop fires immediately on iter 1
-    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, TRUE)']
+    args: ['=0', '={1;2;3}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, TRUE)']
     expected: 1
+
+  - name: stop condition sees the current element
+    args: ['=0', '={1;3;5;9;10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, v = 9)']
+    expected: 18
 
   - name: scalar boolean seed - any case equals 2
     args: ['=FALSE', '={1;2;3;4}', '=LAMBDA(a, v, i, OR(a, v = 2))']
@@ -35,7 +39,7 @@ tests:
       - 6
 
   - name: horizontal cases array works the same as vertical
-    args: ['=0', '={1,3,5,9,10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, i, a > 20)']
+    args: ['=0', '={1,3,5,9,10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, a > 20)']
     expected: 28
 
   - name: help text

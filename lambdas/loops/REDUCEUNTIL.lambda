@@ -1,9 +1,10 @@
 /*  FUNCTION NAME:      REDUCEUNTIL
-    DESCRIPTION:*//**REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. fn signature: LAMBDA(acc, current, i). stop signature: LAMBDA(acc, i). Returns whatever the user passed in: a scalar stays a scalar, a state-string stays a state-string.*/
+    DESCRIPTION:*//**REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. fn and stop share one signature: LAMBDA(acc, current, i). Returns whatever the user passed in: a scalar stays a scalar, a state-string stays a state-string.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
                         2026-05-03  Claude      Accept horizontal or vertical cases (TOCOL up front)
                         2026-05-04  Claude      User accumulator preserved by type — scalar/array seeds wrapped in private slot, text seeds passed through. BREAK/INDEX live in a separate Meta state, FS-separated from the user portion. fn / stop see the unwrapped accumulator directly.
+                        2026-07-20  Claude      stop now receives the current element: LAMBDA(acc, current, i), matching fn's signature.
 */
 REDUCEUNTIL = LAMBDA(
 //  Parameter Declarations
@@ -15,14 +16,14 @@ REDUCEUNTIL = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REDUCEUNTIL(seed, cases, fn, [stop])¶" &
                 "DESCRIPTION:   →REDUCE that halts when stop returns TRUE. Stop is checked after each fn call. Returns whatever the user passed in (scalar / array / state-string).¶" &
-                "VERSION:       →May 04 2026¶" &
+                "VERSION:       →Jul 20 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
                 "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
                 "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
-                "   stop           →(Optional) LAMBDA(acc, i) returning TRUE to halt. Default never stops (= REDUCEI).¶" &
+                "   stop           →(Optional) LAMBDA(acc, current, i) returning TRUE to halt — same signature as fn. acc is the post-fn accumulator; current is the element just consumed. Default never stops (= REDUCEI).¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=REDUCEUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, i, a > 20))¶" &
+                "Formula        →=REDUCEUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, a > 20))¶" &
                 "Result         →28 (number — stops on iter 5 once sum exceeds 20)¶" &
                 "NOTE:          →Excel REDUCE has no real short-circuit; all cases are visited. Once stop fires, BREAK is set internally and subsequent iterations pass the accumulator through unchanged. If you seed with a non-text value, fn must keep returning the same kind of value — to switch into state-building, seed with """" or NewState().",
                 "→", "¶"
@@ -33,7 +34,7 @@ REDUCEUNTIL = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         fs, CHAR(28),
-        realStop, IF(ISOMITTED(stop), LAMBDA(a, i, FALSE), stop),
+        realStop, IF(ISOMITTED(stop), LAMBDA(a, v, i, FALSE), stop),
         flat, TOCOL(cases),
         wrap?, NOT(ISTEXT(@seed)),
         initialMeta, SetVar(NewState(), "INDEX", 0),
@@ -50,7 +51,7 @@ REDUCEUNTIL = LAMBDA(
                                iter, GetVar(metaPart, "INDEX") + 1,
                                acc, IF(wrap?, GetVar(userPart, "v"), userPart),
                                newAcc, fn(acc, current, iter),
-                               stopped?, realStop(newAcc, iter),
+                               stopped?, realStop(newAcc, current, iter),
                                newUser, IF(wrap?, SetVar(userPart, "v", newAcc), newAcc),
                                meta1, SetVar(metaPart, "INDEX", iter),
                                newMeta, IF(stopped?, SetVar(meta1, "BREAK", TRUE), meta1),
