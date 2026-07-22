@@ -276,6 +276,35 @@ tests:
     args: ["=tblData", "Alex", "=tblPerson"]
     expected: [["Alex", 25, "Perth"]]
 
+  - name: column mode with 1x1 array Item behaves as scalar (#318)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+        - { name: "tblPerson", refers_to: "C4:C6" }
+    args: ["=tblAll", '=CHOOSEROWS({"Sam";"Tim"},1)', "=tblPerson", "Age"]
+    expected: 30
+
+  - name: row mode with 1x1 array Item returns the full row (#318)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '=CHOOSEROWS({"Tim";"Sam"},1)']
+    expected: [[42, "Sydney"]]
+
   - name: row mode with array of items stacks rows
     setup:
       cells:

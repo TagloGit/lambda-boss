@@ -23,6 +23,10 @@ tests:
     args: ['={"hello","world","abc"}']
     expected: [["olleh", "dlrow", "cba"]]
 
+  - name: 1x1 array input reverses fully (#318)
+    args: ['=CHOOSEROWS({"hello";"abc"},1)']
+    expected: "olleh"
+
   - name: help text
     args: []
     expected_type: array

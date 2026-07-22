@@ -19,6 +19,14 @@ tests:
     args: ['={"a";"b";"a";"c"}', '=LAMBDA(acc, r, i, LET(k, INDEX(r,1,1), IF(i=1, HSTACK(k, 1), LET(hit, FILTER(CHOOSECOLS(acc,2), CHOOSECOLS(acc,1)=k, 0), IF(@hit=0, HSTACK(k, MAX(CHOOSECOLS(acc,2))+1), HSTACK(k, @hit))))))']
     expected: [["a", 1], ["b", 2], ["a", 1], ["c", 3]]
 
+  - name: single-column items pass fn a true scalar so SEQUENCE in fn is safe (#318)
+    args: ['={"abc";"de"}', '=LAMBDA(a,b,i, CONCAT(MID(b, SEQUENCE(LEN(b),,LEN(b),-1), 1)))']
+    expected: [["cba"], ["ed"]]
+
+  - name: multi-column items pass fn the current row as a 1-row array
+    args: ['={1,10;2,20}', '=LAMBDA(a,r,i, INDEX(r,1,1) + INDEX(r,1,2))']
+    expected: [[11], [22]]
+
   - name: help text
     args: []
     expected_type: array
