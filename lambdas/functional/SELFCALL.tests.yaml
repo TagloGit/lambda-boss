@@ -1,0 +1,28 @@
+tests:
+  - name: factorial via one-arg recursion
+    args: ['=LAMBDA(self, n, IF(n<=1, 1, n*self(n-1)))', "=5"]
+    expected: 120
+
+  - name: sum 1..10 via one-arg recursion
+    args: ['=LAMBDA(self, n, IF(n=0, 0, n+self(n-1)))', "=10"]
+    expected: 55
+
+  - name: gcd via two-arg recursion
+    args: ['=LAMBDA(self, a, b, IF(b=0, a, self(b, MOD(a, b))))', "=48", "=18"]
+    expected: 6
+
+  - name: collatz step count via two-arg recursion
+    args: ['=LAMBDA(self, n, steps, IF(n=1, steps, self(IF(ISEVEN(n), n/2, 3*n+1), steps+1)))', "=6", "=0"]
+    expected: 8
+
+  - name: base case returns immediately without recursing
+    args: ['=LAMBDA(self, n, IF(n<=1, 1, n*self(n-1)))', "=1"]
+    expected: 1
+
+  - name: array state builds a column recursively
+    args: ['=LAMBDA(self, arr, IF(ROWS(arr)>=4, arr, self(VSTACK(arr, ROWS(arr)+1))))', "={1}"]
+    expected: [[1], [2], [3], [4]]
+
+  - name: help text
+    args: []
+    expected_type: array

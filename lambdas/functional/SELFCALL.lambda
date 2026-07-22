@@ -1,0 +1,35 @@
+/*  FUNCTION NAME:      SELFCALL
+    DESCRIPTION:*//**Runs a recursive LAMBDA inline without name-manager setup: fn receives a clean self to call for recursion.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-22  Claude      Initial version
+*/
+SELFCALL = LAMBDA(
+//  Parameter Declarations
+    [fn],
+    [arg_1],
+    [arg_2],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SELFCALL(fn, arg_1, [arg_2])¶" &
+                "DESCRIPTION:   →Runs a recursive LAMBDA inline without name-manager setup: fn receives a clean self to call for recursion.¶" &
+                "VERSION:       →Jul 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   fn             →(Required) LAMBDA(self, state, ...) whose body calls self(newState) to recurse - no double-self plumbing needed.¶" &
+                "   arg_1          →(Required) Initial state.¶" &
+                "   arg_2          →(Optional) Second state slot (e.g. visited + frontier). For more state, pack values with the Loops library's SetState/GetVarAt.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SELFCALL(LAMBDA(self, n, IF(n<=1, 1, n*self(n-1))), 5)¶" &
+                "Result         →120",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(fn),
+    //  Procedure
+        make_1, LAMBDA(rec, LAMBDA(a, fn(rec(rec), a))),
+        make_2, LAMBDA(rec, LAMBDA(a, b, fn(rec(rec), a, b))),
+        result, IF(ISOMITTED(arg_2),
+                    fn(make_1(make_1), arg_1),
+                    fn(make_2(make_2), arg_1, arg_2)),
+        IF(Help?, Help, result)
+)
+);
