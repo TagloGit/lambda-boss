@@ -39,6 +39,14 @@ tests:
     args: ['={"abc123def456";"abcdef";"1a2b3c"}', "[0-9]+", true]
     expected: [[2], [0], [3]]
 
+  - name: 1x1 array input in literal mode (#318)
+    args: ['=CHOOSEROWS({"MASSAGE";"x"},1)', "S"]
+    expected: 2
+
+  - name: 1x1 array input in regex mode counts all matches (#318)
+    args: ['=CHOOSEROWS({"abc123def456";"x"},1)', "[0-9]+", true]
+    expected: 2
+
   - name: help text
     args: []
     expected_type: array

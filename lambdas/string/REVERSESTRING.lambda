@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-16  Claude      Initial version
                         2026-05-14  Claude      Array-lift on text via dispatcher: MAP over multi-text input, otherwise scalar body unchanged. SEQUENCE(LEN(text), ...) requires a scalar length.
+                        2026-07-22  Claude      Unconditional MAP dispatch: 1x1 arrays previously reached the scalar body, where SEQUENCE(LEN) collapses and only the last character was returned (#318)
 */
 REVERSESTRING = LAMBDA(
 //  Parameter Declarations
@@ -23,9 +24,7 @@ REVERSESTRING = LAMBDA(
         Help?, ISOMITTED(text),
     //  Procedure
         scalar, LAMBDA(t, CONCAT(MID(t, SEQUENCE(LEN(t),,LEN(t),-1), 1))),
-        result, IF(OR(ROWS(text) > 1, COLUMNS(text) > 1),
-                    MAP(text, scalar),
-                    scalar(text)),
+        result, MAP(text, scalar),
         IF(Help?, Help, result)
 )
 );
