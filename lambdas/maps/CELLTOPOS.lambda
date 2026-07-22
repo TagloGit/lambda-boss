@@ -5,6 +5,7 @@
                         2026-05-14  Claude      Switch to string input; parse address directly (non-volatile, no INDIRECT)
                         2026-05-14  Claude      Default mult bumped from 1000 to 100000 — safe for any Excel column (max XFD=16384) while keeping the trailing 5 digits readable
                         2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
+                        2026-07-22  Claude      Unconditional MAP dispatch: 1x1 arrays previously reached the scalar body, where SEQUENCE(LEN) lifts element-wise and truncates multi-letter columns ("BY85" parsed as AZ85) (#318)
 */
 CELLTOPOS = LAMBDA(
 //  Parameter Declarations
@@ -38,9 +39,7 @@ CELLTOPOS = LAMBDA(
                     colNum, SUMPRODUCT((CODE(MID(letters, SEQUENCE(n), 1)) - 64) * 26^(n - SEQUENCE(n))),
                     rowNum * m + colNum
                   )),
-        result, IF(OR(ROWS(cell) > 1, COLUMNS(cell) > 1),
-                    MAP(cell, scalar),
-                    scalar(cell)),
+        result, MAP(cell, scalar),
         IF(Help?, Help, result)
 )
 );

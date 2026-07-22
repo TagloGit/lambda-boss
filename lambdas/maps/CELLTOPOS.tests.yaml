@@ -75,6 +75,10 @@ tests:
     args: ["=D2:E2"]
     expected: [[500005, 600006]]
 
+  - name: 1x1 array input with multi-letter column parses fully (#318)
+    args: ['=CHOOSEROWS({"BY85";"C2"},1)']
+    expected: 8500077
+
   - name: help text
     args: []
     expected_type: array
