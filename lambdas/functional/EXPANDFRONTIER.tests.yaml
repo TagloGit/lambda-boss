@@ -1,0 +1,34 @@
+# Test graph (edge list source -> target): A->B, A->C, C->D, B->A, E->A
+# getNext = FILTER(targets, sources = node, "")
+tests:
+  - name: single seed reaches full closure
+    args: ["A", '=LAMBDA(node, FILTER({"B";"C";"D";"A";"A"}, {"A";"A";"C";"B";"E"}=node, ""))']
+    expected: [["A"], ["B"], ["C"], ["D"]]
+
+  - name: include_seeds FALSE returns only newly-reached nodes
+    args: ["A", '=LAMBDA(node, FILTER({"B";"C";"D";"A";"A"}, {"A";"A";"C";"B";"E"}=node, ""))', "=FALSE"]
+    expected: [["B"], ["C"], ["D"]]
+
+  - name: array of seeds merges closures
+    args: ['={"E";"D"}', '=LAMBDA(node, FILTER({"B";"C";"D";"A";"A"}, {"A";"A";"C";"B";"E"}=node, ""))']
+    expected: [["E"], ["D"], ["A"], ["B"], ["C"]]
+
+  - name: isolated seed with no neighbours returns just the seed
+    args: ["Z", '=LAMBDA(node, FILTER({"B";"C";"D";"A";"A"}, {"A";"A";"C";"B";"E"}=node, ""))']
+    expected: "Z"
+
+  - name: getNext errors and empty strings are absorbed as no neighbours
+    args: ["A", '=LAMBDA(node, IF(node="A", {"B";""}, NA()))']
+    expected: [["A"], ["B"]]
+
+  - name: numeric node IDs
+    args: ["=1", "=LAMBDA(node, FILTER({2;3;4}, {1;2;3}=node, \"\"))"]
+    expected: [[1], [2], [3], [4]]
+
+  - name: max_depth exceeded returns NA
+    args: ["A", '=LAMBDA(node, FILTER({"B";"C";"D";"A";"A"}, {"A";"A";"C";"B";"E"}=node, ""))', "=", "=1"]
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array

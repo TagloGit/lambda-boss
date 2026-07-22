@@ -1,0 +1,50 @@
+/*  FUNCTION NAME:      EXPANDFRONTIER
+    DESCRIPTION:*//**Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-22  Claude      Initial version
+*/
+EXPANDFRONTIER = LAMBDA(
+//  Parameter Declarations
+    [seeds],
+    [getNext],
+    [include_seeds],
+    [max_depth],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →EXPANDFRONTIER(seeds, getNext, [include_seeds], [max_depth])¶" &
+                "DESCRIPTION:   →Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes.¶" &
+                "VERSION:       →Jul 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seeds          →(Required) Scalar or 1-D array of starting node IDs (text or number). IDs must be type-consistent and never equal to the empty string.¶" &
+                "   getNext        →(Required) LAMBDA(node) returning the neighbours of one node - any shape; empty, error, or blank all mean no neighbours. Each node is expanded exactly once.¶" &
+                "   include_seeds  →(Optional) Default TRUE. FALSE returns only newly-reached nodes, so a count of triggered nodes is ROWS(result).¶" &
+                "   max_depth      →(Optional) Maximum expansion depth, default 1000. Returns #N/A instead of a runaway recursion.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=EXPANDFRONTIER(""A"", LAMBDA(node, FILTER({""B"";""C"";""D""}, {""A"";""A"";""C""}=node, """")))¶" &
+                "Result         →{A;B;C;D}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(seeds),
+    //  Procedure
+        norm, LAMBDA(node, LET(
+                raw, IFERROR(getNext(node), ""),
+                flat, IFERROR(TOCOL(raw, 3), ""),
+                FILTER(flat, flat <> "", ""))),
+        expandAll, LAMBDA(frontier, LET(
+                stacked, REDUCE("", TOCOL(frontier), LAMBDA(acc, node, VSTACK(acc, norm(node)))),
+                FILTER(stacked, stacked <> "", ""))),
+        rec, LAMBDA(self, visited, frontier, depth, LET(
+                candidates, expandAll(frontier),
+                fresh, UNIQUE(FILTER(candidates, ISNA(XMATCH(candidates, VSTACK(visited, ""))), "")),
+                IF(AND(ROWS(fresh) = 1, INDEX(fresh, 1, 1) = ""), visited,
+                   IF(depth <= 0, NA(),
+                      self(self, VSTACK(visited, fresh), fresh, depth - 1))))),
+        seedCol, UNIQUE(TOCOL(seeds)),
+        reached, rec(rec, seedCol, seedCol, IF(ISOMITTED(max_depth), 1000, max_depth)),
+        keepSeeds, IF(ISOMITTED(include_seeds), TRUE, include_seeds),
+        result, IF(keepSeeds, reached,
+                   FILTER(reached, ISNA(XMATCH(reached, seedCol)), "")),
+        IF(Help?, Help, result)
+)
+);
