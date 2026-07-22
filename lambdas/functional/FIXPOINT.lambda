@@ -1,0 +1,42 @@
+/*  FUNCTION NAME:      FIXPOINT
+    DESCRIPTION:*//**Applies fn repeatedly until the value stops changing, then returns the converged state.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-22  Claude      Initial version
+*/
+FIXPOINT = LAMBDA(
+//  Parameter Declarations
+    [init],
+    [fn],
+    [same],
+    [max_iter],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →FIXPOINT(init, fn, [same], [max_iter])¶" &
+                "DESCRIPTION:   →Applies fn repeatedly until the value stops changing, then returns the converged state.¶" &
+                "VERSION:       →Jul 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   init           →(Required) Starting value - scalar or array.¶" &
+                "   fn             →(Required) LAMBDA(state) returning the next state.¶" &
+                "   same           →(Optional) LAMBDA(a, b) returning TRUE when converged. Default: exact shape plus element-wise equality, so growing arrays are handled.¶" &
+                "   max_iter       →(Optional) Iteration cap, default 1000. Returns #N/A instead of hanging when convergence never fires.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=FIXPOINT(40, LAMBDA(x, IF(x>5, x/2, x)))¶" &
+                "Result         →5",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(init),
+    //  Procedure
+        eq, IF(ISOMITTED(same),
+                LAMBDA(a, b, IFERROR(AND(ROWS(a) = ROWS(b), COLUMNS(a) = COLUMNS(b), AND(a = b)), FALSE)),
+                same),
+        iterCap, IF(ISOMITTED(max_iter), 1000, max_iter),
+        rec, LAMBDA(self, state, n,
+                LET(nextState, fn(state),
+                    IF(eq(nextState, state), state,
+                       IF(n <= 0, NA(),
+                          self(self, nextState, n - 1))))),
+        result, rec(rec, init, iterCap),
+        IF(Help?, Help, result)
+)
+);

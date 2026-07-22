@@ -1,0 +1,28 @@
+tests:
+  - name: halve until at or below 5
+    args: ["=40", "=LAMBDA(x, IF(x>5, x/2, x))"]
+    expected: 5
+
+  - name: already-stable init returns immediately
+    args: ["=3", "=LAMBDA(x, IF(x>5, x/2, x))"]
+    expected: 3
+
+  - name: custom same by proximity stops early
+    args: ["=40", "=LAMBDA(x, x/2)", "=LAMBDA(a, b, ABS(a-b)<0.5)"]
+    expected: 0.625
+
+  - name: array state converges element-wise
+    args: ["={12;3;20}", "=LAMBDA(v, IF(v>10, v-5, v))"]
+    expected: [[7], [3], [10]]
+
+  - name: growing array handled by default shape-aware equality
+    args: ["={1}", "=LAMBDA(s, IF(ROWS(s)<4, VSTACK(s, ROWS(s)+1), s))"]
+    expected: [[1], [2], [3], [4]]
+
+  - name: max_iter cap returns NA when never converging
+    args: ["=1", "=LAMBDA(x, x+1)", "=", "=5"]
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array
