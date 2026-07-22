@@ -4,7 +4,7 @@
                         2026-04-13  Claude      Initial version
                         2026-04-13  Claude      Add Regex parameter
                         2026-05-14  Claude      Array-lift on Text via dispatcher: MAP over multi-text input, otherwise scalar body unchanged. Regex branch needs per-element evaluation because REGEXEXTRACT mode 1 returns an array per Text.
-                        2026-07-22  Claude      Unconditional MAP dispatch: 1x1 arrays previously reached the scalar body, where REGEXEXTRACT mode 1 collapses to the first match and regex counts >1 came back as 1 (#318)
+                        2026-07-22  Claude      Deref the scalar branch with @: 1x1 arrays previously reached the scalar body array-shaped, where REGEXEXTRACT mode 1 collapses to the first match and regex counts >1 came back as 1. @ keeps true-scalar output for scalar input (unconditional MAP would return a 1x1 array) (#318)
 */
 CHARQ = LAMBDA(
 //  Parameter Declarations
@@ -33,7 +33,9 @@ CHARQ = LAMBDA(
                   IF(_regex,
                      IFERROR(COLUMNS(REGEXEXTRACT(t, Char, 1)), 0),
                      (LEN(t) - LEN(SUBSTITUTE(t, Char, ""))) / LEN(Char))),
-        result, MAP(Text, scalar),
+        result, IF(OR(ROWS(Text) > 1, COLUMNS(Text) > 1),
+                    MAP(Text, scalar),
+                    scalar(@Text)),
         IF(Help?, Help, result)
 )
 );

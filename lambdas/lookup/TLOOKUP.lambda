@@ -5,7 +5,7 @@
                         2026-05-14  Claude      Array-lift on Item via dispatcher: MAP over multi-item input, otherwise scalar body unchanged
                         2026-07-18  Claude      Item now optional (omitted returns whole data column under HeaderName); LookupCol now optional (defaults to first table column)
                         2026-07-18  Claude      Row mode: omitted HeaderName returns the matched row's other columns; works with or without a header row; array Items stack rows
-                        2026-07-22  Claude      1x1-array Item handling: column mode now MAP-dispatches unconditionally; row mode derefs Item with @ before the scalar path (INDEX with a lifted 1x1 row index collapsed the whole-row return) (#318)
+                        2026-07-22  Claude      1x1-array Item handling: both modes deref Item with @ on the scalar path (INDEX with a lifted 1x1 row index collapsed row mode's whole-row return); @ also keeps column mode's scalar output a true scalar (#318)
 */
 TLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -65,7 +65,9 @@ TLOOKUP = LAMBDA(
                     rowResult,
                     IF(ISOMITTED(Item),
                         wholeCol,
-                        MAP(Item, scalar))),
+                        IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
+                            MAP(Item, scalar),
+                            scalar(@Item)))),
         IF(Help?, Help, result)
 )
 );
