@@ -1,0 +1,56 @@
+/*  FUNCTION NAME:      MATCHSPLIT
+    DESCRIPTION:*//**Flattens a two-sided match table into one row per team per match, with own and opponent columns side by side plus an explicit Side flag.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-24  Claude      Initial version
+*/
+MATCHSPLIT = LAMBDA(
+//  Parameter Declarations
+    [sideA],
+    [sideB],
+    [keyCols],
+    [interleave],
+    [resultHeaders],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →MATCHSPLIT(sideA, sideB, keyCols, interleave, resultHeaders)¶" &
+                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), own-side values, opponent values. Eliminates the opponent self-XLOOKUP.¶" &
+                "VERSION:       →Jul 24 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   sideA          →(Required) N x W block of side-1 (""home"") columns, one match per row (e.g. team name, score).¶" &
+                "   sideB          →(Required) N x W block of side-2 (""away"") columns, same width and column order as sideA. Returns #VALUE! if the shapes differ.¶" &
+                "   keyCols        →(Optional) N x K per-match identifier column(s) repeated on both output rows (match number, date, ...).¶" &
+                "   interleave     →(Optional) TRUE (default) pairs each match's two rows adjacently, side 1 first; FALSE stacks all side-1 rows then all side-2 rows.¶" &
+                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Own1..OwnW, Opp1..OppW); or pass a custom header array. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MATCHSPLIT({""Ann"",3;""Cat"",1}, {""Bob"",2;""Dan"",4}, {""M1"";""M2""})¶" &
+                "Result         →4 rows: M1,1,Ann,3,Bob,2 / M1,2,Bob,2,Ann,3 / M2,1,Cat,1,Dan,4 / M2,2,Dan,4,Cat,1",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(sideA),
+    //  Procedure
+        nRows, ROWS(sideA),
+        sideW, COLUMNS(sideA),
+        shapeOk, AND(ROWS(sideB) = nRows, COLUMNS(sideB) = sideW),
+        hasKeys, NOT(ISOMITTED(keyCols)),
+        nKeys, IF(hasKeys, COLUMNS(keyCols), 0),
+        sideOnes, SEQUENCE(nRows, 1, 1, 0),
+        sideTwos, SEQUENCE(nRows, 1, 2, 0),
+        blockA, IF(hasKeys, HSTACK(keyCols, sideOnes, sideA, sideB), HSTACK(sideOnes, sideA, sideB)),
+        blockB, IF(hasKeys, HSTACK(keyCols, sideTwos, sideB, sideA), HSTACK(sideTwos, sideB, sideA)),
+        stacked, VSTACK(blockA, blockB),
+        inter?, IF(ISOMITTED(interleave), TRUE, interleave),
+        ordered, IF(inter?,
+                    CHOOSEROWS(stacked, TOCOL(HSTACK(SEQUENCE(nRows), SEQUENCE(nRows) + nRows))),
+                    stacked),
+        hdrCount, IF(ISOMITTED(resultHeaders), 0, ROWS(resultHeaders) * COLUMNS(resultHeaders)),
+        header?, IF(ISOMITTED(resultHeaders), FALSE, IF(hdrCount > 1, TRUE, N(resultHeaders))),
+        defaultHeader, IF(hasKeys,
+                          HSTACK("Key" & SEQUENCE(1, nKeys), "Side", "Own" & SEQUENCE(1, sideW), "Opp" & SEQUENCE(1, sideW)),
+                          HSTACK("Side", "Own" & SEQUENCE(1, sideW), "Opp" & SEQUENCE(1, sideW))),
+        headerRow, IF(hdrCount > 1, TOROW(resultHeaders), defaultHeader),
+        body, IF(header?, VSTACK(headerRow, ordered), ordered),
+        result, IF(shapeOk, body, VALUE("x")),
+        IF(Help?, Help, result)
+)
+);
