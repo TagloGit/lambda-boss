@@ -15,7 +15,7 @@ MATCHSPLIT = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →MATCHSPLIT(sideA, sideB, teamIdA, teamIdB, keyCols, interleave, resultHeaders)¶" &
-                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), own team ID, own-side values, opponent team ID, opponent values. Eliminates the opponent self-XLOOKUP.¶" &
+                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), then own/opponent column pairs (Team, OppTeam, Own1, Opp1, Own2, Opp2, ...). Eliminates the opponent self-XLOOKUP.¶" &
                 "VERSION:       →Jul 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   sideA          →(Required) N x W block of side-1 (""home"") columns, one match per row (e.g. team name, score).¶" &
@@ -24,10 +24,10 @@ MATCHSPLIT = LAMBDA(
                 "   teamIdB        →(Optional) N x 1 column of side-2 team IDs, paired with teamIdA.¶" &
                 "   keyCols        →(Optional) N x K per-match identifier column(s) repeated on both output rows (match number, date, ...).¶" &
                 "   interleave     →(Optional) TRUE (default) pairs each match's two rows adjacently, side 1 first; FALSE stacks all side-1 rows then all side-2 rows.¶" &
-                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Team, Own1..OwnW, OppTeam, Opp1..OppW); or pass a custom header array. Default FALSE.¶" &
+                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Team, OppTeam, Own1, Opp1, ..., OwnW, OppW); or pass a custom header array. Default FALSE.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MATCHSPLIT({3;1}, {2;4}, {""G"";""H""}, {""H"";""G""}, {""M1"";""M2""})¶" &
-                "Result         →4 rows: M1,1,G,3,H,2 / M1,2,H,2,G,3 / M2,1,H,1,G,4 / M2,2,G,4,H,1",
+                "Result         →4 rows: M1,1,G,H,3,2 / M1,2,H,G,2,3 / M2,1,H,G,1,4 / M2,2,G,H,4,1",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -47,8 +47,12 @@ MATCHSPLIT = LAMBDA(
         sideTwos, SEQUENCE(nRows, 1, 2, 0),
         augA, IF(hasIds, HSTACK(teamIdA, sideA), sideA),
         augB, IF(hasIds, HSTACK(teamIdB, sideB), sideB),
-        blockA, IF(hasKeys, HSTACK(keyCols, sideOnes, augA, augB), HSTACK(sideOnes, augA, augB)),
-        blockB, IF(hasKeys, HSTACK(keyCols, sideTwos, augB, augA), HSTACK(sideTwos, augB, augA)),
+        augW, sideW + IF(hasIds, 1, 0),
+        pairIdx, TOROW(VSTACK(SEQUENCE(1, augW), SEQUENCE(1, augW) + augW), , TRUE),
+        pairedA, CHOOSECOLS(HSTACK(augA, augB), pairIdx),
+        pairedB, CHOOSECOLS(HSTACK(augB, augA), pairIdx),
+        blockA, IF(hasKeys, HSTACK(keyCols, sideOnes, pairedA), HSTACK(sideOnes, pairedA)),
+        blockB, IF(hasKeys, HSTACK(keyCols, sideTwos, pairedB), HSTACK(sideTwos, pairedB)),
         stacked, VSTACK(blockA, blockB),
         inter?, IF(ISOMITTED(interleave), TRUE, interleave),
         ordered, IF(inter?,
@@ -58,9 +62,10 @@ MATCHSPLIT = LAMBDA(
         header?, IF(ISOMITTED(resultHeaders), FALSE, IF(hdrCount > 1, TRUE, N(resultHeaders))),
         ownHdr, IF(hasIds, HSTACK("Team", "Own" & SEQUENCE(1, sideW)), "Own" & SEQUENCE(1, sideW)),
         oppHdr, IF(hasIds, HSTACK("OppTeam", "Opp" & SEQUENCE(1, sideW)), "Opp" & SEQUENCE(1, sideW)),
+        pairedHdr, CHOOSECOLS(HSTACK(ownHdr, oppHdr), pairIdx),
         defaultHeader, IF(hasKeys,
-                          HSTACK("Key" & SEQUENCE(1, nKeys), "Side", ownHdr, oppHdr),
-                          HSTACK("Side", ownHdr, oppHdr)),
+                          HSTACK("Key" & SEQUENCE(1, nKeys), "Side", pairedHdr),
+                          HSTACK("Side", pairedHdr)),
         headerRow, IF(hdrCount > 1, TOROW(resultHeaders), defaultHeader),
         body, IF(header?, VSTACK(headerRow, ordered), ordered),
         result, IF(shapeOk, body, VALUE("x")),
