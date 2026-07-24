@@ -1,6 +1,22 @@
 tests:
+  - name: team IDs and keys give Match Side Team Own OppTeam Opp rows
+    args: ['={3;1}', '={2;4}', '={"G";"H"}', '={"H";"G"}', '={"M1";"M2"}']
+    expected:
+      - ["M1", 1, "G", 3, "H", 2]
+      - ["M1", 2, "H", 2, "G", 3]
+      - ["M2", 1, "H", 1, "G", 4]
+      - ["M2", 2, "G", 4, "H", 1]
+
+  - name: team IDs without keys start at Side
+    args: ['={3;1}', '={2;4}', '={"G";"H"}', '={"H";"G"}']
+    expected:
+      - [1, "G", 3, "H", 2]
+      - [2, "H", 2, "G", 3]
+      - [1, "H", 1, "G", 4]
+      - [2, "G", 4, "H", 1]
+
   - name: basic with keys interleaves each match's two rows adjacently
-    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', '={"M1";"M2"}']
+    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', "=", "=", '={"M1";"M2"}']
     expected:
       - ["M1", 1, "Ann", 3, "Bob", 2]
       - ["M1", 2, "Bob", 2, "Ann", 3]
@@ -16,15 +32,24 @@ tests:
       - [2, "Dan", 4, "Cat", 1]
 
   - name: interleave FALSE stacks all side-1 rows then all side-2 rows
-    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', '={"M1";"M2"}', "=FALSE"]
+    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', "=", "=", '={"M1";"M2"}', "=FALSE"]
     expected:
       - ["M1", 1, "Ann", 3, "Bob", 2]
       - ["M2", 1, "Cat", 1, "Dan", 4]
       - ["M1", 2, "Bob", 2, "Ann", 3]
       - ["M2", 2, "Dan", 4, "Cat", 1]
 
-  - name: default resultHeaders with keys prepends Key1 Side Own Opp row
-    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', '={"M1";"M2"}', "=", "=TRUE"]
+  - name: default resultHeaders with IDs and keys includes Team and OppTeam
+    args: ['={3;1}', '={2;4}', '={"G";"H"}', '={"H";"G"}', '={"M1";"M2"}', "=", "=TRUE"]
+    expected:
+      - ["Key1", "Side", "Team", "Own1", "OppTeam", "Opp1"]
+      - ["M1", 1, "G", 3, "H", 2]
+      - ["M1", 2, "H", 2, "G", 3]
+      - ["M2", 1, "H", 1, "G", 4]
+      - ["M2", 2, "G", 4, "H", 1]
+
+  - name: default resultHeaders without IDs prepends Key1 Side Own Opp row
+    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', "=", "=", '={"M1";"M2"}', "=", "=TRUE"]
     expected:
       - ["Key1", "Side", "Own1", "Own2", "Opp1", "Opp2"]
       - ["M1", 1, "Ann", 3, "Bob", 2]
@@ -32,8 +57,8 @@ tests:
       - ["M2", 1, "Cat", 1, "Dan", 4]
       - ["M2", 2, "Dan", 4, "Cat", 1]
 
-  - name: default resultHeaders without keys starts at Side
-    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', "=", "=", "=TRUE"]
+  - name: default resultHeaders without keys or IDs starts at Side
+    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', "=", "=", "=", "=", "=TRUE"]
     expected:
       - ["Side", "Own1", "Own2", "Opp1", "Opp2"]
       - [1, "Ann", 3, "Bob", 2]
@@ -42,16 +67,16 @@ tests:
       - [2, "Dan", 4, "Cat", 1]
 
   - name: custom resultHeaders array
-    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', '={"M1";"M2"}', "=", '={"Match","Side","Team","For","Opp","Against"}']
+    args: ['={3;1}', '={2;4}', '={"G";"H"}', '={"H";"G"}', '={"M1";"M2"}', "=", '={"Match","Side","Team","For","Opp","Against"}']
     expected:
       - ["Match", "Side", "Team", "For", "Opp", "Against"]
-      - ["M1", 1, "Ann", 3, "Bob", 2]
-      - ["M1", 2, "Bob", 2, "Ann", 3]
-      - ["M2", 1, "Cat", 1, "Dan", 4]
-      - ["M2", 2, "Dan", 4, "Cat", 1]
+      - ["M1", 1, "G", 3, "H", 2]
+      - ["M1", 2, "H", 2, "G", 3]
+      - ["M2", 1, "H", 1, "G", 4]
+      - ["M2", 2, "G", 4, "H", 1]
 
   - name: multi-key columns repeat on both rows and header numbers them
-    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', '={"M1","Jan";"M2","Feb"}', "=", "=TRUE"]
+    args: ['={"Ann",3;"Cat",1}', '={"Bob",2;"Dan",4}', "=", "=", '={"M1","Jan";"M2","Feb"}', "=", "=TRUE"]
     expected:
       - ["Key1", "Key2", "Side", "Own1", "Own2", "Opp1", "Opp2"]
       - ["M1", "Jan", 1, "Ann", 3, "Bob", 2]
@@ -79,6 +104,14 @@ tests:
 
   - name: width mismatch returns VALUE error
     args: ['={"Ann",3;"Cat",1}', '={"Bob";"Dan"}']
+    expected: -2146826273
+
+  - name: only one team ID column supplied returns VALUE error
+    args: ['={3;1}', '={2;4}', '={"G";"H"}']
+    expected: -2146826273
+
+  - name: team ID row-count mismatch returns VALUE error
+    args: ['={3;1}', '={2;4}', '={"G"}', '={"H";"G"}']
     expected: -2146826273
 
   - name: help text

@@ -7,23 +7,27 @@ MATCHSPLIT = LAMBDA(
 //  Parameter Declarations
     [sideA],
     [sideB],
+    [teamIdA],
+    [teamIdB],
     [keyCols],
     [interleave],
     [resultHeaders],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MATCHSPLIT(sideA, sideB, keyCols, interleave, resultHeaders)¶" &
-                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), own-side values, opponent values. Eliminates the opponent self-XLOOKUP.¶" &
+                "FUNCTION:      →MATCHSPLIT(sideA, sideB, teamIdA, teamIdB, keyCols, interleave, resultHeaders)¶" &
+                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), own team ID, own-side values, opponent team ID, opponent values. Eliminates the opponent self-XLOOKUP.¶" &
                 "VERSION:       →Jul 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   sideA          →(Required) N x W block of side-1 (""home"") columns, one match per row (e.g. team name, score).¶" &
                 "   sideB          →(Required) N x W block of side-2 (""away"") columns, same width and column order as sideA. Returns #VALUE! if the shapes differ.¶" &
+                "   teamIdA        →(Optional) N x 1 column of side-1 team IDs. Appears as the row's own Team column on side-1 rows and as OppTeam on side-2 rows. Supply both teamIdA and teamIdB or neither.¶" &
+                "   teamIdB        →(Optional) N x 1 column of side-2 team IDs, paired with teamIdA.¶" &
                 "   keyCols        →(Optional) N x K per-match identifier column(s) repeated on both output rows (match number, date, ...).¶" &
                 "   interleave     →(Optional) TRUE (default) pairs each match's two rows adjacently, side 1 first; FALSE stacks all side-1 rows then all side-2 rows.¶" &
-                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Own1..OwnW, Opp1..OppW); or pass a custom header array. Default FALSE.¶" &
+                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Team, Own1..OwnW, OppTeam, Opp1..OppW); or pass a custom header array. Default FALSE.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=MATCHSPLIT({""Ann"",3;""Cat"",1}, {""Bob"",2;""Dan"",4}, {""M1"";""M2""})¶" &
-                "Result         →4 rows: M1,1,Ann,3,Bob,2 / M1,2,Bob,2,Ann,3 / M2,1,Cat,1,Dan,4 / M2,2,Dan,4,Cat,1",
+                "Formula        →=MATCHSPLIT({3;1}, {2;4}, {""G"";""H""}, {""H"";""G""}, {""M1"";""M2""})¶" &
+                "Result         →4 rows: M1,1,G,3,H,2 / M1,2,H,2,G,3 / M2,1,H,1,G,4 / M2,2,G,4,H,1",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -31,13 +35,20 @@ MATCHSPLIT = LAMBDA(
     //  Procedure
         nRows, ROWS(sideA),
         sideW, COLUMNS(sideA),
-        shapeOk, AND(ROWS(sideB) = nRows, COLUMNS(sideB) = sideW),
+        hasIds, NOT(ISOMITTED(teamIdA)),
+        idsPaired, ISOMITTED(teamIdA) = ISOMITTED(teamIdB),
+        idsOk, IF(hasIds,
+                  AND(ROWS(teamIdA) = nRows, COLUMNS(teamIdA) = 1, ROWS(teamIdB) = nRows, COLUMNS(teamIdB) = 1),
+                  TRUE),
+        shapeOk, AND(ROWS(sideB) = nRows, COLUMNS(sideB) = sideW, idsPaired, idsOk),
         hasKeys, NOT(ISOMITTED(keyCols)),
         nKeys, IF(hasKeys, COLUMNS(keyCols), 0),
         sideOnes, SEQUENCE(nRows, 1, 1, 0),
         sideTwos, SEQUENCE(nRows, 1, 2, 0),
-        blockA, IF(hasKeys, HSTACK(keyCols, sideOnes, sideA, sideB), HSTACK(sideOnes, sideA, sideB)),
-        blockB, IF(hasKeys, HSTACK(keyCols, sideTwos, sideB, sideA), HSTACK(sideTwos, sideB, sideA)),
+        augA, IF(hasIds, HSTACK(teamIdA, sideA), sideA),
+        augB, IF(hasIds, HSTACK(teamIdB, sideB), sideB),
+        blockA, IF(hasKeys, HSTACK(keyCols, sideOnes, augA, augB), HSTACK(sideOnes, augA, augB)),
+        blockB, IF(hasKeys, HSTACK(keyCols, sideTwos, augB, augA), HSTACK(sideTwos, augB, augA)),
         stacked, VSTACK(blockA, blockB),
         inter?, IF(ISOMITTED(interleave), TRUE, interleave),
         ordered, IF(inter?,
@@ -45,9 +56,11 @@ MATCHSPLIT = LAMBDA(
                     stacked),
         hdrCount, IF(ISOMITTED(resultHeaders), 0, ROWS(resultHeaders) * COLUMNS(resultHeaders)),
         header?, IF(ISOMITTED(resultHeaders), FALSE, IF(hdrCount > 1, TRUE, N(resultHeaders))),
+        ownHdr, IF(hasIds, HSTACK("Team", "Own" & SEQUENCE(1, sideW)), "Own" & SEQUENCE(1, sideW)),
+        oppHdr, IF(hasIds, HSTACK("OppTeam", "Opp" & SEQUENCE(1, sideW)), "Opp" & SEQUENCE(1, sideW)),
         defaultHeader, IF(hasKeys,
-                          HSTACK("Key" & SEQUENCE(1, nKeys), "Side", "Own" & SEQUENCE(1, sideW), "Opp" & SEQUENCE(1, sideW)),
-                          HSTACK("Side", "Own" & SEQUENCE(1, sideW), "Opp" & SEQUENCE(1, sideW))),
+                          HSTACK("Key" & SEQUENCE(1, nKeys), "Side", ownHdr, oppHdr),
+                          HSTACK("Side", ownHdr, oppHdr)),
         headerRow, IF(hdrCount > 1, TOROW(resultHeaders), defaultHeader),
         body, IF(header?, VSTACK(headerRow, ordered), ordered),
         result, IF(shapeOk, body, VALUE("x")),
