@@ -1,0 +1,32 @@
+tests:
+  - name: run sizes on text column
+    args: ['={"A";"A";"A";"B";"B";"C"}']
+    expected: [[3], [3], [3], [2], [2], [1]]
+
+  - name: run sizes on numbers
+    args: ['={5;5;7;7;7;5}']
+    expected: [[2], [2], [3], [3], [3], [1]]
+
+  - name: row orientation lifts back to a row
+    args: ['={"A","A","B"}']
+    expected: [[2, 2, 1]]
+
+  - name: with-match win streak sizes
+    args: ['={0;1;1;1;0;1;1}', '=1']
+    expected: [[0], [3], [3], [3], [0], [2], [2]]
+
+  - name: with-match text target
+    args: ['={"x";"x";"y";"x"}', '="x"']
+    expected: [[2], [2], [0], [1]]
+
+  - name: longest-streak mask via MAX comparison scenario
+    args: ['={1;1;0;1;1;1}', '=1']
+    expected: [[2], [2], [0], [3], [3], [3]]
+
+  - name: single element returns 1
+    args: ['={"Z"}']
+    expected: 1
+
+  - name: help text
+    args: []
+    expected_type: array

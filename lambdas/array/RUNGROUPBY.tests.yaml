@@ -1,0 +1,36 @@
+tests:
+  - name: values default to keys with default SUM
+    args: ['={5;5;7;7;7;5}']
+    expected: [[5, 10], [7, 21], [5, 5]]
+
+  - name: goals per streak with explicit values
+    args: ['={0;1;1;0;1;1;1}', '={1;2;3;4;5;6;7}']
+    expected: [[0, 1], [1, 5], [0, 4], [1, 18]]
+
+  - name: match filters to target-key runs only
+    args: ['={0;1;1;0;1;1;1}', '={1;2;3;4;5;6;7}', '=', '=1']
+    expected: [[1, 5], [1, 18]]
+
+  - name: ROWS as fn counts run members
+    args: ['={"A";"A";"B"}', '=', '=ROWS']
+    expected: [["A", 2], ["B", 1]]
+
+  - name: show_length inserts length column
+    args: ['={0;1;1;0}', '={10;20;30;40}', '=', '=', '=TRUE']
+    expected: [[0, 1, 10], [1, 2, 50], [0, 1, 40]]
+
+  - name: custom LAMBDA aggregator
+    args: ['={1;1;2;2}', '={3;9;4;1}', '=LAMBDA(slice, MAX(slice))']
+    expected: [[1, 9], [2, 4]]
+
+  - name: row-orientation keys still return one row per run
+    args: ['={1,1,2}']
+    expected: [[1, 2], [2, 2]]
+
+  - name: single-run input
+    args: ['={4;4;4}']
+    expected: [[4, 12]]
+
+  - name: help text
+    args: []
+    expected_type: array

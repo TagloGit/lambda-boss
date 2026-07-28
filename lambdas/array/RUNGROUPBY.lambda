@@ -1,0 +1,55 @@
+/*  FUNCTION NAME:      RUNGROUPBY
+    DESCRIPTION:*//**Aggregates a values array over the consecutive runs of a keys array, one row per run.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-28  Claude      Initial version
+*/
+RUNGROUPBY = LAMBDA(
+//  Parameter Declarations
+    [keys],
+    [values],
+    [fn],
+    [match],
+    [show_length],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →RUNGROUPBY(keys, values, fn, match, show_length)¶" &
+                "DESCRIPTION:   →Aggregates a values array over the consecutive runs of a keys array, returning one row per run: {key, [length], fn(values in run)}. Unlike native GROUPBY, which pools all equal keys, this preserves run structure. Sibling of RUNPOS, RUNSIZE and RUNGROUPS.¶" &
+                "VERSION:       →Jul 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   keys           →(Required) A 1D array (row or column) whose consecutive equal values define the runs.¶" &
+                "   values         →(Optional) A same-length 1D array to aggregate per run. Defaults to keys.¶" &
+                "   fn             →(Optional) Single-argument aggregation function applied to each run's values slice. Default SUM. Pass ROWS for a count, or any LAMBDA(slice, ...).¶" &
+                "   match          →(Optional) If supplied, only rows for runs whose key equals match are returned. Returns #CALC! if no run matches.¶" &
+                "   show_length    →(Optional) TRUE inserts a run-length column between key and aggregate. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=RUNGROUPBY({0;1;1;0;1;1;1}, {1;2;3;4;5;6;7}, SUM, 1)¶" &
+                "Result         →{1,5;1,18}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(keys),
+        hasVals, NOT(ISOMITTED(values)),
+        useMatch, NOT(ISOMITTED(match)),
+        showLen, IF(ISOMITTED(show_length), FALSE, show_length),
+        hasFn, NOT(ISOMITTED(fn)),
+    //  Procedure
+        keysCol, TOCOL(keys),
+        valsCol, IF(hasVals, TOCOL(values), keysCol),
+        n, ROWS(keysCol),
+        isStart, MAP(SEQUENCE(n), LAMBDA(i, IF(i = 1, 1, IF(INDEX(keysCol, i) = INDEX(keysCol, i - 1), 0, 1)))),
+        startPositions, FILTER(SEQUENCE(n), isStart = 1),
+        m, ROWS(startPositions),
+        nextStarts, MAP(SEQUENCE(m), LAMBDA(k, IF(k = m, n + 1, INDEX(startPositions, k + 1)))),
+        lengths, nextStarts - startPositions,
+        runKeys, INDEX(keysCol, startPositions),
+        aggAt, LAMBDA(k,
+                LET(startI, @INDEX(startPositions, k),
+                    runLen, @INDEX(lengths, k),
+                    slice, INDEX(valsCol, SEQUENCE(runLen) + startI - 1),
+                    IF(hasFn, fn(slice), SUM(slice)))),
+        aggs, DROP(REDUCE(0, SEQUENCE(m), LAMBDA(acc, k, VSTACK(acc, aggAt(k)))), 1),
+        fullTable, IF(showLen, HSTACK(runKeys, lengths, aggs), HSTACK(runKeys, aggs)),
+        result, IF(useMatch, FILTER(fullTable, runKeys = match), fullTable),
+        IF(Help?, Help, result)
+)
+);

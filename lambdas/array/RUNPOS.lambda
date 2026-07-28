@@ -1,22 +1,23 @@
-/*  FUNCTION NAME:      CONSECCOUNT
-    DESCRIPTION:*//**Returns a running consecutive-run counter at each position of a 1D array.*/
+/*  FUNCTION NAME:      RUNPOS
+    DESCRIPTION:*//**Returns each element's 1-based position within its consecutive run in a 1D array.*/
 /*  REVISIONS:          Date        Developer   Description
-                        2026-06-12  Claude      Initial version
+                        2026-06-12  Claude      Initial version (as CONSECCOUNT)
+                        2026-07-28  Claude      Renamed CONSECCOUNT -> RUNPOS (run-family naming consolidation, #322)
 */
-CONSECCOUNT = LAMBDA(
+RUNPOS = LAMBDA(
 //  Parameter Declarations
     [vector],
     [match],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CONSECCOUNT(vector, match)¶" &
-                "DESCRIPTION:   →Returns a running consecutive-run counter at each position of a 1D array.¶" &
-                "VERSION:       →Jun 12 2026¶" &
+                "FUNCTION:      →RUNPOS(vector, match)¶" &
+                "DESCRIPTION:   →Returns each element's 1-based position within its consecutive run in a 1D array. Sibling of RUNSIZE (run length per element), RUNGROUPS (one row per run) and RUNGROUPBY (aggregate per run).¶" &
+                "VERSION:       →Jul 28 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
                 "   match          →(Optional) If omitted: counter = previous count + 1 when an element equals its predecessor, else 1 (longest run of any value). If supplied: counter increments while an element equals match, resets to 0 otherwise (longest streak of that value).¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=CONSECCOUNT({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
+                "Formula        →=RUNPOS({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
                 "Result         →{1;2;3;1;2;1}",
                 "→", "¶"
                 ),
