@@ -1,20 +1,21 @@
-/*  FUNCTION NAME:      CONSECGROUPS
+/*  FUNCTION NAME:      CHARRUNS
     DESCRIPTION:*//**Decomposes a string into an array of consecutive-character run groups.*/
 /*  REVISIONS:          Date        Developer   Description
-                        2026-04-15  Tim Jacks   Initial version
+                        2026-04-15  Tim Jacks   Initial version (as CONSECGROUPS)
+                        2026-07-28  Claude      Renamed CONSECGROUPS -> CHARRUNS (run-family naming consolidation, #322)
 */
-CONSECGROUPS = LAMBDA(
+CHARRUNS = LAMBDA(
 //  Parameter Declarations
     [input],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CONSECGROUPS(input)¶" &
-                "DESCRIPTION:   →Decomposes a string into an array of consecutive-character run groups.¶" &
-                "VERSION:       →Apr 15 2026¶" &
+                "FUNCTION:      →CHARRUNS(input)¶" &
+                "DESCRIPTION:   →Decomposes a string into an array of consecutive-character run groups. String twin of the array run family (RUNPOS, RUNSIZE, RUNGROUPS, RUNGROUPBY).¶" &
+                "VERSION:       →Jul 28 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   input          →(Required) A string to decompose into consecutive groups.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=CONSECGROUPS(""AABBBCA"")¶" &
+                "Formula        →=CHARRUNS(""AABBBCA"")¶" &
                 "Result         →{""AA"";""BBB"";""C"";""A""}",
                 "→", "¶"
                 ),

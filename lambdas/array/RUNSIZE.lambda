@@ -1,0 +1,40 @@
+/*  FUNCTION NAME:      RUNSIZE
+    DESCRIPTION:*//**Returns, for each element of a 1D array, the total length of the consecutive run it sits in.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-07-28  Claude      Initial version
+*/
+RUNSIZE = LAMBDA(
+//  Parameter Declarations
+    [vector],
+    [match],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →RUNSIZE(vector, match)¶" &
+                "DESCRIPTION:   →Returns, for each element of a 1D array, the total length of the consecutive run it sits in. Sibling of RUNPOS (position within run), RUNGROUPS (one row per run) and RUNGROUPBY (aggregate per run).¶" &
+                "VERSION:       →Jul 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
+                "   match          →(Optional) If supplied, only runs of elements equal to match are measured; all other elements return 0. E.g. with 0/1 win flags, RUNSIZE(wins, 1) = MAX(RUNSIZE(wins, 1)) masks the longest win streak directly.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=RUNSIZE({0;1;1;1;0;1;1}, 1)¶" &
+                "Result         →{0;3;3;3;0;2;2}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(vector),
+        useMatch, NOT(ISOMITTED(match)),
+    //  Procedure
+        col, TOCOL(vector),
+        n, ROWS(col),
+        isStart, MAP(SEQUENCE(n), LAMBDA(i, IF(i = 1, 1, IF(INDEX(col, i) = INDEX(col, i - 1), 0, 1)))),
+        runId, SCAN(0, isStart, SUM),
+        startPositions, FILTER(SEQUENCE(n), isStart = 1),
+        m, ROWS(startPositions),
+        nextStarts, MAP(SEQUENCE(m), LAMBDA(k, IF(k = m, n + 1, INDEX(startPositions, k + 1)))),
+        lengths, nextStarts - startPositions,
+        sizes, INDEX(lengths, runId),
+        masked, IF(useMatch, IF(col = match, sizes, 0), sizes),
+        result, IF(COLUMNS(vector) > 1, TRANSPOSE(masked), masked),
+        IF(Help?, Help, result)
+)
+);
