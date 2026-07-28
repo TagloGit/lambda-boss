@@ -77,13 +77,13 @@ State the plan in one line before doing the work, e.g. _"2 lambdas changed, 1 ad
 
 ## Step A — Refresh "Current Lambdas" (delta rebuild)
 
-The catalogue is grouped by library (H2), each with a three-column table: **Name** | **Description** | **Calculation**. You will reassemble the **whole** page and `replace_content` it, but only *re-derive* the rows that changed — unchanged rows are reused verbatim from the page fetched in Step 0.
+The catalogue is grouped by library (H2), each with a three-column table: **Name** | **Description** | **Calculation**. Only *re-derive* the rows that changed; unchanged rows are left exactly as they are on the page.
 
-### A1 — Reuse unchanged rows
+### A1 — Leave unchanged rows alone
 
-From the catalogue markdown fetched in Step 0, parse the existing rows keyed by LAMBDA name. Every lambda **not** in the delta keeps its existing row text exactly as-is. Do **not** re-read its `.lambda` file.
+From the catalogue markdown fetched in Step 0, locate the existing rows keyed by LAMBDA name so you know where the changed ones sit. Every lambda **not** in the delta keeps its existing row text untouched — do **not** re-read its `.lambda` file, and do **not** re-emit its row.
 
-(Full-rebuild fallback: when there is no SHA marker, skip A1 — every lambda is "changed", so derive all rows in A2 as the original skill did.)
+(Full-rebuild fallback: when there is no SHA marker, skip A1 — every lambda is "changed", so derive all rows in A2 and take the full-rebuild path in A3.)
 
 ### A2 — Derive rows for the delta only
 
@@ -102,9 +102,28 @@ For each **deleted/renamed-away** lambda, drop its row.
 
 For a library that gains its first lambda, or whose folder is new, read `lambdas/<library>/_library.yaml` for its `name` and `description`. (Library headers/descriptions for unchanged libraries are reused from the fetched page.)
 
-### A3 — Reassemble and replace
+### A3 — Write the changes back
 
-Build the full page: one H2 per library (sorted alphabetically), library `description` in italics, rows sorted alphabetically by LAMBDA name. Header block:
+**Default: targeted `update_content` edits.** The catalogue is ~100 table rows returned as Notion table markup; re-emitting all of them to change one or two risks silently mangling rows that never moved. So write only what changed, as a batch of search-and-replace operations in a single `notion-update-page` call:
+
+- **The sync marker** — two edits: the old date → today's `YYYY-MM-DD`, and the old short SHA → the `git rev-parse --short HEAD` value from Step 0. Match on the bare date and bare SHA strings (they are unique on the page); don't try to match the whole italicised header line, whose markdown round-trips inconsistently.
+- **A changed row** — match its `<td>NAME</td>` cell and replace the row.
+- **An added row** — anchor on the `<tr>` of the row it should precede (alphabetical by LAMBDA name within its library) and emit `<new row>` + `<anchor row opening>` as the replacement.
+- **A removed row** — match the whole `<tr>…</tr>` and replace with empty.
+- **A new library** — anchor on the `## <NextLibrary>` heading that should follow it and prepend the new H2, its italicised description, and its table.
+
+```
+notion-update-page
+  page_id: 3437b3d23d2f819595bac162a5268640
+  command: update_content
+  content_updates: [ {old_str: "2026-07-24", new_str: "2026-07-28"},
+                     {old_str: "5bdaa70", new_str: "3275409"},
+                     {old_str: "<tr>\n<td>MAXOCCUR</td>", new_str: "<tr>\n<td>MATCHSPLIT</td>\n…\n</tr>\n<tr>\n<td>MAXOCCUR</td>"} ]
+```
+
+The `<short-sha>` **must** be the `git rev-parse --short HEAD` value from Step 0 — that is what the next run diffs against. If a marker edit fails to match, stop and report it rather than leaving the page stamped with a stale SHA: a wrong marker makes the *next* run's delta wrong too.
+
+**Full-rebuild path only** (no SHA marker in Step 0): build the whole page — one H2 per library sorted alphabetically, library `description` in italics, rows sorted alphabetically by LAMBDA name — under this header block:
 
 ```markdown
 Catalogue of LAMBDAs already implemented in [TagloGit/lambda-boss](https://github.com/TagloGit/lambda-boss). Check this list before proposing new LAMBDA ideas to avoid duplicates.
@@ -112,16 +131,7 @@ Catalogue of LAMBDAs already implemented in [TagloGit/lambda-boss](https://githu
 _Last synced: <today YYYY-MM-DD> · commit `<short-sha from git rev-parse>`_
 ```
 
-The `<short-sha>` **must** be the `git rev-parse --short HEAD` value from Step 0 — that is what the next run diffs against. Then:
-
-```
-notion-update-page
-  page_id: 3437b3d23d2f819595bac162a5268640
-  command: replace_content
-  new_str: <the reassembled markdown>
-```
-
-Use `replace_content` (not `update_content`) — the page is the source of truth and is fully rewritten each run.
+and send it with `command: replace_content`, `new_str: <the reassembled markdown>`. This is the one case where a full rewrite is correct — there is no trustworthy prior state to preserve.
 
 ---
 
@@ -236,7 +246,7 @@ If a section is empty, omit it. If nothing ran at all: "Nothing to do — catalo
 
 ## Idempotency
 
-- The catalogue is rebuilt from git state and stamped with HEAD's SHA; a re-run with no new commits finds an empty delta and skips Step A.
+- The catalogue is edited from git state and stamped with HEAD's SHA; a re-run with no new commits finds an empty delta and skips Step A.
 - Ideas already moved to "Synced to GitHub" don't appear as inbox children next run.
 - The "Synced to GitHub" page is created only if missing.
 - Reconciliation only closes issues on a confident match and is a no-op once they're closed.
@@ -247,5 +257,5 @@ If a section is empty, omit it. If nothing ran at all: "Nothing to do — catalo
 - Do NOT create specs or plans from ideas — they go to the backlog for triage.
 - Strip the "LAMBDA: " prefix from idea titles when creating issues (use "LAMBDA idea: <name>").
 - If a Notion page fetch fails, skip it and report the error — don't stop the whole sync.
-- If parsing the existing catalogue for row-reuse fails for a given library/row, re-derive that row from its `.lambda` file rather than dropping it.
-- The first run after this skill update will find no SHA marker → one full rebuild that plants the marker; every run after is incremental.
+- If an `update_content` edit fails to match its anchor, re-fetch the catalogue and retry that one edit against the actual text — never escalate to a full `replace_content` rewrite just to force a small change through.
+- The first run after the SHA marker was introduced finds no marker → one full rebuild that plants it; every run after is incremental.
