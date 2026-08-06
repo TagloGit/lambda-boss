@@ -1,5 +1,5 @@
 /*  FUNCTION NAME:      MOVECELL
-    DESCRIPTION:*//**Returns the A1 address of the cell reached by moving steps cells from cell in direction dir, using a moves table of {glyph, dRow, dCol}. Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).*/
+    DESCRIPTION:*//**Returns the A1 address of the cell reached by moving steps cells from cell in direction dir - a glyph looked up in a moves table of {glyph, dRow, dCol}, or a numeric position-delta (rowDelta*100000+colDelta). Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      cell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
@@ -7,6 +7,7 @@
                         2026-05-14  Claude      Array-lift on cell via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
                         2026-06-03  Claude      Add steps arg (default 1); replaces REDUCE-loop pattern. Drop dispatcher in favour of native broadcasting so cell AND steps lift (cells column x steps row = grid)
                         2026-07-17  Claude      Add bounds + overflow params: confine moves to an area (text rect or reference; sheet when omitted) with clip/error/stick/wrap/bounce behaviour. Switch help delimiter to ¦ (content needs arrow glyphs)
+                        2026-08-06  Claude      dir now also accepts a numeric scalar position-delta (rowDelta*100000+colDelta, the library convention: right=1, down=100000), bypassing the moves table
 */
 MOVECELL = LAMBDA(
 //  Parameter Declarations
@@ -19,11 +20,11 @@ MOVECELL = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      ¦MOVECELL(cell, dir, [steps], [moves], [bounds], [overflow])¶" &
-                "DESCRIPTION:   ¦Returns the A1 address of the cell reached by moving steps cells from cell in direction dir, using a moves table of {glyph, dRow, dCol}. Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).¶" &
-                "VERSION:       ¦Jul 17 2026¶" &
+                "DESCRIPTION:   ¦Returns the A1 address of the cell reached by moving steps cells from cell in direction dir - a glyph looked up in a moves table of {glyph, dRow, dCol}, or a numeric position-delta (rowDelta*100000+colDelta). Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).¶" &
+                "VERSION:       ¦Aug 06 2026¶" &
                 "PARAMETERS:    ¦¶" &
                 "   cell           ¦(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Output of MOVECELL itself can be fed back in. Also accepts an array/range of addresses — result lifts element-wise.¶" &
-                "   dir            ¦(Required) Direction glyph matching a value in the first column of moves (e.g. ""→""). Treated as a scalar (single direction applied to every cell in array input).¶" &
+                "   dir            ¦(Required) Direction: a glyph matching a value in the first column of moves (e.g. ""→""), or a numeric scalar position-delta encoded rowDelta*100000+colDelta (library convention, see _dirAll: right=1, left=-1, down=100000, up=-100000, down-right=100001). Numeric dir bypasses the moves table. Treated as a scalar (single direction applied to every cell in array input).¶" &
                 "   steps          ¦(Optional) Number of cells to move in dir. Default 1. Negative reverses the direction; 0 returns cell unchanged. Also accepts an array of step counts — result lifts (e.g. SEQUENCE(5) traces the path). Pass cells as a column and steps as a row to build a cell×steps grid.¶" &
                 "   moves          ¦(Optional) 3-column table: {glyph, dRow, dCol}. Defaults to ARROWMOVES(). Use HSTACK(customGlyphs, KNIGHTDELTAS()) for knight moves.¶" &
                 "   bounds         ¦(Optional) Confining rectangle: an A1 text rect (e.g. ""C3:H10"") or a workbook reference (a named Board range works; corner order is normalised). A single cell is a 1x1 area. Omitted while overflow is supplied = the whole sheet.¶" &
@@ -39,9 +40,11 @@ MOVECELL = LAMBDA(
         safeMult, 16385,
         nStep, IF(ISOMITTED(steps), 1, steps),
         m, IF(ISOMITTED(moves), ARROWMOVES(), moves),
-        idx, XMATCH(dir, CHOOSECOLS(m, 1)),
-        dR, INDEX(m, idx, 2),
-        dC, INDEX(m, idx, 3),
+        dirMult, 100000,
+        numDir?, ISNUMBER(dir),
+        idx, IF(numDir?, NA(), XMATCH(dir, CHOOSECOLS(m, 1))),
+        dR, IF(numDir?, ROUND(dir / dirMult, 0), INDEX(m, idx, 2)),
+        dC, IF(numDir?, dir - dR * dirMult, INDEX(m, idx, 3)),
         pos, CELLTOPOS(cell, safeMult),
         curRow, INT(pos / safeMult),
         curCol, MOD(pos, safeMult),
