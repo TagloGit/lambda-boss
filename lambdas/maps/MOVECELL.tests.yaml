@@ -23,6 +23,54 @@ tests:
     args: ["C10", '="↑"']
     expected: "C9"
 
+  - name: numeric dir 1 moves right
+    args: ["E5", "=1"]
+    expected: "F5"
+
+  - name: numeric dir -1 moves left
+    args: ["B2", "=-1"]
+    expected: "A2"
+
+  - name: numeric dir 100000 moves down
+    args: ["F3", "=100000"]
+    expected: "F4"
+
+  - name: numeric dir -100000 moves up
+    args: ["C10", "=-100000"]
+    expected: "C9"
+
+  - name: numeric dir -100001 moves up-left
+    args: ["E5", "=-100001"]
+    expected: "D4"
+
+  - name: numeric dir 99999 moves down-left
+    args: ["E5", "=99999"]
+    expected: "D6"
+
+  - name: numeric dir 0 stays put
+    args: ["E5", "=0"]
+    expected: "E5"
+
+  - name: numeric dir with multi-step
+    args: ["A1", "=1", "=3"]
+    expected: "D1"
+
+  - name: numeric dir negative steps reverses direction
+    args: ["D4", "=1", "=-2"]
+    expected: "B4"
+
+  - name: numeric knight delta bypasses moves table
+    args: ["D4", "=-199999"]
+    expected: "E2"
+
+  - name: numeric dir respects bounds clip
+    args: ["D2", "=1", "=5", "=", '="A1:E5"']
+    expected: "E2"
+
+  - name: numeric dir wraps at bounds
+    args: ["E3", "=1", "=1", "=", '="A1:E5"', "=3"]
+    expected: "A3"
+
   - name: multi-step right from A1
     args: ["A1", '="→"', "=3"]
     expected: "D1"
