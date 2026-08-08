@@ -1,0 +1,56 @@
+/*  FUNCTION NAME:      NEIGHBOURS
+    DESCRIPTION:*//**Returns the A1-style addresses of all cells within a given distance of a centre cell (Manhattan, Chebyshev, or Euclidean), excluding the centre.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-08  Claude      Initial version
+*/
+NEIGHBOURS = LAMBDA(
+//  Parameter Declarations
+    [centerCell],
+    [distance],
+    [metric],
+    [grid],
+    [origin],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →NEIGHBOURS(centerCell, [distance], [metric], [grid], [origin])¶" &
+                "DESCRIPTION:   →Returns the A1-style addresses of all cells within a given distance of a centre cell, excluding the centre itself. Result is a column of addresses in reading order (row by row, left to right); #N/A when no cells qualify.¶" &
+                "VERSION:       →Aug 08 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   centerCell     →(Required) Centre cell address as text (e.g. ""C3""), or a cell containing one. Scalar only.¶" &
+                "   distance       →(Optional) Maximum distance from the centre; cells with 0 < dist <= distance are returned. Default 1. Non-integer values are meaningful for the Euclidean metric (e.g. 1.5 includes diagonals).¶" &
+                "   metric         →(Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line). Mirrors CELLDIST.¶" &
+                "   grid           →(Optional) A grid range or array bounding the result - neighbours outside it are dropped. Omitted, results are bounded only by the sheet edges.¶" &
+                "   origin         →(Optional) Top-left anchor as a workbook reference - a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position - matches GRIDAREA/SUBGRID convention. Ignored when grid is omitted. Defaults to the grid's own top-left - inferred for a reference, (1,1) for an array.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=NEIGHBOURS(""C3"")¶" &
+                "Result         →C2, B3, D3, C4 (column of the 4 Manhattan neighbours)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(centerCell),
+    //  Procedure
+        safeMult, 16385,
+        rad, IF(ISOMITTED(distance), 1, @distance),
+        met, IF(ISOMITTED(metric), 0, @metric),
+        pos, CELLTOPOS(@centerCell, safeMult),
+        ctrRow, INT(pos / safeMult),
+        ctrCol, MOD(pos, safeMult),
+        span, INT(rad),
+        dRow, SEQUENCE(2 * span + 1, 1, -span),
+        dCol, SEQUENCE(1, 2 * span + 1, -span),
+        distGrid, IF(met = 2, SQRT(dRow ^ 2 + dCol ^ 2),
+                  IF(met = 1, IF(ABS(dRow) > ABS(dCol), ABS(dRow), ABS(dCol)),
+                              ABS(dRow) + ABS(dCol))),
+        cellRow, ctrRow + dRow,
+        cellCol, ctrCol + dCol,
+        baseRow, IF(ISOMITTED(grid), 1, IF(ISOMITTED(origin), IFERROR(MIN(ROW(grid)), 1), MIN(ROW(origin)))),
+        baseCol, IF(ISOMITTED(grid), 1, IF(ISOMITTED(origin), IFERROR(MIN(COLUMN(grid)), 1), MIN(COLUMN(origin)))),
+        maxRow, IF(ISOMITTED(grid), 1048576, baseRow + ROWS(grid) - 1),
+        maxCol, IF(ISOMITTED(grid), 16384, baseCol + COLUMNS(grid) - 1),
+        inBounds, (cellRow >= baseRow) * (cellRow <= maxRow) * (cellCol >= baseCol) * (cellCol <= maxCol),
+        keep, (distGrid > 0) * (distGrid <= rad) * inBounds,
+        addrGrid, ADDRESS(cellRow, cellCol, 4),
+        result, IFERROR(TOCOL(IF(keep = 1, addrGrid, NA()), 2), NA()),
+        IF(Help?, Help, result)
+)
+);

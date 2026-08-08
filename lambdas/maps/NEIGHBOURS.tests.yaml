@@ -1,0 +1,52 @@
+tests:
+  - name: manhattan default distance 1
+    args: ["C3"]
+    expected: [["C2"], ["B3"], ["D3"], ["C4"]]
+
+  - name: chebyshev distance 1 gives 8 neighbours
+    args: ["C3", "=1", "=1"]
+    expected: [["B2"], ["C2"], ["D2"], ["B3"], ["D3"], ["B4"], ["C4"], ["D4"]]
+
+  - name: manhattan distance 2 gives diamond
+    args: ["C3", "=2"]
+    expected: [["C1"], ["B2"], ["C2"], ["D2"], ["A3"], ["B3"], ["D3"], ["E3"], ["B4"], ["C4"], ["D4"], ["C5"]]
+
+  - name: euclidean distance 2 gives disc
+    args: ["C3", "=2", "=2"]
+    expected: [["C1"], ["B2"], ["C2"], ["D2"], ["A3"], ["B3"], ["D3"], ["E3"], ["B4"], ["C4"], ["D4"], ["C5"]]
+
+  - name: euclidean distance 1.5 includes diagonals
+    args: ["C3", "=1.5", "=2"]
+    expected: [["B2"], ["C2"], ["D2"], ["B3"], ["D3"], ["B4"], ["C4"], ["D4"]]
+
+  - name: sheet edges clamp at A1
+    args: ["A1"]
+    expected: [["B1"], ["A2"]]
+
+  - name: grid bounds clamp neighbours
+    args: ["C3", "=1", "=1", "=SEQUENCE(3,3)"]
+    expected: [["B2"], ["C2"], ["B3"]]
+
+  - name: origin anchors in-memory grid bounds
+    args: ["E5", "=1", "=0", "=SEQUENCE(3,3)", "=E5"]
+    expected: [["F5"], ["E6"]]
+
+  - name: distance 0 returns NA
+    args: ["C3", "=0"]
+    expected: -2146826246
+
+  - name: 1x1 array centre behaves as scalar
+    args: ['=CHOOSEROWS({"C3";"Z9"},1)']
+    expected: [["C2"], ["B3"], ["D3"], ["C4"]]
+
+  - name: 1x1 array distance behaves as scalar
+    args: ["C3", "=CHOOSEROWS({2;9},1)"]
+    expected: [["C1"], ["B2"], ["C2"], ["D2"], ["A3"], ["B3"], ["D3"], ["E3"], ["B4"], ["C4"], ["D4"], ["C5"]]
+
+  - name: multi-letter column centre
+    args: ["AA10"]
+    expected: [["AA9"], ["Z10"], ["AB10"], ["AA11"]]
+
+  - name: help text
+    args: []
+    expected_type: array
