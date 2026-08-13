@@ -1,0 +1,87 @@
+/*  FUNCTION NAME:      UNTILELIST
+    DESCRIPTION:*//**Splits a tiled map into equal tiles, extracts a list block from each, and stacks them into one long labelled table.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-13  Claude      Initial version
+*/
+UNTILELIST = LAMBDA(
+//  Parameter Declarations
+    [map],
+    [tile_size],
+    [list_range],
+    [labels],
+    [h_buffer],
+    [v_buffer],
+    [blank_rows],
+    [headers],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →UNTILELIST(map, tile_size, [list_range], [labels], [h_buffer], [v_buffer], [blank_rows], [headers])¶" &
+                "DESCRIPTION:   →Splits a tiled map into equal tiles, extracts a list block from each, and stacks them into one long labelled table. Returns #VALUE! when the map does not tile cleanly with tile_size and the buffers.¶" &
+                "VERSION:       →Aug 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   map           →(Required) The tiled grid: identical tiles repeated left-to-right, top-to-bottom (range or array), e.g. HSTACK('First:Last'!B2:D24).¶" &
+                "   tile_size     →(Required) Size of one tile as a 2-element array {rows,cols}, e.g. {23,3}.¶" &
+                "   list_range    →(Optional) Window of the list within each tile as {top,left,bottom,right}, 1-based and tile-relative, e.g. {8,1,23,3}. Omitted -> the whole tile.¶" &
+                "   labels        →(Optional) One label per tile, left-to-right then top-to-bottom (row or column). Fewer labels than tiles reads only the first N tiles; more labels than tiles returns #VALUE!. Omitted -> tiles numbered 1..N.¶" &
+                "   h_buffer      →(Optional) Blank columns between horizontally adjacent tiles. Default 0.¶" &
+                "   v_buffer      →(Optional) Blank rows between vertically adjacent tiles. Default 0.¶" &
+                "   blank_rows    →(Optional) (0) drop rows where every list cell is blank [default], (1) keep all rows, (2) drop rows whose first list cell is blank. Blank means empty text or numeric 0 (3D collation like HSTACK('First:Last'!range) returns 0 for empty cells).¶" &
+                "   headers       →(Optional) TRUE prepends the default header row {Label, Col1..ColW}; or pass a (width+1)-element array of custom column names. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=UNTILELIST({""a"",1,""x"",9;""b"",2,"""",0}, {2,2})¶" &
+                "Result         →3x3 table: rows (1,a,1) (1,b,2) (2,x,9)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(map),
+        hBuf, IF(ISOMITTED(h_buffer), 0, h_buffer),
+        vBuf, IF(ISOMITTED(v_buffer), 0, v_buffer),
+        blankMode, IF(ISOMITTED(blank_rows), 0, blank_rows),
+    //  Procedure
+        theMult, 100000,
+        mapRows, ROWS(map),
+        mapCols, COLUMNS(map),
+        sizeCol, TOCOL(tile_size),
+        tileRows, @INDEX(sizeCol, 1, 1),
+        tileCols, @INDEX(sizeCol, 2, 1),
+        winCol, IF(ISOMITTED(list_range), VSTACK(1, 1, tileRows, tileCols), TOCOL(list_range)),
+        winTop, @INDEX(winCol, 1, 1),
+        winLeft, @INDEX(winCol, 2, 1),
+        winBot, @INDEX(winCol, 3, 1),
+        winRight, @INDEX(winCol, 4, 1),
+        gridRows, (mapRows + vBuf) / (tileRows + vBuf),
+        gridCols, (mapCols + hBuf) / (tileCols + hBuf),
+        geomOK, AND(gridRows = INT(gridRows), gridCols = INT(gridCols), gridRows >= 1, gridCols >= 1),
+        winOK, AND(winTop >= 1, winLeft >= 1, winBot >= winTop, winRight >= winLeft, winBot <= tileRows, winRight <= tileCols),
+        allTiles, gridRows * gridCols,
+        labelsCol, IF(ISOMITTED(labels), SEQUENCE(allTiles), TOCOL(labels)),
+        nTiles, ROWS(labelsCol),
+        listH, winBot - winTop + 1,
+        listW, winRight - winLeft + 1,
+        nOut, nTiles * listH,
+        idx, SEQUENCE(nOut, 1, 0),
+        tileIdx, INT(idx / listH),
+        rowInList, MOD(idx, listH),
+        baseRow, IFERROR(MIN(ROW(map)), 1),
+        baseCol, IFERROR(MIN(COLUMN(map)), 1),
+        tileTop, INT(tileIdx / gridCols) * (tileRows + vBuf),
+        tileLeft, MOD(tileIdx, gridCols) * (tileCols + hBuf),
+        rowAbs, baseRow + tileTop + winTop - 1 + rowInList,
+        colBase, baseCol + tileLeft + winLeft - 1,
+        posGrid, (rowAbs * theMult + colBase) + SEQUENCE(1, listW, 0, 1),
+        vals, GRIDLOOKUP(map, posGrid, TRUE),
+        labelCol, CHOOSEROWS(labelsCol, tileIdx + 1),
+        blankGrid, ((vals = "") + (vals = 0)) > 0,
+        keepMask, IFS(blankMode = 1, SEQUENCE(nOut) > 0,
+                      blankMode = 2, NOT(CHOOSECOLS(blankGrid, 1)),
+                      TRUE, BYROW(blankGrid, LAMBDA(rw, NOT(AND(rw))))),
+        body, HSTACK(labelCol, vals),
+        kept, FILTER(body, keepMask, NA()),
+        hdrCount, IF(ISOMITTED(headers), 0, ROWS(headers) * COLUMNS(headers)),
+        header?, IF(ISOMITTED(headers), FALSE, IF(hdrCount > 1, TRUE, N(headers))),
+        headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Label", "Col" & SEQUENCE(1, listW))),
+        table, IF(header?, VSTACK(headerRow, kept), kept),
+        result, IF(OR(NOT(geomOK), NOT(winOK), nTiles > allTiles), VALUE("!"), table),
+        IF(Help?, Help, result)
+)
+);
