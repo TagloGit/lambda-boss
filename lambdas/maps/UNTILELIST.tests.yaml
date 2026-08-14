@@ -1,0 +1,111 @@
+tests:
+  - name: two side-by-side tiles, whole tile, blank row dropped by default
+    args: ['={"a",1,"x",9;"b",2,"",0}', '=SEQUENCE(2,2)']
+    expected: [[1, "a", 1], [1, "b", 2], [2, "x", 9]]
+
+  - name: list sub-range skips in-tile header row
+    setup:
+      names:
+        - { name: "tileRng", refers_to: "F3:G5" }
+        - { name: "listRng", refers_to: "F4:G5" }
+    args: ['={"H1","H2","H1","H2";"a",1,"c",3;"b",2,"d",4}', "=tileRng", "=listRng"]
+    expected: [[1, "a", 1], [1, "b", 2], [2, "c", 3], [2, "d", 4]]
+
+  - name: labels applied per tile
+    setup:
+      names:
+        - { name: "tileRng", refers_to: "F3:G5" }
+        - { name: "listRng", refers_to: "F4:G5" }
+    args: ['={"H1","H2","H1","H2";"a",1,"c",3;"b",2,"d",4}', "=tileRng", "=listRng", '={"East","West"}']
+    expected: [["East", "a", 1], ["East", "b", 2], ["West", "c", 3], ["West", "d", 4]]
+
+  - name: vertical tiling with v_buffer gap row
+    args: ['={"a",1;"b",2;"","";"c",3;"d",4}', '=SEQUENCE(2,2)', "=", "=", "=", "=1"]
+    expected: [[1, "a", 1], [1, "b", 2], [2, "c", 3], [2, "d", 4]]
+
+  - name: 2x2 grid of tiles stacks row-major
+    args: ['={1,2,3,4;5,6,7,8}', '=SEQUENCE(1,2)']
+    expected: [[1, 1, 2], [2, 3, 4], [3, 5, 6], [4, 7, 8]]
+
+  - name: blank_rows 1 keeps all rows
+    args: ['={"a",1,"x",9;"b",2,"",0}', '=SEQUENCE(2,2)', "=", "=", "=", "=", "=1"]
+    expected: [[1, "a", 1], [1, "b", 2], [2, "x", 9], [2, "", 0]]
+
+  - name: blank_rows 2 drops rows whose first cell is blank
+    args: ['={"a",1;"",5;"b",2}', '=SEQUENCE(3,2)', "=", "=", "=", "=", "=2"]
+    expected: [[1, "a", 1], [1, "b", 2]]
+
+  - name: default keeps partially blank rows
+    args: ['={"a",1;"",5;"b",2}', '=SEQUENCE(3,2)']
+    expected: [[1, "a", 1], [1, "", 5], [1, "b", 2]]
+
+  - name: headers TRUE prepends default header row
+    args: ['={"a",1,"x",9;"b",2,"",0}', '=SEQUENCE(2,2)', "=", "=", "=", "=", "=", "=TRUE"]
+    expected: [["Label", "Col1", "Col2"], [1, "a", 1], [1, "b", 2], [2, "x", 9]]
+
+  - name: custom header row
+    args: ['={"a",1,"x",9;"b",2,"",0}', '=SEQUENCE(2,2)', "=", "=", "=", "=", "=", '={"T","K","V"}']
+    expected: [["T", "K", "V"], [1, "a", 1], [1, "b", 2], [2, "x", 9]]
+
+  - name: fewer labels than tiles reads only the first N tiles
+    args: ['={"a",1,"x",9;"b",2,"c",3}', '=SEQUENCE(2,2)', "=", '={"One"}']
+    expected: [["One", "a", 1], ["One", "b", 2]]
+
+  - name: more labels than tiles returns VALUE error
+    args: ['={"a",1,"x",9;"b",2,"c",3}', '=SEQUENCE(2,2)', "=", '={"A","B","C"}']
+    expected: -2146826273
+
+  - name: geometry misfit returns VALUE error
+    args: ['={1,2,3;4,5,6}', '=SEQUENCE(2,2)']
+    expected: -2146826273
+
+  - name: list as array constant instead of reference returns VALUE error
+    args: ['={1,2;3,4}', '=SEQUENCE(2,2)', '={1,1,2,2}']
+    expected: -2146826273
+
+  - name: list range outside tile rectangle returns VALUE error
+    setup:
+      names:
+        - { name: "tileRng", refers_to: "F3:G5" }
+        - { name: "listRng", refers_to: "F5:G6" }
+    args: ['={1,2;3,4;5,6}', "=tileRng", "=listRng"]
+    expected: -2146826273
+
+  - name: all rows blank returns NA
+    args: ['={"",0;"",""}', '=SEQUENCE(2,2)']
+    expected: -2146826246
+
+  - name: real ranges with both buffers, tile is the first tile in place
+    setup:
+      cells:
+        - address: "F3:J7"
+          values:
+            - ["a", 1, "", "b", 2]
+            - ["c", 2, "", "d", 4]
+            - ["", "", "", "", ""]
+            - ["e", 5, "", "f", 6]
+            - ["g", 7, "", "h", 8]
+      names:
+        - { name: "mapRng", refers_to: "F3:J7" }
+        - { name: "tileRng", refers_to: "F3:G4" }
+    args: ["=mapRng", "=tileRng", "=", "=", "=1", "=1"]
+    expected: [[1, "a", 1], [1, "c", 2], [2, "b", 2], [2, "d", 4], [3, "e", 5], [3, "g", 7], [4, "f", 6], [4, "h", 8]]
+
+  - name: real map with in-tile header rows, tile and list in place
+    setup:
+      cells:
+        - address: "F3:I5"
+          values:
+            - ["Hdr", "Hdr", "Hdr", "Hdr"]
+            - ["a", 1, "c", 3]
+            - ["b", 2, "d", 4]
+      names:
+        - { name: "mapRng", refers_to: "F3:I5" }
+        - { name: "tileRng", refers_to: "F3:G5" }
+        - { name: "listRng", refers_to: "F4:G5" }
+    args: ["=mapRng", "=tileRng", "=listRng", '={"East","West"}']
+    expected: [["East", "a", 1], ["East", "b", 2], ["West", "c", 3], ["West", "d", 4]]
+
+  - name: help text
+    args: []
+    expected_type: array
