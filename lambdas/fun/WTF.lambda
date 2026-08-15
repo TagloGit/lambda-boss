@@ -21,7 +21,9 @@ WTF = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),
     //  Procedure
-        result, {"I took my eye off Excel for a week or two,";
+        result, {"What the f*** is a LAMBDA?";
+                 "-----------------------------------------------------------------------";
+                 "𝅘𝅥𝅮𝅘𝅥𝅮 I took my eye off Excel for a week or two,";
                  "Came back now it does stuff I never knew";
                  "Cells are spilling, arrays are going wild,";
                  "Formulas stretch out like they've somehow been restyled";
@@ -37,7 +39,7 @@ WTF = LAMBDA(
                  "And the help docs read like a logical schematic";
                  "Tried to run a calc and it filled me with anger";
                  "So tell me one thing";
-                 "What the f*** is a LAMBDA?"},
+                 "What the f*** is a LAMBDA? 𝅘𝅥𝅮𝅘𝅥𝅮"},
         IF(Help?, result, Help)
 )
 );

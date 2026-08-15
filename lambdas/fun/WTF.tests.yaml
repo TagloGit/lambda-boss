@@ -2,6 +2,9 @@ tests:
   - name: bare call spills the full lyrics
     args: []
     expected:
+        ["What the f*** is a LAMBDA?"];
+        ["-----------------------------------------------------------------------"];
+        ["𝅘𝅥𝅮𝅘𝅥𝅮 I took my eye off Excel for a week or two,"];
       - ["I took my eye off Excel for a week or two,"]
       - ["Came back now it does stuff I never knew"]
       - ["Cells are spilling, arrays are going wild,"]
