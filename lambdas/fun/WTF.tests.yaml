@@ -1,0 +1,28 @@
+tests:
+  - name: bare call spills the full lyrics
+    args: []
+    expected:
+        ["What the f*** is a LAMBDA?"];
+        ["-----------------------------------------------------------------------"];
+        ["𝅘𝅥𝅮𝅘𝅥𝅮 I took my eye off Excel for a week or two,"];
+      - ["I took my eye off Excel for a week or two,"]
+      - ["Came back now it does stuff I never knew"]
+      - ["Cells are spilling, arrays are going wild,"]
+      - ["Formulas stretch out like they've somehow been restyled"]
+      - ["There's a SORT, a FILTER, there's this thing called LET"]
+      - ["Some function called SCAN, I haven't learnt that yet"]
+      - ["There's a SEQUENCE running and a MAP on call"]
+      - ["And I'm just sitting here scrolling, trying to recall"]
+      - ["I swear I was gone for like one long nap"]
+      - ["And now Excel feels like a massive coding trap"]
+      - ["I've got questions, they stack like rows"]
+      - ["But one keeps punching me right in the nose"]
+      - ["I used to sum cells now it feels like black magic"]
+      - ["And the help docs read like a logical schematic"]
+      - ["Tried to run a calc and it filled me with anger"]
+      - ["So tell me one thing"]
+      - ["What the f*** is a LAMBDA?"]
+
+  - name: help text
+    args: ["=TRUE"]
+    expected_type: array
