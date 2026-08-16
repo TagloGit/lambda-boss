@@ -11,16 +11,20 @@ tests:
     args: ["aaaa", "aa", "=", "=FALSE"]
     expected: [[1], [3]]
 
-  - name: case-sensitive match finds only exact case
-    args: ["abcABC", "abc", "=TRUE"]
+  - name: case-sensitive by default finds only exact case
+    args: ["abcABC", "abc"]
     expected: 1
 
-  - name: case-insensitive match finds both cases (default)
-    args: ["abcABC", "abc", "=FALSE"]
+  - name: explicit case_insensitive 0 is case-sensitive
+    args: ["abcABC", "abc", "=0"]
+    expected: 1
+
+  - name: case_insensitive 1 finds both cases
+    args: ["abcABC", "abc", "=1"]
     expected: [[1], [4]]
 
-  - name: case-sensitive multi-match
-    args: ["aAaA", "A", "=TRUE"]
+  - name: case-sensitive multi-match by default
+    args: ["aAaA", "A"]
     expected: [[2], [4]]
 
   - name: no match returns error by default
