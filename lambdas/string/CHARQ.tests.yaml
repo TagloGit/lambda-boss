@@ -31,6 +31,30 @@ tests:
     args: ["MASSAGE", "S", true]
     expected: 2
 
+  - name: case-sensitive by default in literal mode
+    args: ["MASSAGE", "s"]
+    expected: 0
+
+  - name: explicit case_insensitive 0 is case-sensitive
+    args: ["MASSAGE", "S", "=", "=0"]
+    expected: 2
+
+  - name: case_insensitive 1 counts across case in literal mode
+    args: ["MASSAGE", "s", "=", "=1"]
+    expected: 2
+
+  - name: case_insensitive 1 with multi-character substring
+    args: ["abcABCAbc", "ABC", "=", "=1"]
+    expected: 3
+
+  - name: case-sensitive by default in regex mode
+    args: ["MASSAGE", "m", "=TRUE"]
+    expected: 0
+
+  - name: case_insensitive 1 in regex mode
+    args: ["MASSAGE", "m", "=TRUE", "=1"]
+    expected: 1
+
   - name: vertical array of texts lifts (literal mode)
     args: ['={"MASSAGE";"HELLO";"abcabc"}', "S"]
     expected: [[2], [0], [0]]

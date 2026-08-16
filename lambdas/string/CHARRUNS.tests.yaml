@@ -19,6 +19,18 @@ tests:
     args: ["↑↑↓↓↓→"]
     expected: [["↑↑"], ["↓↓↓"], ["→"]]
 
+  - name: mixed case splits runs by default
+    args: ["AaaB"]
+    expected: [["A"], ["aa"], ["B"]]
+
+  - name: case_insensitive 1 groups runs across case
+    args: ["AaaB", "=1"]
+    expected: [["Aaa"], ["B"]]
+
+  - name: case_insensitive 1 preserves original casing in output
+    args: ["aAbBbA", "=1"]
+    expected: [["aA"], ["bBb"], ["A"]]
+
   - name: help text
     args: []
     expected_type: array

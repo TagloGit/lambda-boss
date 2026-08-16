@@ -3,17 +3,20 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Tim Jacks   Initial version (as CONSECGROUPS)
                         2026-07-28  Claude      Renamed CONSECGROUPS -> CHARRUNS (run-family naming consolidation, #322)
+                        2026-08-16  Claude      Add case_insensitive argument (0 = case-sensitive [default], 1 = case-insensitive), library convention
 */
 CHARRUNS = LAMBDA(
 //  Parameter Declarations
     [input],
+    [case_insensitive],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CHARRUNS(input)¶" &
+                "FUNCTION:      →CHARRUNS(input, case_insensitive)¶" &
                 "DESCRIPTION:   →Decomposes a string into an array of consecutive-character run groups. String twin of the array run family (RUNPOS, RUNSIZE, RUNGROUPS, RUNGROUPBY).¶" &
-                "VERSION:       →Jul 28 2026¶" &
+                "VERSION:       →Aug 16 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   input          →(Required) A string to decompose into consecutive groups.¶" &
+                "   case_insensitive →(Optional) (0) case-sensitive [default], (1) case-insensitive: runs group across case, e.g. ""Aa"" is one run (original casing preserved in output).¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=CHARRUNS(""AABBBCA"")¶" &
                 "Result         →{""AA"";""BBB"";""C"";""A""}",
@@ -21,8 +24,9 @@ CHARRUNS = LAMBDA(
                 ),
     //  Check inputs
         Help?, ISOMITTED(input),
+        _ci, IF(ISOMITTED(case_insensitive), 0, case_insensitive),
     //  Procedure
-        result, TRANSPOSE(REGEXEXTRACT(input, "(.)\1*", 1)),
+        result, TRANSPOSE(REGEXEXTRACT(input, "(.)\1*", 1, _ci)),
         IF(Help?, Help, result)
 )
 );

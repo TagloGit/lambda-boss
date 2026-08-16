@@ -5,21 +5,24 @@
                         2026-04-13  Claude      Add Regex parameter
                         2026-05-14  Claude      Array-lift on Text via dispatcher: MAP over multi-text input, otherwise scalar body unchanged. Regex branch needs per-element evaluation because REGEXEXTRACT mode 1 returns an array per Text.
                         2026-07-22  Claude      Deref the scalar branch with @: 1x1 arrays previously reached the scalar body array-shaped, where REGEXEXTRACT mode 1 collapses to the first match and regex counts >1 came back as 1. @ keeps true-scalar output for scalar input (unconditional MAP would return a 1x1 array) (#318)
+                        2026-08-16  Claude      Add case_insensitive argument (0 = case-sensitive [default], 1 = case-insensitive), library convention
 */
 CHARQ = LAMBDA(
 //  Parameter Declarations
     [Text],
     [Char],
     [Regex],
+    [case_insensitive],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CHARQ(Text, Char, Regex)¶" &
+                "FUNCTION:      →CHARQ(Text, Char, Regex, case_insensitive)¶" &
                 "DESCRIPTION:   →Counts non-overlapping occurrences of a substring within a string.¶" &
-                "VERSION:       →May 14 2026¶" &
+                "VERSION:       →Aug 16 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   Text           →(Required) The string to search within. Also accepts an array of strings — result lifts element-wise.¶" &
                 "   Char           →(Required) The character(s) to count, or a regex pattern if Regex is TRUE.¶" &
                 "   Regex          →(Optional) If TRUE, treat Char as a regex pattern. Default: FALSE.¶" &
+                "   case_insensitive →(Optional) (0) case-sensitive [default], (1) case-insensitive.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=CHARQ(""MASSAGE"",""S"")¶" &
                 "Result         →2",
@@ -28,11 +31,14 @@ CHARQ = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(Text),
         _regex, IF(ISOMITTED(Regex), FALSE, Regex),
+        _ci, IF(ISOMITTED(case_insensitive), 0, case_insensitive),
     //  Procedure
         scalar, LAMBDA(t,
                   IF(_regex,
-                     IFERROR(COLUMNS(REGEXEXTRACT(t, Char, 1)), 0),
-                     (LEN(t) - LEN(SUBSTITUTE(t, Char, ""))) / LEN(Char))),
+                     IFERROR(COLUMNS(REGEXEXTRACT(t, Char, 1, _ci)), 0),
+                     LET(tNorm, IF(_ci = 1, UPPER(t), t),
+                         charNorm, IF(_ci = 1, UPPER(Char), Char),
+                         (LEN(tNorm) - LEN(SUBSTITUTE(tNorm, charNorm, ""))) / LEN(charNorm)))),
         result, IF(OR(ROWS(Text) > 1, COLUMNS(Text) > 1),
                     MAP(Text, scalar),
                     scalar(@Text)),
