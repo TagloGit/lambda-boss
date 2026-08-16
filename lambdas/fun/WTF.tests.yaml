@@ -2,10 +2,9 @@ tests:
   - name: bare call spills the full lyrics
     args: []
     expected:
-        ["What the f*** is a LAMBDA?"];
-        ["-----------------------------------------------------------------------"];
-        ["𝅘𝅥𝅮𝅘𝅥𝅮 I took my eye off Excel for a week or two,"];
-      - ["I took my eye off Excel for a week or two,"]
+      - ["What the f*** is a LAMBDA?"]
+      - ["-----------------------------------------------------------------------"]
+      - ["\U0001D160\U0001D160 I took my eye off Excel for a week or two,"]
       - ["Came back now it does stuff I never knew"]
       - ["Cells are spilling, arrays are going wild,"]
       - ["Formulas stretch out like they've somehow been restyled"]
@@ -21,7 +20,7 @@ tests:
       - ["And the help docs read like a logical schematic"]
       - ["Tried to run a calc and it filled me with anger"]
       - ["So tell me one thing"]
-      - ["What the f*** is a LAMBDA?"]
+      - ["What the f*** is a LAMBDA? \U0001D160\U0001D160"]
 
   - name: help text
     args: ["=TRUE"]
