@@ -23,6 +23,26 @@ tests:
     args: ["x"]
     expected: "x"
 
+  - name: sliding windows of 3
+    args: ["abcdef", "=3", "=", "=TRUE"]
+    expected: [["abc"], ["bcd"], ["cde"], ["def"]]
+
+  - name: sliding windows of 2 horizontal
+    args: ["abcde", "=2", "=TRUE", "=TRUE"]
+    expected: [["ab", "bc", "cd", "de"]]
+
+  - name: sliding with text shorter than chunk returns whole string
+    args: ["hi", "=5", "=", "=TRUE"]
+    expected: "hi"
+
+  - name: sliding with chunk size 1 matches default explode
+    args: ["abc", "=1", "=", "=TRUE"]
+    expected: [["a"], ["b"], ["c"]]
+
+  - name: sliding window equal to text length returns whole string
+    args: ["abcd", "=4", "=", "=TRUE"]
+    expected: "abcd"
+
   - name: help text
     args: []
     expected_type: array
