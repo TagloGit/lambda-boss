@@ -43,6 +43,22 @@ tests:
     args: ["abc", "", "=", "=", "empty"]
     expected: "empty"
 
+  - name: default positions are code points around clusters
+    args: ["\U0001F44D\U0001F3FDx\U0001F44D\U0001F3FDx", "x"]
+    expected: [[3], [6]]
+
+  - name: position_unit 1 returns grapheme positions
+    args: ["\U0001F44D\U0001F3FDx\U0001F44D\U0001F3FDx", "x", "=", "=", "=", "=1"]
+    expected: [[2], [4]]
+
+  - name: position_unit 1 on plain text matches default
+    args: ["KTTKBPK", "K", "=", "=", "=", "=1"]
+    expected: [[1], [4], [7]]
+
+  - name: position_unit 1 no match returns sentinel
+    args: ["HELLO", "Z", "=", "=", "none", "=1"]
+    expected: "none"
+
   - name: help text
     args: []
     expected_type: array

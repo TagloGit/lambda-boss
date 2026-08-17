@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-09  Claude      Initial version
                         2026-08-16  Claude      Replace match_case (boolean, insensitive by default) with case_insensitive (0 = case-sensitive [default], 1 = case-insensitive), library convention
+                        2026-08-17  Claude      Add position_unit argument (0 = code points [default, matches SEARCH/FIND], 1 = grapheme clusters)
 */
 SEARCHALL = LAMBDA(
 //  Parameter Declarations
@@ -11,17 +12,19 @@ SEARCHALL = LAMBDA(
     [case_insensitive],
     [overlapping],
     [if_not_found],
+    [position_unit],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SEARCHALL(inText, searchFor, [case_insensitive], [overlapping], [if_not_found])¶" &
+                "FUNCTION:      →SEARCHALL(inText, searchFor, [case_insensitive], [overlapping], [if_not_found], [position_unit])¶" &
                 "DESCRIPTION:   →Returns a spilled column of the 1-based start positions of every occurrence of a substring within a string.¶" &
-                "VERSION:       →Aug 16 2026¶" &
+                "VERSION:       →Aug 17 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   inText         →(Required) Text to search within.¶" &
                 "   searchFor      →(Required) Substring to locate.¶" &
                 "   case_insensitive →(Optional) (0) case-sensitive [default], (1) case-insensitive.¶" &
                 "   overlapping    →(Optional) TRUE (default) counts overlapping matches; FALSE consumes searchFor after each hit (non-overlapping).¶" &
                 "   if_not_found   →(Optional) Value returned when no match is found. Default #N/A.¶" &
+                "   position_unit  →(Optional) (0) code points [default, matches SEARCH/FIND and is safe to feed into MID/REPLACE], (1) grapheme clusters - positions as characters are counted visually, where a multi-codepoint emoji counts as one.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=SEARCHALL(""KTTKBPK"", ""K"")¶" &
                 "Result         →{1;4;7}",
@@ -32,6 +35,7 @@ SEARCHALL = LAMBDA(
         _ci, IF(ISOMITTED(case_insensitive), 0, case_insensitive),
         overlapFlag, IF(ISOMITTED(overlapping), TRUE, overlapping),
         notFound, IF(ISOMITTED(if_not_found), NA(), if_not_found),
+        _unit, IF(ISOMITTED(position_unit), 0, position_unit),
     //  Procedure
         lw, LEN(inText),
         ls, LEN(searchFor),
@@ -42,7 +46,11 @@ SEARCHALL = LAMBDA(
         ends, SCAN(0, allPos, LAMBDA(lastEnd, p, IF(p > lastEnd, p + ls - 1, lastEnd))),
         nonOv, FILTER(allPos, ends = allPos + ls - 1),
         chosen, IF(overlapFlag, allPos, nonOv),
-        result, IF(ls = 0, notFound, IFERROR(chosen, notFound)),
+        g_, REGEXEXTRACT(inText, "\X", 1),
+        gEnds, SCAN(0, LEN(g_), SUM),
+        gStarts, gEnds - LEN(g_) + 1,
+        posOut, IF(_unit = 1, XMATCH(chosen, gStarts, -1), chosen),
+        result, IF(ls = 0, notFound, IFERROR(posOut, notFound)),
         IF(Help?, Help, result)
 )
 );

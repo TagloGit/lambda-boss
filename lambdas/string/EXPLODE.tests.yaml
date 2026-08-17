@@ -43,6 +43,26 @@ tests:
     args: ["abcd", "=4", "=", "=TRUE"]
     expected: "abcd"
 
+  - name: multi-codepoint emoji counts as one character
+    args: ["\U0001F44D\U0001F3FDab"]
+    expected: [["\U0001F44D\U0001F3FD"], ["a"], ["b"]]
+
+  - name: chunks never split a grapheme cluster
+    args: ["\U0001F44D\U0001F3FDab", 2]
+    expected: [["\U0001F44D\U0001F3FDa"], ["b"]]
+
+  - name: single cluster string returns whole cluster
+    args: ["\U0001F44D\U0001F3FD"]
+    expected: "\U0001F44D\U0001F3FD"
+
+  - name: sliding windows respect clusters
+    args: ["\U0001F44D\U0001F3FDab", "=2", "=", "=TRUE"]
+    expected: [["\U0001F44D\U0001F3FDa"], ["ab"]]
+
+  - name: non-BMP single-codepoint emoji still one character
+    args: ["a\U0001F600b"]
+    expected: [["a"], ["\U0001F600"], ["b"]]
+
   - name: help text
     args: []
     expected_type: array

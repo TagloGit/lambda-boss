@@ -1,8 +1,9 @@
 /*  FUNCTION NAME:      EXPLODE
-    DESCRIPTION:*//**Splits a string into an array of character chunks of a given size, optionally as sliding windows.*/
+    DESCRIPTION:*//**Splits a string into an array of character chunks of a given size, optionally as sliding windows. Grapheme-aware: a multi-codepoint emoji counts as one character and is never split.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-12  Tim Jacks   Initial version
                         2026-08-16  Claude      Add sliding window option
+                        2026-08-17  Claude      Grapheme-aware: chunk by \X clusters so multi-codepoint emoji (skin tones, ZWJ, flags, combining marks) are never split
 */
 EXPLODE = LAMBDA(
 //  Parameter Declarations
@@ -13,8 +14,8 @@ EXPLODE = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →EXPLODE(text, chunk_size, horizontal, sliding)¶" &
-                "DESCRIPTION:   →Splits a string into an array of character chunks of a given size, optionally as sliding windows.¶" &
-                "VERSION:       →Aug 16 2026¶" &
+                "DESCRIPTION:   →Splits a string into an array of character chunks of a given size, optionally as sliding windows. Grapheme-aware: a multi-codepoint emoji counts as one character and is never split.¶" &
+                "VERSION:       →Aug 17 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   text           →(Required) The string to split.¶" &
                 "   chunk_size     →(Optional) Number of characters per chunk. Default: 1.¶" &
@@ -31,14 +32,17 @@ EXPLODE = LAMBDA(
         _horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
         _slide, IF(ISOMITTED(sliding), FALSE, sliding),
     //  Procedure
+        g_, REGEXEXTRACT(text, "\X", 1),
+        n_, IF(text = "", 0, COLUMNS(g_)),
         _count, IF(_slide,
-                    MAX(LEN(text) - _size + 1, 1),
-                    CEILING(LEN(text) / _size, 1)),
+                    MAX(n_ - _size + 1, 1),
+                    CEILING(n_ / _size, 1)),
         _step, IF(_slide, 1, _size),
         _starts, IF(_horiz,
                     SEQUENCE(1, _count, 1, _step),
                     SEQUENCE(_count, 1, 1, _step)),
-        result, MID(text, _starts, _size),
+        chunkAt, LAMBDA(s_, TEXTJOIN("", TRUE, IFERROR(INDEX(g_, 1, SEQUENCE(1, _size, s_)), ""))),
+        result, IF(_count = 1, text, MAP(_starts, chunkAt)),
         IF(Help?, Help, result)
 )
 );

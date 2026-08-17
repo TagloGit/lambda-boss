@@ -27,6 +27,18 @@ tests:
     args: ['=CHOOSEROWS({"hello";"abc"},1)']
     expected: "olleh"
 
+  - name: skin-tone cluster survives reversal intact
+    args: ["a\U0001F44D\U0001F3FDb"]
+    expected: "b\U0001F44D\U0001F3FDa"
+
+  - name: flag cluster survives reversal intact
+    args: ["\U0001F1FA\U0001F1F8x"]
+    expected: "x\U0001F1FA\U0001F1F8"
+
+  - name: non-BMP single-codepoint emoji reverses correctly
+    args: ["a\U0001F600b"]
+    expected: "b\U0001F600a"
+
   - name: help text
     args: []
     expected_type: array
