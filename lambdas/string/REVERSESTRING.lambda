@@ -1,9 +1,10 @@
 /*  FUNCTION NAME:      REVERSESTRING
-    DESCRIPTION:*//**Reverses the characters in a text string.*/
+    DESCRIPTION:*//**Reverses the characters in a text string. Grapheme-aware: a multi-codepoint emoji counts as one character and survives reversal intact.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-16  Claude      Initial version
                         2026-05-14  Claude      Array-lift on text via dispatcher: MAP over multi-text input, otherwise scalar body unchanged. SEQUENCE(LEN(text), ...) requires a scalar length.
                         2026-07-22  Claude      Deref the scalar branch with @: 1x1 arrays previously reached the scalar body array-shaped, where SEQUENCE(LEN) collapses and only the last character was returned. @ keeps true-scalar output for scalar input (unconditional MAP would return a 1x1 array) (#318)
+                        2026-08-17  Claude      Grapheme-aware: reverse \X clusters, not code points, so multi-codepoint emoji (skin tones, ZWJ, flags, combining marks) survive intact
 */
 REVERSESTRING = LAMBDA(
 //  Parameter Declarations
@@ -11,8 +12,8 @@ REVERSESTRING = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →REVERSESTRING(text)¶" &
-                "DESCRIPTION:   →Reverses the characters in a text string.¶" &
-                "VERSION:       →May 14 2026¶" &
+                "DESCRIPTION:   →Reverses the characters in a text string. Grapheme-aware: a multi-codepoint emoji counts as one character and survives reversal intact.¶" &
+                "VERSION:       →Aug 17 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   text          →(Required) The string to reverse. Also accepts an array of strings — result lifts element-wise.¶" &
                 "EXAMPLE:       →¶" &
@@ -23,7 +24,12 @@ REVERSESTRING = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(text),
     //  Procedure
-        scalar, LAMBDA(t, CONCAT(MID(t, SEQUENCE(LEN(t),,LEN(t),-1), 1))),
+        scalar, LAMBDA(t,
+                  IF(t = "", t,
+                     LET(g_, REGEXEXTRACT(t, "\X", 1),
+                         n_, COLUMNS(g_),
+                         IF(n_ < 2, t,
+                            CONCAT(CHOOSECOLS(g_, SEQUENCE(1, n_, n_, -1))))))),
         result, IF(OR(ROWS(text) > 1, COLUMNS(text) > 1),
                     MAP(text, scalar),
                     scalar(@text)),

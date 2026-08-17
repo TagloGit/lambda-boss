@@ -31,6 +31,10 @@ tests:
     args: ["aAbBbA", "=1"]
     expected: [["aA"], ["bBb"], ["A"]]
 
+  - name: repeated grapheme cluster is one run
+    args: ["\U0001F44D\U0001F3FD\U0001F44D\U0001F3FDaa"]
+    expected: [["\U0001F44D\U0001F3FD\U0001F44D\U0001F3FD"], ["aa"]]
+
   - name: help text
     args: []
     expected_type: array
