@@ -1,21 +1,24 @@
 /*  FUNCTION NAME:      MASK
-    DESCRIPTION:*//**Builds a 2d mask of 1s and 0s sized to grid: cross, diagonals, star, circle, triangles, border, diamond or checkerboard.*/
+    DESCRIPTION:*//**Builds a 2d mask of 1s and 0s sized to grid: cross, diagonals, star, circle, half-area triangle, border, diamond or checkerboard.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-20  Claude      Initial version
+                        2026-08-20  Claude      Split type into shape + rotation; triangle is now a right-angled half-area triangle oriented by rotation
 */
 MASK = LAMBDA(
 //  Parameter Declarations
     [grid],
-    [type],
+    [shape],
+    [rotation],
     [invert],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MASK(grid, [type], [invert])¶" &
-                "DESCRIPTION:   →Builds a 2d mask of 1s and 0s sized to grid: cross, diagonals, star, circle, triangles, border, diamond or checkerboard. Shapes are centred and scale to the grid's dimensions.¶" &
+                "FUNCTION:      →MASK(grid, [shape], [rotation], [invert])¶" &
+                "DESCRIPTION:   →Builds a 2d mask of 1s and 0s sized to grid: cross, diagonals, star, circle, half-area triangle, border, diamond or checkerboard. Shapes are centred and scale to the grid's dimensions.¶" &
                 "VERSION:       →Aug 20 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) Grid whose dimensions size the mask; its values are ignored.¶" &
-                "   type           →(Optional) Shape: (0) cross [default], (1) diagonals (X), (2) star (cross + X), (3) circle (ellipse on non-square grids), (4) triangle up, (5) triangle right, (6) triangle down, (7) triangle left, (8) border, (9) diamond, (10) checkerboard. Any other value returns #N/A.¶" &
+                "   shape          →(Optional) Shape: (0) cross [default], (1) diagonals (X), (2) star (cross + X), (3) circle (ellipse on non-square grids), (4) triangle (right-angled, covers half the area, diagonal included), (5) border, (6) diamond, (7) checkerboard. Any other value returns #N/A.¶" &
+                "   rotation       →(Optional) Quarter-turns clockwise from the shape's default orientation; wraps mod 4, so -1 is one turn anticlockwise. Only triangle is orientation-sensitive - right angle at: (0) bottom-left [default], (1) top-left, (2) top-right, (3) bottom-right. The other shapes are rotation-symmetric and ignore it.¶" &
                 "   invert         →(Optional) (0) as-is [default], (1) swap the 1s and 0s. TRUE is also accepted.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MASK(SEQUENCE(3,3), 0)¶" &
@@ -25,7 +28,8 @@ MASK = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(grid),
     //  Procedure
-        maskType, IF(ISOMITTED(type), 0, type),
+        maskShape, IF(ISOMITTED(shape), 0, shape),
+        rot, MOD(IF(ISOMITTED(rotation), 0, rotation), 4),
         inv, N(IF(ISOMITTED(invert), 0, invert)),
         nRows, ROWS(grid),
         nCols, COLUMNS(grid),
@@ -35,7 +39,6 @@ MASK = LAMBDA(
         ctrCol, (nCols + 1) / 2,
     //  Degenerate-dimension guards: spans avoid divide-by-zero on 1-row / 1-col grids
         spanRows, MAX(nRows - 1, 1),
-        spanCols, MAX(nCols - 1, 1),
         halfRows, (nRows - 1) / 2,
         halfCols, (nCols - 1) / 2,
     //  Shape predicates (booleans, broadcast to nRows x nCols)
@@ -47,24 +50,22 @@ MASK = LAMBDA(
         diagMask, (mainDiag + antiDiag) > 0,
         starMask, (crossMask + diagMask) > 0,
         circleMask, ((rowIdx - ctrRow) / (nRows / 2))^2 + ((colIdx - ctrCol) / (nCols / 2))^2 <= 1,
-        triUp, ABS(colIdx - ctrCol) <= (rowIdx - 1) * halfCols / spanRows,
-        triRight, ABS(rowIdx - ctrRow) <= (nCols - colIdx) * halfRows / spanCols,
-        triDown, ABS(colIdx - ctrCol) <= (nRows - rowIdx) * halfCols / spanRows,
-        triLeft, ABS(rowIdx - ctrRow) <= (colIdx - 1) * halfRows / spanCols,
+    //  Right-angled half-area triangle, hypotenuse scaled to the grid; rot picks the right-angle corner
+        triMask, IFS(rot = 0, (colIdx - 1) * (nRows - 1) <= (rowIdx - 1) * (nCols - 1),
+                     rot = 1, (colIdx - 1) * (nRows - 1) <= (nRows - rowIdx) * (nCols - 1),
+                     rot = 2, (colIdx - 1) * (nRows - 1) >= (rowIdx - 1) * (nCols - 1),
+                     TRUE, (colIdx - 1) * (nRows - 1) >= (nRows - rowIdx) * (nCols - 1)),
         borderMask, ((rowIdx = 1) + (rowIdx = nRows) + (colIdx = 1) + (colIdx = nCols)) > 0,
         diamondMask, ABS(rowIdx - ctrRow) / MAX(halfRows, 0.5) + ABS(colIdx - ctrCol) / MAX(halfCols, 0.5) <= 1,
         checkerMask, MOD(rowIdx + colIdx, 2) = 0,
-        chosen, IFS(maskType = 0, crossMask,
-                    maskType = 1, diagMask,
-                    maskType = 2, starMask,
-                    maskType = 3, circleMask,
-                    maskType = 4, triUp,
-                    maskType = 5, triRight,
-                    maskType = 6, triDown,
-                    maskType = 7, triLeft,
-                    maskType = 8, borderMask,
-                    maskType = 9, diamondMask,
-                    maskType = 10, checkerMask,
+        chosen, IFS(maskShape = 0, crossMask,
+                    maskShape = 1, diagMask,
+                    maskShape = 2, starMask,
+                    maskShape = 3, circleMask,
+                    maskShape = 4, triMask,
+                    maskShape = 5, borderMask,
+                    maskShape = 6, diamondMask,
+                    maskShape = 7, checkerMask,
                     TRUE, NA()),
         bits, --(chosen),
         result, IF(inv = 1, 1 - bits, bits),
