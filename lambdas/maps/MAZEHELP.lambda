@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns the help table for MAZE. Split out of MAZE because the combined formula exceeded Excel's 8192-character limit on saved formulas.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-18  Claude      Initial version — MAZE help table extracted verbatim from MAZE so the MAZE formula fits Excel's 8192-character limit
+                        2026-08-20  Claude      Cus_Dir help updated: entries may be any DIRDELTA spelling as well as numeric deltas
 */
 MAZEHELP = LAMBDA(
 //  Parameter Declarations
@@ -32,7 +33,7 @@ MAZEHELP = LAMBDA(
                 "   Targets       →(Optional) A1 address(es) of cells to report distance for. Omitted returns the full distance grid covering all reachable cells.¶" &
                 "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
                 "   Show_Steps    →(Optional) Output mode: (0) cumulative cost [default], (1) step counter (TRUE also accepted), (2) path - the traversed cells as an Nx1 column of A1 addresses from st to the target. Mode 2 requires exactly one Targets cell; returns #N/A when Targets is omitted, multi-cell, or unreachable.¶" &
-                "   Cus_Dir       →(Optional) Custom move set as a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()).¶" &
+                "   Cus_Dir       →(Optional) Custom move set: a list of encoded row*100000+col deltas (e.g. KNIGHTDELTAS()) and/or any DIRDELTA spelling (arrows, ""NE"", ""UL"", ""down"", ...).¶" &
                 "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or CELLTOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
                 "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp, so st/Targets addresses and the returned grid are read in that frame. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
                 "EXAMPLE:       →¶" &

@@ -1,6 +1,7 @@
 /*  CONSTANT NAME:      _arrowsAll
-    DESCRIPTION:*//**The 8 compass arrow characters as a vertical array, in canonical order (up, down, left, right, up-left, up-right, down-left, down-right) matching _dirAll.*/
+    DESCRIPTION:*//**The 8 compass arrow characters as a vertical array, in canonical clockwise order from north (up, up-right, right, down-right, down, down-left, left, up-left) matching _dirAll. This is the order produced by SORT(_arrowsAll).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-19  Claude      Initial version
+                        2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of the glyphs)
 */
-_arrowsAll = {"↑";"↓";"←";"→";"↖";"↗";"↙";"↘"};
+_arrowsAll = {"↑";"↗";"→";"↘";"↓";"↙";"←";"↖"};

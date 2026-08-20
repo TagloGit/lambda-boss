@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowNW
+    DESCRIPTION:*//**The north-west (up-left) arrow character. Delta twin: _dirNW.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowNW = "↖";

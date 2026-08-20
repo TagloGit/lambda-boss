@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      DEFAULTARROWS
-    DESCRIPTION:*//**Returns the 8 default compass arrow characters as a vertical array, in canonical order matching DEFAULTMOVEDELTAS.*/
+    DESCRIPTION:*//**Returns the 8 default compass arrow characters as a vertical array, in canonical clockwise order from north, matching DEFAULTMOVEDELTAS.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
+                        2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of the glyphs)
 */
 DEFAULTARROWS = LAMBDA(
 //  Parameter Declarations
@@ -9,19 +10,19 @@ DEFAULTARROWS = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      ¦DEFAULTARROWS()¶" &
-                "DESCRIPTION:   ¦Returns the 8 default compass arrow characters as a vertical array, in canonical order matching DEFAULTMOVEDELTAS.¶" &
-                "VERSION:       ¦Apr 15 2026¶" &
+                "DESCRIPTION:   ¦Returns the 8 default compass arrow characters as a vertical array, in canonical clockwise order from north (the order produced by SORT), matching DEFAULTMOVEDELTAS.¶" &
+                "VERSION:       ¦Aug 20 2026¶" &
                 "PARAMETERS:    ¦¶" &
                 "   ShowHelp       ¦(Optional) Pass TRUE to show this help text instead of the arrow list.¶" &
                 "EXAMPLE:       ¦¶" &
                 "Formula        ¦=DEFAULTARROWS()¶" &
-                "Result         ¦{↑;↓;←;→;↖;↗;↙;↘}",
+                "Result         ¦{↑;↗;→;↘;↓;↙;←;↖}",
                 "¦", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),
     //  Procedure
-        result, {"↑";"↓";"←";"→";"↖";"↗";"↙";"↘"},
+        result, {"↑";"↗";"→";"↘";"↓";"↙";"←";"↖"},
         IF(Help?, result, Help)
 )
 );

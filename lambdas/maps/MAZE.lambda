@@ -10,6 +10,7 @@
                         2026-07-18  Claude      Show_Steps promoted to numeric enum: (0) cumulative cost [default], (1) step counter (TRUE still accepted), (2) path — back-walks the pool's dirDelta predecessor pointers from a single target to return the shortest path as an Nx1 column of A1 addresses
                         2026-07-18  Claude      Fix step counter inflation: the frontier-rows SEQUENCE omitted its step argument, so each proposal's step number gained the source cell's index within the sorted frontier. Now a true zero column — stepNum is uniformly iter+1, i.e. the number of moves on the path
                         2026-07-18  Claude      Help table extracted to MAZEHELP — the combined formula exceeded Excel's 8192-character limit on saved formulas; the Help? branch now delegates via IF(Help?, MAZEHELP(), output)
+                        2026-08-20  Claude      Default direction order aligned to the library canonical clockwise-from-north order (changes tie-breaks between equal-cost paths, not distances); Cus_Dir entries may now be any DIRDELTA spelling (arrows, NE, UL, down, ...) as well as numeric deltas
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -28,8 +29,8 @@ MAZE = LAMBDA(
         Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
     //  Procedure
         M, 100000,
-        defaultDirs, {100000, -100000, 1, -1, 100001, -100001, 99999, -99999},
-        moveSet, IF(ISOMITTED(Cus_Dir), TAKE(defaultDirs, , 8 - 4 * No_Diag), TOROW(Cus_Dir, 3)),
+        defaultDirs, IF(8 - 4 * No_Diag = 4, {-100000, 1, 100000, -1}, {-100000, -99999, 1, 100001, 100000, 99999, -1, -100001}),
+        moveSet, IF(ISOMITTED(Cus_Dir), defaultDirs, TOROW(DIRDELTA(Cus_Dir), 3)),
         nRows, IF(ISOMITTED(Costs), ROWS(AllowMp), ROWS(Costs)),
         nCols, IF(ISOMITTED(Costs), COLUMNS(AllowMp), COLUMNS(Costs)),
         baseRow, IFERROR(IF(ISOMITTED(Costs), NA(), MIN(ROW(Costs))), IFERROR(IF(ISOMITTED(AllowMp), NA(), MIN(ROW(AllowMp))), 1)),

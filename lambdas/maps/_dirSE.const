@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirSE
+    DESCRIPTION:*//**The scalar position-delta for south-east (down-right): rowDelta +1, colDelta +1 encoded as rowDelta*100000+colDelta (default mult 100000). Arrow twin: _arrowSE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_dirSE = 100001;

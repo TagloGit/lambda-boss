@@ -35,6 +35,14 @@ tests:
     args: ['="B1"', "=", "={1,1,1,1;1,1,1,1;1,0,1,1;1,1,1,1}", "=", "={100000,99999,100001}"]
     expected: [["", 0, "", ""], ["", 1, "", ""], [2, "", "", ""], [3, "", "", ""]]
 
+  - name: Dirs accepts direction tokens - D,L,R matches the numeric pocket walk
+    args: ['="B1"', "=", "={1,1,1;0,1,0;0,1,0;0,0,0}", "=", '={"D","L","R"}']
+    expected: [["", 0, ""], ["", 1, ""], ["", 2, ""], ["", "", ""]]
+
+  - name: Dirs accepts arrow glyphs - water flow twin
+    args: ['="B1"', "=", "={1,1,1,1;1,1,1,1;1,0,1,1;1,1,1,1}", "=", '={"↓","↙","↘"}']
+    expected: [["", 0, "", ""], ["", 1, "", ""], [2, "", "", ""], [3, "", "", ""]]
+
   - name: custom Walklam - always down until blocked, using the dirOK sibling context
     args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),100000,NA()))"]
     expected: [["", 0, ""], ["", 1, ""], ["", 2, ""]]

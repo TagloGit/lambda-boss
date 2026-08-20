@@ -1,0 +1,41 @@
+/*  FUNCTION NAME:      DIRDELTA
+    DESCRIPTION:*//**Normalises any direction spelling - arrow glyph, compass code (NE, North-East), screen direction (UL, up, DownRight), or numeric packed delta - into the library convention: a packed position-delta (default), an arrow glyph, or a compass code.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+DIRDELTA = LAMBDA(
+//  Parameter Declarations
+    [dir],
+    [output],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      ¦DIRDELTA(dir, [output])¶" &
+                "DESCRIPTION:   ¦Normalises any direction spelling into the library convention. Returns the packed position-delta rowDelta*100000+colDelta by default (see _dirAll: up=-100000, up-right=-99999, right=1, down-right=100001, down=100000, down-left=99999, left=-1, up-left=-100001), or the arrow glyph / compass code via output.¶" &
+                "VERSION:       ¦Aug 20 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   dir            ¦(Required) A direction in any spelling: an arrow glyph (↑ ↗ → ↘ ↓ ↙ ← ↖), a compass code (N, NE ... or North, NorthEast, North-East ...), a screen direction (U, D, L, R, UR, UL, DR, DL, reversed forms like RU, LD, or Up, Down, UpRight, Down-Left ...), or a numeric packed delta. Case-insensitive; hyphens and spaces are ignored. Unrecognised text returns #N/A. Also accepts an array of directions - result lifts element-wise.¶" &
+                "   output         ¦(Optional) Output representation: (0) packed position-delta [default], (1) arrow glyph, (2) compass code (N, NE, ...). Numeric dir passes through unchanged in mode 0 (so non-compass deltas such as knight moves survive); modes 1-2 require one of the 8 compass directions.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=DIRDELTA(""north-east"")¶" &
+                "Result         ¦-99999 (and =DIRDELTA(""NE"", 1) returns ↗)",
+                "¦", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(dir),
+    //  Procedure
+        arrows, {"↑";"↗";"→";"↘";"↓";"↙";"←";"↖"},
+        codes, {"N";"NE";"E";"SE";"S";"SW";"W";"NW"},
+        deltas, {-100000;-99999;1;100001;100000;99999;-1;-100001},
+        tokenCol, {"↑";"↗";"→";"↘";"↓";"↙";"←";"↖";"N";"NE";"E";"SE";"S";"SW";"W";"NW";"NORTH";"NORTHEAST";"EAST";"SOUTHEAST";"SOUTH";"SOUTHWEST";"WEST";"NORTHWEST";"U";"UR";"R";"DR";"D";"DL";"L";"UL";"RU";"RD";"LD";"LU";"UP";"UPRIGHT";"RIGHT";"DOWNRIGHT";"DOWN";"DOWNLEFT";"LEFT";"UPLEFT";"RIGHTUP";"RIGHTDOWN";"LEFTDOWN";"LEFTUP"},
+        kCol, {1;2;3;4;5;6;7;8;1;2;3;4;5;6;7;8;1;2;3;4;5;6;7;8;1;2;3;4;5;6;7;8;2;4;6;8;1;2;3;4;5;6;7;8;2;4;6;8},
+        out, IF(ISOMITTED(output), 0, output),
+        cleaned, SUBSTITUTE(SUBSTITUTE(UPPER(dir & ""), "-", ""), " ", ""),
+        kNum, IF(ISNUMBER(dir),
+                 XMATCH(dir, deltas, 0),
+                 INDEX(kCol, XMATCH(cleaned, tokenCol, 0))),
+        result, IF(out = 1, INDEX(arrows, kNum),
+                IF(out = 2, INDEX(codes, kNum),
+                   IF(ISNUMBER(dir), dir, INDEX(deltas, kNum)))),
+        IF(Help?, Help, result)
+)
+);

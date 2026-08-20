@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowE
+    DESCRIPTION:*//**The east (right) arrow character. Delta twin: _dirE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowE = "→";

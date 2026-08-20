@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowSE
+    DESCRIPTION:*//**The south-east (down-right) arrow character. Delta twin: _dirSE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowSE = "↘";

@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns an 8x3 moves table combining DEFAULTARROWS and DEFAULTMOVEDELTAS: {arrow, dRow, dCol}.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
+                        2026-08-20  Claude      Row order now follows the canonical clockwise-from-north order (inherited from DEFAULTARROWS / DEFAULTMOVEDELTAS)
 */
 ARROWMOVES = LAMBDA(
 //  Parameter Declarations

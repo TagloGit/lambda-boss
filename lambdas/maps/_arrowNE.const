@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowNE
+    DESCRIPTION:*//**The north-east (up-right) arrow character. Delta twin: _dirNE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowNE = "↗";

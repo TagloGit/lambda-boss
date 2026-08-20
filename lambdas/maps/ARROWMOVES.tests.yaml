@@ -1,15 +1,15 @@
 tests:
-  - name: returns 8x3 moves table
+  - name: returns 8x3 moves table clockwise from north
     args: []
     expected:
       - ["↑", -1, 0]
-      - ["↓", 1, 0]
-      - ["←", 0, -1]
-      - ["→", 0, 1]
-      - ["↖", -1, -1]
       - ["↗", -1, 1]
-      - ["↙", 1, -1]
+      - ["→", 0, 1]
       - ["↘", 1, 1]
+      - ["↓", 1, 0]
+      - ["↙", 1, -1]
+      - ["←", 0, -1]
+      - ["↖", -1, -1]
 
   - name: help text
     args: ["=TRUE"]

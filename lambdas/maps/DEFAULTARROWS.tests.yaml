@@ -1,7 +1,7 @@
 tests:
-  - name: returns 8 arrow characters
+  - name: returns 8 arrow characters clockwise from north
     args: []
-    expected: [["↑"], ["↓"], ["←"], ["→"], ["↖"], ["↗"], ["↙"], ["↘"]]
+    expected: [["↑"], ["↗"], ["→"], ["↘"], ["↓"], ["↙"], ["←"], ["↖"]]
 
   - name: help text
     args: ["=TRUE"]

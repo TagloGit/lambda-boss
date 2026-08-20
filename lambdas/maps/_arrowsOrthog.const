@@ -1,6 +1,7 @@
 /*  CONSTANT NAME:      _arrowsOrthog
-    DESCRIPTION:*//**The 4 orthogonal (cardinal) arrow characters as a vertical array, in canonical order (up, down, left, right) matching _dirOrthog.*/
+    DESCRIPTION:*//**The 4 orthogonal (cardinal) arrow characters as a vertical array, in canonical clockwise order from north (up, right, down, left) matching _dirOrthog.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-19  Claude      Initial version
+                        2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of the glyphs)
 */
-_arrowsOrthog = {"↑";"↓";"←";"→"};
+_arrowsOrthog = {"↑";"→";"↓";"←"};

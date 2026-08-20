@@ -1,6 +1,7 @@
 /*  CONSTANT NAME:      _dirAll
-    DESCRIPTION:*//**The 8 scalar position-deltas for all 8 compass directions, as a vertical array in canonical order (up, down, left, right, up-left, up-right, down-left, down-right) matching _arrowsAll. Each is a single integer to add to a CELLTOPOS position (default mult 100000).*/
+    DESCRIPTION:*//**The 8 scalar position-deltas for all 8 compass directions, as a vertical array in canonical clockwise order from north (up, up-right, right, down-right, down, down-left, left, up-left) matching _arrowsAll. Each is a single integer to add to a CELLTOPOS position (default mult 100000).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-19  Claude      Initial version
+                        2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of _arrowsAll)
 */
-_dirAll = {-100000;100000;-1;1;-100001;-99999;99999;100001};
+_dirAll = {-100000;-99999;1;100001;100000;99999;-1;-100001};

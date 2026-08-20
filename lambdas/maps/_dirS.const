@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirS
+    DESCRIPTION:*//**The scalar position-delta for south (down): rowDelta +1 encoded as rowDelta*100000+colDelta (default mult 100000). Arrow twin: _arrowS.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_dirS = 100000;
