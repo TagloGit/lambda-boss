@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowN
+    DESCRIPTION:*//**The north (up) arrow character. Delta twin: _dirN.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowN = "↑";

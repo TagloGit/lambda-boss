@@ -1,7 +1,8 @@
 /*  FUNCTION NAME:      DEFAULTMOVEDELTAS
-    DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in order matching DEFAULTARROWS.*/
+    DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in canonical clockwise order from north, matching DEFAULTARROWS.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
+                        2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of DEFAULTARROWS)
 */
 DEFAULTMOVEDELTAS = LAMBDA(
 //  Parameter Declarations
@@ -9,19 +10,19 @@ DEFAULTMOVEDELTAS = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →DEFAULTMOVEDELTAS()¶" &
-                "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in order matching DEFAULTARROWS.¶" &
-                "VERSION:       →Apr 15 2026¶" &
+                "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in canonical clockwise order from north, matching DEFAULTARROWS.¶" &
+                "VERSION:       →Aug 20 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the delta grid.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=DEFAULTMOVEDELTAS()¶" &
-                "Result         →8x2 array: up, down, left, right, up-left, up-right, down-left, down-right",
+                "Result         →8x2 array: up, up-right, right, down-right, down, down-left, left, up-left",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),
     //  Procedure
-        result, {-1,0;1,0;0,-1;0,1;-1,-1;-1,1;1,-1;1,1},
+        result, {-1,0;-1,1;0,1;1,1;1,0;1,-1;0,-1;-1,-1},
         IF(Help?, result, Help)
 )
 );

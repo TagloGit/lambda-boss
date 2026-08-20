@@ -218,6 +218,46 @@ tests:
     args: ['={"C1";"D1"}', '="→"', "={1,2}", "=", '="A1:E5"']
     expected: [["D1", "E1"], ["E1", "E1"]]
 
+  - name: compass token NE moves up-right
+    args: ["E5", "NE"]
+    expected: "F4"
+
+  - name: compass token lowercase w moves left
+    args: ["B2", "w"]
+    expected: "A2"
+
+  - name: long compass token with hyphen moves down-left
+    args: ["E5", "south-west"]
+    expected: "D6"
+
+  - name: screen token UL moves up-left
+    args: ["E5", "UL"]
+    expected: "D4"
+
+  - name: screen token DR with multi-step
+    args: ["A1", "DR", "=3"]
+    expected: "D4"
+
+  - name: word token down moves down
+    args: ["F3", "down"]
+    expected: "F4"
+
+  - name: token dir respects bounds clip
+    args: ["D2", "R", "=5", "=", '="A1:E5"']
+    expected: "E2"
+
+  - name: custom moves glyph wins over token fallback
+    args: ["D4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    expected: "E2"
+
+  - name: token falls back through custom moves table to compass
+    args: ["D4", "NE", "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    expected: "E3"
+
+  - name: unrecognised dir text returns NA
+    args: ["E5", "XX"]
+    expected: -2146826246
+
   - name: help text
     args: []
     expected_type: array

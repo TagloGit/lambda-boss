@@ -168,6 +168,14 @@ tests:
     args: ['="A1"', "={2,2,2;2,2,2;2,2,2}", "=", '="C3"', "=FALSE", "=1"]
     expected: 2
 
+  - name: Cus_Dir accepts direction tokens - U,D,L,R matches the 4-way default grid
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=", '={"U","D","L","R"}']
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
+  - name: Cus_Dir accepts arrow glyphs - mixed with numeric deltas
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=", '={"↑","↓",-1,1}']
+    expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
   - name: st supplied but neither Costs nor AllowMp returns help text
     args: ['="C3"']
     expected_type: array

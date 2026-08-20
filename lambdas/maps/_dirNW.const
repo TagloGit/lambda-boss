@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirNW
+    DESCRIPTION:*//**The scalar position-delta for north-west (up-left): rowDelta -1, colDelta -1 encoded as rowDelta*100000+colDelta (default mult 100000). Arrow twin: _arrowNW.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_dirNW = -100001;

@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowS
+    DESCRIPTION:*//**The south (down) arrow character. Delta twin: _dirS.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowS = "↓";

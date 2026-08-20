@@ -54,9 +54,9 @@ public class LambdaLoaderIntegrationTests
 
         // The constant's literal is preserved (array-row separators intact).
         var arrowsAll = loaded.Single(l => l.Name == "maps._arrowsAll");
-        Assert.Equal("={\"↑\";\"↓\";\"←\";\"→\";\"↖\";\"↗\";\"↙\";\"↘\"}", arrowsAll.Formula);
+        Assert.Equal("={\"↑\";\"↗\";\"→\";\"↘\";\"↓\";\"↙\";\"←\";\"↖\"}", arrowsAll.Formula);
 
         var dirAll = loaded.Single(l => l.Name == "maps._dirAll");
-        Assert.Equal("={-100000;100000;-1;1;-100001;-99999;99999;100001}", dirAll.Formula);
+        Assert.Equal("={-100000;-99999;1;100001;100000;99999;-1;-100001}", dirAll.Formula);
     }
 }

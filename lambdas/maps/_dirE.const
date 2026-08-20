@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirE
+    DESCRIPTION:*//**The scalar position-delta for east (right): colDelta +1 encoded as rowDelta*100000+colDelta (mult-independent). Arrow twin: _arrowE.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_dirE = 1;

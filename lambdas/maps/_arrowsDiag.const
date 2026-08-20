@@ -1,6 +1,7 @@
 /*  CONSTANT NAME:      _arrowsDiag
-    DESCRIPTION:*//**The 4 diagonal arrow characters as a vertical array, in canonical order (up-left, up-right, down-left, down-right) matching _dirDiag.*/
+    DESCRIPTION:*//**The 4 diagonal arrow characters as a vertical array, in canonical clockwise order from north (up-right, down-right, down-left, up-left) matching _dirDiag.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-19  Claude      Initial version
+                        2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of the glyphs)
 */
-_arrowsDiag = {"↖";"↗";"↙";"↘"};
+_arrowsDiag = {"↗";"↘";"↙";"↖"};

@@ -8,6 +8,7 @@
                         2026-06-03  Claude      Add steps arg (default 1); replaces REDUCE-loop pattern. Drop dispatcher in favour of native broadcasting so cell AND steps lift (cells column x steps row = grid)
                         2026-07-17  Claude      Add bounds + overflow params: confine moves to an area (text rect or reference; sheet when omitted) with clip/error/stick/wrap/bounce behaviour. Switch help delimiter to ¦ (content needs arrow glyphs)
                         2026-08-06  Claude      dir now also accepts a numeric scalar position-delta (rowDelta*100000+colDelta, the library convention: right=1, down=100000), bypassing the moves table
+                        2026-08-20  Claude      dir now also accepts any DIRDELTA text spelling (NE, north-east, UL, left, ...) as a fallback when the glyph is not found in moves
 */
 MOVECELL = LAMBDA(
 //  Parameter Declarations
@@ -21,10 +22,10 @@ MOVECELL = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      ¦MOVECELL(cell, dir, [steps], [moves], [bounds], [overflow])¶" &
                 "DESCRIPTION:   ¦Returns the A1 address of the cell reached by moving steps cells from cell in direction dir - a glyph looked up in a moves table of {glyph, dRow, dCol}, or a numeric position-delta (rowDelta*100000+colDelta). Optional bounds + overflow confine the move to an area (clip/error/stick/wrap/bounce).¶" &
-                "VERSION:       ¦Aug 06 2026¶" &
+                "VERSION:       ¦Aug 20 2026¶" &
                 "PARAMETERS:    ¦¶" &
                 "   cell           ¦(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Output of MOVECELL itself can be fed back in. Also accepts an array/range of addresses — result lifts element-wise.¶" &
-                "   dir            ¦(Required) Direction: a glyph matching a value in the first column of moves (e.g. ""→""), or a numeric scalar position-delta encoded rowDelta*100000+colDelta (library convention, see _dirAll: right=1, left=-1, down=100000, up=-100000, down-right=100001). Numeric dir bypasses the moves table. Treated as a scalar (single direction applied to every cell in array input).¶" &
+                "   dir            ¦(Required) Direction: a glyph matching a value in the first column of moves (e.g. ""→""), any text spelling accepted by DIRDELTA (""NE"", ""north-east"", ""UL"", ""left"" - case-insensitive; used as a fallback when the text is not found in moves), or a numeric scalar position-delta encoded rowDelta*100000+colDelta (library convention, see _dirAll: right=1, left=-1, down=100000, up=-100000, down-right=100001). Numeric dir bypasses the moves table. Treated as a scalar (single direction applied to every cell in array input).¶" &
                 "   steps          ¦(Optional) Number of cells to move in dir. Default 1. Negative reverses the direction; 0 returns cell unchanged. Also accepts an array of step counts — result lifts (e.g. SEQUENCE(5) traces the path). Pass cells as a column and steps as a row to build a cell×steps grid.¶" &
                 "   moves          ¦(Optional) 3-column table: {glyph, dRow, dCol}. Defaults to ARROWMOVES(). Use HSTACK(customGlyphs, KNIGHTDELTAS()) for knight moves.¶" &
                 "   bounds         ¦(Optional) Confining rectangle: an A1 text rect (e.g. ""C3:H10"") or a workbook reference (a named Board range works; corner order is normalised). A single cell is a 1x1 area. Omitted while overflow is supplied = the whole sheet.¶" &
@@ -43,8 +44,10 @@ MOVECELL = LAMBDA(
         dirMult, 100000,
         numDir?, ISNUMBER(dir),
         idx, IF(numDir?, NA(), XMATCH(dir, CHOOSECOLS(m, 1))),
-        dR, IF(numDir?, ROUND(dir / dirMult, 0), INDEX(m, idx, 2)),
-        dC, IF(numDir?, dir - dR * dirMult, INDEX(m, idx, 3)),
+        tbl?, IF(numDir?, FALSE, NOT(ISNA(idx))),
+        dirNum, IF(numDir?, dir, IF(tbl?, 0, DIRDELTA(dir))),
+        dR, IF(tbl?, INDEX(m, idx, 2), ROUND(dirNum / dirMult, 0)),
+        dC, IF(tbl?, INDEX(m, idx, 3), dirNum - dR * dirMult),
         pos, CELLTOPOS(cell, safeMult),
         curRow, INT(pos / safeMult),
         curCol, MOD(pos, safeMult),

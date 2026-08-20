@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowW
+    DESCRIPTION:*//**The west (left) arrow character. Delta twin: _dirW.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowW = "←";

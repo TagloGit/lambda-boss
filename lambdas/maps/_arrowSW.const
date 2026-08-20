@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _arrowSW
+    DESCRIPTION:*//**The south-west (down-left) arrow character. Delta twin: _dirSW.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-20  Claude      Initial version
+*/
+_arrowSW = "↙";
