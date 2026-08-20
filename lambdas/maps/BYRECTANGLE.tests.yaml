@@ -1,0 +1,62 @@
+tests:
+  - name: default 1x1 window with default SUM is identity
+    args: ['={1,2;3,4}']
+    expected: [[1, 2], [3, 4]]
+
+  - name: 2x2 sliding sums over 3x3 grid
+    args: ['=SEQUENCE(3,3)', '=2', '=2']
+    expected: [[12, 16], [24, 28]]
+
+  - name: 2x2 sliding max via custom operation
+    args: ['=SEQUENCE(3,3)', '=2', '=2', '=LAMBDA(area, MAX(area))']
+    expected: [[5, 6], [8, 9]]
+
+  - name: built-in passed by name as operation
+    args: ['=SEQUENCE(3,3)', '=2', '=2', '=MIN']
+    expected: [[1, 2], [4, 5]]
+
+  - name: 1x3 horizontal sliding window (moving sum along a row)
+    args: ['={1,2,3,4,5}', '=1', '=3']
+    expected: [[6, 9, 12]]
+
+  - name: tiling mode 2x2 over 4x4
+    args: ['=SEQUENCE(4,4)', '=2', '=2', '=', '=1']
+    expected: [[14, 22], [46, 54]]
+
+  - name: tiling includes partial edge tiles on 3x3
+    args: ['=SEQUENCE(3,3)', '=2', '=2', '=', '=1']
+    expected: [[12, 9], [15, 9]]
+
+  - name: real range input via named range
+    setup:
+      cells:
+        - address: "E3:G5"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "testGrid", refers_to: "E3:G5" }
+    args: ["=testGrid", "=2", "=2"]
+    expected: [[12, 16], [24, 28]]
+
+  - name: real range input hands operation a true reference (SUBTOTAL works)
+    setup:
+      cells:
+        - address: "E3:G5"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "testGrid", refers_to: "E3:G5" }
+    args: ["=testGrid", "=2", "=2", "=LAMBDA(area, SUBTOTAL(9, area))"]
+    expected: [[12, 16], [24, 28]]
+
+  - name: window larger than grid returns NA
+    args: ['={1,2;3,4}', '=3', '=3']
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array

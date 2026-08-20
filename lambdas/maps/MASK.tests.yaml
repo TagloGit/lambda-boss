@@ -1,0 +1,72 @@
+tests:
+  - name: cross on 5x5 (default type)
+    args: ['=SEQUENCE(5,5)']
+    expected: [[0, 0, 1, 0, 0], [0, 0, 1, 0, 0], [1, 1, 1, 1, 1], [0, 0, 1, 0, 0], [0, 0, 1, 0, 0]]
+
+  - name: cross on even 4x4 uses the two centre rows and columns
+    args: ['=SEQUENCE(4,4)', '=0']
+    expected: [[0, 1, 1, 0], [1, 1, 1, 1], [1, 1, 1, 1], [0, 1, 1, 0]]
+
+  - name: diagonals X on 5x5
+    args: ['=SEQUENCE(5,5)', '=1']
+    expected: [[1, 0, 0, 0, 1], [0, 1, 0, 1, 0], [0, 0, 1, 0, 0], [0, 1, 0, 1, 0], [1, 0, 0, 0, 1]]
+
+  - name: diagonals scale on non-square 3x5
+    args: ['=SEQUENCE(3,5)', '=1']
+    expected: [[1, 0, 0, 0, 1], [0, 0, 1, 0, 0], [1, 0, 0, 0, 1]]
+
+  - name: star on 5x5 combines cross and X
+    args: ['=SEQUENCE(5,5)', '=2']
+    expected: [[1, 0, 1, 0, 1], [0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0], [1, 0, 1, 0, 1]]
+
+  - name: circle on 5x5
+    args: ['=SEQUENCE(5,5)', '=3']
+    expected: [[0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0]]
+
+  - name: triangle up on 5x5
+    args: ['=SEQUENCE(5,5)', '=4']
+    expected: [[0, 0, 1, 0, 0], [0, 0, 1, 0, 0], [0, 1, 1, 1, 0], [0, 1, 1, 1, 0], [1, 1, 1, 1, 1]]
+
+  - name: triangle right on 5x5
+    args: ['=SEQUENCE(5,5)', '=5']
+    expected: [[1, 0, 0, 0, 0], [1, 1, 1, 0, 0], [1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [1, 0, 0, 0, 0]]
+
+  - name: triangle down on 5x5
+    args: ['=SEQUENCE(5,5)', '=6']
+    expected: [[1, 1, 1, 1, 1], [0, 1, 1, 1, 0], [0, 1, 1, 1, 0], [0, 0, 1, 0, 0], [0, 0, 1, 0, 0]]
+
+  - name: triangle left on 5x5
+    args: ['=SEQUENCE(5,5)', '=7']
+    expected: [[0, 0, 0, 0, 1], [0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 0, 1, 1, 1], [0, 0, 0, 0, 1]]
+
+  - name: border on 4x4
+    args: ['=SEQUENCE(4,4)', '=8']
+    expected: [[1, 1, 1, 1], [1, 0, 0, 1], [1, 0, 0, 1], [1, 1, 1, 1]]
+
+  - name: diamond on 5x5
+    args: ['=SEQUENCE(5,5)', '=9']
+    expected: [[0, 0, 1, 0, 0], [0, 1, 1, 1, 0], [1, 1, 1, 1, 1], [0, 1, 1, 1, 0], [0, 0, 1, 0, 0]]
+
+  - name: checkerboard on 3x3
+    args: ['=SEQUENCE(3,3)', '=10']
+    expected: [[1, 0, 1], [0, 1, 0], [1, 0, 1]]
+
+  - name: inverted cross on 3x3
+    args: ['=SEQUENCE(3,3)', '=0', '=1']
+    expected: [[1, 0, 1], [0, 0, 0], [1, 0, 1]]
+
+  - name: invert accepts TRUE
+    args: ['=SEQUENCE(3,3)', '=0', '=TRUE']
+    expected: [[1, 0, 1], [0, 0, 0], [1, 0, 1]]
+
+  - name: single-row grid cross fills the row
+    args: ['={1,2,3,4,5}', '=0']
+    expected: [[1, 1, 1, 1, 1]]
+
+  - name: unknown type returns NA
+    args: ['=SEQUENCE(3,3)', '=99']
+    expected: -2146826246
+
+  - name: help text
+    args: []
+    expected_type: array
