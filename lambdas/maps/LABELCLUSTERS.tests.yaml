@@ -27,6 +27,18 @@ tests:
     args: ['={200002;300002}']
     expected: [[1], [1]]
 
+  - name: diagonal pair splits under 4-way arrow glyphs (DIRDELTA normalisation)
+    args: ['={"B2";"C3"}', '={"↑";"→";"↓";"←"}']
+    expected: [[1], [2]]
+
+  - name: diagonal pair merges under 8-way compass codes
+    args: ['={"B2";"C3"}', '={"N";"NE";"E";"SE";"S";"SW";"W";"NW"}']
+    expected: [[1], [1]]
+
+  - name: orthogonal pair merges under screen-direction names
+    args: ['={"B2";"B3"}', '={"up";"down";"left";"right"}']
+    expected: [[1], [1]]
+
   - name: help text
     args: []
     expected_type: array

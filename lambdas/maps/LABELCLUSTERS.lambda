@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
                         2026-08-20  Claude      Default stencil re-ordered to the library canonical clockwise-from-north order (result is order-independent; no behaviour change)
+                        2026-08-22  Claude      deltas normalised via DIRDELTA so arrow glyphs / compass codes / screen directions are accepted alongside packed deltas
 */
 LABELCLUSTERS = LAMBDA(
 //  Parameter Declarations
@@ -13,10 +14,10 @@ LABELCLUSTERS = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →LABELCLUSTERS(cells, [deltas], [group])¶" &
                 "DESCRIPTION:   →Labels each input cell with an integer cluster id such that two cells in the same group share an id whenever they are adjacent, directly or transitively. Uses full transitive closure (min-label relaxation) so the result is independent of input order.¶" &
-                "VERSION:       →Jul 01 2026¶" &
+                "VERSION:       →Aug 22 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   cells          →(Required) A column of cells — A1 address text (e.g. ""B7"") OR encoded scalar positions (row*100000+col). Auto-detected per element via ISNUMBER; text is normalised internally via CELLTOPOS.¶" &
-                "   deltas         →(Optional) A 1-D array of scalar position deltas defining connectivity. Default: the 8 compass directions in canonical clockwise order ({-100000;-99999;1;100001;100000;99999;-1;-100001}, i.e. _dirAll). Pass {-100000;1;100000;-1} (_dirOrthog) for 4-way, or any custom stencil (e.g. knight moves). Assumes the library default mult=100000.¶" &
+                "   deltas         →(Optional) A 1-D array defining connectivity, in any direction notation — packed position deltas (_dirOrthog, _dirAll, knight moves ...), arrow glyphs (_arrowsOrthog, ↑ → ↓ ←), compass codes (N, NE, north-east ...) or screen directions (U, DR, up-left ...); normalised via DIRDELTA. Default: the 8 compass directions in canonical clockwise order ({-100000;-99999;1;100001;100000;99999;-1;-100001}, i.e. _dirAll). Pass _dirOrthog or _arrowsOrthog for 4-way. Assumes the library default mult=100000.¶" &
                 "   group          →(Optional) Column of area / sheet keys (numeric or text). Adjacency is only tested between cells sharing the same key, so multi-sheet maps stay partitioned. Omitted: all cells treated as one group.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=LABELCLUSTERS({""A1"";""A3"";""A2""})¶" &
@@ -34,7 +35,7 @@ LABELCLUSTERS = LAMBDA(
         gi, XMATCH(grpRaw, UNIQUE(grpRaw)),
         BIG, 1000000000000,
         K, gi * BIG + pos,
-        dts, IF(ISOMITTED(deltas), {-100000;-99999;1;100001;100000;99999;-1;-100001}, deltas),
+        dts, IF(ISOMITTED(deltas), {-100000;-99999;1;100001;100000;99999;-1;-100001}, DIRDELTA(deltas)),
         relaxStep, LAMBDA(lab,
                       REDUCE(lab, dts, LAMBDA(acc, dlt,
                         LET(nl, XLOOKUP(K + dlt, K, lab, n + 1),

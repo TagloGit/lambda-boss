@@ -1,0 +1,51 @@
+/*  FUNCTION NAME:      CLUSTERAGG
+    DESCRIPTION:*//**Groups the cells of a grid that satisfy a predicate into connected clusters and aggregates a value per cluster, returning a {clusterId, cellCount, aggregate} table sorted largest aggregate first.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-22  Claude      Initial version
+*/
+CLUSTERAGG = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [predicate],
+    [value_fn],
+    [agg_fn],
+    [deltas],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →CLUSTERAGG(grid, predicate, [value_fn], [agg_fn], [deltas])¶" &
+                "DESCRIPTION:   →Groups the cells of a grid that satisfy a predicate into connected clusters (via LABELCLUSTERS), maps each cell to a number, and aggregates per cluster. Returns a three-column {clusterId, cellCount, aggregate} table sorted by aggregate descending (ties by clusterId ascending), so the answer to ""largest / highest-scoring group"" is always row 1. Cluster ids are numbered by first appearance in reading order. Returns #N/A when no cell matches.¶" &
+                "VERSION:       →Aug 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
+                "   predicate      →(Required) LAMBDA(v, ...) returning TRUE for the cells that belong in clusters, e.g. LAMBDA(v, NOT(ISNUMBER(v))).¶" &
+                "   value_fn       →(Optional) LAMBDA(v, ...) mapping a matching cell's value to a number, e.g. LAMBDA(v, CODE(v) - 64). Only applied to cells that pass the predicate. Omitted: every cell counts 1, so the aggregate is the cluster size.¶" &
+                "   agg_fn         →(Optional) Aggregator applied to each cluster's column of mapped values. Pass a built-in by name (SUM, MAX, AVERAGE, ...) or a LAMBDA(values, ...). Default SUM.¶" &
+                "   deltas         →(Optional) Adjacency stencil in any direction notation — packed deltas (_dirOrthog), arrow glyphs (_arrowsOrthog), compass codes or screen directions; normalised via DIRDELTA. Default: 8-way (_dirAll).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CLUSTERAGG(mp, LAMBDA(v, NOT(ISNUMBER(v))), LAMBDA(v, CODE(v) - 64), , _dirOrthog)¶" &
+                "Result         →{3, 17, 2002; ...} — cluster 3 has 17 letters summing to 2002; =INDEX(result, 1, 3) is the answer",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+        fn, IF(ISOMITTED(agg_fn), SUM, agg_fn),
+    //  Procedure
+        theMult, 100000,
+        nRows, ROWS(grid),
+        nCols, COLUMNS(grid),
+        mask, TOCOL(MAP(grid, predicate)),
+        posGrid, SEQUENCE(nRows) * theMult + SEQUENCE(1, nCols),
+        hitPos, FILTER(TOCOL(posGrid), mask, NA()),
+        hitVals, FILTER(TOCOL(grid), mask, NA()),
+        n, ROWS(hitPos),
+        weights, IF(ISOMITTED(value_fn), SEQUENCE(n, 1, 1, 0), MAP(hitVals, value_fn)),
+        dts, IF(ISOMITTED(deltas), {-100000;-99999;1;100001;100000;99999;-1;-100001}, DIRDELTA(deltas)),
+        labels, LABELCLUSTERS(hitPos, dts),
+        ids, UNIQUE(labels),
+        counts, MAP(ids, LAMBDA(k, SUM(--(labels = k)))),
+        aggs, MAP(ids, LAMBDA(k, fn(FILTER(weights, labels = k)))),
+        table, HSTACK(ids, counts, aggs),
+        result, IF(ISNA(@hitPos), NA(), SORTBY(table, aggs, -1, ids, 1)),
+        IF(Help?, Help, result)
+)
+);
