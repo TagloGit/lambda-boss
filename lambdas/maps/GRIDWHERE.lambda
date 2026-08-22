@@ -1,0 +1,53 @@
+/*  FUNCTION NAME:      GRIDWHERE
+    DESCRIPTION:*//**Returns the cells of a grid that satisfy a predicate, as a column of addresses, values, address/value pairs, or encoded positions in reading order.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-22  Claude      Initial version
+*/
+GRIDWHERE = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [predicate],
+    [return_mode],
+    [origin],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →GRIDWHERE(grid, predicate, [return_mode], [origin])¶" &
+                "DESCRIPTION:   →Returns the cells of a grid that satisfy a predicate, as a single column in reading order (row by row, left to right). Replaces the mask-spill + FILTER(TOCOL(ADDRESSES(mask)), TOCOL(mask)) pattern that precedes most Maps-library calls; the output feeds LABELCLUSTERS, DISTFROM, MAZE targets etc. directly. Returns #N/A when no cell matches.¶" &
+                "VERSION:       →Aug 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
+                "   predicate      →(Required) LAMBDA(v, ...) returning TRUE/FALSE for each cell value, e.g. LAMBDA(v, NOT(ISNUMBER(v))).¶" &
+                "   return_mode    →(Optional) What to return per matching cell: (0) A1 address text [default], (1) the cell value, (2) a two-column {address, value} table, (3) encoded position row*100000+col (the CELLTOPOS convention).¶" &
+                "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position so addresses/positions map to that frame, matching GRIDLOOKUP / MAZE / SUBGRID. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=GRIDWHERE(mp, LAMBDA(v, NOT(ISNUMBER(v))))¶" &
+                "Result         →Column of addresses of the non-numeric cells of mp, e.g. {""X24"";""Z24"";""AB24""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+        mode, IF(ISOMITTED(return_mode), 0, return_mode),
+    //  Procedure
+        theMult, 100000,
+        baseRow, IFERROR(MIN(ROW(grid)), 1),
+        baseCol, IFERROR(MIN(COLUMN(grid)), 1),
+        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
+        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
+        nRows, ROWS(grid),
+        nCols, COLUMNS(grid),
+        mask, TOCOL(MAP(grid, predicate)),
+        rowNums, TOCOL(SEQUENCE(nRows, 1, originRow) + SEQUENCE(1, nCols, 0, 0)),
+        colNums, TOCOL(SEQUENCE(nRows, 1, 0, 0) + SEQUENCE(1, nCols, originCol)),
+        vals, TOCOL(grid),
+        hitRows, FILTER(rowNums, mask, NA()),
+        hitCols, FILTER(colNums, mask, NA()),
+        hitVals, FILTER(vals, mask, NA()),
+        addrs, ADDRESS(hitRows, hitCols, 4),
+        result, IF(ISNA(@hitRows), NA(),
+                IF(mode = 1, hitVals,
+                IF(mode = 2, HSTACK(addrs, hitVals),
+                IF(mode = 3, hitRows * theMult + hitCols,
+                   addrs)))),
+        IF(Help?, Help, result)
+)
+);
