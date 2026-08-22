@@ -1,0 +1,53 @@
+tests:
+  - name: letter clusters summed by letter value, 8-way default, largest first
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)']
+    expected: [[2, 3, 11], [1, 2, 4]]
+
+  - name: default value_fn counts cells (aggregate = cluster size)
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))']
+    expected: [[2, 3, 3], [1, 2, 2]]
+
+  - name: diagonal neighbours merge under the 8-way default
+    args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))']
+    expected: [[1, 2, 2]]
+
+  - name: 4-way compass codes split diagonals, ties ordered by cluster id
+    args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))', "=", "=", '={"N";"E";"S";"W"}']
+    expected: [[1, 1, 1], [2, 1, 1]]
+
+  - name: 4-way arrow glyphs via DIRDELTA
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)', "=", '={"↑";"→";"↓";"←"}']
+    expected: [[2, 3, 11], [1, 2, 4]]
+
+  - name: 4-way packed deltas via _dirOrthog literal
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)', "=", '={-100000;1;100000;-1}']
+    expected: [[2, 3, 11], [1, 2, 4]]
+
+  - name: custom agg_fn MAX per cluster
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)', "=MAX"]
+    expected: [[2, 3, 5], [1, 2, 3]]
+
+  - name: numeric grid, islands of values above a threshold
+    args: ['={9,1,1,8;9,1,1,8;1,1,1,1}', '=LAMBDA(v, v > 5)', '=LAMBDA(v, v)']
+    expected: [[1, 2, 18], [2, 2, 16]]
+
+  - name: no matching cells returns #N/A
+    args: ['={1,2;3,4}', '=LAMBDA(v, v > 100)']
+    expected: -2146826246
+
+  - name: real range input
+    setup:
+      cells:
+        - address: "G5:I7"
+          values:
+            - ["A", 1, 2]
+            - [3, "B", 4]
+            - [5, 6, "C"]
+      names:
+        - { name: "testGrid", refers_to: "G5:I7" }
+    args: ["=testGrid", "=LAMBDA(v, ISTEXT(v))", "=LAMBDA(v, CODE(v) - 64)"]
+    expected: [[1, 3, 6]]
+
+  - name: help text
+    args: []
+    expected_type: array
