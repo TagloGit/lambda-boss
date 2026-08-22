@@ -1,0 +1,60 @@
+tests:
+  - name: basic long-to-wide with headers and keys (defaults)
+    args: ['={1;1;2;2}', '={"Char";"Code";"Char";"Code"}', '={"A";"O.n";"B";"On."}']
+    expected: [["", "Char", "Code"], [1, "A", "O.n"], [2, "B", "On."]]
+
+  - name: keep_keys FALSE drops the key column (UNTILE Section index case)
+    args: ['={1;1;2;2}', '={"Char";"Code";"Char";"Code"}', '={"A";"O.n";"B";"On."}', "=", "=", "=", "=FALSE"]
+    expected: [["Char", "Code"], ["A", "O.n"], ["B", "On."]]
+
+  - name: headers FALSE returns body only
+    args: ['={1;1;2;2}', '={"Char";"Code";"Char";"Code"}', '={"A";"O.n";"B";"On."}', "=", "=FALSE"]
+    expected: [[1, "A", "O.n"], [2, "B", "On."]]
+
+  - name: no headers and no keys returns just the value grid
+    args: ['={1;1;2;2}', '={"Char";"Code";"Char";"Code"}', '={"A";"O.n";"B";"On."}', "=", "=FALSE", "=", "=FALSE"]
+    expected: [["A", "O.n"], ["B", "On."]]
+
+  - name: missing combinations fill with if_empty default blank
+    args: ['={1;2}', '={"X";"Y"}', '={5;6}']
+    expected: [["", "X", "Y"], [1, 5, ""], [2, "", 6]]
+
+  - name: custom if_empty fill
+    args: ['={1;2}', '={"X";"Y"}', '={5;6}', "=", "=FALSE", "=0"]
+    expected: [[1, 5, 0], [2, 0, 6]]
+
+  - name: first-appearance order is preserved for keys and labels (not sorted)
+    args: ['={"z";"z";"a"}', '={"q";"p";"p"}', '={1;2;3}', "=", "=FALSE"]
+    expected: [["z", 1, 2], ["a", "", 3]]
+
+  - name: duplicates aggregated with fn SUM
+    args: ['={1;1;1}', '={"a";"a";"b"}', '={1;2;3}', "=SUM", "=FALSE"]
+    expected: [[1, 3, 3]]
+
+  - name: duplicates aggregated with a LAMBDA fn
+    args: ['={1;1;1}', '={"a";"a";"b"}', '={1;2;3}', "=LAMBDA(v, MAX(v) - MIN(v))", "=FALSE"]
+    expected: [[1, 1, 0]]
+
+  - name: duplicates without fn are joined as text
+    args: ['={1;1;1}', '={"a";"a";"b"}', '={"x";"y";"z"}', "=", "=FALSE"]
+    expected: [[1, "x, y", "z"]]
+
+  - name: multi-column keys pivot on the compound key
+    args: ['={"x","p";"x","q";"x","p"}', '={"a";"b";"a"}', '={1;2;3}', "=SUM", "=FALSE"]
+    expected: [["x", "p", 4, ""], ["x", "q", "", 2]]
+
+  - name: multi-column keys header has a blank corner per key column
+    args: ['={"x","p";"x","q"}', '={"a";"b"}', '={1;2}']
+    expected: [["", "", "a", "b"], ["x", "p", 1, ""], ["x", "q", "", 2]]
+
+  - name: row-shaped 1-D inputs are treated as columns
+    args: ['={1,2}', '={"a","b"}', '={10,20}', "=", "=FALSE"]
+    expected: [[1, 10, ""], [2, "", 20]]
+
+  - name: single key single label
+    args: ['={"k"}', '={"c"}', '={"v"}']
+    expected: [["", "c"], ["k", "v"]]
+
+  - name: help text
+    args: []
+    expected_type: array

@@ -1,0 +1,66 @@
+/*  FUNCTION NAME:      PIVOT
+    DESCRIPTION:*//**Reshapes a tidy long-format (keys, labels, values) table into a wide crosstab - the inverse of UNPIVOT. Text-safe, no grand totals, first-appearance ordering.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-22  Claude      Initial version
+*/
+PIVOT = LAMBDA(
+//  Parameter Declarations
+    [keys],
+    [labels],
+    [values],
+    [fn],
+    [headers],
+    [if_empty],
+    [keep_keys],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →PIVOT(keys, labels, values, [fn], [headers], [if_empty], [keep_keys])¶" &
+                "DESCRIPTION:   →Reshapes a tidy long-format table into a wide crosstab: unique keys down (first-appearance order), unique labels across, values at the intersections. The inverse of UNPIVOT. Unlike native PIVOTBY it is text-safe by default, adds no grand totals, and preserves input order rather than sorting.¶" &
+                "VERSION:       →Aug 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   keys           →(Required) Row keys: a 1-D array, or an H x K block for compound keys (mirrors UNPIVOT's multi-key output). A row-shaped 1-D input is treated as a column.¶" &
+                "   labels         →(Required) 1-D array of column labels, one per row of keys.¶" &
+                "   values         →(Required) 1-D array of values (any type, text included), one per row of keys.¶" &
+                "   fn             →(Optional) Aggregator for duplicate (key, label) pairs — a built-in by name (SUM, MAX, ...) or a LAMBDA over the column of matching values; must return a scalar. Omitted: a single value is placed as-is and unexpected duplicates are joined as text with "", "".¶" &
+                "   headers        →(Optional) TRUE [default] prepends the label row (and a blank corner above the key column(s)); FALSE returns the body only.¶" &
+                "   if_empty       →(Optional) Fill for (key, label) combinations with no value. Default """".¶" &
+                "   keep_keys      →(Optional) TRUE [default] includes the key column(s) on the left; FALSE returns just the pivoted value columns — handy when the key is an artificial index such as UNTILE's Section number.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=PIVOT({1;1;2;2}, {""Char"";""Code"";""Char"";""Code""}, {""A"";""O.n"";""B"";""On.""})¶" &
+                "Result         →{"""",""Char"",""Code"";1,""A"",""O.n"";2,""B"",""On.""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(keys),
+        hasFn, NOT(ISOMITTED(fn)),
+        hdr?, IF(ISOMITTED(headers), TRUE, headers),
+        empty, IF(ISOMITTED(if_empty), "", if_empty),
+        keep?, IF(ISOMITTED(keep_keys), TRUE, keep_keys),
+    //  Procedure
+        keyBlock, IF(AND(ROWS(keys) = 1, COLUMNS(keys) > 1), TRANSPOSE(keys), keys),
+        labelsC, TOCOL(labels),
+        valsC, TOCOL(values),
+        nk, COLUMNS(keyBlock),
+        comp, BYROW(keyBlock, LAMBDA(kr, TEXTJOIN(CHAR(30), FALSE, kr))),
+        uKeys, UNIQUE(keyBlock),
+        uComp, UNIQUE(comp),
+        uLabels, UNIQUE(labelsC),
+        kIdx, XMATCH(comp, uComp, 0),
+        lIdx, XMATCH(labelsC, uLabels, 0),
+        nKeys, ROWS(uComp),
+        nLabels, ROWS(uLabels),
+        cell, LAMBDA(ki, lj,
+                LET(hitMask, (kIdx = ki) * (lIdx = lj),
+                    cnt, SUM(hitMask),
+                    IF(cnt = 0, empty,
+                       LET(hits, FILTER(valsC, hitMask),
+                           IF(hasFn, fn(hits),
+                              IF(cnt = 1, @hits, TEXTJOIN(", ", TRUE, hits))))))),
+        body, MAKEARRAY(nKeys, nLabels, cell),
+        labelRow, TOROW(uLabels),
+        withKeys, IF(keep?, HSTACK(uKeys, body), body),
+        topRow, IF(keep?, HSTACK(EXPAND("", 1, nk, ""), labelRow), labelRow),
+        result, IF(hdr?, VSTACK(topRow, withKeys), withKeys),
+        IF(Help?, Help, result)
+)
+);
