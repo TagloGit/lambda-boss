@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns TRUE if at least one item satisfies the predicate, else FALSE.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-28  Claude      Initial version
+                        2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */
 ANY = LAMBDA(
 //  Parameter Declarations
@@ -11,7 +12,7 @@ ANY = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →ANY(items, [predicate])¶" &
                 "DESCRIPTION:   →Returns TRUE if at least one item satisfies the predicate, else FALSE.¶" &
-                "VERSION:       →May 28 2026¶" &
+                "VERSION:       →Aug 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   items          →(Required) Array or range of values to test.¶" &
                 "   predicate      →(Optional) LAMBDA(v) returning TRUE/FALSE or 0/1. If omitted, items are assumed to already be boolean or 0/1 values.¶" &
@@ -24,7 +25,7 @@ ANY = LAMBDA(
         Help?, ISOMITTED(items),
     //  Procedure
         pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
-        mapped, MAP(items, pred),
+        mapped, MAP(items, LAMBDA(x_, pred(x_))),
         result, SUM(--mapped)>0,
         IF(Help?, Help, result)
 )

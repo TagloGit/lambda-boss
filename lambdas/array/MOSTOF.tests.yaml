@@ -19,6 +19,14 @@ tests:
     args: ['={"A","B","A"}', "={10,20,40}", "=AVERAGE"]
     expected: [["A", 25], ["B", 20]]
 
+  - name: function closure over a cell reference (eta-wrap regression, #343)
+    setup:
+      cells:
+        - address: "C3"
+          values: 10
+    args: ['={"A";"A";"B"}', '={1;2;4}', "=LAMBDA(col_, SUM(col_)*C3)"]
+    expected: [["B", 40], ["A", 30]]
+
   - name: help text
     args: []
     expected_type: array
