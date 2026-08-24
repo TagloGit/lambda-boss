@@ -90,10 +90,11 @@ public class LambdaFormatTests
         if (Regex.IsMatch(content, @"IF\(Help\?,\s*\w+HELP\(\)"))
             return;
 
-        // Must contain the TEXTSPLIT with → and ¶ delimiters
+        // Must contain the TEXTSPLIT with → and ¶ delimiters. ¦ is the sanctioned
+        // alternate column delimiter for files whose help content needs the → glyph
+        // in prose (e.g. DIRDELTA, GRIDSTRINGS).
         Assert.Matches(@"TEXTSPLIT\(", content);
-        Assert.Contains("\"→\"", content);
-        Assert.Contains("\"¶\"", content);
+        Assert.Matches("\"(→|¦)\",\\s*\"¶\"", content);
     }
 
     [Theory]

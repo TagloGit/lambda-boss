@@ -1,0 +1,40 @@
+tests:
+  - name: 2x2 default gives four forward families in canonical order
+    args: ['={"A","B";"C","D"}']
+    expected: [["AB"], ["CD"], ["C"], ["AD"], ["B"], ["AC"], ["BD"], ["A"], ["BC"], ["D"]]
+
+  - name: single direction left reads rows right-to-left
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}', '="←"']
+    expected: [["CBA"], ["FED"], ["IHG"]]
+
+  - name: single direction up reads columns bottom-up via compass spelling
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}', '="N"']
+    expected: [["GDA"], ["HEB"], ["IFC"]]
+
+  - name: reversed diagonal via up-left arrow
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}', '="↖"']
+    expected: [["G"], ["HD"], ["IEA"], ["FB"], ["C"]]
+
+  - name: reversed anti-diagonal via screen spelling
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}', '="UR"']
+    expected: [["A"], ["DB"], ["GEC"], ["HF"], ["I"]]
+
+  - name: rows only with include_reverse covers both readings
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}', '="→"', "=TRUE"]
+    expected: [["ABC"], ["DEF"], ["GHI"], ["CBA"], ["FED"], ["IHG"]]
+
+  - name: array of direction tokens in mixed spellings
+    args: ['={"A","B";"C","D"}', '={"right","↓"}']
+    expected: [["AB"], ["CD"], ["AC"], ["BD"]]
+
+  - name: default plus include_reverse covers all 8 readings on 2x2
+    args: ['={"A","B";"C","D"}', "=", "=TRUE"]
+    expected: [["CA"], ["DB"], ["A"], ["CB"], ["D"], ["AB"], ["CD"], ["C"], ["AD"], ["B"], ["AC"], ["BD"], ["A"], ["BC"], ["D"], ["BA"], ["DC"], ["C"], ["DA"], ["B"]]
+
+  - name: duplicate selection dedupes
+    args: ['={"A","B";"C","D"}', '={"→","←"}', "=TRUE"]
+    expected: [["AB"], ["CD"], ["BA"], ["DC"]]
+
+  - name: help text
+    args: []
+    expected_type: array

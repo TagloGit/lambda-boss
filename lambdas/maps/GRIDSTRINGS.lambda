@@ -1,0 +1,50 @@
+/*  FUNCTION NAME:      GRIDSTRINGS
+    DESCRIPTION:*//**Returns every scan line through a grid as a string - rows, columns, diagonals, anti-diagonals, in any of the 8 reading directions - stacked as one column.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-24  Claude      Initial version
+*/
+GRIDSTRINGS = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [directions],
+    [include_reverse],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      ¦GRIDSTRINGS(grid, [directions], [include_reverse])¶" &
+                "DESCRIPTION:   ¦Returns one string per scan line through the grid, stacked as a single column. Feed the result to CHARQ or regex helpers to finish word-search-style problems in one formula, e.g. =SUM(CHARQ(GRIDSTRINGS(mp,,TRUE), word)).¶" &
+                "VERSION:       ¦Aug 24 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   grid           ¦(Required) 2D array or range of single characters (or short strings). A 100x100 grid with all 8 directions yields ~1200 strings - cheap for Excel, but sizeable.¶" &
+                "   directions     ¦(Optional) Which reading directions to include - scalar or array, in any DIRDELTA spelling (arrow glyphs, compass codes, screen directions, packed deltas). Each token is a reading direction: → = rows left-to-right, ← = rows right-to-left, ↓ = columns top-down, ↑ = columns bottom-up, ↘ / ↖ = diagonals, ↙ / ↗ = anti-diagonals. Default: the four forward families → ↓ ↘ ↙. Pass _dirAll for all 8. Output blocks are stacked in canonical clockwise order (↑ ↗ → ↘ ↓ ↙ ← ↖) filtered to the selection.¶" &
+                "   include_reverse¦(Optional) TRUE = also include the opposite of each selected direction (duplicates removed), so the default selection covers all 8 readings. Default FALSE.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=GRIDSTRINGS({""A"",""B"";""C"",""D""})¶" &
+                "Result         ¦{""AB"";""CD"";""C"";""AD"";""B"";""AC"";""BD"";""A"";""BC"";""D""}",
+                "¦", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+    //  Procedure
+        nR, ROWS(grid),
+        nC, COLUMNS(grid),
+        withRev, IF(ISOMITTED(include_reverse), FALSE, include_reverse),
+    //  Normalise tokens to packed deltas; default = the four forward families (right, down-right, down, down-left)
+        chosen, IF(ISOMITTED(directions), {1;100001;100000;99999}, TOCOL(DIRDELTA(directions, 0))),
+        full, IF(withRev, VSTACK(chosen, -chosen), chosen),
+    //  Canonical clockwise order from north (= _dirAll); membership test dedupes the selection
+        canon, {-100000;-99999;1;100001;100000;99999;-1;-100001},
+        picked, FILTER(canon, ISNUMBER(XMATCH(canon, full, 0))),
+        revCat, LAMBDA(line, CONCAT(INDEX(line, SEQUENCE(ROWS(line), 1, ROWS(line), -1)))),
+        block, LAMBDA(delta,
+                 IFS(delta = 1, BYROW(grid, CONCAT),
+                     delta = -1, BYROW(INDEX(grid, SEQUENCE(nR), SEQUENCE(1, nC, nC, -1)), CONCAT),
+                     delta = 100000, TRANSPOSE(BYCOL(grid, CONCAT)),
+                     delta = -100000, TRANSPOSE(BYCOL(INDEX(grid, SEQUENCE(nR, 1, nR, -1), SEQUENCE(1, nC)), CONCAT)),
+                     delta = 100001, BYDIAGONALS(grid),
+                     delta = -100001, BYDIAGONALS(grid, revCat),
+                     delta = 99999, BYDIAGONALS(grid, CONCAT, TRUE),
+                     delta = -99999, BYDIAGONALS(grid, revCat, TRUE))),
+        result, DROP(REDUCE(0, picked, LAMBDA(acc, delta, VSTACK(acc, block(delta)))), 1),
+        IF(Help?, Help, result)
+)
+);

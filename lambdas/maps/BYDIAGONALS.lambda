@@ -1,0 +1,42 @@
+/*  FUNCTION NAME:      BYDIAGONALS
+    DESCRIPTION:*//**Applies a function (default CONCAT) to each ↘ diagonal of a grid (or each ↙ anti-diagonal), returning one result per diagonal as a column.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-24  Claude      Initial version
+*/
+BYDIAGONALS = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [fn],
+    [antidiagonal],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →BYDIAGONALS(grid, [fn], [antidiagonal])¶" &
+                "DESCRIPTION:   →Applies fn (default CONCAT) to each ↘ diagonal of grid (or each ↙ anti-diagonal), returning ROWS+COLUMNS-1 results as a column. The diagonal companion to BYROW/BYCOL.¶" &
+                "VERSION:       →Aug 24 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   grid          →(Required) A 2D array or range (e.g. a letter grid).¶" &
+                "   fn            →(Optional) LAMBDA applied to each diagonal, received as a column read in the arrow direction; must return a scalar (like BYROW). Built-ins can be passed by name (e.g. SUM). Default CONCAT, so the default output is a column of diagonal strings.¶" &
+                "   antidiagonal  →(Optional) FALSE/omitted = ↘ diagonals, listed from the bottom-left corner to the top-right corner, each read top-left to bottom-right. TRUE = ↙ anti-diagonals, listed from the top-left corner to the bottom-right corner, each read top-right to bottom-left.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=BYDIAGONALS({""A"",""B"";""C"",""D""})¶" &
+                "Result         →{""C"";""AD"";""B""}",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+    //  Procedure
+        nR, ROWS(grid),
+        nC, COLUMNS(grid),
+        op, IF(ISOMITTED(fn), CONCAT, fn),
+        anti, IF(ISOMITTED(antidiagonal), FALSE, antidiagonal),
+    //  Diagonal k of nR+nC-1: down-right family satisfies col-row = k-nR (k=1 at bottom-left);
+    //  anti family satisfies row+col = k+1 (k=1 at top-left), read in the ↙ direction (row ascending)
+        result, MAKEARRAY(nR + nC - 1, 1, LAMBDA(k, unused_,
+                    LET(startRow, IF(anti, MAX(1, k + 1 - nC), MAX(1, nR - k + 1)),
+                        endRow, IF(anti, MIN(nR, k), MIN(nR, nR + nC - k)),
+                        rowsV, SEQUENCE(endRow - startRow + 1, 1, startRow),
+                        colsV, IF(anti, k + 1 - rowsV, rowsV + k - nR),
+                        op(INDEX(grid, rowsV, colsV))))),
+        IF(Help?, Help, result)
+)
+);
