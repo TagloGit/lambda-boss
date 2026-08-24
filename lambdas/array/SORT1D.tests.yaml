@@ -1,0 +1,36 @@
+tests:
+  - name: row of text sorts ascending and stays a row
+    args: ['={"C","A","B"}']
+    expected: [["A", "B", "C"]]
+
+  - name: column of text sorts ascending and stays a column
+    args: ['={"C";"A";"B"}']
+    expected: [["A"], ["B"], ["C"]]
+
+  - name: row descending
+    args: ["={5,3,9}", "=TRUE"]
+    expected: [[9, 5, 3]]
+
+  - name: column descending
+    args: ["={5;3;9}", "=TRUE"]
+    expected: [[9], [5], [3]]
+
+  - name: explicit descending FALSE sorts ascending
+    args: ["={2,1,3}", "=FALSE"]
+    expected: [[1, 2, 3]]
+
+  - name: 2D grid flattens to one sorted column
+    args: ["={4,1;3,2}"]
+    expected: [[1], [2], [3], [4]]
+
+  - name: 2D grid descending
+    args: ["={4,1;3,2}", "=TRUE"]
+    expected: [[4], [3], [2], [1]]
+
+  - name: single scalar value passes through
+    args: ["=42"]
+    expected: 42
+
+  - name: help text
+    args: []
+    expected_type: array

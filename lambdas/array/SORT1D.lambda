@@ -1,0 +1,32 @@
+/*  FUNCTION NAME:      SORT1D
+    DESCRIPTION:*//**Sorts a 1D array, auto-orienting: a row stays a row, a column stays a column, a 2D grid flattens to one sorted column.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-24  Claude      Initial version
+*/
+SORT1D = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [descending],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →SORT1D(array, [descending])¶" &
+                "DESCRIPTION:   →Sorts a 1D array, auto-orienting by shape: a row returns a sorted row, a column a sorted column, and a 2D grid flattens (row by row) into a single sorted column.¶" &
+                "VERSION:       →Aug 24 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array         →(Required) A 1D row, 1D column, or 2D array. No by_col flag needed - orientation is detected from the shape, so one formula serves both row and column slices.¶" &
+                "   descending    →(Optional) FALSE/omitted = ascending; TRUE = descending.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CONCAT(SORT1D({""C"",""A"",""B""}))¶" &
+                "Result         →ABC (a row in returns a row out)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        order, IF(ISOMITTED(descending), 1, IF(descending, -1, 1)),
+        result, IF(ROWS(array) = 1, SORT(array, 1, order, TRUE),
+                   IF(COLUMNS(array) = 1, SORT(array, 1, order),
+                      SORT(TOCOL(array), 1, order))),
+        IF(Help?, Help, result)
+)
+);

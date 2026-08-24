@@ -1,0 +1,36 @@
+tests:
+  - name: 3x3 letter grid default CONCAT gives diagonal strings BL to TR
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}']
+    expected: [["G"], ["DH"], ["AEI"], ["BF"], ["C"]]
+
+  - name: 3x3 anti-diagonals listed TL to BR read top-right to bottom-left
+    args: ['={"A","B","C";"D","E","F";"G","H","I"}', "=", "=TRUE"]
+    expected: [["A"], ["BD"], ["CEG"], ["FH"], ["I"]]
+
+  - name: numeric grid with SUM passed by name
+    args: ["=SEQUENCE(3,3)", "=SUM"]
+    expected: [[7], [12], [15], [8], [3]]
+
+  - name: custom lambda counts diagonal length
+    args: ["=SEQUENCE(3,3)", "=LAMBDA(diag, ROWS(diag))"]
+    expected: [[1], [2], [3], [2], [1]]
+
+  - name: non-square 2x3 grid
+    args: ['={"A","B","C";"D","E","F"}']
+    expected: [["D"], ["AE"], ["BF"], ["C"]]
+
+  - name: non-square 2x3 grid anti-diagonals
+    args: ['={"A","B","C";"D","E","F"}', "=", "=TRUE"]
+    expected: [["A"], ["BD"], ["CE"], ["F"]]
+
+  - name: single row grid gives one cell per diagonal
+    args: ['={"A","B","C"}']
+    expected: [["A"], ["B"], ["C"]]
+
+  - name: single column grid gives one cell per diagonal
+    args: ['={"A";"B";"C"}']
+    expected: [["C"], ["B"], ["A"]]
+
+  - name: help text
+    args: []
+    expected_type: array
