@@ -42,8 +42,8 @@ GRIDSTRINGS = LAMBDA(
                      delta = -100000, TRANSPOSE(BYCOL(INDEX(grid, SEQUENCE(nR, 1, nR, -1), SEQUENCE(1, nC)), CONCAT)),
                      delta = 100001, BYDIAGONALS(grid),
                      delta = -100001, BYDIAGONALS(grid, revCat),
-                     delta = 99999, BYDIAGONALS(grid, CONCAT, TRUE),
-                     delta = -99999, BYDIAGONALS(grid, revCat, TRUE))),
+                     delta = 99999, BYDIAGONALS(grid, CONCAT, 1),
+                     delta = -99999, BYDIAGONALS(grid, revCat, 1))),
         result, DROP(REDUCE(0, picked, LAMBDA(acc, delta, VSTACK(acc, block(delta)))), 1),
         IF(Help?, Help, result)
 )
