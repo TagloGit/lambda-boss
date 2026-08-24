@@ -47,6 +47,19 @@ tests:
     args: ['={"A";"B";"C"}']
     expected: [["C"], ["B"], ["A"]]
 
+  - name: ADDRESSES composition yields diagonal cell addresses from a real range
+    setup:
+      cells:
+        - address: "G3:I5"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "testGrid", refers_to: "G3:I5" }
+    args: ["=ADDRESSES(testGrid)", '=LAMBDA(diag, TEXTJOIN(",", , diag))']
+    expected: [["G5"], ["G4,H5"], ["G3,H4,I5"], ["H3,I4"], ["I3"]]
+
   - name: help text
     args: []
     expected_type: array
