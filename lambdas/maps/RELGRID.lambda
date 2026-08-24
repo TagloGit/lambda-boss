@@ -1,0 +1,58 @@
+/*  FUNCTION NAME:      RELGRID
+    DESCRIPTION:*//**Returns an array the same shape as grid where each cell holds a chosen geometric measure relative to an anchor cell (row/col deltas, diagonals, distances, quadrants).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-24  Claude      Initial version (#350)
+*/
+RELGRID = LAMBDA(
+//  Parameter Declarations
+    [grid],
+    [anchor],
+    [measure],
+    [origin],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →RELGRID(grid, anchor, [measure], [origin])¶" &
+                "DESCRIPTION:   →Returns an array the same shape as grid where each cell holds a chosen geometric measure relative to an anchor cell (row/col deltas, diagonals, distances, quadrants).¶" &
+                "VERSION:       →Aug 24 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   grid           →(Required) Range or array defining the shape; values are ignored. Sign convention: +drow is down, +dcol is right.¶" &
+                "   anchor         →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. The cell all measures are relative to; anchor cell = 0 for measures 0-6.¶" &
+                "   measure        →(Optional) (0) drow [default], (1) dcol, (2) drow+dcol - constant along up-right anti-diagonals, (3) drow-dcol - constant along down-right diagonals, (4) Manhattan distance, (5) Chebyshev distance, (6) Euclidean distance, (7) quadrant id from the row/col axes through anchor - clockwise from north: 1 NE, 2 SE, 3 SW, 4 NW, 0 on an axis, (8) quadrant id from the diagonal axes through anchor - clockwise from north: 1 N, 2 E, 3 S, 4 W, 0 on a diagonal.¶" &
+                "   origin         →(Optional) Top-left anchor frame as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position, so anchor is read in that frame. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SUM(FILTER(TOCOL(mp), TOCOL(RELGRID(mp, ""E5"", 4)) <= 3))¶" &
+                "Result         →Sum of mp values within Manhattan distance 3 of E5 (a diamond)",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(grid),
+    //  Procedure
+        safeMult, 16385,
+        met, IF(ISOMITTED(measure), 0, N(measure)),
+        baseRow, IFERROR(MIN(ROW(grid)), 1),
+        baseCol, IFERROR(MIN(COLUMN(grid)), 1),
+        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
+        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
+        pos, CELLTOPOS(anchor, safeMult),
+        ancRow, INT(pos / safeMult),
+        ancCol, MOD(pos, safeMult),
+        dRow, SEQUENCE(ROWS(grid), 1, originRow) - ancRow,
+        dCol, SEQUENCE(1, COLUMNS(grid), originCol) - ancCol,
+        absR, ABS(dRow),
+        absC, ABS(dCol),
+        sumD, dRow + dCol,
+        difD, dRow - dCol,
+        result, IFS(met = 1, dCol + dRow * 0,
+                    met = 2, sumD,
+                    met = 3, difD,
+                    met = 4, absR + absC,
+                    met = 5, IF(absR > absC, absR + absC * 0, absC + absR * 0),
+                    met = 6, SQRT(dRow ^ 2 + dCol ^ 2),
+                    met = 7, IF((dRow = 0) + (dCol = 0) > 0, 0,
+                                IF(dCol > 0, IF(dRow < 0, 1, 2), IF(dRow > 0, 3, 4))),
+                    met = 8, IF((sumD = 0) + (difD = 0) > 0, 0,
+                                IF(difD < 0, IF(sumD < 0, 1, 2), IF(sumD > 0, 3, 4))),
+                    TRUE, dRow + dCol * 0),
+        IF(Help?, Help, result)
+)
+);

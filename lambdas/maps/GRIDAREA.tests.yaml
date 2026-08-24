@@ -85,6 +85,46 @@ tests:
     args: ["=SEQUENCE(10,10)", "M2", "=3", "=3", "=M2:P5"]
     expected: [[1, 2], [11, 12]]
 
+  - name: overflow 0 explicit matches default clip
+    args: ["=SEQUENCE(10,10)", "A1", "=3", "=3", "=", "=0"]
+    expected: [[1, 2], [11, 12]]
+
+  - name: pad mode at top-left corner pads with blank
+    args: ["=SEQUENCE(10,10)", "A1", "=3", "=3", "=", "=1"]
+    expected: [["", "", ""], ["", 1, 2], ["", 11, 12]]
+
+  - name: pad mode interior matches clip
+    args: ["=SEQUENCE(10,10)", "E5", "=3", "=3", "=", "=1"]
+    expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
+
+  - name: pad mode 5x5 around B2 - issue example, centre at (3,3)
+    args: ["=SEQUENCE(9,9)", "B2", "=5", "=5", "=", "=1"]
+    expected: [["", "", "", "", ""], ["", 1, 2, 3, 4], ["", 10, 11, 12, 13], ["", 19, 20, 21, 22], ["", 28, 29, 30, 31]]
+
+  - name: pad mode bottom-right corner pads right and below
+    args: ["=SEQUENCE(10,10)", "J10", "=3", "=3", "=", "=1"]
+    expected: [[89, 90, ""], [99, 100, ""], ["", "", ""]]
+
+  - name: pad mode custom fill value
+    args: ["=SEQUENCE(10,10)", "A1", "=3", "=3", "=", "=1", "=0"]
+    expected: [[0, 0, 0], [0, 1, 2], [0, 11, 12]]
+
+  - name: pad mode even window 4x4 centres at (2,2)
+    args: ["=SEQUENCE(10,10)", "E5", "=4", "=4", "=", "=1"]
+    expected: [[34, 35, 36, 37], [44, 45, 46, 47], [54, 55, 56, 57], [64, 65, 66, 67]]
+
+  - name: pad mode with origin anchor at M2
+    args: ["=SEQUENCE(10,10)", "M2", "=3", "=3", "=M2", "=1"]
+    expected: [["", "", ""], ["", 1, 2], ["", 11, 12]]
+
+  - name: error mode interior window returns normally
+    args: ["=SEQUENCE(10,10)", "E5", "=3", "=3", "=", "=2"]
+    expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
+
+  - name: error mode at edge returns NA
+    args: ["=SEQUENCE(10,10)", "A1", "=3", "=3", "=", "=2"]
+    expected: -2146826246
+
   - name: help text
     args: []
     expected_type: array

@@ -1,11 +1,12 @@
 /*  FUNCTION NAME:      GRIDAREA
-    DESCRIPTION:*//**Extracts a rectangular neighborhood from grid around centerCell, clamped to the grid's bounds.*/
+    DESCRIPTION:*//**Extracts a rectangular neighborhood from grid around centerCell; overflow modes clip to the grid's bounds [default], pad to a guaranteed shape, or error.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-04-17  Claude      Initial version
                         2026-04-17  Claude      Swap grid/centerCell order; rename center to centerCell
                         2026-05-14  Claude      centerCell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
                         2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory grid can be anchored to a worksheet position — matches SUBGRID/GRIDLOOKUP convention
+                        2026-08-24  Claude      Add overflow modes — (0) clip [default], (1) pad to guaranteed rows x cols with centerCell dead-centre, (2) error — and fill value for pad mode (#349)
 */
 GRIDAREA = LAMBDA(
 //  Parameter Declarations
@@ -14,20 +15,24 @@ GRIDAREA = LAMBDA(
     [rows],
     [cols],
     [origin],
+    [overflow],
+    [fill],
 //  Help
     LET(Help, TEXTSPLIT(
-                "FUNCTION:      →GRIDAREA(grid, centerCell, [rows], [cols], [origin])¶" &
-                "DESCRIPTION:   →Extracts a rectangular neighborhood from grid around centerCell, clamped to the grid's bounds.¶" &
-                "VERSION:       →Jul 01 2026¶" &
+                "FUNCTION:      →GRIDAREA(grid, centerCell, [rows], [cols], [origin], [overflow], [fill])¶" &
+                "DESCRIPTION:   →Extracts a rectangular neighborhood from grid around centerCell; overflow modes clip to the grid's bounds [default], pad to a guaranteed shape, or error.¶" &
+                "VERSION:       →Aug 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) The full grid range to extract from.¶" &
                 "   centerCell     →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Position within grid determines the window's center.¶" &
                 "   rows           →(Optional) Height of the extraction window. Default 3.¶" &
                 "   cols           →(Optional) Width of the extraction window. Default = rows (square).¶" &
                 "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position, so centerCell is read in that frame. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
+                "   overflow       →(Optional) Edge behaviour when the window extends past the grid: (0) clip [default] — shrink the window to the grid's bounds, (1) pad — always return rows x cols with centerCell dead-centre at position (ceil(rows/2), ceil(cols/2)), out-of-grid cells set to fill, (2) error — returns NA() if the window exceeds the grid.¶" &
+                "   fill           →(Optional) Value for out-of-grid cells in pad mode. Default blank """".¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=GRIDAREA(A1:I9, ""E5"", 3, 3)¶" &
-                "Result         →3x3 array centered on E5, clamped to A1:I9",
+                "Formula        →=GRIDAREA(A1:I9, ""B2"", 5, 5, , 1)¶" &
+                "Result         →5x5 array with B2's value at (3,3); top row and left column are """"",
                 "→", "¶"
                 ),
     //  Check inputs
@@ -36,6 +41,8 @@ GRIDAREA = LAMBDA(
         safeMult, 16385,
         winR, IF(ISOMITTED(rows), 3, rows),
         winC, IF(ISOMITTED(cols), winR, cols),
+        ovf, IF(ISOMITTED(overflow), 0, N(overflow)),
+        fillVal, IF(ISOMITTED(fill), "", fill),
         hr, INT(winR/2),
         hc, INT(winC/2),
         baseRow, IFERROR(MIN(ROW(grid)), 1),
@@ -44,14 +51,30 @@ GRIDAREA = LAMBDA(
         originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
         endRow, originRow + ROWS(grid) - 1,
         endCol, originCol + COLUMNS(grid) - 1,
+        nRows, ROWS(grid),
+        nCols, COLUMNS(grid),
         pos, CELLTOPOS(centerCell, safeMult),
         ctrRow, INT(pos / safeMult),
         ctrCol, MOD(pos, safeMult),
+    //  Clip window (mode 0): shrink to the grid's bounds
         topRow, MAX(originRow, ctrRow - hr),
         botRow, MIN(endRow, ctrRow + hr),
         leftCol, MAX(originCol, ctrCol - hc),
         rightCol, MIN(endCol, ctrCol + hc),
-        result, INDEX(grid, SEQUENCE(botRow - topRow + 1, 1, topRow - originRow + 1), SEQUENCE(1, rightCol - leftCol + 1, leftCol - originCol + 1)),
+        clipResult, INDEX(grid, SEQUENCE(botRow - topRow + 1, 1, topRow - originRow + 1), SEQUENCE(1, rightCol - leftCol + 1, leftCol - originCol + 1)),
+    //  Fixed window (modes 1 and 2): exactly winR x winC with the centre at (ceil(winR/2), ceil(winC/2))
+        padTop, ctrRow - ROUNDUP(winR / 2, 0) + 1,
+        padLeft, ctrCol - ROUNDUP(winC / 2, 0) + 1,
+        rRel, SEQUENCE(winR, 1, padTop - originRow + 1),
+        cRel, SEQUENCE(1, winC, padLeft - originCol + 1),
+        inRange, (rRel >= 1) * (rRel <= nRows) * (cRel >= 1) * (cRel <= nCols),
+        clampRow, IF(rRel < 1, 1, IF(rRel > nRows, nRows, rRel)),
+        clampCol, IF(cRel < 1, 1, IF(cRel > nCols, nCols, cRel)),
+        padResult, IF(inRange, INDEX(grid, clampRow, clampCol), fillVal),
+        exceeds, OR(rRel < 1, rRel > nRows, cRel < 1, cRel > nCols),
+        result, IFS(ovf = 1, padResult,
+                    ovf = 2, IF(exceeds, NA(), padResult),
+                    TRUE, clipResult),
         IF(Help?, Help, result)
 )
 );
