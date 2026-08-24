@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns the cells of a grid that satisfy a predicate, as a column of addresses, values, address/value pairs, or encoded positions in reading order.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-22  Claude      Initial version
+                        2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */
 GRIDWHERE = LAMBDA(
 //  Parameter Declarations
@@ -13,7 +14,7 @@ GRIDWHERE = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →GRIDWHERE(grid, predicate, [return_mode], [origin])¶" &
                 "DESCRIPTION:   →Returns the cells of a grid that satisfy a predicate, as a single column in reading order (row by row, left to right). Replaces the mask-spill + FILTER(TOCOL(ADDRESSES(mask)), TOCOL(mask)) pattern that precedes most Maps-library calls; the output feeds LABELCLUSTERS, DISTFROM, MAZE targets etc. directly. Returns #N/A when no cell matches.¶" &
-                "VERSION:       →Aug 22 2026¶" &
+                "VERSION:       →Aug 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
                 "   predicate      →(Required) LAMBDA(v, ...) returning TRUE/FALSE for each cell value, e.g. LAMBDA(v, NOT(ISNUMBER(v))).¶" &
@@ -35,7 +36,7 @@ GRIDWHERE = LAMBDA(
         originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
         nRows, ROWS(grid),
         nCols, COLUMNS(grid),
-        mask, TOCOL(MAP(grid, predicate)),
+        mask, TOCOL(MAP(grid, LAMBDA(x_, predicate(x_)))),
         rowNums, TOCOL(SEQUENCE(nRows, 1, originRow) + SEQUENCE(1, nCols, 0, 0)),
         colNums, TOCOL(SEQUENCE(nRows, 1, 0, 0) + SEQUENCE(1, nCols, originCol)),
         vals, TOCOL(grid),

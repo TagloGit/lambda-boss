@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Seedless reduce: folds fn over the list starting from its first element. The identity-less reduction (gcd, max, merge, join) with no seed to invent.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
+                        2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */
 REDUCE1 = LAMBDA(
 //  Parameter Declarations
@@ -25,7 +26,7 @@ REDUCE1 = LAMBDA(
     //  Procedure
         flat, TOCOL(array),
         n, ROWS(flat),
-        result, IF(n = 1, INDEX(flat, 1, 1), REDUCE(INDEX(flat, 1, 1), DROP(flat, 1), fn)),
+        result, IF(n = 1, INDEX(flat, 1, 1), REDUCE(INDEX(flat, 1, 1), DROP(flat, 1), LAMBDA(acc_, x_, fn(acc_, x_)))),
         IF(Help?, Help, result)
 )
 );

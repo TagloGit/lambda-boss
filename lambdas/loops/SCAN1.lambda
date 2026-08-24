@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Seedless inclusive scan: uses the first element as the seed, so out[1] equals the first element. No identity value to invent.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
+                        2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */
 SCAN1 = LAMBDA(
 //  Parameter Declarations
@@ -26,7 +27,7 @@ SCAN1 = LAMBDA(
         wasRow, AND(ROWS(array) = 1, COLUMNS(array) > 1),
         flat, TOCOL(array),
         col, IF(ROWS(flat) = 1, flat,
-                VSTACK(INDEX(flat, 1, 1), SCAN(INDEX(flat, 1, 1), DROP(flat, 1), fn))),
+                VSTACK(INDEX(flat, 1, 1), SCAN(INDEX(flat, 1, 1), DROP(flat, 1), LAMBDA(acc_, x_, fn(acc_, x_))))),
         result, IF(wasRow, TRANSPOSE(col), col),
         IF(Help?, Help, result)
 )

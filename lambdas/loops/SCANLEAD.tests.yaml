@@ -15,6 +15,14 @@ tests:
     args: ['=7', '={4}', '=LAMBDA(a, v, a + v)']
     expected: 7
 
+  - name: fn closure over a cell reference (eta-wrap regression, #343)
+    setup:
+      cells:
+        - address: "C3"
+          values: 2
+    args: ["=0", "={10;20;30}", "=LAMBDA(a_, v_, a_ + v_*C3)"]
+    expected: [[0], [20], [60]]
+
   - name: help text
     args: []
     expected_type: array

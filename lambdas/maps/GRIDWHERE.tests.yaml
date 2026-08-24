@@ -56,6 +56,17 @@ tests:
     args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))', "=3", "=M10"]
     expected: [[1000013], [1100014]]
 
+  - name: predicate closure over a cell reference (eta-wrap regression, #343)
+    # NOTE: the harness formula lives at A1, where the #343 re-anchoring is the
+    # identity - this case cannot catch a revert to a direct callback pass. It
+    # guards the wrapped call's arity and semantics; real verification was COM-based.
+    setup:
+      cells:
+        - address: "C3"
+          values: "E"
+    args: ['={"E",1;2,"E"}', "=LAMBDA(v, v=C3)"]
+    expected: [["A1"], ["B2"]]
+
   - name: help text
     args: []
     expected_type: array

@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Groups the cells of a grid that satisfy a predicate into connected clusters and aggregates a value per cluster, returning a {clusterId, cellCount, aggregate} table sorted largest aggregate first.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-22  Claude      Initial version
+                        2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */
 CLUSTERAGG = LAMBDA(
 //  Parameter Declarations
@@ -14,7 +15,7 @@ CLUSTERAGG = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →CLUSTERAGG(grid, predicate, [value_fn], [agg_fn], [deltas])¶" &
                 "DESCRIPTION:   →Groups the cells of a grid that satisfy a predicate into connected clusters (via LABELCLUSTERS), maps each cell to a number, and aggregates per cluster. Returns a three-column {clusterId, cellCount, aggregate} table sorted by aggregate descending (ties by clusterId ascending), so the answer to ""largest / highest-scoring group"" is always row 1. Cluster ids are numbered by first appearance in reading order. Returns #N/A when no cell matches.¶" &
-                "VERSION:       →Aug 22 2026¶" &
+                "VERSION:       →Aug 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
                 "   predicate      →(Required) LAMBDA(v, ...) returning TRUE for the cells that belong in clusters, e.g. LAMBDA(v, NOT(ISNUMBER(v))).¶" &
@@ -33,12 +34,12 @@ CLUSTERAGG = LAMBDA(
         theMult, 100000,
         nRows, ROWS(grid),
         nCols, COLUMNS(grid),
-        mask, TOCOL(MAP(grid, predicate)),
+        mask, TOCOL(MAP(grid, LAMBDA(x_, predicate(x_)))),
         posGrid, SEQUENCE(nRows) * theMult + SEQUENCE(1, nCols),
         hitPos, FILTER(TOCOL(posGrid), mask, NA()),
         hitVals, FILTER(TOCOL(grid), mask, NA()),
         n, ROWS(hitPos),
-        weights, IF(ISOMITTED(value_fn), SEQUENCE(n, 1, 1, 0), MAP(hitVals, value_fn)),
+        weights, IF(ISOMITTED(value_fn), SEQUENCE(n, 1, 1, 0), MAP(hitVals, LAMBDA(x_, value_fn(x_)))),
         dts, IF(ISOMITTED(deltas), {-100000;-99999;1;100001;100000;99999;-1;-100001}, DIRDELTA(deltas)),
         labels, LABELCLUSTERS(hitPos, dts),
         ids, UNIQUE(labels),

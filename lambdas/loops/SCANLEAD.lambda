@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Exclusive (lead) scan: emits the accumulator entering each step. out[1] is seed; out[i] is fn folded over the first i-1 elements. The clean replacement for the PREV(x, FALSE) + SCAN offset trick.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
+                        2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */
 SCANLEAD = LAMBDA(
 //  Parameter Declarations
@@ -12,7 +13,7 @@ SCANLEAD = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →SCANLEAD(seed, array, fn)¶" &
                 "DESCRIPTION:   →Exclusive (lead) scan: emits the accumulator ENTERING each step, so out[1] = seed and out[i] = fn folded over elements 1..i-1. Unlike SCAN (whose out[1] is fn(seed, x1)), this needs no PREV(x, FALSE) shift to realign when a step depends on the steps before it.¶" &
-                "VERSION:       →Jul 01 2026¶" &
+                "VERSION:       →Aug 24 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   seed           →(Required) Starting accumulator — becomes the first emitted value.¶" &
                 "   array          →(Required) 1-D values to fold over. Vertical or horizontal; the result matches the orientation.¶" &
@@ -27,7 +28,7 @@ SCANLEAD = LAMBDA(
     //  Procedure
         wasRow, AND(ROWS(array) = 1, COLUMNS(array) > 1),
         flat, TOCOL(array),
-        full, SCAN(seed, flat, fn),
+        full, SCAN(seed, flat, LAMBDA(acc_, x_, fn(acc_, x_))),
         col, IF(ROWS(flat) = 1, seed, VSTACK(seed, DROP(full, -1))),
         result, IF(wasRow, TRANSPOSE(col), col),
         IF(Help?, Help, result)

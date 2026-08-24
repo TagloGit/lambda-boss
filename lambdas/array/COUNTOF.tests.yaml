@@ -31,6 +31,14 @@ tests:
     args: ['={2;4;6;7;8}', '=LAMBDA(n, MOD(n,2)=0)']
     expected: 4
 
+  - name: predicate closure over a cell reference (eta-wrap regression, #343)
+    setup:
+      cells:
+        - address: "C3"
+          values: 5
+    args: ['={1,5,5}', "=LAMBDA(v, v=C3)"]
+    expected: 2
+
   - name: help text
     args: []
     expected_type: array
