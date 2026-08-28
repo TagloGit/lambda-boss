@@ -288,9 +288,14 @@ public partial class GatherWindow
     ///     True when any row currently rendered in the bindings list is a
     ///     slice row — including an excluded one, which is still visible and
     ///     still subject to the fixed-position caveat the moment it is
-    ///     re-ticked. Orphan rows live in their own collection and can never
-    ///     be slices (a slice's only path is its anchor, and dropping the
-    ///     anchor drops the slice outright rather than orphaning it).
+    ///     re-ticked. Orphan rows live in their own collection and are
+    ///     deliberately not scanned: they contribute nothing to the LET, so
+    ///     the caveat does not apply to them. They <em>can</em> be slices —
+    ///     unticking a spilling anchor cascades its slice rows out of the
+    ///     bindings list and the tracker records each as orphaned by that
+    ///     anchor — but the state is self-healing: re-ticking the anchor
+    ///     forgets the orphans, returns the slices to the list, and runs
+    ///     this check again.
     /// </summary>
     private static bool HasSliceRow(IEnumerable<GatherRowVm> rows)
     {
