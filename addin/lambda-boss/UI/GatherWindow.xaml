@@ -155,6 +155,7 @@
                                              Margin="0,0,8,0"
                                              VerticalAlignment="Center"
                                              GotFocus="NameTextBox_GotFocus"
+                                             LostFocus="NameTextBox_LostFocus"
                                              PreviewMouseLeftButtonDown="NameTextBox_PreviewMouseLeftButtonDown" />
                                     <TextBlock Grid.Column="4"
                                                Text="{Binding Rhs}"

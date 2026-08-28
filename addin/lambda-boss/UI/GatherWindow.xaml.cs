@@ -23,7 +23,9 @@ namespace LambdaBoss.UI;
 ///     <see cref="RecomputeForNameOnly" /> runs the engine but updates
 ///     each existing VM's <see cref="GatherRowVm.Rhs" /> in place rather
 ///     than rebuilding the row list, so the focused TextBox keeps its
-///     caret position while the user types. Role overrides persist
+///     caret position while the user types — and it is debounced
+///     (<see cref="_previewDebounce" />) so a typing burst costs one
+///     engine run rather than one per character. Role overrides persist
 ///     across rebuilds via <see cref="_roleOverrides" /> and name
 ///     overrides via <see cref="_nameOverrides" />, so the user's
 ///     choices stay in effect through subsequent unrelated toggles.
@@ -40,6 +42,15 @@ public partial class GatherWindow
 
     private const string InvalidNameStatusText =
         "Fix invalid names before saving";
+
+    /// <summary>
+    ///     How long typing has to pause before the LET preview re-renders.
+    ///     Long enough that a normal typing burst produces one engine run
+    ///     instead of one per character, short enough to still read as
+    ///     live feedback when the user stops.
+    /// </summary>
+    private static readonly TimeSpan PreviewDebounceDelay =
+        TimeSpan.FromMilliseconds(300);
 
     // Snapshots of explicitly-excluded rows so they can re-appear in the
     // visible list after a Recompute (which only returns included
@@ -61,6 +72,20 @@ public partial class GatherWindow
     private readonly Dictionary<FormulaRef, string> _nameOverrides = [];
 
     private readonly ObservableCollection<GatherRowVm> _orphans = [];
+
+    // Debounce for the preview re-render behind live name editing. The
+    // Name TextBox binds with UpdateSourceTrigger=PropertyChanged, so the
+    // box itself, the override dictionary and the red-border validation
+    // all still update on every keystroke — but
+    // <see cref="RecomputeForNameOnly" /> re-runs the entire precedent
+    // walk against live Excel COM (a formula read plus a spill probe per
+    // cell, out-of-process), which is far too slow to do per character
+    // and made typing in the rename column visibly lag. The expensive
+    // half now runs once the user pauses. Every read of the recomputed
+    // state flushes first (see <see cref="SaveButton_Click" />,
+    // <see cref="NameTextBox_LostFocus" />) so nothing observes a name
+    // the preview hasn't caught up with.
+    private readonly DebouncedAction _previewDebounce;
 
     // Orphan tracker: precedents that fell out of the active list because
     // their only path ran through a cell the user demoted or excluded.
@@ -96,6 +121,7 @@ public partial class GatherWindow
         InitializeComponent();
         _result = initial;
         _recompute = recompute;
+        _previewDebounce = new DebouncedAction(PreviewDebounceDelay, RecomputeForNameOnly);
 
         WalkHintText.Text = BuildWalkHint(initial);
         SinkAddressText.Text = initial.Sink.A1Address;
@@ -112,6 +138,10 @@ public partial class GatherWindow
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
+        // A name typed within the debounce window hasn't reached the
+        // engine yet — flush before reading _result so Save can never
+        // commit a LET built from stale names.
+        _previewDebounce.Flush();
         SavedFormula = _result.SynthesisedLet;
         DialogResult = true;
         Close();
@@ -122,6 +152,18 @@ public partial class GatherWindow
         SavedFormula = null;
         DialogResult = false;
         Close();
+    }
+
+    /// <summary>
+    ///     Nothing reads the recomputed state after the dialog closes
+    ///     (Save has already flushed; Cancel discards), so drop any
+    ///     pending preview run rather than let the timer tick into a
+    ///     closed window.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        _previewDebounce.Cancel();
+        base.OnClosed(e);
     }
 
     /// <summary>
@@ -198,6 +240,16 @@ public partial class GatherWindow
         if (tb.IsKeyboardFocusWithin) return;
         tb.Focus();
         e.Handled = true;
+    }
+
+    /// <summary>
+    ///     Leaving a name box ends the typing burst, so render the preview
+    ///     now instead of waiting out the rest of the debounce interval —
+    ///     tabbing down the rename column keeps feeling immediate.
+    /// </summary>
+    private void NameTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        _previewDebounce.Flush();
     }
 
     private void BuildRowsFromBindings(IReadOnlyList<BindingRow> bindings)
@@ -376,8 +428,11 @@ public partial class GatherWindow
             // gates the Save button (and lights the row's red border)
             // because committing a LET that differs from the user's
             // typed text would surprise them.
+            // Validation is a pure string check — keep it per-keystroke so
+            // the red border and the Save gate track what's on screen. Only
+            // the engine run is deferred.
             UpdateSaveButtonEnabled(RevalidateNames());
-            RecomputeForNameOnly();
+            _previewDebounce.Trigger();
             return;
         }
 
@@ -470,6 +525,12 @@ public partial class GatherWindow
 
     private void Recompute(FormulaRef? causedBy)
     {
+        // A full recompute supersedes any pending preview-only one: it
+        // reads the same, already-current <see cref="_nameOverrides" />
+        // and rebuilds every row from the fresh result, so the deferred
+        // run would be pure duplicate work. Drop it rather than flush it.
+        _previewDebounce.Cancel();
+
         // Snapshot the active rows BEFORE the recompute. Used by the
         // orphan tracker to detect cells that fell off the active list
         // because of a demote or an exclude — diff'd against the new
