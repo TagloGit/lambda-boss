@@ -1,0 +1,40 @@
+tests:
+  - name: single letter from position E5
+    args: ["=500005"]
+    expected: "E"
+
+  - name: top-left A1
+    args: ["=100001"]
+    expected: "A"
+
+  - name: multi-letter column AB
+    args: ["=1200028"]
+    expected: "AB"
+
+  - name: composed with TOPOS multi-letter
+    args: ['=TOPOS("AB12")']
+    expected: "AB"
+
+  - name: composed with TOPOS last column XFD
+    args: ['=TOPOS("XFD16384")']
+    expected: "XFD"
+
+  - name: custom mult 50
+    args: ["=526", "=50"]
+    expected: "Z"
+
+  - name: custom mult matches TOPOS custom mult
+    args: ['=TOPOS("Z10", 50)', "=50"]
+    expected: "Z"
+
+  - name: vertical array of positions lifts
+    args: ['={100001;500005;1200028}']
+    expected: [["A"], ["E"], ["AB"]]
+
+  - name: horizontal array of positions lifts
+    args: ['={100001,500005,1200028}']
+    expected: [["A", "E", "AB"]]
+
+  - name: help text
+    args: []
+    expected_type: array
