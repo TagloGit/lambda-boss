@@ -237,8 +237,8 @@ public sealed class GatherRowVmTests
             BindingRole.Input,
             "second",
             "INDEX(arr,1,2)",
-            isExpansion: false,
-            canToggleRole: false,
+            isExpansion: true,
+            canToggleRole: true,
             sliceOf: sliceOf,
             straddles: Cell("Sheet1", 1, 2));
 
