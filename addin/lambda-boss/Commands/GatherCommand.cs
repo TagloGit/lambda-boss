@@ -266,8 +266,12 @@ internal static class GatherCommand
                 // A child's own SpillingToRange is null, so the rectangle is
                 // always read from the anchor — one extra dereference, not a
                 // conditional fallback. Measured at ~1.6 ms/op on top of the
-                // anchor's own read (out-of-process); too cheap to memo, since
-                // the walker probes each cell exactly once.
+                // anchor's own read (out-of-process). The walker probes some
+                // cells more than once per walk (once on discovery, once per
+                // precedent occurrence), so it memoises this call for the
+                // duration of a single CellGraphWalker.Walk — see
+                // GetSpillMemo there. Nothing is cached across walks, so a
+                // Recompute after an edit re-reads live geometry.
                 dynamic? rect = anchorRange.SpillingToRange;
                 if (rect == null)
                     return null;

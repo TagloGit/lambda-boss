@@ -277,6 +277,11 @@ public static class GatherEngine
             {
                 if (!p.IsRange) continue;
                 if (excludedRanges != null && excludedRanges.Contains(p)) continue;
+                // Spec 0010: a degenerate single-cell range landing inside a
+                // spill (`A2:A2`) is a scalar in Excel, not a block. It takes
+                // the single-cell slice path below, so it must not promote to
+                // a range input here. Multi-cell ranges over a spill are PR 4.
+                if (p.Start.Equals(p.End) && source.GetSpill(p.Start) != null) continue;
                 if (rangeSet.Add(p))
                     ranges.Add(p);
             }
@@ -301,13 +306,66 @@ public static class GatherEngine
             .Where(w => !w.Ref.Equals(sink) && !coveredByRange.Contains(w.Ref))
             .ToList();
 
+        // Spec 0010 — spill slices. A single-cell reference landing inside
+        // the spill range of a cell that is already a binding becomes its
+        // own binding row holding a named slice of the anchor's array.
+        // Both single-cell cases are one code path: `B1` (a spill child,
+        // which has no formula of its own) and `A1` (a scalar reference to
+        // the spilling anchor, which Excel reads as the top-left value —
+        // the pre-existing silent widening this fixes). `A1#` is excluded:
+        // it IS the anchor's binding, and needs no row of its own.
+        var anchorCells = new HashSet<CellRef>();
+        foreach (var c in nonSink)
+            if (c.HasSpill)
+                anchorCells.Add(c.Ref);
+
+        var slices = new List<SpillSlice>();
+        var slicesByAnchor = new Dictionary<CellRef, List<SpillSlice>>();
+        if (anchorCells.Count > 0)
+        {
+            var sliceKeys = new HashSet<FormulaRef>();
+            // `walked`, not `nonSink` — the sink's own formula gets rewritten
+            // into the LET body, so a slice it references needs a row too.
+            foreach (var cell in walked)
+            foreach (var p in cell.Precedents)
+            {
+                if (p.IsSpilled) continue;
+                if (p.IsRange && !p.Start.Equals(p.End)) continue;
+                if (p.Start.Equals(sink)) continue;
+                if (excludedCells != null && excludedCells.Contains(p.Start)) continue;
+                if (coveredByRange.Contains(p.Start)) continue;
+                var spill = source.GetSpill(p.Start);
+                if (spill == null) continue;
+                // The anchor has to be a binding for there to be an array to
+                // slice. It normally is — the walker redirects every in-spill
+                // precedent to the anchor — but the user may have excluded it,
+                // in which case the reference stays a literal cell address.
+                if (!anchorCells.Contains(spill.Anchor)) continue;
+                var row = p.Start.Row - spill.Anchor.Row + 1;
+                var column = p.Start.Column - spill.Anchor.Column + 1;
+                if (row < 1 || row > spill.Rows || column < 1 || column > spill.Columns)
+                    continue;
+                if (!sliceKeys.Add(p)) continue;
+
+                var slice = new SpillSlice(
+                    p, spill.Anchor, row, column, spill.Rows, spill.Columns,
+                    p.IsRange ? SliceRefShape.Range : SliceRefShape.SingleCell);
+                slices.Add(slice);
+                if (!slicesByAnchor.TryGetValue(spill.Anchor, out var forAnchor))
+                    slicesByAnchor[spill.Anchor] = forAnchor = new List<SpillSlice>();
+                forAnchor.Add(slice);
+            }
+        }
+
         // Names: ranges first (in encounter order), then cells (in topo
-        // order). This keeps inputs grouped at the top of the LET — ranges
-        // are always inputs — which matches the spec's dialog ordering.
+        // order), then slices. This keeps inputs grouped at the top of the
+        // LET — ranges are always inputs — which matches the spec's dialog
+        // ordering. Slices name last because their final fallback is derived
+        // from the anchor's name, which has to be settled first.
         // PR 12: user name overrides are claimed first so auto-derived
         // names suffix around them (<c>x_2</c>) rather than the other way
         // around — an override is the user's authoritative choice.
-        var nameByRef = AssignNames(ranges, nonSink, source, nameOverrides);
+        var nameByRef = AssignNames(ranges, nonSink, slices, source, nameOverrides);
 
         // Build the in-scope set used to classify each cell as input vs
         // step. A cell is a step iff at least one of its precedents has a
@@ -330,9 +388,32 @@ public static class GatherEngine
         var used = new HashSet<string>(nameByRef.Values, StringComparer.OrdinalIgnoreCase);
 
         var stepRows = new List<BindingRow>();
+
+        // Slice rows are emitted immediately after their anchor's own row,
+        // into whichever list that row landed in — so the concatenation of
+        // inputs-then-steps still reads anchor, slices, dependants.
+        void AppendSlices(WalkedCell anchorCell, FormulaRef anchorRowRef, List<BindingRow> target)
+        {
+            if (!anchorCell.HasSpill) return;
+            if (!slicesByAnchor.TryGetValue(anchorCell.Ref, out var forAnchor)) return;
+            var anchorName = nameByRef[anchorRowRef];
+            foreach (var slice in forAnchor)
+                target.Add(new BindingRow(
+                    slice.Ref,
+                    BindingRole.Input,
+                    nameByRef[slice.Ref],
+                    SpillSliceBuilder.Build(
+                        anchorName, slice.SpillRows, slice.SpillColumns,
+                        slice.Row, slice.Row, slice.Column, slice.Column, slice.Shape),
+                    // No formula to bake and nothing to demote to, so the
+                    // role toggle is meaningless on a slice row.
+                    CanToggleRole: false,
+                    SliceOf: anchorRowRef));
+        }
+
         foreach (var cell in nonSink)
         {
-            var cellFormulaRef = new FormulaRef(cell.Ref);
+            var cellFormulaRef = RowRef(cell);
             var name = nameByRef[cellFormulaRef];
             var role = ClassifyRole(cell, nameByRef, excluded, roleOverrides);
             if (role == BindingRole.Input)
@@ -355,6 +436,7 @@ public static class GatherEngine
                 bindings.Add(new BindingRow(
                     cellFormulaRef, BindingRole.Input, name, inputRhs,
                     CanToggleRole: cell.HasSourceFormula));
+                AppendSlices(cell, cellFormulaRef, bindings);
                 continue;
             }
 
@@ -413,6 +495,10 @@ public static class GatherEngine
             if (stepAlias != null && used.Contains(stepAlias))
             {
                 nameByRef[cellFormulaRef] = stepAlias;
+                // The row is gone but its slices aren't — they index into
+                // the alias target, which is an existing binding declared
+                // earlier in the LET.
+                AppendSlices(cell, cellFormulaRef, stepRows);
                 continue;
             }
 
@@ -437,6 +523,7 @@ public static class GatherEngine
             stepRows.Add(new BindingRow(
                 cellFormulaRef, BindingRole.Step, name, stepRhs,
                 CanToggleRole: true));
+            AppendSlices(cell, cellFormulaRef, stepRows);
         }
 
         // Range and cell inputs first, then steps in topo order — matches
@@ -608,6 +695,7 @@ public static class GatherEngine
     private static Dictionary<FormulaRef, string> AssignNames(
         IReadOnlyList<FormulaRef> ranges,
         IReadOnlyList<WalkedCell> nonSink,
+        IReadOnlyList<SpillSlice> slices,
         ICellSource source,
         IReadOnlyDictionary<FormulaRef, string>? nameOverrides)
     {
@@ -637,7 +725,7 @@ public static class GatherEngine
 
             foreach (var cell in nonSink)
             {
-                var fr = new FormulaRef(cell.Ref);
+                var fr = RowRef(cell);
                 if (nameOverrides.TryGetValue(fr, out var overrideName))
                 {
                     var resolved = ResolveCollision(overrideName, used);
@@ -645,6 +733,14 @@ public static class GatherEngine
                     used.Add(resolved);
                 }
             }
+
+            foreach (var slice in slices)
+                if (nameOverrides.TryGetValue(slice.Ref, out var overrideName))
+                {
+                    var resolved = ResolveCollision(overrideName, used);
+                    nameByRef[slice.Ref] = resolved;
+                    used.Add(resolved);
+                }
         }
 
         foreach (var range in ranges)
@@ -661,15 +757,46 @@ public static class GatherEngine
 
         foreach (var cell in nonSink)
         {
-            var fr = new FormulaRef(cell.Ref);
+            var fr = RowRef(cell);
             if (nameByRef.ContainsKey(fr)) continue;
             var baseName = LetNameSanitizer.Sanitize(cell.CellAboveText)
                            ?? LetNameSanitizer.Sanitize(cell.CellLeftText);
             nameByRef[fr] = AssignOne(baseName, used, ref fallbackCounter);
         }
 
+        // Slice rows: the spec 0005 ladder with one new final fallback —
+        // `<anchorName>_<rowMajorIndex>` in place of the generic `step_N`,
+        // so the row reads as "part of <anchor>" and groups visually with
+        // its source. The existing collision suffixing applies on top,
+        // which is what turns a scalar reference to the anchor itself into
+        // `<anchorLabel>_2` (it shares the anchor's cell-above label by
+        // construction).
+        foreach (var slice in slices)
+        {
+            if (nameByRef.ContainsKey(slice.Ref)) continue;
+            var anchorName = nameByRef.TryGetValue(slice.AnchorRowRef, out var an) ? an : null;
+            var cellRef = slice.Ref.Start;
+            var baseName = LetNameSanitizer.Sanitize(source.GetCellAboveText(cellRef))
+                           ?? LetNameSanitizer.Sanitize(source.GetCellLeftText(cellRef))
+                           ?? (anchorName == null ? null : $"{anchorName}_{slice.RowMajorIndex}");
+            nameByRef[slice.Ref] = AssignOne(baseName, used, ref fallbackCounter);
+        }
+
         return nameByRef;
     }
+
+    /// <summary>
+    ///     The <see cref="FormulaRef" /> that identifies a walked cell's own
+    ///     binding row. A spilling anchor's binding <em>is</em> the array, so
+    ///     its row is keyed on the spilled ref (<c>A1#</c>) — which leaves
+    ///     the non-spilled key (<c>A1</c>) free to identify the slice row for
+    ///     a scalar reference to the same cell. Spec 0010's "the lookup
+    ///     dictionary carries both keys" is exactly this split.
+    /// </summary>
+    private static FormulaRef RowRef(WalkedCell cell) =>
+        cell.HasSpill
+            ? new FormulaRef(cell.Ref, IsSpilled: true)
+            : new FormulaRef(cell.Ref);
 
     private static string AssignOne(string? baseName, HashSet<string> used, ref int fallbackCounter)
     {
@@ -731,8 +858,13 @@ public static class GatherEngine
         // source so this path is defensive; an out-of-source promote
         // silently falls through to natural classification (Input,
         // because Formula==null).
-        var fr = new FormulaRef(cell.Ref);
-        if (roleOverrides != null && roleOverrides.TryGetValue(fr, out var overrideRole))
+        // A spilling anchor's row is keyed on the spilled ref, but accept an
+        // override keyed on the bare cell too — the two identify the same
+        // row and callers predating spec 0010 pass the bare form.
+        var fr = RowRef(cell);
+        if (roleOverrides != null
+            && (roleOverrides.TryGetValue(fr, out var overrideRole)
+                || roleOverrides.TryGetValue(new FormulaRef(cell.Ref), out overrideRole)))
         {
             if (overrideRole == BindingRole.Step && cell.Formula != null)
                 return BindingRole.Step;
@@ -766,6 +898,35 @@ public static class GatherEngine
                 return BindingRole.Step;
         }
         return BindingRole.Input;
+    }
+
+    /// <summary>
+    ///     One reference that landed inside a spill and will become its own
+    ///     binding row (spec 0010, <em>Slices are binding rows</em>).
+    ///     <see cref="Ref" /> is the reference exactly as it was written —
+    ///     the child cell, the anchor cell for a scalar reference to it, or
+    ///     a degenerate one-cell range — and doubles as the row's identity
+    ///     and its rewrite-lookup key. <see cref="Row" />/<see cref="Column" />
+    ///     are 1-based relative to the anchor.
+    /// </summary>
+    private sealed record SpillSlice(
+        FormulaRef Ref,
+        CellRef Anchor,
+        int Row,
+        int Column,
+        int SpillRows,
+        int SpillColumns,
+        SliceRefShape Shape)
+    {
+        /// <summary>The anchor's own binding-row key — always the spilled form.</summary>
+        public FormulaRef AnchorRowRef => new(Anchor, IsSpilled: true);
+
+        /// <summary>
+        ///     The slice's linear position inside the spill in row-major
+        ///     order (<c>A1</c>→1, <c>B1</c>→2 for a 1×2 spill), used by the
+        ///     anchor-derived naming fallback.
+        /// </summary>
+        public int RowMajorIndex => (Row - 1) * SpillColumns + Column;
     }
 
     private static string StripLeadingEquals(string formula)

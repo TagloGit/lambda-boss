@@ -106,9 +106,11 @@ depends on it.*
 
 ### 2. `SpillSliceBuilder` — pure generator, not yet wired
 
-- Implement the ladder exactly as specced: single-cell rule **first**, then
+- Implement the ladder exactly as specced: ref-shape test first (a `SpillRef`
+  is the whole array whatever its size), then the single-cell rule, then
   whole-array, then per-axis band/block selectors composed into at most one
-  `DROP` and one `TAKE`.
+  `DROP` and one `TAKE`. "Single-cell first" is *first among the geometry
+  rules* — see spec 0010's note under rule 1 for why both orderings are needed.
 - Argument omission: trailing omissions drop the argument, interior omissions
   render as a bare comma (`TAKE(arr,,-1)`).
 - Tests — the full matrix, as a pure function: 1×1 / 1×N / N×1 / N×M spills ×

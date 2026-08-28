@@ -264,6 +264,20 @@ public sealed record WalkedCell(
 ///     underlying cell has no formula in the source (literal value);
 ///     true for everything else, where the dialog renders the
 ///     promote/demote toggle.
+///
+///     Spec 0010 adds <see cref="SliceOf" />: non-null on <em>slice</em>
+///     rows — a reference that landed inside a spill and was rewritten as a
+///     named slice of the anchor's binding (<c>INDEX(arr,r,c)</c> and, from
+///     PR 4, <c>TAKE</c>/<c>DROP</c> forms). The value is the anchor's own
+///     row <see cref="Source" />, which identifies the parent for the
+///     dialog's Include cascading. Slice rows are always
+///     <see cref="BindingRole.Input" /> with <see cref="CanToggleRole" />
+///     false — there is no formula to bake, so demotion is meaningless.
+///
+///     A spilling anchor's own row carries a <see cref="Source" /> whose
+///     <see cref="FormulaRef.IsSpilled" /> is true: the binding <em>is</em>
+///     the array (<c>A1#</c>), which is what makes it distinct from a slice
+///     row for the scalar reference <c>A1</c> to the same cell.
 /// </summary>
 public sealed record BindingRow(
     FormulaRef Source,
@@ -271,7 +285,8 @@ public sealed record BindingRow(
     string Name,
     string Rhs,
     bool IsExpansion = false,
-    bool CanToggleRole = false);
+    bool CanToggleRole = false,
+    FormulaRef? SliceOf = null);
 
 /// <summary>
 ///     Per-row state passed to <see cref="GatherEngine.Recompute" /> by the
