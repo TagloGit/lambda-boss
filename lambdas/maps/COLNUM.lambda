@@ -22,7 +22,7 @@ COLNUM = LAMBDA(
         Help?, ISOMITTED(address),
     //  Procedure
         safeMult, 100000,
-        result, MOD(CELLTOPOS(address, safeMult), safeMult),
+        result, MOD(TOPOS(address, safeMult), safeMult),
         IF(Help?, Help, result)
 )
 );

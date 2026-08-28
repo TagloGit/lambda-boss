@@ -11,20 +11,20 @@ tests:
     args: ["=100001"]
     expected: 1
 
-  - name: composed with CELLTOPOS
-    args: ['=CELLTOPOS("Q17")']
+  - name: composed with TOPOS
+    args: ['=TOPOS("Q17")']
     expected: 17
 
-  - name: composed with CELLTOPOS for multi-letter col
-    args: ['=CELLTOPOS("XFD16384")']
+  - name: composed with TOPOS for multi-letter col
+    args: ['=TOPOS("XFD16384")']
     expected: 16384
 
   - name: custom mult 50
     args: ["=526", "=50"]
     expected: 10
 
-  - name: custom mult matches CELLTOPOS custom mult
-    args: ['=CELLTOPOS("Z10", 50)', "=50"]
+  - name: custom mult matches TOPOS custom mult
+    args: ['=TOPOS("Z10", 50)', "=50"]
     expected: 10
 
   - name: vertical array of positions lifts

@@ -32,7 +32,7 @@ NEIGHBOURS = LAMBDA(
         safeMult, 16385,
         rad, IF(ISOMITTED(distance), 1, @distance),
         met, IF(ISOMITTED(metric), 0, @metric),
-        pos, CELLTOPOS(@centerCell, safeMult),
+        pos, TOPOS(@centerCell, safeMult),
         ctrRow, INT(pos / safeMult),
         ctrCol, MOD(pos, safeMult),
         span, INT(rad),

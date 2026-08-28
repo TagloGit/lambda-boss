@@ -25,7 +25,7 @@ GRIDLOOKUP = LAMBDA(
                 "VERSION:       →Jul 01 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   grid          →(Required) The grid range to search (e.g. M!C3:L12).¶" &
-                "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") OR an encoded position integer (ROW*100000+COL, from CELLTOPOS) to look up directly. Also accepts an array/range of values, addresses or positions — result lifts element-wise.¶" &
+                "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") OR an encoded position integer (ROW*100000+COL, from TOPOS) to look up directly. Also accepts an array/range of values, addresses or positions — result lifts element-wise.¶" &
                 "   return_Value  →(Optional) FALSE (default) returns a cell address for the value. TRUE treats value as an address/position and returns the cell's value.¶" &
                 "   match_mode    →(Optional) Forwarded to XMATCH: 0 exact (default), -1 exact or next smaller, 1 exact or next larger, 2 wildcard. Ignored when return_Value is TRUE.¶" &
                 "   if_invalid    →(Optional) Value returned when the input is an error, falls outside the grid, or is not found. Omitted defaults to NA().¶" &
@@ -51,7 +51,7 @@ GRIDLOOKUP = LAMBDA(
         scalar, LAMBDA(v,
                   IF(ISERROR(v), invalid,
                      IF(reverse,
-                        LET(pos, IF(ISNUMBER(v), v, CELLTOPOS(v, theMult)),
+                        LET(pos, IF(ISNUMBER(v), v, TOPOS(v, theMult)),
                             decRow, INT(pos / theMult) - originRow + 1,
                             decCol, MOD(pos, theMult) - originCol + 1,
                             IF(OR(decRow < 1, decRow > nRows, decCol < 1, decCol > nCols),

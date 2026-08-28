@@ -1,0 +1,55 @@
+/*  FUNCTION NAME:      TOPOS
+    DESCRIPTION:*//**Converts anything to a scalar packed position: A1-style address text encodes as an absolute position (ROW * mult + COLUMN), any direction spelling (via DIRDELTA) becomes a relative movement delta, and numbers pass through unchanged.*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-04-15  Claude      Initial version (as CELLTOPOS)
+                        2026-05-14  Claude      Switch to string input; parse address directly (non-volatile, no INDIRECT)
+                        2026-05-14  Claude      Default mult bumped from 1000 to 100000 — safe for any Excel column (max XFD=16384) while keeping the trailing 5 digits readable
+                        2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
+                        2026-07-22  Claude      Deref the scalar branch with @: 1x1 arrays previously reached the scalar body array-shaped, where SEQUENCE(LEN) lifts element-wise and truncates multi-letter columns ("BY85" parsed as AZ85). Unconditional MAP is NOT the fix - MAP returns a 1x1 array even for scalar input, re-poisoning downstream SEQUENCE consumers (MAZE path mode) (#318)
+                        2026-08-28  Claude      Generalised and renamed CELLTOPOS -> TOPOS: non-address text routes through DIRDELTA to a relative packed delta (repacked for custom mult); numbers pass through unchanged
+*/
+TOPOS = LAMBDA(
+//  Parameter Declarations
+    [value],
+    [mult],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      ¦TOPOS(value, [mult])¶" &
+                "DESCRIPTION:   ¦Converts anything to a scalar packed position: A1-style address text encodes as an absolute position ROW*mult+COLUMN, any direction spelling becomes a relative movement delta (via DIRDELTA), and numbers pass through unchanged.¶" &
+                "VERSION:       ¦Aug 28 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   value          ¦(Required) A cell address as text (e.g. ""E5""; sheet prefixes, $ anchors and ranges are tolerated - the first cell of a range is used), OR a direction in any spelling DIRDELTA accepts (arrow glyph ↑ ↗ → ↘ ↓ ↙ ← ↖, compass code N, NE, North-East ..., screen direction U, DR, up-left ...), OR a number (passes through unchanged, so pre-packed positions, deltas and knight moves survive). Also accepts an array/range of values - result lifts element-wise. Unrecognised text returns #N/A.¶" &
+                "   mult           ¦(Optional) Multiplier for the row component. Default: 100000 - safe for any Excel column (max XFD=16384) and keeps the trailing 5 digits readable as the column. Applies to both branches: addresses encode as ROW*mult+COLUMN, direction deltas repack as rowDelta*mult+colDelta.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=TOPOS(""E5"")¶" &
+                "Result         ¦500005 (and =TOPOS(""↑"") returns -100000)",
+                "¦", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(value),
+    //  Procedure
+        m, IF(ISOMITTED(mult), 100000, mult),
+        scalar, LAMBDA(v,
+                  IF(ISNUMBER(v), v,
+                    LET(
+                      afterSheet, IFERROR(TEXTAFTER(v, "!", -1), v),
+                      firstCell, IFERROR(TEXTBEFORE(afterSheet, ":"), afterSheet),
+                      upper, SUBSTITUTE(UPPER(firstCell), "$", ""),
+                      IF(REGEXTEST(upper, "^[A-Z]{1,3}[0-9]+$"),
+                        LET(
+                          letters, REGEXEXTRACT(upper, "[A-Z]+"),
+                          rowNum, --REGEXEXTRACT(upper, "\d+"),
+                          n, LEN(letters),
+                          colNum, SUMPRODUCT((CODE(MID(letters, SEQUENCE(n), 1)) - 64) * 26^(n - SEQUENCE(n))),
+                          rowNum * m + colNum),
+                        LET(
+                          delta, DIRDELTA(v),
+                          rowDelta, ROUND(delta / 100000, 0),
+                          colDelta, delta - rowDelta * 100000,
+                          rowDelta * m + colDelta))))),
+        result, IF(OR(ROWS(value) > 1, COLUMNS(value) > 1),
+                    MAP(value, scalar),
+                    scalar(@value)),
+        IF(Help?, Help, result)
+)
+);
