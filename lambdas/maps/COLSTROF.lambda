@@ -1,0 +1,30 @@
+/*  FUNCTION NAME:      COLSTROF
+    DESCRIPTION:*//**Extracts the column letters (e.g. "AB") from an encoded position integer (as produced by TOPOS).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-08-28  Claude      Initial version
+*/
+COLSTROF = LAMBDA(
+//  Parameter Declarations
+    [pos],
+    [mult],
+//  Help
+    LET(Help, TEXTSPLIT(
+                "FUNCTION:      →COLSTROF(pos, [mult])¶" &
+                "DESCRIPTION:   →Extracts the column letters (e.g. ""AB"") from an encoded position integer (as produced by TOPOS). The letters twin of COLOF.¶" &
+                "VERSION:       →Aug 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches TOPOS). Must match the mult used to encode pos.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COLSTROF(1200028)¶" &
+                "Result         →AB",
+                "→", "¶"
+                ),
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), 100000, mult),
+        result, SUBSTITUTE(ADDRESS(1, MOD(pos, m), 4), "1", ""),
+        IF(Help?, Help, result)
+)
+);
