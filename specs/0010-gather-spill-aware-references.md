@@ -111,13 +111,22 @@ For a reference covering rows `r1..r2` and columns `c1..c2` of an R×C spill
    not `INDEX(arr,1,COLUMNS(arr))`. The position freezes at gather time, which
    is exactly the staleness the original cell ref already had.
 
-   **This rule is checked first**, and that ordering matters. A range ref
-   covering exactly one cell (`A2:A2`) takes the scalar path — including the
-   case where the spill is itself 1×1, so `A1:A1` is *also* "the whole array".
-   Excel's `=A1:A1` yields a scalar, and emitting `arr` there would hand
-   downstream steps a 1×1 array, which is not a scalar and collapses
-   `SEQUENCE`/`REGEXEXTRACT`. On a 1×1 spill, only an explicit `A1#` asks for
-   the array.
+   **This rule is checked first among the geometry rules**, and that ordering
+   matters. A range ref covering exactly one cell (`A2:A2`) takes the scalar
+   path — including the case where the spill is itself 1×1, so `A1:A1` is
+   *also* "the whole array". Excel's `=A1:A1` yields a scalar, and emitting
+   `arr` there would hand downstream steps a 1×1 array, which is not a scalar
+   and collapses `SEQUENCE`/`REGEXEXTRACT`. On a 1×1 spill, only an explicit
+   `A1#` asks for the array.
+
+   "First among the geometry rules" is the precise claim, and the distinction
+   is load-bearing: the implementation tests the **ref shape** before it looks
+   at the rectangle at all, so a `SpillRef` (`A1#`) short-circuits to `arr`
+   ahead of the single-cell check. Both orderings are needed, and they don't
+   conflict — the shape test is what makes `A1#` on a 1×1 spill the array while
+   `A1` on the same spill is the scalar, and the single-cell test is what keeps
+   `A1:A1` a scalar. Don't "fix" the implementation to check the rectangle
+   first; that would collapse `A1#` on a 1×1 spill to `INDEX(arr,1,1)`.
 2. **Whole array** — the ref shape is `A1#`, or a range with `h=R`, `w=C`
    spanning more than one cell → `arr`.
 3. **Band or block** → decide each axis independently, then compose into at most
