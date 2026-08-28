@@ -632,6 +632,153 @@ public class GatherEngineSpillSliceTests
             .WithFormula("D8", sinkFormula);
     }
 
+    // --- Selection normalisation + spill-child sink ---------------------
+
+    /// <summary>
+    ///     Gathering from a spill child is a mistake with an obvious fix, so
+    ///     it names the anchor instead of doing nothing (spec 0005's silent
+    ///     no-op). No bindings, no LET.
+    /// </summary>
+    [Fact]
+    public void Gather_SinkIsSpillChild_RefusesNamingTheAnchor()
+    {
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(2,3)")
+            .WithSpill("A1", 2, 3)
+            .WithFormula("E1", "=A1*2");
+
+        var result = GatherEngine.Gather(source.Ref("C2"), source);
+
+        Assert.NotNull(result);
+        Assert.Equal(GatherDiagnosticKind.SpillChildSink, result!.Diagnostic!.Kind);
+        Assert.Equal(
+            "C2 is inside A1's spill range. Gather from A1 instead.",
+            result.Diagnostic.Message);
+        Assert.Equal(
+            new[] { source.Ref("C2"), source.Ref("A1") },
+            result.Diagnostic.Cells);
+        Assert.Empty(result.Bindings);
+        Assert.Empty(result.SynthesisedLet);
+    }
+
+    /// <summary>
+    ///     The refusal is about being a <em>child</em>, not about spilling:
+    ///     gathering from the anchor itself is untouched by the check.
+    /// </summary>
+    [Fact]
+    public void Gather_SinkIsSpillAnchor_GathersNormally()
+    {
+        var source = new StubCellSource()
+            .WithLabel("A1", "Rows")
+            .WithFormula("A2", "=1+1")
+            .WithFormula("A3", "=SEQUENCE(A2,3)")
+            .WithSpill("A3", 2, 3);
+
+        var result = GatherEngine.Gather(source.Ref("A3"), source);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.Diagnostic);
+        Assert.Equal("SEQUENCE(rows,3)", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     A cell with no formula that isn't part of a spill stays the
+    ///     pre-existing silent no-op — the refusal must not widen into
+    ///     "gathered an empty cell".
+    /// </summary>
+    [Fact]
+    public void Gather_SinkIsPlainFormulalessCell_StillReturnsNull()
+    {
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(2,3)")
+            .WithSpill("A1", 2, 3);
+
+        Assert.Null(GatherEngine.Gather(source.Ref("E5"), source));
+    }
+
+    /// <summary>
+    ///     The mis-firing case. <c>D4</c> reads the child <c>B2</c> only, and
+    ///     the walker resolves that to the anchor <c>A2</c> — so <c>B2</c>
+    ///     never appears in any walk, and an un-normalised selection would
+    ///     count it as a second independent sink alongside <c>D4</c> and
+    ///     refuse. Normalising the child to its anchor first leaves one sink.
+    /// </summary>
+    [Fact]
+    public void Gather_SelectionSpanningSpillRange_DoesNotMisfireMultiSink()
+    {
+        var source = new StubCellSource()
+            .WithLabel("A1", "Extracted")
+            .WithFormula("A2", "=SEQUENCE(1,2)")
+            .WithSpill("A2", 1, 2)
+            .WithFormula("D4", "=B2*2");
+
+        var result = GatherEngine.Gather(
+            source.Ref("D4"),
+            new[] { source.Ref("A2"), source.Ref("B2"), source.Ref("D4") },
+            source);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.Diagnostic);
+        Assert.Equal(
+            new[] { "extracted", "extracted_2" },
+            result.Bindings.Select(b => b.Name));
+        Assert.Equal("extracted_2*2", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     Dragging across nothing but a spill range selects the calculation,
+    ///     not its output cells: <c>B2:C2</c> collapses to the single cell
+    ///     <c>B2</c>, so the selection stops restricting and the anchor's own
+    ///     precedent <c>A2</c> is walked as a step. Left un-normalised, the
+    ///     two-cell selection would leaf-restrict <c>A2</c> onto the boundary
+    ///     as the input <c>A2</c> and drop <c>A4</c> from the LET entirely.
+    /// </summary>
+    [Fact]
+    public void Gather_DragOverSpillRangeOnly_NormalisesAwayTheRestriction()
+    {
+        var source = new StubCellSource()
+            .WithLabel("A1", "Count")
+            .WithFormula("A2", "=A4*2")
+            .WithLabel("B1", "Extracted")
+            .WithFormula("B2", "=SEQUENCE(1,A2)")
+            .WithSpill("B2", 1, 2);
+
+        var result = GatherEngine.Gather(
+            source.Ref("B2"),
+            new[] { source.Ref("B2"), source.Ref("C2") },
+            source);
+
+        Assert.NotNull(result);
+        Assert.Null(result!.Diagnostic);
+
+        var precedent = result.Bindings.Single(b => b.Source.A1Address == "A2");
+        Assert.Equal(BindingRole.Step, precedent.Role);
+        Assert.Equal("count", precedent.Name);
+        Assert.Equal(3, result.FreeWalkCount);
+        Assert.Equal(3, result.WalkedCount);
+    }
+
+    /// <summary>
+    ///     Normalisation collapses duplicates, so a genuinely multi-sink
+    ///     selection is still refused — the check is narrowed, not disarmed.
+    /// </summary>
+    [Fact]
+    public void Gather_TwoSpillsWithNoDependency_StillRefusedAsMultiSink()
+    {
+        var source = new StubCellSource()
+            .WithFormula("A1", "=SEQUENCE(1,2)")
+            .WithSpill("A1", 1, 2)
+            .WithFormula("A3", "=SEQUENCE(1,2)")
+            .WithSpill("A3", 1, 2);
+
+        var result = GatherEngine.Gather(
+            source.Ref("A1"),
+            new[] { source.Ref("A1"), source.Ref("B1"), source.Ref("A3"), source.Ref("B3") },
+            source);
+
+        Assert.Equal(GatherDiagnosticKind.MultipleSinks, result!.Diagnostic!.Kind);
+    }
+
     private static StubCellSource CanonicalSource()
     {
         return new StubCellSource()
