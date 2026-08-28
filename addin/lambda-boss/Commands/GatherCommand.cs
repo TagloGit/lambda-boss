@@ -242,27 +242,48 @@ internal static class GatherCommand
                 $"GetCellLeftText({cell.Sheet}!{cell.A1Address})");
         }
 
-        public bool HasSpill(CellRef cell)
+        public SpillInfo? GetSpill(CellRef cell)
         {
             if (cell.IsExternal)
-                return false;
+                return null;
             var sheet = TryGetWorksheet(cell.Sheet);
             if (sheet == null)
-                return false;
+                return null;
             try
             {
                 dynamic range = sheet.Cells[cell.Row, cell.Column];
-                return (bool)range.HasSpill;
+
+                // SpillParent returns the anchor for both the anchor itself
+                // and every child of the spill, and null (not an error) for
+                // any cell that isn't part of one. Spec 0010's spike pins
+                // this — see the Open Questions table.
+                dynamic? anchorRange = range.SpillParent;
+                if (anchorRange == null)
+                    return null;
+
+                var anchor = new CellRef(cell.Sheet, (int)anchorRange.Column, (int)anchorRange.Row);
+
+                // A child's own SpillingToRange is null, so the rectangle is
+                // always read from the anchor — one extra dereference, not a
+                // conditional fallback. Measured at ~1.6 ms/op on top of the
+                // anchor's own read (out-of-process); too cheap to memo, since
+                // the walker probes each cell exactly once.
+                dynamic? rect = anchorRange.SpillingToRange;
+                if (rect == null)
+                    return null;
+
+                return new SpillInfo(anchor, (int)rect.Rows.Count, (int)rect.Columns.Count);
             }
             catch (Exception ex)
             {
-                // Range.HasSpill is Excel 365 only. On older builds the
-                // property doesn't exist and the dynamic call throws — log
-                // and treat as non-spilling. The plan documents this as
-                // "modern Excel 365 only, no fallback"; this catch is the
-                // graceful-degradation safety net rather than a feature.
-                Logger.Error($"Gather/HasSpill({cell.Sheet}!{cell.A1Address})", ex);
-                return false;
+                // Range.SpillParent / SpillingToRange are Excel 365 only. On
+                // older builds the properties don't exist and the dynamic
+                // call throws — log and treat as non-spilling. The plan
+                // documents this as "modern Excel 365 only, no fallback";
+                // this catch is the graceful-degradation safety net rather
+                // than a feature.
+                Logger.Error($"Gather/GetSpill({cell.Sheet}!{cell.A1Address})", ex);
+                return null;
             }
         }
 
