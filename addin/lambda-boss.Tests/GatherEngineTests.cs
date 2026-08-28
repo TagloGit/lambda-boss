@@ -594,7 +594,7 @@ public class GatherEngineTests
         var source = new StubCellSource()
             .WithLabel("A1", "Numbers")
             .WithFormula("A2", "=SEQUENCE(10)")
-            .WithSpill("A2")
+            .WithSpill("A2", 10, 1)
             .WithFormula("B2", "=SUM(A2#)");
 
         var result = GatherEngine.Gather(source.Ref("B2"), source)!;
@@ -621,7 +621,7 @@ public class GatherEngineTests
         var source = new StubCellSource()
             .WithLabel("A1", "Numbers")
             .WithFormula("A2", "=SEQUENCE(10)")
-            .WithSpill("A2")
+            .WithSpill("A2", 10, 1)
             .WithFormula("B2", "=SUM(A2#)")
             .WithFormula("C2", "=B2+1");
 
@@ -654,7 +654,7 @@ public class GatherEngineTests
             .WithFormula("A2", "=10")
             .WithLabel("B1", "Numbers")
             .WithFormula("B2", "=SEQUENCE(A2)")
-            .WithSpill("B2")
+            .WithSpill("B2", 10, 1)
             .WithFormula("C2", "=SUM(B2#)");
 
         var result = GatherEngine.Gather(source.Ref("C2"), source)!;
@@ -2202,7 +2202,7 @@ public class GatherEngineTests
         // semantics flow through the formula itself).
         var source = new StubCellSource()
             .WithFormula("A1", "=SEQUENCE(5)")
-            .WithSpill("A1")
+            .WithSpill("A1", 5, 1)
             .WithFormula("B1", "=SUM(A1#)");
         var sink = source.Ref("B1");
         var selection = new[] { sink };

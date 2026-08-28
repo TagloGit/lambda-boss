@@ -26,8 +26,8 @@ There are two further defects in the same area, both pre-existing:
 - **Spill children emit a broken RHS.** `Range.HasSpill` reports true for every
   cell in a spill range, not just the anchor, so a spill-child leaf gets RHS
   `B1#` — and `#` on a non-anchor cell is `#REF!` in Excel. Gather can therefore
-  emit a LET that does not evaluate. (Confirm the exact COM semantics in the
-  spike — see *Open Questions*.)
+  emit a LET that does not evaluate. (Confirmed in the PR 1 spike — see
+  *Open Questions*.)
 - **A scalar reference to a spilling anchor is silently widened.** `=A1*2` where
   `A1` spills means the top-left value only. Gather binds the anchor's RHS as
   `A1#` and rewrites the `A1` token to the bare binding name, so the step now
@@ -69,14 +69,17 @@ public sealed record SpillInfo(CellRef Anchor, int Rows, int Columns);
 Returns non-null when `cell` is part of a dynamic-array spill (anchor or child),
 giving the anchor's address and the spill rectangle's dimensions. Null for plain
 cells, external refs, and unreachable sheets. The live adapter resolves it via
-`Range.SpillParent` + `Range.SpillingToRange`; the existing `HasSpill(cell)`
-member is subsumed and removed (`GetSpill(c)?.Anchor == c` replaces it).
+`Range.SpillParent` then `Range.SpillingToRange` **on the anchor** — a child's
+own `SpillingToRange` is null (spike, *Open Questions*); the existing
+`HasSpill(cell)` member is subsumed and removed (`GetSpill(c)?.Anchor == c`
+replaces it).
 
 Excel guarantees spill ranges are **disjoint** — overlap is `#SPILL!` — so every
 cell belongs to at most one spill range and there is no ambiguity to resolve.
 
-Cost is one extra COM property read per walked cell, on the same order as the
-existing `HasSpill` call it replaces.
+Cost is unchanged from the existing `HasSpill` call on cells that don't spill,
+and a few property reads more on cells that do — measured in the spike, see
+*Open Questions*.
 
 ### Reference taxonomy
 
@@ -372,21 +375,63 @@ stay distinct precedents, since they map to different replacements
 
 ## Open Questions
 
-- **COM semantics spike — must run first.** The design assumes `HasSpill` is
-  true for spill children as well as anchors, that `HasFormula` is false on a
-  child (making it present as a leaf input today), and that `SpillParent`
-  returns the anchor for both anchor and child while `SpillingToRange` gives the
-  rectangle. Confirm all five properties (`HasSpill`, `HasFormula`, `Formula2`,
-  `SpillParent`, `SpillingToRange`) against anchor, child, and plain cells
-  before writing `GetSpill`. If `HasFormula` turns out to be **true** on
-  children (returning the anchor's formula text), the present-day failure mode
-  is a duplicated step rather than a stray input, and the "broken `B1#` RHS"
-  claim in *Problem* is wrong — the fix is the same either way, but the problem
-  statement and the regression tests differ.
-- **`SpillingToRange` on a child.** May return the parent's spill range, or may
-  error. If it errors, `GetSpill` resolves the anchor first and reads
-  `SpillingToRange` from the anchor — one extra COM hop per child. Determine in
-  the spike and note the cost.
+- ~~**COM semantics spike — must run first.**~~ **Resolved (PR 1, #353).** Run
+  through the AddinTests harness against a live Excel 365; the probe is kept as
+  a regression guard in
+  `addin/lambda-boss.AddinTests/SpillComSemanticsTests.cs`. Sheet: `A1` holds
+  `=SEQUENCE(2,3)`, spilling into `A1:C2`; `E1` holds `=A1*2`; `E2` holds the
+  literal `42`.
+
+  | Cell | Kind | `HasSpill` | `HasFormula` | `Formula2` | `SpillParent` | `SpillingToRange` |
+  |---|---|---|---|---|---|---|
+  | `A1` | spill anchor | `True` | `True` | `=SEQUENCE(2,3)` | `A1` | `A1:C2` (2×3) |
+  | `B1` | spill child | `True` | `False` | `""` | `A1` | `null` |
+  | `C2` | spill child (corner) | `True` | `False` | `""` | `A1` | `null` |
+  | `E1` | plain formula | `False` | `True` | `=A1*2` | `null` | `null` |
+  | `E2` | plain literal | `False` | `False` | `42` | `null` | `null` |
+
+  `HasArray` is `False` on all five — dynamic-array spills are not legacy CSE
+  arrays, as *Out of Scope* assumes.
+
+  Every assumption in the design holds:
+
+  - **`HasFormula` is false on a spill child**, and `Formula2` returns the empty
+    string rather than the anchor's formula text. The *Problem* section stands
+    as written: a child presents to the walker as a leaf **input**, not as a
+    duplicated step, and the "broken `B1#` RHS" defect is real — `HasSpill` is
+    `True` on children too, so today's `#` suffix does land on a non-anchor
+    cell.
+  - **`SpillParent` resolves the anchor from both the anchor and any child**,
+    and returns **`null`** (rather than raising a COM error) on cells that
+    aren't part of a spill. `GetSpill` therefore branches on null; the
+    `try`/`catch` is only a safety net for pre-365 builds where the property
+    doesn't exist at all.
+- ~~**`SpillingToRange` on a child.**~~ **Resolved (PR 1, #353).**
+  `SpillingToRange` returns **`null`** on a spill child (it does not error, and
+  it does not return the parent's rectangle). The anchor hop is therefore
+  **mandatory, not a fallback**: `GetSpill` reads `SpillParent`, then reads
+  `SpillingToRange` from the anchor range.
+
+  Measured cost, 200 iterations each, driving Excel **out of process** from the
+  test harness — the shipped XLL is in-process and pays materially less per
+  property, so these are an upper bound and only the ratios matter:
+
+  | Probe | ms/op |
+  |---|---|
+  | child, via the anchor hop (what `GetSpill` does) | 7.9 |
+  | anchor, its own rectangle | 6.3 |
+  | child, if the anchor's rectangle were memoed | 2.8 |
+  | plain cell (`SpillParent` → null) | 1.3 |
+  | today's `HasSpill` alone | 1.3 |
+
+  **No memo in v1.** The hop itself is cheap (7.9 vs 6.3 — the geometry read
+  dominates, not the extra dereference), and the walker probes each cell exactly
+  once, so an anchor-keyed memo only pays when two or more children of the same
+  anchor appear in one walk, saving ~5 ms per extra child on a measurement that
+  overstates in-process cost. Revisit if a graph reading many cells out of one
+  large spill feels slow. Note also that `GetSpill` is no more expensive than
+  `HasSpill` on plain cells (both ~1.3 ms) — the extra cost is confined to
+  cells that actually spill.
 - **Slice rows for a spill the author never sliced.** If every reference to an
   anchor is `A1#`, no slice rows appear — correct. But if an author references
   `A1#` *and* `B1`, the LET carries both `arr` and `INDEX(arr,1,2)`. That's

@@ -13,7 +13,9 @@ internal sealed class StubCellSource : ICellSource
     // case-insensitively (matches CellRef equality).
     private readonly Dictionary<string, string> _formulas = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _labels = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _spills = new(StringComparer.OrdinalIgnoreCase);
+    // Keyed by every cell in the spill rectangle (anchor and children alike),
+    // mirroring Range.SpillParent, which resolves the anchor from any of them.
+    private readonly Dictionary<string, SpillInfo> _spills = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lambdaNames = new(StringComparer.OrdinalIgnoreCase);
 
     public StubCellSource(string sheet = "Sheet1")
@@ -36,12 +38,19 @@ internal sealed class StubCellSource : ICellSource
     }
 
     /// <summary>
-    ///     Marks <paramref name="a1" /> as a spill anchor for tests.
-    ///     Mirrors what the live adapter learns from <c>Range.HasSpill</c>.
+    ///     Marks <paramref name="anchor" /> as a spill anchor filling a
+    ///     <paramref name="rows" />×<paramref name="cols" /> rectangle, and
+    ///     registers every cell in that rectangle as part of the spill.
+    ///     Mirrors what the live adapter learns from <c>Range.SpillParent</c>
+    ///     plus <c>Range.SpillingToRange</c>.
     /// </summary>
-    public StubCellSource WithSpill(string a1)
+    public StubCellSource WithSpill(string anchor, int rows, int cols)
     {
-        _spills.Add(Qualify(a1));
+        var (sheet, col, row) = ParseAddress(anchor, SinkSheet);
+        var info = new SpillInfo(new CellRef(sheet, col, row), rows, cols);
+        for (var r = 0; r < rows; r++)
+        for (var c = 0; c < cols; c++)
+            _spills[Key(sheet, col + c, row + r)] = info;
         return this;
     }
 
@@ -77,11 +86,11 @@ internal sealed class StubCellSource : ICellSource
         return _labels.TryGetValue(Key(cell.Sheet, cell.Column - 1, cell.Row), out var l) ? l : null;
     }
 
-    public bool HasSpill(CellRef cell)
+    public SpillInfo? GetSpill(CellRef cell)
     {
         if (cell.IsExternal)
-            return false;
-        return _spills.Contains(Key(cell.Sheet, cell.Column, cell.Row));
+            return null;
+        return _spills.TryGetValue(Key(cell.Sheet, cell.Column, cell.Row), out var info) ? info : null;
     }
 
     public bool IsLambdaName(string name)

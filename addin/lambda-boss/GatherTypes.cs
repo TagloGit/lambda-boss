@@ -232,9 +232,10 @@ public sealed record FormulaRef(CellRef Start, CellRef? End = null, bool IsSpill
 ///     above and to the left on the cell's own sheet, null when out of
 ///     range, empty, or non-string. <see cref="Precedents" /> mixes
 ///     single-cell and range refs; the walker only recurses into
-///     single-cell precedents. <see cref="HasSpill" /> reflects
-///     <see cref="ICellSource.HasSpill" /> for the cell's own anchor —
-///     true when the formula spills into a dynamic-array range. The
+///     single-cell precedents. <see cref="HasSpill" /> is true when the
+///     cell is the <em>anchor</em> of a dynamic-array spill — i.e. when
+///     <see cref="ICellSource.GetSpill" /> reports the cell as its own
+///     anchor, so the cell's formula spills into a range. The
 ///     engine uses it only to suffix <c>#</c> on the RHS of a spilling
 ///     input so the binding represents the whole array; spilling cells
 ///     with in-scope precedents are still steps whose RHS is the
@@ -379,6 +380,20 @@ public enum GatherDiagnosticKind
 }
 
 /// <summary>
+///     The geometry of the dynamic-array spill a cell belongs to:
+///     <see cref="Anchor" /> is the cell holding the formula that spills,
+///     and <see cref="Rows" />/<see cref="Columns" /> are the dimensions of
+///     the spill rectangle the anchor fills. Returned by
+///     <see cref="ICellSource.GetSpill" /> for the anchor and for every
+///     child alike — a cell is the anchor iff <c>Anchor == cell</c>.
+///
+///     Excel guarantees spill ranges are disjoint (overlap is
+///     <c>#SPILL!</c>), so a cell belongs to at most one spill and there is
+///     no ambiguity to resolve.
+/// </summary>
+public sealed record SpillInfo(CellRef Anchor, int Rows, int Columns);
+
+/// <summary>
 ///     COM-free abstraction over the active workbook used by
 ///     <see cref="CellGraphWalker" />. The live adapter implements this
 ///     against the <c>Workbook</c> COM object; tests stub it with an
@@ -421,15 +436,18 @@ public interface ICellSource
     string? GetCellLeftText(CellRef cell);
 
     /// <summary>
-    ///     True when <paramref name="cell" /> is the anchor of a dynamic-
-    ///     array spill (its formula returns an array that fills the
-    ///     surrounding cells). The live adapter reads <c>Range.HasSpill</c> —
-    ///     modern Excel 365 only, no fallback for older builds. Always
-    ///     false for external refs, unreachable cells, and non-formula
-    ///     cells. The engine uses this to force a spilling cell to bind
-    ///     as an input with RHS <c>A1#</c>.
+    ///     The spill geometry <paramref name="cell" /> belongs to, or null
+    ///     when the cell isn't part of a dynamic-array spill. Non-null for
+    ///     both the anchor and every child of a spill; the anchor test is
+    ///     <c>GetSpill(c)?.Anchor == c</c>. Always null for external refs
+    ///     and unreachable cells. The live adapter reads
+    ///     <c>Range.SpillParent</c> then <c>Range.SpillingToRange</c> on
+    ///     the anchor — modern Excel 365 only, no fallback for older
+    ///     builds. The engine uses this to force a spilling anchor to bind
+    ///     as an input with RHS <c>A1#</c>; spec 0010 builds slice
+    ///     expressions from the geometry.
     /// </summary>
-    bool HasSpill(CellRef cell);
+    SpillInfo? GetSpill(CellRef cell);
 
     /// <summary>
     ///     True when <paramref name="name" /> resolves to a workbook-scoped
