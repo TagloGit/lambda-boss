@@ -84,6 +84,14 @@ internal static class CellGraphWalker
         // the same redirection or it would never reach the anchor from the
         // step that references a child.
         var anchorByCell = new Dictionary<CellRef, CellRef>();
+        // Per-walk memo over ICellSource.GetSpill. The live source pays two
+        // COM property reads per probe (~1.6 ms out-of-process), and the
+        // precedent loop probes once per precedent *occurrence* — a cell
+        // referenced by three steps was being read three times, on spill-free
+        // sheets as much as spilling ones. The sheet can't change mid-walk,
+        // so caching here is safe; the memo dies with the Walk call, so a
+        // Recompute after an edit still sees fresh geometry.
+        var spillByCell = new Dictionary<CellRef, SpillInfo?>();
         var leafRestricted = 0;
         var stack = new Stack<CellRef>();
         stack.Push(sink);
@@ -121,7 +129,7 @@ internal static class CellGraphWalker
             // child is #REF!). Children never reach this point anyway — the
             // precedent loop below redirects them to their anchor — but the
             // flag stays anchor-only so the invariant is local.
-            var spill = source.GetSpill(cell);
+            var spill = GetSpillMemo(cell, source, spillByCell);
             var hasSpill = spill != null && spill.Anchor == cell;
 
             // Always probe the source for the cell's formula, even when
@@ -173,7 +181,7 @@ internal static class CellGraphWalker
 
             foreach (var p in precedents)
             {
-                var target = ResolveWalkTarget(p, source, anchorByCell);
+                var target = ResolveWalkTarget(p, source, anchorByCell, spillByCell);
                 if (target == null)
                     continue;
                 // Excluded precedents don't get walked — that's how the
@@ -214,18 +222,38 @@ internal static class CellGraphWalker
     ///     would be no array for the slice to index into.
     /// </summary>
     private static CellRef? ResolveWalkTarget(
-        FormulaRef p, ICellSource source, Dictionary<CellRef, CellRef> anchorByCell)
+        FormulaRef p,
+        ICellSource source,
+        Dictionary<CellRef, CellRef> anchorByCell,
+        Dictionary<CellRef, SpillInfo?> spillByCell)
     {
         if (p.IsRange && !p.Start.Equals(p.End))
             return null;
 
-        var spill = source.GetSpill(p.Start);
+        var spill = GetSpillMemo(p.Start, source, spillByCell);
         if (spill == null)
             return p.IsRange ? null : p.Start;
 
         if (!spill.Anchor.Equals(p.Start))
             anchorByCell[p.Start] = spill.Anchor;
         return spill.Anchor;
+    }
+
+    /// <summary>
+    ///     <see cref="ICellSource.GetSpill" /> behind a per-walk memo. A null
+    ///     result (the common case — the cell isn't in a spill) is cached too,
+    ///     so a non-spilling cell referenced by many steps costs one probe per
+    ///     walk rather than one per reference.
+    /// </summary>
+    private static SpillInfo? GetSpillMemo(
+        CellRef cell, ICellSource source, Dictionary<CellRef, SpillInfo?> spillByCell)
+    {
+        if (spillByCell.TryGetValue(cell, out var cached))
+            return cached;
+
+        var spill = source.GetSpill(cell);
+        spillByCell[cell] = spill;
+        return spill;
     }
 
     /// <summary>
