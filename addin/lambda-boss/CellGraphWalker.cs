@@ -78,6 +78,20 @@ internal static class CellGraphWalker
         if (source is null) throw new ArgumentNullException(nameof(source));
 
         var byRef = new Dictionary<CellRef, WalkedCell>();
+        // Spec 0010: every cell that turned out to live inside a spill,
+        // mapped to that spill's anchor. Discovery pushes the anchor rather
+        // than the referenced cell, so the topological pass has to follow
+        // the same redirection or it would never reach the anchor from the
+        // step that references a child.
+        var anchorByCell = new Dictionary<CellRef, CellRef>();
+        // Per-walk memo over ICellSource.GetSpill. The live source pays two
+        // COM property reads per probe (~1.6 ms out-of-process), and the
+        // precedent loop probes once per precedent *occurrence* — a cell
+        // referenced by three steps was being read three times, on spill-free
+        // sheets as much as spilling ones. The sheet can't change mid-walk,
+        // so caching here is safe; the memo dies with the Walk call, so a
+        // Recompute after an edit still sees fresh geometry.
+        var spillByCell = new Dictionary<CellRef, SpillInfo?>();
         var leafRestricted = 0;
         var stack = new Stack<CellRef>();
         stack.Push(sink);
@@ -112,9 +126,10 @@ internal static class CellGraphWalker
             var cellLeft = source.GetCellLeftText(cell);
             // Anchor-only flag: GetSpill is non-null for spill children too,
             // and only the anchor's RHS may carry the `#` suffix (`B1#` on a
-            // child is #REF!). Spec 0010 PR 3 replaces this bool with the
-            // full geometry; until then the walker keeps the old contract.
-            var spill = source.GetSpill(cell);
+            // child is #REF!). Children never reach this point anyway — the
+            // precedent loop below redirects them to their anchor — but the
+            // flag stays anchor-only so the invariant is local.
+            var spill = GetSpillMemo(cell, source, spillByCell);
             var hasSpill = spill != null && spill.Anchor == cell;
 
             // Always probe the source for the cell's formula, even when
@@ -152,18 +167,12 @@ internal static class CellGraphWalker
                     // Sheet1 from a sink on Sheet2 would mis-route Sheet1's
                     // internal `B1` references back to Sheet2.
                     //
-                    // Strip the IsSpilled flag for cell-level precedents.
-                    // /Gather has always treated A1 and A1# as the same
-                    // precedent — spill info lives on
-                    // <see cref="WalkedCell.HasSpill" />, not on the ref. The
-                    // shared FormulaRef now carries IsSpilled (spec 0008
-                    // needs it for /Refactor's distinct-binding rule), but
-                    // /Gather's downstream code keys on the non-spilled
-                    // anchor; normalising here keeps that contract intact.
-                    // Ranges are left as-is (IsSpilled is always false on
-                    // ranges).
-                    precedents = NormaliseSpillFlag(
-                        CellRefExtractor.Extract(formula, cell.Sheet));
+                    // Spec 0010 removed the spill-flag normalisation that used
+                    // to collapse `A1#` onto `A1`: the two map to different
+                    // replacements (`arr` versus `INDEX(arr,1,1)`), so they
+                    // must stay distinct precedents with distinct lookup
+                    // entries.
+                    precedents = CellRefExtractor.Extract(formula, cell.Sheet);
                 }
             }
 
@@ -172,12 +181,8 @@ internal static class CellGraphWalker
 
             foreach (var p in precedents)
             {
-                // Range refs aren't expanded into their constituent cells —
-                // they're an opaque "block" precedent that the engine
-                // promotes to a single leaf input. Cells covered by the
-                // range that happen to be reached via OTHER precedents are
-                // walked normally and dropped post-walk.
-                if (p.IsRange)
+                var target = ResolveWalkTarget(p, source, anchorByCell, spillByCell);
+                if (target == null)
                     continue;
                 // Excluded precedents don't get walked — that's how the
                 // user's "Include" toggle drops a cell and its
@@ -185,44 +190,70 @@ internal static class CellGraphWalker
                 // this cell's Precedents list (we just don't push it), so
                 // the engine sees the precedent for role classification
                 // and the rewriter passes the literal cell-ref through.
-                if (excludedCells != null && excludedCells.Contains(p.Start))
+                if (excludedCells != null && excludedCells.Contains(target))
                     continue;
-                if (!byRef.ContainsKey(p.Start))
-                    stack.Push(p.Start);
+                if (!byRef.ContainsKey(target))
+                    stack.Push(target);
             }
         }
 
-        return CycleAwareTopoSort(sink, byRef, leafRestricted);
+        return CycleAwareTopoSort(sink, byRef, anchorByCell, leafRestricted);
     }
 
     /// <summary>
-    ///     Returns a new precedent list where every spilled single-cell
-    ///     FormulaRef is replaced by its non-spilled equivalent and
-    ///     duplicates are collapsed in first-seen order. Range refs are
-    ///     pass-through. Used so /Gather's downstream code (which keys on
-    ///     non-spilled anchors) keeps working after spec 0008 split A1
-    ///     and A1# into distinct FormulaRefs.
+    ///     The cell a precedent should be walked into, or null when the
+    ///     precedent isn't walkable at all.
+    ///
+    ///     Range refs aren't expanded into their constituent cells — they're
+    ///     an opaque "block" precedent that the engine promotes to a single
+    ///     leaf input, so they return null. The one exception is a degenerate
+    ///     single-cell range (<c>A2:A2</c>) that lands inside a spill: Excel
+    ///     evaluates that as a scalar and spec 0010 routes it down the
+    ///     single-cell slice path, so it has to reach the anchor like a bare
+    ///     cell ref would.
+    ///
+    ///     Any reference landing inside a spill resolves to that spill's
+    ///     <em>anchor</em> — the walker recurses into the anchor, never a
+    ///     child (a child has no formula of its own, so walking it would
+    ///     produce a stray leaf input with a <c>#</c>-suffixed RHS that
+    ///     evaluates to <c>#REF!</c>). The redirection is also spec 0010's
+    ///     <em>anchor discovery</em>: an anchor that nothing references
+    ///     directly is still pulled into the walk, because otherwise there
+    ///     would be no array for the slice to index into.
     /// </summary>
-    private static IReadOnlyList<FormulaRef> NormaliseSpillFlag(
-        IReadOnlyList<FormulaRef> precedents)
+    private static CellRef? ResolveWalkTarget(
+        FormulaRef p,
+        ICellSource source,
+        Dictionary<CellRef, CellRef> anchorByCell,
+        Dictionary<CellRef, SpillInfo?> spillByCell)
     {
-        if (precedents.Count == 0)
-            return precedents;
-        var any = false;
-        for (var i = 0; i < precedents.Count; i++)
-            if (precedents[i].IsSpilled) { any = true; break; }
-        if (!any)
-            return precedents;
+        if (p.IsRange && !p.Start.Equals(p.End))
+            return null;
 
-        var seen = new HashSet<FormulaRef>();
-        var result = new List<FormulaRef>(precedents.Count);
-        foreach (var p in precedents)
-        {
-            var normalised = p.IsSpilled ? new FormulaRef(p.Start) : p;
-            if (seen.Add(normalised))
-                result.Add(normalised);
-        }
-        return result;
+        var spill = GetSpillMemo(p.Start, source, spillByCell);
+        if (spill == null)
+            return p.IsRange ? null : p.Start;
+
+        if (!spill.Anchor.Equals(p.Start))
+            anchorByCell[p.Start] = spill.Anchor;
+        return spill.Anchor;
+    }
+
+    /// <summary>
+    ///     <see cref="ICellSource.GetSpill" /> behind a per-walk memo. A null
+    ///     result (the common case — the cell isn't in a spill) is cached too,
+    ///     so a non-spilling cell referenced by many steps costs one probe per
+    ///     walk rather than one per reference.
+    /// </summary>
+    private static SpillInfo? GetSpillMemo(
+        CellRef cell, ICellSource source, Dictionary<CellRef, SpillInfo?> spillByCell)
+    {
+        if (spillByCell.TryGetValue(cell, out var cached))
+            return cached;
+
+        var spill = source.GetSpill(cell);
+        spillByCell[cell] = spill;
+        return spill;
     }
 
     /// <summary>
@@ -237,7 +268,10 @@ internal static class CellGraphWalker
     ///     spin forever pushing back and forth between the cycle's cells.
     /// </summary>
     private static WalkOutcome CycleAwareTopoSort(
-        CellRef sink, Dictionary<CellRef, WalkedCell> byRef, int leafRestrictedCount)
+        CellRef sink,
+        Dictionary<CellRef, WalkedCell> byRef,
+        Dictionary<CellRef, CellRef> anchorByCell,
+        int leafRestrictedCount)
     {
         var ordered = new List<WalkedCell>(byRef.Count);
         var visited = new HashSet<CellRef>();
@@ -254,9 +288,16 @@ internal static class CellGraphWalker
             {
                 stack.Push((cell, nextChild + 1));
                 var pre = node.Precedents[nextChild];
-                if (pre.IsRange)
+                if (pre.IsRange && !pre.Start.Equals(pre.End))
                     continue;
+                // Follow the same child→anchor redirection discovery used,
+                // otherwise a step that only references a spill child would
+                // have no edge to the anchor and the anchor would never be
+                // emitted (nor its position in the topological order fixed
+                // ahead of the step that slices it).
                 var child = pre.Start;
+                if (anchorByCell.TryGetValue(child, out var resolvedAnchor))
+                    child = resolvedAnchor;
                 if (!byRef.ContainsKey(child))
                     continue;
                 if (onPath.Contains(child))

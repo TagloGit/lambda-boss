@@ -294,7 +294,7 @@ public partial class GatherWindow
             {
                 _excluded[vm.Source] = new BindingRow(
                     vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
-                    vm.IsExpansion, vm.CanToggleRole);
+                    vm.IsExpansion, vm.CanToggleRole, vm.SliceOf);
                 // Excluding a step drops any precedents reachable only
                 // via this cell — same upstream effect as a demote.
                 // Pass the cell as the cause so the tracker records
@@ -442,7 +442,7 @@ public partial class GatherWindow
             if (snapshotBefore.ContainsKey(vm.Source)) continue;
             snapshotBefore[vm.Source] = new BindingRow(
                 vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
-                vm.IsExpansion, vm.CanToggleRole);
+                vm.IsExpansion, vm.CanToggleRole, vm.SliceOf);
         }
 
         var states = BuildRowStates();
@@ -670,6 +670,7 @@ public class GatherRowVm : INotifyPropertyChanged
         _rhs = binding.Rhs;
         IsExpansion = binding.IsExpansion;
         CanToggleRole = binding.CanToggleRole;
+        SliceOf = binding.SliceOf;
         OrphanedByAddress = orphanedByAddress;
         _include = include;
         _isStep = binding.Role == BindingRole.Step;
@@ -678,9 +679,28 @@ public class GatherRowVm : INotifyPropertyChanged
     public FormulaRef Source { get; }
     public BindingRole RoleEnum { get; }
     public string Address => Source.A1Address;
-    public string Role => RoleEnum == BindingRole.Input ? "input" : "step";
+
+    /// <summary>
+    ///     Spec 0010: slice rows read "slice" rather than "input" so the
+    ///     author can tell a named slice of a spill apart from a plain cell
+    ///     input at a glance. They never carry a role toggle
+    ///     (<see cref="BindingRow.CanToggleRole" /> is false), so the static
+    ///     text is always the one rendered. Indentation under the anchor and
+    ///     the fixed-slice-position note are spec 0010 PR 8.
+    /// </summary>
+    public string Role => IsSlice
+        ? "slice"
+        : RoleEnum == BindingRole.Input ? "input" : "step";
+
     public bool IsExpansion { get; }
     public bool CanToggleRole { get; }
+
+    /// <summary>
+    ///     The anchor row this row is a slice of, or null on ordinary rows.
+    /// </summary>
+    public FormulaRef? SliceOf { get; }
+
+    public bool IsSlice => SliceOf != null;
 
     /// <summary>
     ///     The binding name as displayed in (and edited from) the dialog.
