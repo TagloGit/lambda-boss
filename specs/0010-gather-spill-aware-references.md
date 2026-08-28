@@ -215,6 +215,13 @@ reference."*
 The LET is still **correct** — it reads the live cells — just not fully
 self-contained. Non-blocking, no diagnostic, no refusal.
 
+As shipped, straddle detection probes the range's **four corners** rather than
+every cell (a bounded COM cost instead of one probe per cell), so a range that
+crosses right through a spill or wholly encloses it — no corner of it landing
+inside — is not flagged, while every single-edge overflow still is. The blind
+spot costs a warning marker only and never correctness, since the range
+promotes identically either way.
+
 ### Interactions with existing gather behaviour
 
 - **Anchor discovery.** When a step references a spill child and nothing
@@ -433,20 +440,27 @@ stay distinct precedents, since they map to different replacements
   | plain cell (`SpillParent` → null) | 1.3 |
   | today's `HasSpill` alone | 1.3 |
 
-  **No memo in v1.** The hop itself is cheap (7.9 vs 6.3 — the geometry read
-  dominates, not the extra dereference), and the walker probes each cell exactly
-  once, so an anchor-keyed memo only pays when two or more children of the same
-  anchor appear in one walk, saving ~5 ms per extra child on a measurement that
-  overstates in-process cost. Revisit if a graph reading many cells out of one
-  large spill feels slow. Note also that `GetSpill` is no more expensive than
-  `HasSpill` on plain cells (both ~1.3 ms) — the extra cost is confined to
-  cells that actually spill.
+  **Memoised per walk** (amended after implementation; v1 planned no memo).
+  The original reasoning was that the hop itself is cheap (7.9 vs 6.3 — the
+  geometry read dominates, not the extra dereference) and that the walker
+  probes each cell exactly once, so an anchor-keyed memo would only pay when
+  two or more children of the same anchor appear in one walk. The second half
+  of that was wrong: the precedent loop probes once per precedent
+  *occurrence*, not once per cell, so a cell referenced by three steps was
+  paid for three times — on spill-free sheets as much as spilling ones. The
+  delivered walker therefore memoises `ICellSource.GetSpill` for the duration
+  of a single `Walk` (`CellGraphWalker.GetSpillMemo`). Staleness is a
+  non-issue: one walk is already a single snapshot of the grid. Note also that
+  `GetSpill` is no more expensive than `HasSpill` on plain cells (both ~1.3
+  ms) — the extra cost is confined to cells that actually spill.
 - **Slice rows for a spill the author never sliced.** If every reference to an
   anchor is `A1#`, no slice rows appear — correct. But if an author references
   `A1#` *and* `B1`, the LET carries both `arr` and `INDEX(arr,1,2)`. That's
   right, just worth eyeballing in the preview once it's real.
-- **Dialog indentation vs the existing `IsExpansion` rows.** Inner-LET expansion
+- **Dialog indentation vs the existing `IsExpansion` rows.** *Resolved during
+  planning: they stay separate — that is what shipped.* Inner-LET expansion
   rows already hide their Include checkbox and belong to a host row. Slice rows
   are a second kind of child row with slightly different rules (they *do* have
-  an Include checkbox). Confirm during plan whether these unify into one
-  "child row" concept in the view model or stay separate.
+  an Include checkbox), and orphan rows are a third. The plan kept all three as
+  distinct row kinds rather than unifying them into one "child row" concept in
+  the view model, because no two of the three share a rule set.

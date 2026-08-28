@@ -142,10 +142,12 @@ public sealed record CellRef(string Sheet, int Column, int Row, string? External
 ///     refs always have <see cref="IsSpilled" /> = false (Excel has no
 ///     <c>A1:B5#</c> syntax). <see cref="CellRefExtractor.Rewrite" />
 ///     transparently falls back from a spilled key to its non-spilled
-///     equivalent when the spilled key isn't in the lookup, so
-///     <c>/Gather</c> — which only ever registers non-spilled keys —
-///     keeps its PR 5 behaviour of collapsing <c>A1#</c> tokens to the
-///     anchor cell's binding name.
+///     equivalent when the spilled key isn't in the lookup. Since spec 0010
+///     that fallback is legacy cover for <c>/Refactor</c> and <c>/Unnest</c>
+///     alone: <c>/Gather</c> now registers <em>both</em> keys, and a
+///     spilling anchor's row is keyed on the <em>spilled</em> ref (see
+///     <c>GatherEngine.RowRef</c>), so the spilled key is always present
+///     and the fallback never fires on the gather path.
 /// </summary>
 public sealed record FormulaRef(CellRef Start, CellRef? End = null, bool IsSpilled = false)
 {
