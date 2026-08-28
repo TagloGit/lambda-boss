@@ -76,100 +76,126 @@
                    Foreground="#dcdcaa"
                    Margin="0,12,0,4" />
 
-        <Border Grid.Row="6"
-                Background="#252526"
-                BorderBrush="#3e3e3e"
-                BorderThickness="1"
-                MaxHeight="200">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="BindingsList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Margin="6,3">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="28" />
-                                    <ColumnDefinition Width="56" />
-                                    <ColumnDefinition Width="60" />
-                                    <ColumnDefinition Width="160" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="18" />
-                                </Grid.ColumnDefinitions>
-                                <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
-                                <CheckBox Grid.Column="0"
-                                          IsChecked="{Binding Include, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Visibility="{Binding IncludeCheckboxVisibility}"
-                                          VerticalAlignment="Center"
-                                          Cursor="Hand"
-                                          ToolTip="Include in the synthesised LET" />
-                                <TextBlock Grid.Column="1"
-                                           Text="{Binding Address}"
-                                           FontFamily="Consolas"
-                                           FontSize="12"
-                                           Foreground="{Binding AddressBrush}"
-                                           VerticalAlignment="Center" />
-                                <ToggleButton Grid.Column="2"
-                                              Content="{Binding Role}"
-                                              IsChecked="{Binding IsStep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                              Visibility="{Binding RoleToggleVisibility}"
-                                              Padding="6,1"
-                                              FontFamily="Consolas"
-                                              FontSize="11"
-                                              MinWidth="44"
-                                              HorizontalAlignment="Left"
+        <StackPanel Grid.Row="6">
+            <Border Background="#252526"
+                    BorderBrush="#3e3e3e"
+                    BorderThickness="1"
+                    MaxHeight="200">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="BindingsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="6,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28" />
+                                        <!-- Address: 56 for the address itself plus
+                                             14 of slack absorbing a slice row's
+                                             indent (GatherRowVm.SliceIndentPixels). -->
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="160" />
+                                        <ColumnDefinition Width="*" />
+                                        <!-- Auto, not a fixed 18: an unflagged row
+                                             collapses the marker column to nothing
+                                             and gives the width back to Rhs. All
+                                             markers still line up, since the column
+                                             is last and Rhs is the star. -->
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
+                                    <CheckBox Grid.Column="0"
+                                              IsChecked="{Binding Include, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              Visibility="{Binding IncludeCheckboxVisibility}"
                                               VerticalAlignment="Center"
-                                              Background="Transparent"
-                                              Foreground="{Binding RoleBrush}"
-                                              BorderBrush="#3e3e3e"
-                                              BorderThickness="1"
                                               Cursor="Hand"
-                                              ToolTip="Click to flip between input and step" />
-                                <TextBlock Grid.Column="2"
-                                           Text="{Binding Role}"
-                                           FontFamily="Consolas"
-                                           FontSize="11"
-                                           Foreground="{Binding RoleBrush}"
-                                           Visibility="{Binding RoleStaticVisibility}"
-                                           VerticalAlignment="Center" />
-                                <TextBox Grid.Column="3"
-                                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         IsReadOnly="{Binding IsNameReadOnly}"
-                                         FontFamily="Consolas"
-                                         FontSize="13"
-                                         Foreground="{Binding NameBrush}"
-                                         Background="#1e1e1e"
-                                         BorderBrush="{Binding NameBorderBrush}"
-                                         BorderThickness="1"
-                                         Padding="4,1"
-                                         Margin="0,0,8,0"
-                                         VerticalAlignment="Center"
-                                         GotFocus="NameTextBox_GotFocus"
-                                         PreviewMouseLeftButtonDown="NameTextBox_PreviewMouseLeftButtonDown" />
-                                <TextBlock Grid.Column="4"
-                                           Text="{Binding Rhs}"
-                                           FontFamily="Consolas"
-                                           FontSize="12"
-                                           Foreground="{Binding RhsBrush}"
-                                           TextTrimming="CharacterEllipsis"
-                                           VerticalAlignment="Center"
-                                           ToolTip="{Binding Rhs}" />
-                                <!-- Straddling-range warning (spec 0010): the row
-                                     is a normal, included range input; the marker
-                                     only says it could not be made a slice. -->
-                                <TextBlock Grid.Column="5"
-                                           Text="&#x26A0;"
-                                           FontSize="12"
-                                           Foreground="#d7ba7d"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Visibility="{Binding StraddleWarningVisibility}"
-                                           ToolTip="{Binding StraddleWarningText}" />
-                                <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
-                            </Grid>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Border>
+                                              ToolTip="Include in the synthesised LET" />
+                                    <!-- Margin carries the slice-row indent, so a
+                                         slice sits visibly under the anchor row
+                                         the engine emitted it after. -->
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Address}"
+                                               Margin="{Binding AddressIndent}"
+                                               FontFamily="Consolas"
+                                               FontSize="12"
+                                               Foreground="{Binding AddressBrush}"
+                                               VerticalAlignment="Center" />
+                                    <ToggleButton Grid.Column="2"
+                                                  Content="{Binding Role}"
+                                                  IsChecked="{Binding IsStep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  Visibility="{Binding RoleToggleVisibility}"
+                                                  Padding="6,1"
+                                                  FontFamily="Consolas"
+                                                  FontSize="11"
+                                                  MinWidth="44"
+                                                  HorizontalAlignment="Left"
+                                                  VerticalAlignment="Center"
+                                                  Background="Transparent"
+                                                  Foreground="{Binding RoleBrush}"
+                                                  BorderBrush="#3e3e3e"
+                                                  BorderThickness="1"
+                                                  Cursor="Hand"
+                                                  ToolTip="Click to flip between input and step" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding Role}"
+                                               FontFamily="Consolas"
+                                               FontSize="11"
+                                               Foreground="{Binding RoleBrush}"
+                                               Visibility="{Binding RoleStaticVisibility}"
+                                               VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="3"
+                                             Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             IsReadOnly="{Binding IsNameReadOnly}"
+                                             FontFamily="Consolas"
+                                             FontSize="13"
+                                             Foreground="{Binding NameBrush}"
+                                             Background="#1e1e1e"
+                                             BorderBrush="{Binding NameBorderBrush}"
+                                             BorderThickness="1"
+                                             Padding="4,1"
+                                             Margin="0,0,8,0"
+                                             VerticalAlignment="Center"
+                                             GotFocus="NameTextBox_GotFocus"
+                                             PreviewMouseLeftButtonDown="NameTextBox_PreviewMouseLeftButtonDown" />
+                                    <TextBlock Grid.Column="4"
+                                               Text="{Binding Rhs}"
+                                               FontFamily="Consolas"
+                                               FontSize="12"
+                                               Foreground="{Binding RhsBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"
+                                               ToolTip="{Binding Rhs}" />
+                                    <!-- Straddling-range warning (spec 0010): the row
+                                         is a normal, included range input; the marker
+                                         only says it could not be made a slice. -->
+                                    <TextBlock Grid.Column="5"
+                                               Text="&#x26A0;"
+                                               Width="18"
+                                               FontSize="12"
+                                               Foreground="#d7ba7d"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Visibility="{Binding StraddleWarningVisibility}"
+                                               ToolTip="{Binding StraddleWarningText}" />
+                                    <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <!-- Spec 0010: the frozen-geometry caveat, once under the list and
+                 only when a slice row exists. Visibility is driven from
+                 GatherWindow.BuildRowsFromBindings. -->
+            <TextBlock x:Name="SliceNoteText"
+                       Text="Slice positions are fixed at gather time — if the array later changes shape, the slice offsets don't follow."
+                       FontSize="12"
+                       FontStyle="Italic"
+                       Foreground="#9cdcfe"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,0"
+                       Visibility="Collapsed" />
+        </StackPanel>
 
         <StackPanel x:Name="OrphansSection"
                     Grid.Row="7"
@@ -191,7 +217,10 @@
                                 <Grid Margin="6,3">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="28" />
-                                        <ColumnDefinition Width="56" />
+                                        <!-- Matches the bindings list's widened
+                                             address column so the two lists
+                                             stay column-aligned. -->
+                                        <ColumnDefinition Width="70" />
                                         <ColumnDefinition Width="60" />
                                         <ColumnDefinition Width="160" />
                                         <ColumnDefinition Width="160" />

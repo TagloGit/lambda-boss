@@ -276,6 +276,28 @@ public partial class GatherWindow
 
         OrphansSection.Visibility =
             _orphans.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Spec 0010: the frozen-geometry caveat is stated once, under the
+        // list, and only when there is a slice row to which it applies —
+        // a gather with no spill in it should carry no spill wording at all.
+        SliceNoteText.Visibility =
+            HasSliceRow(_rows) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    ///     True when any row currently rendered in the bindings list is a
+    ///     slice row — including an excluded one, which is still visible and
+    ///     still subject to the fixed-position caveat the moment it is
+    ///     re-ticked. Orphan rows live in their own collection and can never
+    ///     be slices (a slice's only path is its anchor, and dropping the
+    ///     anchor drops the slice outright rather than orphaning it).
+    /// </summary>
+    private static bool HasSliceRow(IEnumerable<GatherRowVm> rows)
+    {
+        foreach (var vm in rows)
+            if (vm.IsSlice)
+                return true;
+        return false;
     }
 
     private void Row_PropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -292,9 +314,7 @@ public partial class GatherWindow
             FormulaRef? causedBy;
             if (!vm.Include)
             {
-                _excluded[vm.Source] = new BindingRow(
-                    vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
-                    vm.IsExpansion, vm.CanToggleRole, vm.SliceOf);
+                _excluded[vm.Source] = Snapshot(vm);
                 // Excluding a step drops any precedents reachable only
                 // via this cell — same upstream effect as a demote.
                 // Pass the cell as the cause so the tracker records
@@ -424,6 +444,25 @@ public partial class GatherWindow
         return null;
     }
 
+    /// <summary>
+    ///     Rebuilds the plain <see cref="BindingRow" /> a VM was constructed
+    ///     from, for the two places the dialog caches row data outside the
+    ///     engine's result: the excluded-row snapshots (so an unticked row
+    ///     stays renderable) and the pre-Recompute active snapshot the orphan
+    ///     tracker diffs against. Every display-affecting field has to be
+    ///     carried through — a single shared builder so a new
+    ///     <c>BindingRow</c> field can't be forgotten on one of the two call
+    ///     sites (which is exactly how the straddle marker went missing on
+    ///     excluded rows).
+    /// </summary>
+    internal static BindingRow Snapshot(GatherRowVm vm)
+    {
+        return new BindingRow(
+            vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
+            vm.IsExpansion, vm.CanToggleRole, vm.SliceOf,
+            vm.StraddlesSpillAnchor);
+    }
+
     private void Recompute(FormulaRef? causedBy)
     {
         // Snapshot the active rows BEFORE the recompute. Used by the
@@ -440,9 +479,7 @@ public partial class GatherWindow
             if (vm.IsExpansion) continue;
             if (!vm.Include) continue;
             if (snapshotBefore.ContainsKey(vm.Source)) continue;
-            snapshotBefore[vm.Source] = new BindingRow(
-                vm.Source, vm.RoleEnum, vm.Name, vm.Rhs,
-                vm.IsExpansion, vm.CanToggleRole, vm.SliceOf);
+            snapshotBefore[vm.Source] = Snapshot(vm);
         }
 
         var states = BuildRowStates();
@@ -635,6 +672,14 @@ public partial class GatherWindow
 /// </summary>
 public class GatherRowVm : INotifyPropertyChanged
 {
+    /// <summary>
+    ///     Indent applied to a slice row's address column. Sized to read as
+    ///     child-of-the-row-above without pushing longer block addresses
+    ///     (<c>A2:A4</c>) out of the column — the address column is widened by
+    ///     the same amount in the XAML to absorb it.
+    /// </summary>
+    internal const double SliceIndentPixels = 14;
+
     private static readonly Brush ActiveAddressBrush =
         new SolidColorBrush((Color)ColorConverter.ConvertFromString("#9cdcfe"));
 
@@ -671,7 +716,7 @@ public class GatherRowVm : INotifyPropertyChanged
         IsExpansion = binding.IsExpansion;
         CanToggleRole = binding.CanToggleRole;
         SliceOf = binding.SliceOf;
-        StraddledSpillAnchorAddress = binding.StraddlesSpillAnchor?.A1Address;
+        StraddlesSpillAnchor = binding.StraddlesSpillAnchor;
         OrphanedByAddress = orphanedByAddress;
         _include = include;
         _isStep = binding.Role == BindingRole.Step;
@@ -679,7 +724,27 @@ public class GatherRowVm : INotifyPropertyChanged
 
     public FormulaRef Source { get; }
     public BindingRole RoleEnum { get; }
-    public string Address => Source.A1Address;
+
+    /// <summary>
+    ///     The row's address as displayed in the dialog. A spilling anchor's
+    ///     row renders the <em>spilled</em> form (<c>A2#</c>) because its
+    ///     binding is the whole array, not the anchor cell's scalar value —
+    ///     which is what tells it apart from a slice row for the scalar
+    ///     reference <c>A2</c> to the same cell, since both rows would
+    ///     otherwise read the bare <c>A2</c>.
+    ///     <see cref="FormulaRef.A1Address" /> deliberately omits the suffix
+    ///     (it is the dedupe/identity form), so the <c>#</c> is appended here,
+    ///     in the display layer that needs it.
+    /// </summary>
+    public string Address => Source.IsSpilled ? Source.A1Address + "#" : Source.A1Address;
+
+    /// <summary>
+    ///     Spec 0010 PR 8. Left margin applied to the address column so slice
+    ///     rows sit visibly indented under the anchor row they slice — the
+    ///     engine already emits each anchor's slices immediately after it, so
+    ///     the indent alone reads as parentage. Zero on every other row kind.
+    /// </summary>
+    public Thickness AddressIndent => IsSlice ? new Thickness(SliceIndentPixels, 0, 0, 0) : default;
 
     /// <summary>
     ///     Spec 0010: slice rows read "slice" rather than "input" so the
@@ -704,13 +769,20 @@ public class GatherRowVm : INotifyPropertyChanged
     public bool IsSlice => SliceOf != null;
 
     /// <summary>
-    ///     Spec 0010 PR 5. Address of the spill anchor this row's range is
-    ///     partly inside, or null on every other row. A straddling range
-    ///     cannot be expressed as a slice of the anchor's array, so it stays a
-    ///     literal range input — correct, just not self-contained — and the
-    ///     row carries a warning marker rather than a diagnostic or a refusal.
+    ///     Spec 0010 PR 5. The spill anchor this row's range is partly inside,
+    ///     or null on every other row. A straddling range cannot be expressed
+    ///     as a slice of the anchor's array, so it stays a literal range input
+    ///     — correct, just not self-contained — and the row carries a warning
+    ///     marker rather than a diagnostic or a refusal. Held as the
+    ///     <see cref="CellRef" /> rather than just its address so
+    ///     <see cref="GatherWindow" /> can round-trip the flag back into a
+    ///     <see cref="BindingRow" /> when it snapshots an excluded row; a
+    ///     snapshot that dropped it made the marker disappear until the row was
+    ///     re-ticked.
     /// </summary>
-    public string? StraddledSpillAnchorAddress { get; }
+    public CellRef? StraddlesSpillAnchor { get; }
+
+    public string? StraddledSpillAnchorAddress => StraddlesSpillAnchor?.A1Address;
 
     public bool IsStraddlingSpill => StraddledSpillAnchorAddress != null;
 
