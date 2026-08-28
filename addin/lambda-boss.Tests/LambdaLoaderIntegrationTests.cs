@@ -50,7 +50,7 @@ public class LambdaLoaderIntegrationTests
         Assert.Contains("maps._dirAll", names);
 
         // Lambdas in the same library still load.
-        Assert.Contains("maps.CELLTOPOS", names);
+        Assert.Contains("maps.TOPOS", names);
 
         // The constant's literal is preserved (array-row separators intact).
         var arrowsAll = loaded.Single(l => l.Name == "maps._arrowsAll");

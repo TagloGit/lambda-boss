@@ -53,7 +53,7 @@ GRIDAREA = LAMBDA(
         endCol, originCol + COLUMNS(grid) - 1,
         nRows, ROWS(grid),
         nCols, COLUMNS(grid),
-        pos, CELLTOPOS(centerCell, safeMult),
+        pos, TOPOS(centerCell, safeMult),
         ctrRow, INT(pos / safeMult),
         ctrCol, MOD(pos, safeMult),
     //  Clip window (mode 0): shrink to the grid's bounds

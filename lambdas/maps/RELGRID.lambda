@@ -33,7 +33,7 @@ RELGRID = LAMBDA(
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
         originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
-        pos, CELLTOPOS(anchor, safeMult),
+        pos, TOPOS(anchor, safeMult),
         ancRow, INT(pos / safeMult),
         ancCol, MOD(pos, safeMult),
         dRow, SEQUENCE(ROWS(grid), 1, originRow) - ancRow,

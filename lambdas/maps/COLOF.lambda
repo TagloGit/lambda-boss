@@ -1,5 +1,5 @@
 /*  FUNCTION NAME:      COLOF
-    DESCRIPTION:*//**Extracts the column number from an encoded position integer (as produced by CELLTOPOS).*/
+    DESCRIPTION:*//**Extracts the column number from an encoded position integer (as produced by TOPOS).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
 */
@@ -10,11 +10,11 @@ COLOF = LAMBDA(
 //  Help
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →COLOF(pos, [mult])¶" &
-                "DESCRIPTION:   →Extracts the column number from an encoded position integer (as produced by CELLTOPOS).¶" &
+                "DESCRIPTION:   →Extracts the column number from an encoded position integer (as produced by TOPOS).¶" &
                 "VERSION:       →May 20 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches CELLTOPOS). Must match the mult used to encode pos.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches TOPOS). Must match the mult used to encode pos.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=COLOF(1700017)¶" &
                 "Result         →17",

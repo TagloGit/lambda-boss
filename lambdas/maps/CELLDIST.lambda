@@ -27,8 +27,8 @@ CELLDIST = LAMBDA(
     //  Procedure
         safeMult, 16385,
         met, IF(ISOMITTED(metric), 0, metric),
-        posA, CELLTOPOS(cell1, safeMult),
-        posB, CELLTOPOS(cell2, safeMult),
+        posA, TOPOS(cell1, safeMult),
+        posB, TOPOS(cell2, safeMult),
         rowA, INT(posA / safeMult),
         rowB, INT(posB / safeMult),
         colA, MOD(posA, safeMult),

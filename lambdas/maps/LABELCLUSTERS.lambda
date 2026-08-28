@@ -16,7 +16,7 @@ LABELCLUSTERS = LAMBDA(
                 "DESCRIPTION:   →Labels each input cell with an integer cluster id such that two cells in the same group share an id whenever they are adjacent, directly or transitively. Uses full transitive closure (min-label relaxation) so the result is independent of input order.¶" &
                 "VERSION:       →Aug 22 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cells          →(Required) A column of cells — A1 address text (e.g. ""B7"") OR encoded scalar positions (row*100000+col). Auto-detected per element via ISNUMBER; text is normalised internally via CELLTOPOS.¶" &
+                "   cells          →(Required) A column of cells — A1 address text (e.g. ""B7"") OR encoded scalar positions (row*100000+col). Auto-detected per element via ISNUMBER; text is normalised internally via TOPOS.¶" &
                 "   deltas         →(Optional) A 1-D array defining connectivity, in any direction notation — packed position deltas (_dirOrthog, _dirAll, knight moves ...), arrow glyphs (_arrowsOrthog, ↑ → ↓ ←), compass codes (N, NE, north-east ...) or screen directions (U, DR, up-left ...); normalised via DIRDELTA. Default: the 8 compass directions in canonical clockwise order ({-100000;-99999;1;100001;100000;99999;-1;-100001}, i.e. _dirAll). Pass _dirOrthog or _arrowsOrthog for 4-way. Assumes the library default mult=100000.¶" &
                 "   group          →(Optional) Column of area / sheet keys (numeric or text). Adjacency is only tested between cells sharing the same key, so multi-sheet maps stay partitioned. Omitted: all cells treated as one group.¶" &
                 "EXAMPLE:       →¶" &
@@ -30,7 +30,7 @@ LABELCLUSTERS = LAMBDA(
         wasRow, AND(ROWS(cells) = 1, COLUMNS(cells) > 1),
         cellsC, IF(wasRow, TRANSPOSE(cells), cells),
         n, ROWS(cellsC),
-        pos, MAP(cellsC, LAMBDA(c, IF(ISNUMBER(c), c, CELLTOPOS(c)))),
+        pos, MAP(cellsC, LAMBDA(c, IF(ISNUMBER(c), c, TOPOS(c)))),
         grpRaw, IF(ISOMITTED(group), SEQUENCE(n, , 0, 0), IF(wasRow, TRANSPOSE(group), group)),
         gi, XMATCH(grpRaw, UNIQUE(grpRaw)),
         BIG, 1000000000000,

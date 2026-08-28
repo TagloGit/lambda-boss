@@ -12,7 +12,7 @@ ADDRESSES = LAMBDA(
                 "DESCRIPTION:   →Returns the A1-style addresses of cells in a range as text, shape-matching the input range.¶" &
                 "VERSION:       →May 20 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   cells          →(Required) A cell or range reference. Output shape matches the input shape. Addresses are returned in relative form (no $ anchors), matching CELLTOPOS / MOVECELL / POSTOCELL conventions.¶" &
+                "   cells          →(Required) A cell or range reference. Output shape matches the input shape. Addresses are returned in relative form (no $ anchors), matching TOPOS / MOVECELL / POSTOCELL conventions.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=ADDRESSES(F28:H30)¶" &
                 "Result         →3x3 grid of ""F28"" through ""H30""",

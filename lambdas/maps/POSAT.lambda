@@ -16,7 +16,7 @@ POSAT = LAMBDA(
                 "PARAMETERS:    →¶" &
                 "   row            →(Required) Row number. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &
                 "   col            →(Required) Column number. Also accepts an array of cols — result lifts element-wise (and broadcasts against row).¶" &
-                "   mult           →(Optional) Row multiplier. Default: 100000 (matches CELLTOPOS/ROWOF/COLOF). Must match the mult those decoders use for round-trips.¶" &
+                "   mult           →(Optional) Row multiplier. Default: 100000 (matches TOPOS/ROWOF/COLOF). Must match the mult those decoders use for round-trips.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=POSAT(17, 17)¶" &
                 "Result         →1700017",

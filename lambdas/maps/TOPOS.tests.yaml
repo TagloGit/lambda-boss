@@ -47,6 +47,54 @@ tests:
     args: ["Z10", "=50"]
     expected: 526
 
+  - name: arrow up converts to relative delta
+    args: ["↑"]
+    expected: -100000
+
+  - name: arrow up-right converts to relative delta
+    args: ["↗"]
+    expected: -99999
+
+  - name: arrow left converts to relative delta
+    args: ["←"]
+    expected: -1
+
+  - name: compass code NE
+    args: ["NE"]
+    expected: -99999
+
+  - name: verbose compass north-east
+    args: ["north-east"]
+    expected: -99999
+
+  - name: screen direction down
+    args: ["down"]
+    expected: 100000
+
+  - name: screen direction DL
+    args: ["DL"]
+    expected: 99999
+
+  - name: number passes through unchanged
+    args: ["=100001"]
+    expected: 100001
+
+  - name: knight-move delta passes through unchanged
+    args: ["=-199999"]
+    expected: -199999
+
+  - name: custom mult repacks direction delta down
+    args: ["↓", "=100"]
+    expected: 100
+
+  - name: custom mult repacks direction delta NE
+    args: ["NE", "=100"]
+    expected: -99
+
+  - name: unrecognised text returns NA
+    args: ["nonsense"]
+    expected: -2146826246
+
   - name: cell containing address string
     setup:
       cells:
@@ -54,6 +102,14 @@ tests:
           values: "E5"
     args: ["=C3"]
     expected: 500005
+
+  - name: cell containing arrow glyph
+    setup:
+      cells:
+        - address: "C3"
+          values: "↖"
+    args: ["=C3"]
+    expected: -100001
 
   - name: vertical array of addresses lifts
     args: ['={"E5";"C3"}']
@@ -66,6 +122,10 @@ tests:
   - name: 2D array of addresses lifts
     args: ['={"E5","F6";"C3","D4"}']
     expected: [[500005, 600006], [300003, 400004]]
+
+  - name: mixed array of address and direction lifts
+    args: ['={"E5","↑","NE"}']
+    expected: [[500005, -100000, -99999]]
 
   - name: range of cells containing addresses lifts
     setup:

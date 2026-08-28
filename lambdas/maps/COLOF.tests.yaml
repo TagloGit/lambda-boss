@@ -12,19 +12,19 @@ tests:
     expected: 1
 
   - name: multi-letter column AB
-    args: ['=CELLTOPOS("AB12")']
+    args: ['=TOPOS("AB12")']
     expected: 28
 
-  - name: composed with CELLTOPOS XFD
-    args: ['=CELLTOPOS("XFD16384")']
+  - name: composed with TOPOS XFD
+    args: ['=TOPOS("XFD16384")']
     expected: 16384
 
   - name: custom mult 50
     args: ["=526", "=50"]
     expected: 26
 
-  - name: custom mult matches CELLTOPOS custom mult
-    args: ['=CELLTOPOS("Z10", 50)', "=50"]
+  - name: custom mult matches TOPOS custom mult
+    args: ['=TOPOS("Z10", 50)', "=50"]
     expected: 26
 
   - name: vertical array of positions lifts
