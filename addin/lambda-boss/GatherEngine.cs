@@ -69,7 +69,16 @@ public static class GatherEngine
     ///     10): the walker treats the cell as if it didn't exist, so any
     ///     precedents reachable only via that cell drop too. Range
     ///     exclusions stop the range from being promoted to a binding (the
-    ///     literal range stays in the calling step's formula). Each row's
+    ///     literal range stays in the calling step's formula).
+    ///     Spec 0010 adds the spill cascades, which turn on the row's ref
+    ///     shape rather than on the cell it starts at: excluding a
+    ///     <em>slice</em> row (any ref wholly inside a spill — <c>A1</c>,
+    ///     <c>B1</c>, <c>A1:B2</c>) reverts just that reference to a literal
+    ///     address and leaves the anchor and its sibling slices intact,
+    ///     while excluding the <em>anchor</em> row (keyed <c>A1#</c>) drops
+    ///     the cell from the walk and cascades: every slice of it drops and
+    ///     reverts too. Demoting the anchor is not an exclusion — its RHS
+    ///     becomes <c>A1#</c> and every slice keeps indexing into it. Each row's
     ///     <see cref="RowState.RoleOverride" /> (PR 11) flips the
     ///     classification: a step demoted to an input drops out of the
     ///     walk's recursion (its precedents only stay if reached via
@@ -153,18 +162,48 @@ public static class GatherEngine
         // The sink itself is exempt — the dialog never offers an Include
         // checkbox on the sink (it's the LET body, not a binding row), so
         // a defensive Remove keeps malformed inputs from breaking gather.
+        //
+        // Spec 0010 adds a third bucket, and it is the one that stops the
+        // two spill row kinds from colliding. A spilling anchor's row is
+        // keyed on the spilled ref (`A1#`); every ref lying wholly inside
+        // that spill — the bare `A1`, any child `B1`, any sub-block
+        // `A1:B2` — keys a SLICE row instead. Keying the exclusion set on
+        // `fr.Start` alone would make those indistinguishable, so
+        // unticking one slice row would drop the anchor cell from the walk
+        // and take the array binding and every sibling slice with it.
+        // Slice exclusions therefore never reach the walker: they suppress
+        // exactly one slice row and the reference reverts to a literal
+        // address (spec 0010, "Exclusion cascades"). Excluding the
+        // anchor's own row is the cascading direction — it drops the cell
+        // from the walk, which drops every slice of it in turn.
         HashSet<CellRef>? excludedCells = null;
         HashSet<FormulaRef>? excludedRanges = null;
+        HashSet<FormulaRef>? excludedSlices = null;
+        HashSet<CellRef>? excludedAnchors = null;
         if (excluded != null && excluded.Count > 0)
         {
             excludedCells = new HashSet<CellRef>();
             excludedRanges = new HashSet<FormulaRef>();
+            excludedSlices = new HashSet<FormulaRef>();
+            excludedAnchors = new HashSet<CellRef>();
             foreach (var fr in excluded)
             {
+                if (WhollyInsideSpill(fr, source) != null)
+                {
+                    excludedSlices.Add(fr);
+                    continue;
+                }
+
                 if (fr.IsRange)
+                {
                     excludedRanges.Add(fr);
+                }
                 else if (!fr.Start.Equals(sink))
+                {
                     excludedCells.Add(fr.Start);
+                    if (fr.IsSpilled)
+                        excludedAnchors.Add(fr.Start);
+                }
             }
         }
 
@@ -187,6 +226,16 @@ public static class GatherEngine
             {
                 if (fr.IsRange) continue;
                 if (fr.Start.Equals(sink)) continue;
+                // Same key collision as the exclusion split above: a bare
+                // ref inside a spill identifies a slice row, not the
+                // anchor's (`A1#`). Slice rows carry no role toggle
+                // (CanToggleRole = false), so an override on one is
+                // malformed input — ignoring it here keeps it from
+                // demoting the anchor and cutting the array's own walk.
+                // Demoting the ANCHOR is keyed `A1#`, falls through, and
+                // works exactly as spec 0010 requires: RHS becomes `A1#`
+                // and every slice keeps indexing into it.
+                if (WhollyInsideSpill(fr, source) != null) continue;
                 if (role == BindingRole.Input)
                 {
                     demotedCells ??= new HashSet<CellRef>();
@@ -359,7 +408,19 @@ public static class GatherEngine
         // their own: a range spanning the entire spill and covering more than
         // one cell. Resolved into `nameByRef` once names are assigned.
         var wholeArrayRefs = new List<(FormulaRef Ref, FormulaRef AnchorRowRef)>();
-        if (anchorCells.Count > 0)
+        // Refs that WOULD have been slices but got no row — because the user
+        // unticked the slice row, or unticked the anchor and the cascade took
+        // every slice of it with it. They revert to literal cell addresses in
+        // the referencing formula, so the referencing cell has to stay a step:
+        // `excluded` alone can't tell ClassifyRole that, because the anchor's
+        // row key (`A1#`) never matches the slice ref (`B1`) it cascaded onto.
+        var revertedSliceRefs = new HashSet<FormulaRef>();
+        // The loop still has work to do with no live anchor left, so the gate
+        // widens past `anchorCells`: an excluded anchor leaves the set empty
+        // while its cascade is exactly what needs recording.
+        if (anchorCells.Count > 0
+            || excludedAnchors is { Count: > 0 }
+            || excludedSlices is { Count: > 0 })
         {
             var sliceKeys = new HashSet<FormulaRef>();
             // `walked`, not `nonSink` — the sink's own formula gets rewritten
@@ -369,15 +430,34 @@ public static class GatherEngine
             {
                 if (p.IsSpilled) continue;
                 if (p.Start.Equals(sink)) continue;
-                if (excludedCells != null && excludedCells.Contains(p.Start)) continue;
                 if (coveredByRange.Contains(p.Start)) continue;
                 var spill = WhollyInsideSpill(p, source);
                 if (spill == null) continue;
+
+                // From here `p` is a slice candidate, so every path that
+                // declines to build a row leaves a literal address behind and
+                // records the ref for ClassifyRole.
+
+                // The user unticked this slice row. Only this one reference
+                // reverts — the anchor, and every sibling slice of it, are
+                // untouched.
+                if (excludedSlices != null && excludedSlices.Contains(p))
+                {
+                    revertedSliceRefs.Add(p);
+                    continue;
+                }
+
                 // The anchor has to be a binding for there to be an array to
                 // slice. It normally is — the walker redirects every in-spill
-                // precedent to the anchor — but the user may have excluded it,
-                // in which case the reference stays a literal cell address.
-                if (!anchorCells.Contains(spill.Anchor)) continue;
+                // precedent to the anchor — but the user may have excluded the
+                // anchor's row, and that cascades: no array, so every slice of
+                // it drops and reverts to a literal cell address too.
+                if (!anchorCells.Contains(spill.Anchor))
+                {
+                    revertedSliceRefs.Add(p);
+                    continue;
+                }
+
                 var end = p.End ?? p.Start;
                 var r1 = p.Start.Row - spill.Anchor.Row + 1;
                 var c1 = p.Start.Column - spill.Anchor.Column + 1;
@@ -388,7 +468,11 @@ public static class GatherEngine
                 // entry, so this only guards against a malformed extraction.
                 if (r1 < 1 || c1 < 1 || r2 < r1 || c2 < c1
                     || r2 > spill.Rows || c2 > spill.Columns)
+                {
+                    revertedSliceRefs.Add(p);
                     continue;
+                }
+
                 if (!sliceKeys.Add(p)) continue;
 
                 // A range spanning the whole spill and more than one cell is
@@ -482,7 +566,7 @@ public static class GatherEngine
         {
             var cellFormulaRef = RowRef(cell);
             var name = nameByRef[cellFormulaRef];
-            var role = ClassifyRole(cell, nameByRef, excluded, roleOverrides);
+            var role = ClassifyRole(cell, nameByRef, excluded, revertedSliceRefs, roleOverrides);
             if (role == BindingRole.Input)
             {
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
@@ -1002,6 +1086,7 @@ public static class GatherEngine
         WalkedCell cell,
         IReadOnlyDictionary<FormulaRef, string> nameByRef,
         ISet<FormulaRef>? excluded,
+        ISet<FormulaRef>? revertedSliceRefs,
         IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides)
     {
         // PR 11: a row-level role override forces the classification.
@@ -1049,11 +1134,16 @@ public static class GatherEngine
         // ref's literal text (the rewriter leaves unmapped refs alone),
         // which is the spec's "calling step keeps the cell-ref" — turning
         // the cell into an input would discard the formula instead.
+        // Spec 0010 extends that to refs reverted by the slice cascade:
+        // excluding an anchor keyed `A1#` reverts refs keyed `B1`, so
+        // `excluded` can't see them and only the reverted set can.
         foreach (var p in cell.Precedents)
         {
             if (nameByRef.ContainsKey(p))
                 return BindingRole.Step;
             if (excluded != null && excluded.Contains(p))
+                return BindingRole.Step;
+            if (revertedSliceRefs != null && revertedSliceRefs.Contains(p))
                 return BindingRole.Step;
         }
         return BindingRole.Input;
