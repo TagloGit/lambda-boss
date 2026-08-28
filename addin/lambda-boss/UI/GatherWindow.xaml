@@ -92,6 +92,7 @@
                                     <ColumnDefinition Width="60" />
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="18" />
                                 </Grid.ColumnDefinitions>
                                 <!-- ReSharper disable Xaml.BindingWithContextNotResolved -->
                                 <CheckBox Grid.Column="0"
@@ -151,6 +152,17 @@
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"
                                            ToolTip="{Binding Rhs}" />
+                                <!-- Straddling-range warning (spec 0010): the row
+                                     is a normal, included range input; the marker
+                                     only says it could not be made a slice. -->
+                                <TextBlock Grid.Column="5"
+                                           Text="&#x26A0;"
+                                           FontSize="12"
+                                           Foreground="#d7ba7d"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Visibility="{Binding StraddleWarningVisibility}"
+                                           ToolTip="{Binding StraddleWarningText}" />
                                 <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
                             </Grid>
                         </DataTemplate>

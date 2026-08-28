@@ -296,6 +296,11 @@ public static class GatherEngine
         // dropped under a range that no longer exists.
         var ranges = new List<FormulaRef>();
         var rangeSet = new HashSet<FormulaRef>();
+        // Spec 0010 PR 5: promoted ranges that overlap a spill without lying
+        // wholly inside it, keyed to the anchor they straddle. Carried onto
+        // the range's binding row so the dialog can warn; the promotion
+        // itself is unchanged.
+        var straddledAnchorByRange = new Dictionary<FormulaRef, CellRef>();
         foreach (var cell in walked)
         {
             foreach (var p in cell.Precedents)
@@ -307,10 +312,14 @@ public static class GatherEngine
                 // to a range input — whether it is a degenerate single cell
                 // (`A2:A2`, a scalar in Excel), a band, an interior block, or
                 // the whole spill. A range straddling the spill's boundary is
-                // inexpressible as a slice and promotes exactly as today.
+                // inexpressible as a slice and promotes exactly as today —
+                // carrying the anchor it straddles so the dialog can warn.
                 if (WhollyInsideSpill(p, source) != null) continue;
-                if (rangeSet.Add(p))
-                    ranges.Add(p);
+                if (!rangeSet.Add(p)) continue;
+                ranges.Add(p);
+                var straddled = StraddledSpillAnchor(p, source);
+                if (straddled != null)
+                    straddledAnchorByRange[p] = straddled;
             }
         }
 
@@ -445,7 +454,10 @@ public static class GatherEngine
         {
             var name = nameByRef[range];
             var rhs = range.DisplayAddress(source.SinkSheet);
-            bindings.Add(new BindingRow(range, BindingRole.Input, name, rhs));
+            straddledAnchorByRange.TryGetValue(range, out var straddledAnchor);
+            bindings.Add(new BindingRow(
+                range, BindingRole.Input, name, rhs,
+                StraddlesSpillAnchor: straddledAnchor));
         }
 
         // The pool of names already taken — outer ranges and outer cells
@@ -942,6 +954,60 @@ public static class GatherEngine
         if (p.IsRange && !spill.Contains(p.End!))
             return null;
         return spill;
+    }
+
+    /// <summary>
+    ///     The anchor of the spill a promoted <em>range</em> partly overlaps,
+    ///     or null when it overlaps none. The complement of
+    ///     <see cref="WhollyInsideSpill" /> for ranges: wholly-inside is a
+    ///     slice, no overlap is an ordinary range, and partial overlap is the
+    ///     straddle spec 0010 PR 5 warns about. Purely a UI signal — the
+    ///     caller promotes the range identically either way, so a missed
+    ///     detection costs a warning, never correctness.
+    ///
+    ///     Detection probes the range's four corners rather than its cells:
+    ///     one <see cref="ICellSource.GetSpill" /> per corner is bounded,
+    ///     where scanning would cost a COM probe per cell of an arbitrarily
+    ///     large range. Every single-edge overflow (the range hanging over the
+    ///     spill's top, left, right or bottom) puts at least one corner inside
+    ///     the spill, so all four are caught. The bounded blind spot is a
+    ///     range that <em>crosses right through</em> or wholly encloses a
+    ///     spill — no corner of it lands inside, so no probe finds the spill
+    ///     and the row goes unmarked. That shape (<c>SUM(A1:Z100)</c> over a
+    ///     region that happens to contain a spill) reads as a deliberate bulk
+    ///     range rather than a nearly-a-slice reference, which is the case the
+    ///     warning exists for.
+    /// </summary>
+    private static CellRef? StraddledSpillAnchor(FormulaRef p, ICellSource source)
+    {
+        if (!p.IsRange || p.IsSpilled)
+            return null;
+        var start = p.Start;
+        var end = p.End!;
+        var corners = new[]
+        {
+            start,
+            end,
+            new CellRef(start.Sheet, end.Column, start.Row, start.ExternalWorkbook),
+            new CellRef(start.Sheet, start.Column, end.Row, start.ExternalWorkbook)
+        };
+        var probed = new HashSet<CellRef>();
+        foreach (var corner in corners)
+        {
+            if (!probed.Add(corner))
+                continue;
+            var spill = source.GetSpill(corner);
+            if (spill == null)
+                continue;
+            // A range wholly inside the spill is a slice, not a straddle; it
+            // never reaches promotion, but the guard keeps this predicate
+            // meaningful on its own.
+            if (spill.Contains(start) && spill.Contains(end))
+                return null;
+            return spill.Anchor;
+        }
+
+        return null;
     }
 
     /// <summary>
