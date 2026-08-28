@@ -391,7 +391,16 @@ public enum GatherDiagnosticKind
     ///     <c>/EditLambda</c> first to expand it into a LET, then re-run
     ///     <c>/Gather</c>.
     /// </summary>
-    LambdaCallSink
+    LambdaCallSink,
+
+    /// <summary>
+    ///     The sink is a spill child — a cell filled by another cell's
+    ///     dynamic array rather than by a formula of its own. There is no
+    ///     calculation rooted there to gather (spec 0010): the author meant
+    ///     the anchor. Replaces spec 0005's silent no-op, which was
+    ///     indistinguishable from <c>/Gather</c> not working at all.
+    /// </summary>
+    SpillChildSink
 }
 
 /// <summary>
