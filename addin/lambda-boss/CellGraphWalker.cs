@@ -19,7 +19,7 @@ namespace LambdaBoss;
 ///     (formula <c>null</c>, no precedents) so its sub-tree is dropped
 ///     from the walk and its cell-ref appears as an input on the boundary.
 ///     The sink itself is never restricted — gathering always processes the
-///     sink's formula. Spill anchors keep their <see cref="ICellSource.HasSpill" />
+///     sink's formula. Spill anchors keep their <see cref="WalkedCell.HasSpill" />
 ///     flag even when leaf-restricted so the engine still emits <c>A1#</c>
 ///     on the boundary input, preserving the array semantics of the
 ///     dropped sub-tree.
@@ -90,7 +90,7 @@ internal static class CellGraphWalker
 
             // Cell is leaf-restricted when a restriction set is given and
             // this cell isn't in it. The sink is exempt — gather always
-            // processes its formula. Cell-above/left labels and HasSpill
+            // processes its formula. Cell-above/left labels and spill geometry
             // are still queried so the boundary input's binding name and
             // `#`-suffix come out the same as a natural leaf would.
             var isRestricted = restrictTo != null
@@ -110,7 +110,12 @@ internal static class CellGraphWalker
 
             var cellAbove = source.GetCellAboveText(cell);
             var cellLeft = source.GetCellLeftText(cell);
-            var hasSpill = source.HasSpill(cell);
+            // Anchor-only flag: GetSpill is non-null for spill children too,
+            // and only the anchor's RHS may carry the `#` suffix (`B1#` on a
+            // child is #REF!). Spec 0010 PR 3 replaces this bool with the
+            // full geometry; until then the walker keeps the old contract.
+            var spill = source.GetSpill(cell);
+            var hasSpill = spill != null && spill.Anchor == cell;
 
             // Always probe the source for the cell's formula, even when
             // the cell is restricted or demoted — the engine uses

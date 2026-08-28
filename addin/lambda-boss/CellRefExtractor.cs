@@ -12,7 +12,7 @@ namespace LambdaBoss;
 ///     PR 5 consumes the trailing <c>#</c> on spill refs as part of the
 ///     match so the rewriter collapses the whole <c>A1#</c> token to a
 ///     binding name; the engine learns spill-ness from
-///     <see cref="ICellSource.HasSpill" />, not from this flag. String
+///     <see cref="ICellSource.GetSpill" />, not from this flag. String
 ///     literals are skipped wholesale.
 /// </summary>
 internal static class CellRefExtractor

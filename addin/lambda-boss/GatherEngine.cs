@@ -340,7 +340,7 @@ public static class GatherEngine
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
                 // workbook-qualified for externals — DisplayAddress handles
                 // the quoting rules so the RHS round-trips cleanly. A
-                // spilling leaf appends '#' so the binding represents the
+                // spilling anchor appends '#' so the binding represents the
                 // whole array rather than just the anchor cell's value;
                 // step-classified cells skip the suffix because their RHS
                 // is the rewritten formula (array semantics flow through

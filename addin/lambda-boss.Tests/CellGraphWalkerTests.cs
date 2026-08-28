@@ -191,7 +191,7 @@ public class CellGraphWalkerTests
         // continues into A1 (the anchor) — A1 surfaces as a walked cell.
         var source = new StubCellSource()
             .WithFormula("A1", "=SEQUENCE(10)")
-            .WithSpill("A1")
+            .WithSpill("A1", 10, 1)
             .WithFormula("B1", "=SUM(A1#)");
 
         var walked = CellGraphWalker.Walk(source.Ref("B1"), source).Cells!;
@@ -213,7 +213,7 @@ public class CellGraphWalkerTests
         var source = new StubCellSource()
             .WithFormula("A2", "=10")
             .WithFormula("B2", "=SEQUENCE(A2)")
-            .WithSpill("B2")
+            .WithSpill("B2", 10, 1)
             .WithFormula("C2", "=SUM(B2#)");
 
         var walked = CellGraphWalker.Walk(source.Ref("C2"), source).Cells!;
@@ -400,7 +400,7 @@ public class CellGraphWalkerTests
         // dynamic-array semantics of the dropped sub-tree.
         var source = new StubCellSource()
             .WithFormula("A1", "=SEQUENCE(10)")
-            .WithSpill("A1")
+            .WithSpill("A1", 10, 1)
             .WithFormula("B1", "=SUM(A1#)");
 
         var restrictTo = new HashSet<CellRef> { source.Ref("B1") };
