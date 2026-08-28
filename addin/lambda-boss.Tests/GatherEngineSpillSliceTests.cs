@@ -3,13 +3,16 @@ using Xunit;
 namespace LambdaBoss.Tests;
 
 /// <summary>
-///     Spec 0010 PR 3 — single-cell slices end-to-end. A single-cell
-///     reference landing inside a spill becomes its own binding row holding
-///     <c>INDEX(anchor, r, c)</c>. Both single-cell cases are one code path:
-///     a spill <em>child</em> (<c>B2</c>, which has no formula of its own) and
-///     a scalar reference to the spilling <em>anchor</em> (<c>A2</c>, which
-///     Excel reads as the top-left value). Range slices spanning more than one
-///     cell are PR 4; the dialog's indentation and fixed-position note are PR 8.
+///     Spec 0010 PRs 3 and 4 — spill slices end-to-end. A reference landing
+///     wholly inside a spill becomes its own binding row holding a slice of the
+///     anchor's array: <c>INDEX(anchor, r, c)</c> for the single-cell cases
+///     (PR 3 — a spill <em>child</em> such as <c>B2</c>, which has no formula
+///     of its own, and a scalar reference to the spilling <em>anchor</em>,
+///     which Excel reads as the top-left value), and <c>TAKE</c>/<c>DROP</c>
+///     for a range covering a sub-block (PR 4). A range spanning the whole
+///     spill needs no row — it rewrites to the anchor's own binding name.
+///     The straddling-range warning is PR 5; the dialog's indentation and
+///     fixed-position note are PR 8.
 /// </summary>
 public class GatherEngineSpillSliceTests
 {
@@ -359,6 +362,274 @@ public class GatherEngineSpillSliceTests
         Assert.Equal("SEQUENCE(1,count)", result.Bindings[1].Rhs);
         Assert.Equal("INDEX(extracted,1,2)", result.Bindings[2].Rhs);
         Assert.Equal("extracted_2*3", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    // --- PR 4: range slices ---------------------------------------------
+
+    /// <summary>
+    ///     A range exactly equal to the spill and spanning 2+ cells IS the
+    ///     array: it rewrites to the anchor's binding name and earns no row of
+    ///     its own, because a row would only re-alias what the anchor already
+    ///     binds.
+    /// </summary>
+    [Fact]
+    public void Gather_RangeExactlyEqualToSpill_RewritesToAnchorNameWithNoNewRow()
+    {
+        var source = GridSource("=SUM(A2:C5)");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal("grid", binding.Name);
+        Assert.Equal("A2#", binding.Rhs);
+        Assert.Null(binding.SliceOf);
+        Assert.Equal("SUM(grid)", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     Row band starting at the top: the column axis spans the full spill
+    ///     so it contributes nothing, and its argument is a trailing omission
+    ///     — <c>TAKE(grid,2)</c>, not <c>TAKE(grid,2,3)</c>.
+    /// </summary>
+    [Fact]
+    public void Gather_RowBandInsideSpill_EmitsPositiveTakeWithColumnArgOmitted()
+    {
+        var source = GridSource("=SUM(A2:C3)");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        Assert.Equal(2, result.Bindings.Count);
+        Assert.Equal("A2#", result.Bindings[0].Rhs);
+        var slice = result.Bindings[1];
+        Assert.Equal("TAKE(grid,2)", slice.Rhs);
+        Assert.Equal("A2:C3", slice.Source.A1Address);
+        Assert.Equal(result.Bindings[0].Source, slice.SliceOf);
+        Assert.Equal($"SUM({slice.Name})", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     A column band flush to the spill's last column is edge-relative:
+    ///     <c>TAKE(grid,,-1)</c> — a negative take with the row argument
+    ///     rendered as a bare interior comma. Explicitly not a counted
+    ///     <c>CHOOSECOLS(grid,3)</c>.
+    /// </summary>
+    [Fact]
+    public void Gather_ColumnBandFlushToEnd_EmitsNegativeTakeNotCountedChooseCols()
+    {
+        var source = GridSource("=SUM(C2:C5)").WithLabel("C1", "Last");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        Assert.Equal(2, result.Bindings.Count);
+        var slice = result.Bindings[1];
+        Assert.Equal("last", slice.Name);
+        Assert.Equal("TAKE(grid,,-1)", slice.Rhs);
+        Assert.DoesNotContain("CHOOSECOLS", result.SynthesisedLet, StringComparison.Ordinal);
+        Assert.Equal("SUM(last)", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     An interior block constrained on both axes composes into exactly
+    ///     one <c>DROP</c> and one <c>TAKE</c>. Here the row axis is interior
+    ///     (drop 1, take 2) while the column axis is flush to the last column
+    ///     (take -2, no drop), so the <c>DROP</c>'s column argument is a
+    ///     trailing omission and the negative take composes across axes.
+    /// </summary>
+    [Fact]
+    public void Gather_InteriorBlockInsideSpill_EmitsOneDropAndOneTake()
+    {
+        var source = GridSource("=SUM(B3:C4)");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        Assert.Equal(2, result.Bindings.Count);
+        var slice = result.Bindings[1];
+        Assert.Equal("TAKE(DROP(grid,1),2,-2)", slice.Rhs);
+        Assert.Equal(1, CountOccurrences(slice.Rhs, "DROP("));
+        Assert.Equal(1, CountOccurrences(slice.Rhs, "TAKE("));
+        // Row-major fallback name: (2-1)*3 + 2 = 5.
+        Assert.Equal("grid_5", slice.Name);
+    }
+
+    /// <summary>
+    ///     A one-cell range inside a multi-cell spill is a scalar in Excel, so
+    ///     it takes the <c>INDEX</c> path rather than a 1×1 <c>TAKE</c>.
+    /// </summary>
+    [Fact]
+    public void Gather_DegenerateRangeInsideMultiCellSpill_TakesScalarIndexPath()
+    {
+        var source = GridSource("=SUM(B3:B3)");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        Assert.Equal(2, result.Bindings.Count);
+        Assert.Equal("INDEX(grid,2,2)", result.Bindings[1].Rhs);
+        Assert.DoesNotContain("TAKE(", result.SynthesisedLet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     The 1×1 boundary case, stated as one formula: <c>A2:A2</c> is
+    ///     simultaneously one cell and the whole spill, and the single-cell
+    ///     rule wins — so it indexes, while <c>A2#</c> alongside it still
+    ///     binds the array. Emitting <c>arr</c> for the range would hand the
+    ///     step a 1×1 array, which is not a scalar.
+    /// </summary>
+    [Fact]
+    public void Gather_OneByOneSpill_DegenerateRangeIndexesWhileSpillRefBindsArray()
+    {
+        var source = OneByOneSource("=SUM(A2:A2)+SUM(A2#)");
+
+        var result = GatherEngine.Gather(source.Ref("B2"), source)!;
+
+        Assert.Equal(2, result.Bindings.Count);
+        Assert.Equal("A2#", result.Bindings[0].Rhs);
+        Assert.Equal("INDEX(arr,1,1)", result.Bindings[1].Rhs);
+        Assert.Equal("SUM(arr_2)+SUM(arr)", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     Range-promotion precedence: a range wholly inside a spill never
+    ///     becomes a range input, so no binding row carries a range
+    ///     <see cref="BindingRow.Source" /> and the literal <c>A2:C3</c> text
+    ///     never reaches the LET.
+    /// </summary>
+    [Fact]
+    public void Gather_RangeWhollyInsideSpill_NeverPromotesToRangeInput()
+    {
+        var source = GridSource("=SUM(A2:C3)+SUM(B3:C4)");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        Assert.All(result.Bindings, b => Assert.False(b.Source.IsRange && b.SliceOf == null));
+        Assert.DoesNotContain(":", result.SynthesisedLet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    ///     A range straddling the spill's boundary is inexpressible as a slice
+    ///     and promotes to a literal range input exactly as before. The
+    ///     warning marker on that row is PR 5.
+    /// </summary>
+    [Fact]
+    public void Gather_RangeStraddlingSpillBoundary_StillPromotesToRangeInput()
+    {
+        var source = GridSource("=SUM(A2:C6)");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        var binding = Assert.Single(result.Bindings);
+        Assert.True(binding.Source.IsRange);
+        Assert.Equal("A2:C6", binding.Rhs);
+        Assert.Null(binding.SliceOf);
+    }
+
+    /// <summary>
+    ///     Spec 0005 drops walked cells that fall inside a promoted range;
+    ///     spec 0010 exempts spill anchors, because the anchor is the array
+    ///     every slice of it indexes into. Here a straddling range covers the
+    ///     anchor, and the anchor's own <c>A2#</c> row survives alongside it.
+    /// </summary>
+    [Fact]
+    public void Gather_PromotedRangeCoveringAnchor_DoesNotDropTheAnchorRow()
+    {
+        var source = GridSource("=SUM(A2:C6)+E2")
+            .WithLabel("E1", "Doubled")
+            .WithFormula("E2", "=A2#*2");
+
+        var result = GatherEngine.Gather(source.Ref("D8"), source)!;
+
+        var anchor = result.Bindings.Single(b => b.Source.IsSpilled);
+        Assert.Equal("A2", anchor.Source.Start.A1Address);
+        Assert.Equal("A2#", anchor.Rhs);
+
+        var range = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal("A2:C6", range.Rhs);
+
+        Assert.Equal($"{anchor.Name}*2",
+            result.Bindings.Single(b => b.Name == "doubled").Rhs);
+    }
+
+    /// <summary>
+    ///     Anchor discovery through a range: the sink's only reference into
+    ///     the spill is a sub-block, and the walker still pulls the anchor in
+    ///     — otherwise there would be no array for the block to slice.
+    /// </summary>
+    [Fact]
+    public void Walk_RangeInsideSpill_PullsAnchorIn()
+    {
+        var source = GridSource("=SUM(B3:C4)");
+
+        var walked = CellGraphWalker.Walk(source.Ref("D8"), source).Cells!;
+
+        Assert.Equal(new[] { "A2", "D8" }, walked.Select(w => w.Ref.A1Address));
+        Assert.True(walked.Single(w => w.Ref.A1Address == "A2").HasSpill);
+    }
+
+    /// <summary>
+    ///     A range that touches no spill is still opaque — the walker records
+    ///     it as a block precedent and never recurses into its cells, so the
+    ///     engine promotes it as it always has.
+    /// </summary>
+    [Fact]
+    public void Walk_RangeOutsideAnySpill_StaysOpaque()
+    {
+        var source = new StubCellSource()
+            .WithFormula("A2", "=SEQUENCE(4,3)")
+            .WithSpill("A2", 4, 3)
+            .WithFormula("F1", "=1")
+            .WithFormula("D8", "=SUM(F1:F3)");
+
+        var walked = CellGraphWalker.Walk(source.Ref("D8"), source).Cells!;
+
+        Assert.Equal(new[] { "D8" }, walked.Select(w => w.Ref.A1Address));
+    }
+
+    /// <summary>
+    ///     Regression pin for the topological pass's degenerate-range edge.
+    ///     <see cref="CellGraphWalker" />'s discovery leaves a one-cell range
+    ///     outside any spill unwalked, but the topological pass still follows
+    ///     it — and that asymmetry is the only thing that catches a circular
+    ///     reference written as a self-covering degenerate range. PR 4
+    ///     rewrote the guard around it; this test stops a future tidy-up from
+    ///     trading the refusal for a silently self-referential LET.
+    /// </summary>
+    [Fact]
+    public void Gather_DegenerateRangeClosingALoop_StillRefusesWithCycle()
+    {
+        var source = new StubCellSource()
+            .WithFormula("B1", "=SUM(C1:C1)+1")
+            .WithFormula("C1", "=B1*2");
+
+        var result = GatherEngine.Gather(source.Ref("C1"), source)!;
+
+        Assert.NotNull(result.Diagnostic);
+        Assert.Equal(GatherDiagnosticKind.Cycle, result.Diagnostic!.Kind);
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        var i = haystack.IndexOf(needle, StringComparison.Ordinal);
+        while (i >= 0)
+        {
+            count++;
+            i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal);
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    ///     A 4×3 spill anchored at <c>A2</c> (so <c>A2:C5</c>), labelled
+    ///     <c>Grid</c> from <c>A1</c>, with the sink at <c>D8</c> well clear of
+    ///     the spill rectangle.
+    /// </summary>
+    private static StubCellSource GridSource(string sinkFormula)
+    {
+        return new StubCellSource()
+            .WithLabel("A1", "Grid")
+            .WithFormula("A2", "=SEQUENCE(4,3)")
+            .WithSpill("A2", 4, 3)
+            .WithFormula("D8", sinkFormula);
     }
 
     private static StubCellSource CanonicalSource()

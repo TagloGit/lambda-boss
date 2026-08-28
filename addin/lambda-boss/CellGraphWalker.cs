@@ -84,6 +84,12 @@ internal static class CellGraphWalker
         // the same redirection or it would never reach the anchor from the
         // step that references a child.
         var anchorByCell = new Dictionary<CellRef, CellRef>();
+        // Spec 0010 PR 4: the range precedents that resolved through a spill
+        // and therefore carry a real graph edge to its anchor. Ranges that
+        // straddle a spill boundary — or touch no spill at all — stay opaque
+        // block precedents and are absent here, so the topological pass can
+        // replay discovery's decision instead of re-deriving it.
+        var slicedRanges = new HashSet<FormulaRef>();
         // Per-walk memo over ICellSource.GetSpill. The live source pays two
         // COM property reads per probe (~1.6 ms out-of-process), and the
         // precedent loop probes once per precedent *occurrence* — a cell
@@ -181,7 +187,7 @@ internal static class CellGraphWalker
 
             foreach (var p in precedents)
             {
-                var target = ResolveWalkTarget(p, source, anchorByCell, spillByCell);
+                var target = ResolveWalkTarget(p, source, anchorByCell, slicedRanges, spillByCell);
                 if (target == null)
                     continue;
                 // Excluded precedents don't get walked — that's how the
@@ -197,7 +203,7 @@ internal static class CellGraphWalker
             }
         }
 
-        return CycleAwareTopoSort(sink, byRef, anchorByCell, leafRestricted);
+        return CycleAwareTopoSort(sink, byRef, anchorByCell, slicedRanges, leafRestricted);
     }
 
     /// <summary>
@@ -206,11 +212,14 @@ internal static class CellGraphWalker
     ///
     ///     Range refs aren't expanded into their constituent cells — they're
     ///     an opaque "block" precedent that the engine promotes to a single
-    ///     leaf input, so they return null. The one exception is a degenerate
-    ///     single-cell range (<c>A2:A2</c>) that lands inside a spill: Excel
-    ///     evaluates that as a scalar and spec 0010 routes it down the
-    ///     single-cell slice path, so it has to reach the anchor like a bare
-    ///     cell ref would.
+    ///     leaf input, so they return null. The exception is a range that lies
+    ///     <em>wholly inside</em> a spill (spec 0010, PR 4): the engine turns
+    ///     it into a slice of the anchor's array — a degenerate single-cell
+    ///     range (<c>A2:A2</c>) into <c>INDEX</c>, a sub-block into
+    ///     <c>TAKE</c>/<c>DROP</c> — so it has to reach the anchor like a bare
+    ///     cell ref would. A range with one endpoint outside the spill
+    ///     straddles its boundary, is inexpressible as a slice, and stays
+    ///     opaque so the engine promotes it as today.
     ///
     ///     Any reference landing inside a spill resolves to that spill's
     ///     <em>anchor</em> — the walker recurses into the anchor, never a
@@ -220,20 +229,30 @@ internal static class CellGraphWalker
     ///     <em>anchor discovery</em>: an anchor that nothing references
     ///     directly is still pulled into the walk, because otherwise there
     ///     would be no array for the slice to index into.
+    ///
+    ///     Every range ref that resolves through a spill is recorded in
+    ///     <paramref name="slicedRanges" />, which is what the topological
+    ///     pass keys on to decide whether a range precedent carries a graph
+    ///     edge — so the two passes cannot drift.
     /// </summary>
     private static CellRef? ResolveWalkTarget(
         FormulaRef p,
         ICellSource source,
         Dictionary<CellRef, CellRef> anchorByCell,
+        HashSet<FormulaRef> slicedRanges,
         Dictionary<CellRef, SpillInfo?> spillByCell)
     {
-        if (p.IsRange && !p.Start.Equals(p.End))
-            return null;
-
         var spill = GetSpillMemo(p.Start, source, spillByCell);
         if (spill == null)
             return p.IsRange ? null : p.Start;
 
+        // Straddling range: one endpoint outside the spill. Not a slice, so
+        // it stays an opaque range precedent and promotes as today.
+        if (p.IsRange && !spill.Contains(p.End!))
+            return null;
+
+        if (p.IsRange)
+            slicedRanges.Add(p);
         if (!spill.Anchor.Equals(p.Start))
             anchorByCell[p.Start] = spill.Anchor;
         return spill.Anchor;
@@ -271,6 +290,7 @@ internal static class CellGraphWalker
         CellRef sink,
         Dictionary<CellRef, WalkedCell> byRef,
         Dictionary<CellRef, CellRef> anchorByCell,
+        HashSet<FormulaRef> slicedRanges,
         int leafRestrictedCount)
     {
         var ordered = new List<WalkedCell>(byRef.Count);
@@ -288,7 +308,22 @@ internal static class CellGraphWalker
             {
                 stack.Push((cell, nextChild + 1));
                 var pre = node.Precedents[nextChild];
-                if (pre.IsRange && !pre.Start.Equals(pre.End))
+                // A range precedent carries a graph edge when discovery
+                // resolved it through a spill (replayed from the recorded
+                // set, so the geometry is never re-derived and the two passes
+                // cannot disagree about which ranges are slices) — or when it
+                // is a degenerate one-cell range, which the pass has always
+                // followed. That second clause does NOT mirror
+                // <see cref="ResolveWalkTarget" />, which leaves a degenerate
+                // range outside any spill unwalked; the asymmetry is
+                // deliberate and load-bearing. It is the only thing that
+                // catches a circular reference expressed as a self-covering
+                // degenerate range (`B1 = SUM(C1:C1)+1` with sink
+                // `C1 = B1*2`), and dropping it would trade a correct refusal
+                // for a silently self-referential LET.
+                if (pre.IsRange
+                    && !pre.Start.Equals(pre.End)
+                    && !slicedRanges.Contains(pre))
                     continue;
                 // Follow the same child→anchor redirection discovery used,
                 // otherwise a step that only references a spill child would

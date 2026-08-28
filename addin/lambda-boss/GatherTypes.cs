@@ -406,7 +406,25 @@ public enum GatherDiagnosticKind
 ///     <c>#SPILL!</c>), so a cell belongs to at most one spill and there is
 ///     no ambiguity to resolve.
 /// </summary>
-public sealed record SpillInfo(CellRef Anchor, int Rows, int Columns);
+public sealed record SpillInfo(CellRef Anchor, int Rows, int Columns)
+{
+    /// <summary>
+    ///     True when <paramref name="cell" /> falls inside this spill's
+    ///     rectangle. Used to decide whether a <em>range</em> reference lies
+    ///     wholly inside the spill (both endpoints contained — a slice) or
+    ///     straddles its boundary (one endpoint outside — left as a literal
+    ///     range input). Sheet and workbook must match, so a same-coordinates
+    ///     cell on another sheet is never contained.
+    /// </summary>
+    public bool Contains(CellRef cell)
+    {
+        if (cell is null) throw new ArgumentNullException(nameof(cell));
+        return string.Equals(Anchor.Sheet, cell.Sheet, StringComparison.OrdinalIgnoreCase)
+               && string.Equals(Anchor.ExternalWorkbook, cell.ExternalWorkbook, StringComparison.OrdinalIgnoreCase)
+               && cell.Row >= Anchor.Row && cell.Row < Anchor.Row + Rows
+               && cell.Column >= Anchor.Column && cell.Column < Anchor.Column + Columns;
+    }
+}
 
 /// <summary>
 ///     COM-free abstraction over the active workbook used by
