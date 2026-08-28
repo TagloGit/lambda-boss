@@ -15,7 +15,8 @@ namespace LambdaBoss.Commands;
 ///     formula equivalent to the calculation graph rooted at the active
 ///     cell, and on Save writes the LET back to the sink. PR 7 also routes
 ///     refusals (cycle in the graph, multi-sink selection) into a
-///     <c>MessageBox</c> rather than opening the dialog.
+///     <c>MessageBox</c> rather than opening the dialog — as does spec
+///     0010's spill-child sink.
 /// </summary>
 internal static class GatherCommand
 {
@@ -37,12 +38,23 @@ internal static class GatherCommand
             int sinkColumn = (int)activeCell.Column;
             int sinkRow = (int)activeCell.Row;
 
-            bool hasFormula = (bool)activeCell.HasFormula;
-            if (!hasFormula)
-                return;
-
             var sink = new CellRef(sheetName, sinkColumn, sinkRow);
             var source = new LiveCellSource(workbook, sheetName);
+
+            // A cell with no formula stays a silent no-op — with one
+            // exception. A spill child reports HasFormula false (spec 0010's
+            // COM spike) yet is a deliberate, nameable mistake: the author
+            // pointed at an array's output instead of the formula that
+            // produced it. Let it through so the engine can answer with the
+            // SpillChildSink diagnostic. An anchor always has a formula, so
+            // the Anchor check is belt-and-braces.
+            if (!(bool)activeCell.HasFormula)
+            {
+                var sinkSpill = source.GetSpill(sink);
+                if (sinkSpill == null || sinkSpill.Anchor.Equals(sink))
+                    return;
+            }
+
             var selection = ReadSelection(app, sheetName, sink);
 
             GatherResult? result;

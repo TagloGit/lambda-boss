@@ -34,8 +34,13 @@ public static class GatherEngine
     }
 
     /// <summary>
-    ///     Selection-aware overload. When <paramref name="selection" />
-    ///     contains more than one cell, the engine first checks the
+    ///     Selection-aware overload. Spec 0010 normalises the selection
+    ///     first: any spill child in it maps to its anchor, so a drag over a
+    ///     spill range reads as one selected calculation. A sink that is
+    ///     itself a spill child refuses outright with
+    ///     <see cref="GatherDiagnosticKind.SpillChildSink" />.
+    ///     When <paramref name="selection" /> then still
+    ///     contains more than one cell, the engine checks the
     ///     multi-sink rule (PR 7): if 2+ selected cells have no in-scope
     ///     dependent (i.e. aren't transitively referenced by another
     ///     selected cell), the engine refuses with a
@@ -119,9 +124,28 @@ public static class GatherEngine
         if (selection is null) throw new ArgumentNullException(nameof(selection));
         if (source is null) throw new ArgumentNullException(nameof(source));
 
+        // Spill-child sink (spec 0010). A child has no formula of its own,
+        // so without this check it would fall straight through the
+        // no-formula early return below as a silent no-op — indistinguishable
+        // from /Gather being broken. Checked ahead of GetFormula for exactly
+        // that reason, and outside the `excluded == null` diagnostic gate
+        // below because the sink can't change between Gather and Recompute
+        // (so this is unreachable on the Recompute path, and cheap and
+        // defensive if it ever isn't).
+        var sinkSpill = source.GetSpill(sink);
+        if (sinkSpill != null && !sinkSpill.Anchor.Equals(sink))
+            return RefusedWithSpillChildSink(sink, sinkSpill, source);
+
         var sinkFormula = source.GetFormula(sink);
         if (sinkFormula == null)
             return null;
+
+        // Selection normalisation (spec 0010). Every spill child in the
+        // selection maps to its anchor before the multi-sink check runs and
+        // before restrictTo is built, so dragging across a spill range
+        // selects the calculation that produced it rather than its output
+        // cells.
+        var effectiveSelection = NormaliseSelection(selection, source);
 
         // Split exclusion set by ref shape: cells get propagated to the
         // walker (which skips pushing them onto the stack), ranges stay
@@ -202,7 +226,8 @@ public static class GatherEngine
             // cell. If any walk hits a cycle, surface that cycle diagnostic
             // first — cycles are an unconditional refusal, while multi-sink
             // is selection-shape dependent.
-            var multiSinkDiagnostic = CheckMultipleSinks(sink, selection, sinkFormula, source);
+            var multiSinkDiagnostic = CheckMultipleSinks(
+                sink, effectiveSelection, sinkFormula, source);
             if (multiSinkDiagnostic != null)
                 return multiSinkDiagnostic;
         }
@@ -234,7 +259,7 @@ public static class GatherEngine
         // for demoted cells because demotion is checked first inside the
         // walker).
         WalkOutcome outcome;
-        var hasRestriction = selection.Count > 1;
+        var hasRestriction = effectiveSelection.Count > 1;
         var hasExclusion = excludedCells != null && excludedCells.Count > 0;
         var hasDemotion = demotedCells != null && demotedCells.Count > 0;
         var hasPromotion = promotedCells != null && promotedCells.Count > 0;
@@ -247,7 +272,7 @@ public static class GatherEngine
                 // formulas are loaded and their precedents pushed —
                 // exactly what "promote pulls new precedents in" means
                 // when the cell sat outside the original selection.
-                restrictTo = new HashSet<CellRef>(selection);
+                restrictTo = new HashSet<CellRef>(effectiveSelection);
                 if (hasPromotion)
                     restrictTo.UnionWith(promotedCells!);
             }
@@ -650,6 +675,75 @@ public static class GatherEngine
 
         return new GatherResult(
             sink, sinkFormula, Array.Empty<BindingRow>(), string.Empty, diagnostic);
+    }
+
+    /// <summary>
+    ///     Selection normalisation (spec 0010). Maps every spill child in
+    ///     the selection to its anchor and drops the duplicates that
+    ///     collapse produces, so a drag across <c>A1:C2</c> where <c>A1</c>
+    ///     spills into it arrives at the rest of the engine as the single
+    ///     cell <c>A1</c> — the calculation the author dragged over, not its
+    ///     six output cells. Runs before the multi-sink check (which would
+    ///     otherwise see six sink candidates) and before <c>restrictTo</c>
+    ///     is built (which would otherwise leaf-restrict the anchor's own
+    ///     precedents against a set of cells that aren't in the graph).
+    ///
+    ///     Deduplication is part of the contract, not a tidy-up: the
+    ///     multi-sink count is over the list, so leaving five copies of the
+    ///     anchor behind would refuse the very selection this exists to
+    ///     allow. It also incidentally hardens the count against a raw
+    ///     selection that repeats a cell across two Ctrl-clicked areas.
+    ///
+    ///     Cost is one <c>GetSpill</c> per selected cell — the same order
+    ///     as the multi-sink check's per-cell walk that follows it, and on
+    ///     non-spilling cells the live adapter's probe is a single COM
+    ///     property read.
+    /// </summary>
+    private static IReadOnlyList<CellRef> NormaliseSelection(
+        IReadOnlyList<CellRef> selection, ICellSource source)
+    {
+        if (selection.Count <= 1)
+            return selection;
+
+        var seen = new HashSet<CellRef>();
+        var normalised = new List<CellRef>(selection.Count);
+        var changed = false;
+        foreach (var cell in selection)
+        {
+            var spill = source.GetSpill(cell);
+            var mapped = spill?.Anchor ?? cell;
+            if (!mapped.Equals(cell))
+                changed = true;
+            if (!seen.Add(mapped))
+            {
+                changed = true;
+                continue;
+            }
+            normalised.Add(mapped);
+        }
+
+        return changed ? normalised : selection;
+    }
+
+    /// <summary>
+    ///     Builds a refusal result for a sink that is a spill child (spec
+    ///     0010). Names the anchor in the message so the fix is one click
+    ///     away: <c>"D4 is inside A1's spill range. Gather from A1
+    ///     instead."</c> Addresses are sheet-qualified only when they leave
+    ///     the sink's sheet, matching how binding RHS text renders.
+    /// </summary>
+    private static GatherResult RefusedWithSpillChildSink(
+        CellRef sink, SpillInfo spill, ICellSource source)
+    {
+        var child = sink.DisplayAddress(source.SinkSheet);
+        var anchor = spill.Anchor.DisplayAddress(source.SinkSheet);
+        var diagnostic = new GatherDiagnostic(
+            GatherDiagnosticKind.SpillChildSink,
+            $"{child} is inside {anchor}'s spill range. Gather from {anchor} instead.",
+            new[] { sink, spill.Anchor });
+
+        return new GatherResult(
+            sink, string.Empty, Array.Empty<BindingRow>(), string.Empty, diagnostic);
     }
 
     /// <summary>
