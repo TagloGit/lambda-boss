@@ -671,6 +671,7 @@ public class GatherRowVm : INotifyPropertyChanged
         IsExpansion = binding.IsExpansion;
         CanToggleRole = binding.CanToggleRole;
         SliceOf = binding.SliceOf;
+        StraddledSpillAnchorAddress = binding.StraddlesSpillAnchor?.A1Address;
         OrphanedByAddress = orphanedByAddress;
         _include = include;
         _isStep = binding.Role == BindingRole.Step;
@@ -701,6 +702,30 @@ public class GatherRowVm : INotifyPropertyChanged
     public FormulaRef? SliceOf { get; }
 
     public bool IsSlice => SliceOf != null;
+
+    /// <summary>
+    ///     Spec 0010 PR 5. Address of the spill anchor this row's range is
+    ///     partly inside, or null on every other row. A straddling range
+    ///     cannot be expressed as a slice of the anchor's array, so it stays a
+    ///     literal range input — correct, just not self-contained — and the
+    ///     row carries a warning marker rather than a diagnostic or a refusal.
+    /// </summary>
+    public string? StraddledSpillAnchorAddress { get; }
+
+    public bool IsStraddlingSpill => StraddledSpillAnchorAddress != null;
+
+    /// <summary>
+    ///     Tooltip on the straddle warning marker, naming the anchor so the
+    ///     author can see which spill the range half-overlaps. Spec 0010's
+    ///     wording verbatim.
+    /// </summary>
+    public string StraddleWarningText =>
+        StraddledSpillAnchorAddress == null
+            ? ""
+            : $"Partly inside {StraddledSpillAnchorAddress}'s spill range — left as a cell reference.";
+
+    public Visibility StraddleWarningVisibility =>
+        IsStraddlingSpill ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>
     ///     The binding name as displayed in (and edited from) the dialog.

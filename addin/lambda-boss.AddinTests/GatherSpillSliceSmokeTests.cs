@@ -6,7 +6,7 @@ using Xunit.Abstractions;
 namespace LambdaBoss.AddinTests;
 
 /// <summary>
-///     Spec 0010 PR 3 smoke: a gathered LET containing slice expressions
+///     Spec 0010 PRs 3 and 5 smoke: a gathered LET containing slice expressions
 ///     evaluates, in live Excel, to the same value as the original cell graph.
 ///     The unit suite covers the slice ladder and the engine wiring
 ///     exhaustively against a stub; what it cannot establish is that Excel
@@ -26,6 +26,12 @@ namespace LambdaBoss.AddinTests;
 ///             omission (<c>TAKE(arr,,-1)</c>) inside a LET binding's RHS.
 ///             PR 3's single-cell path only ever emits <c>INDEX</c>, but PR 4's
 ///             band/block forms depend on this and no pure test can confirm it.
+///         </item>
+///         <item>
+///             PR 5's straddling range: detected from live COM spill geometry,
+///             left as a literal range, and still evaluating to the original
+///             answer — the claim that the warning is a marker rather than a
+///             correctness problem.
 ///         </item>
 ///     </list>
 /// </summary>
@@ -97,6 +103,60 @@ public class GatherSpillSliceSmokeTests
             _excel.Application.Calculate();
 
             Assert.Equal(20d, (double)ws.Range["F3"].Value2);
+        }
+        finally
+        {
+            Cleanup(ws);
+        }
+    }
+
+    /// <summary>
+    ///     Spec 0010 PR 5, live. A range that is partly inside a spill and
+    ///     partly outside it cannot become a slice, so it stays a literal range
+    ///     in the LET. Two things need real Excel to establish: that the
+    ///     straddle is detected from actual COM spill geometry (the anchor
+    ///     named is the one Excel reports, not one the stub was told about),
+    ///     and the point of the whole design decision — that the resulting LET
+    ///     still evaluates against the live cells and gives the original
+    ///     answer. The warning is a marker, not a refusal.
+    /// </summary>
+    [Fact]
+    public void GatheredLet_WithStraddlingRange_KeepsLiteralRangeAndEvaluatesTheSame()
+    {
+        var ws = _excel.AddWorksheet();
+        try
+        {
+            // C2 sits one row above a spill anchored at C3 (C3:D4), so
+            // SUM(C2:D4) hangs over the spill's top edge. C3 is off both
+            // column A and row 1, so the anchor can only be named by
+            // translating both axes.
+            ws.Range["C2"].Value2 = 100d;
+            ws.Range["C3"].Formula2 = "=SEQUENCE(2,2)*10";
+            ws.Range["F1"].Formula2 = "=SUM(C2:D4)";
+            _excel.Application.Calculate();
+
+            var sheetName = (string)ws.Name;
+            var expected = (double)ws.Range["F1"].Value2;
+
+            var source = new LiveSheetCellSource(ws, sheetName);
+            // F1 — column 6, row 1.
+            var result = GatherEngine.Gather(new CellRef(sheetName, 6, 1), source);
+
+            Assert.NotNull(result);
+            // Not a diagnostic and not a refusal — an ordinary range input
+            // that happens to be marked.
+            Assert.Null(result!.Diagnostic);
+            _output.WriteLine(result.SynthesisedLet);
+
+            var binding = Assert.Single(result.Bindings);
+            Assert.Equal("C2:D4", binding.Rhs);
+            Assert.Null(binding.SliceOf);
+            Assert.Equal("C3", binding.StraddlesSpillAnchor!.A1Address);
+
+            ws.Range["F3"].Formula2 = result.SynthesisedLet;
+            _excel.Application.Calculate();
+
+            Assert.Equal(expected, (double)ws.Range["F3"].Value2);
         }
         finally
         {

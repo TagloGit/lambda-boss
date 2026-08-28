@@ -278,6 +278,16 @@ public sealed record WalkedCell(
 ///     <see cref="FormulaRef.IsSpilled" /> is true: the binding <em>is</em>
 ///     the array (<c>A1#</c>), which is what makes it distinct from a slice
 ///     row for the scalar reference <c>A1</c> to the same cell.
+///
+///     Spec 0010 PR 5 adds <see cref="StraddlesSpillAnchor" />: non-null on a
+///     <em>range</em> row whose rectangle is partly inside a spill and partly
+///     outside it. Such a range is inexpressible as a slice of the anchor's
+///     array, so it promotes to a literal range input exactly as it always
+///     has — the value is the anchor of the spill it overlaps, carried purely
+///     so the dialog can mark the row with a warning naming that anchor. It is
+///     deliberately <em>not</em> a diagnostic and not a refusal: the LET is
+///     still correct, it reads the live cells, it is just not fully
+///     self-contained.
 /// </summary>
 public sealed record BindingRow(
     FormulaRef Source,
@@ -286,7 +296,8 @@ public sealed record BindingRow(
     string Rhs,
     bool IsExpansion = false,
     bool CanToggleRole = false,
-    FormulaRef? SliceOf = null);
+    FormulaRef? SliceOf = null,
+    CellRef? StraddlesSpillAnchor = null);
 
 /// <summary>
 ///     Per-row state passed to <see cref="GatherEngine.Recompute" /> by the

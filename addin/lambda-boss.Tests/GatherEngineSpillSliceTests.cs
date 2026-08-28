@@ -11,8 +11,11 @@ namespace LambdaBoss.Tests;
 ///     which Excel reads as the top-left value), and <c>TAKE</c>/<c>DROP</c>
 ///     for a range covering a sub-block (PR 4). A range spanning the whole
 ///     spill needs no row — it rewrites to the anchor's own binding name.
-///     The straddling-range warning is PR 5; the dialog's indentation and
-///     fixed-position note are PR 8.
+///     PR 5 adds the other half of the range story: a range partly inside the
+///     spill and partly outside it is inexpressible as a slice, so it promotes
+///     to a literal range input exactly as before, carrying the anchor it
+///     straddles purely so the dialog can warn — no diagnostic, no refusal.
+///     The dialog's indentation and fixed-position note are PR 8.
 /// </summary>
 public class GatherEngineSpillSliceTests
 {
@@ -506,8 +509,8 @@ public class GatherEngineSpillSliceTests
 
     /// <summary>
     ///     A range straddling the spill's boundary is inexpressible as a slice
-    ///     and promotes to a literal range input exactly as before. The
-    ///     warning marker on that row is PR 5.
+    ///     and promotes to a literal range input exactly as before. PR 5 adds
+    ///     the warning carrier on that row; the promotion is unchanged.
     /// </summary>
     [Fact]
     public void Gather_RangeStraddlingSpillBoundary_StillPromotesToRangeInput()
@@ -520,6 +523,129 @@ public class GatherEngineSpillSliceTests
         Assert.True(binding.Source.IsRange);
         Assert.Equal("A2:C6", binding.Rhs);
         Assert.Null(binding.SliceOf);
+    }
+
+    // --- Straddling ranges: the warning surface (PR 5) ------------------
+
+    /// <summary>
+    ///     One edge at a time. The range hangs over the spill's top, left,
+    ///     right or bottom, so it cannot be expressed as a slice of the
+    ///     anchor's array — it promotes to a literal range input exactly as
+    ///     today, now carrying the anchor it straddles so the dialog can mark
+    ///     the row. The anchor is <c>C3</c> throughout, off both column A and
+    ///     row 1, so the flag can only name it by translating both axes.
+    /// </summary>
+    [Theory]
+    [InlineData("C2:E4", "top")]
+    [InlineData("B3:D6", "left")]
+    [InlineData("D3:F6", "right")]
+    [InlineData("C4:E7", "bottom")]
+    public void Gather_RangeStraddlingOneEdge_FlagsTheRowWithTheAnchor(string range, string edge)
+    {
+        var source = OffsetGridSource($"=SUM({range})");
+
+        var result = GatherEngine.Gather(source.Ref("G10"), source)!;
+
+        var binding = Assert.Single(result.Bindings);
+        Assert.True(binding.Source.IsRange);
+        Assert.Equal(range, binding.Rhs);
+        Assert.Null(binding.SliceOf);
+        Assert.True(
+            binding.StraddlesSpillAnchor != null,
+            $"expected the {edge}-edge straddle {range} to be flagged");
+        Assert.Equal(source.Ref("C3"), binding.StraddlesSpillAnchor);
+    }
+
+    /// <summary>
+    ///     Overlaps that reach the spill by only one of the range's two
+    ///     <em>other</em> corners — the top-right and the bottom-left. Probing
+    ///     just the range's own endpoints (<c>Start</c>, <c>End</c>) would miss
+    ///     both, since neither endpoint lands inside the spill.
+    /// </summary>
+    [Theory]
+    [InlineData("B3:D8", "top-right")]
+    [InlineData("D1:F5", "bottom-left")]
+    public void Gather_RangeOverlappingBySingleCorner_IsStillFlagged(string range, string corner)
+    {
+        var source = OffsetGridSource($"=SUM({range})");
+
+        var result = GatherEngine.Gather(source.Ref("G10"), source)!;
+
+        var binding = Assert.Single(result.Bindings);
+        Assert.True(
+            binding.StraddlesSpillAnchor != null,
+            $"expected the {corner} overlap {range} to be flagged");
+        Assert.Equal(source.Ref("C3"), binding.StraddlesSpillAnchor);
+    }
+
+    /// <summary>
+    ///     The flag is a marker, not a refusal and not a demotion: no
+    ///     diagnostic is raised, the row is an ordinary included range input
+    ///     named the way any unlabelled range is, and the LET reads the live
+    ///     cells through it. Correct, just not self-contained.
+    /// </summary>
+    [Fact]
+    public void Gather_StraddlingRange_RaisesNoDiagnosticAndBindsNormally()
+    {
+        var source = OffsetGridSource("=SUM(C2:E4)");
+
+        var result = GatherEngine.Gather(source.Ref("G10"), source)!;
+
+        Assert.Null(result.Diagnostic);
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal(BindingRole.Input, binding.Role);
+        Assert.False(binding.CanToggleRole);
+        Assert.Equal("step_1", binding.Name);
+        var parsed = LetParser.Parse(result.SynthesisedLet);
+        Assert.Equal("C2:E4", Assert.Single(parsed.Bindings).RhsText);
+        Assert.Equal("SUM(step_1)", parsed.Body);
+    }
+
+    /// <summary>
+    ///     The straddle flag names the anchor of the spill, never the range's
+    ///     own corner cell — here every corner probed is a spill
+    ///     <em>child</em>, and the flag still reads <c>C3</c>.
+    /// </summary>
+    [Fact]
+    public void Gather_StraddlingRangeStartingOnASpillChild_NamesTheAnchorNotTheChild()
+    {
+        var source = OffsetGridSource("=SUM(D4:F7)");
+
+        var result = GatherEngine.Gather(source.Ref("G10"), source)!;
+
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal("C3", binding.StraddlesSpillAnchor!.A1Address);
+    }
+
+    /// <summary>
+    ///     A range wholly inside the spill is a slice, not a straddle — it
+    ///     never promotes, so nothing carries the warning.
+    /// </summary>
+    [Fact]
+    public void Gather_RangeWhollyInsideSpill_CarriesNoStraddleWarning()
+    {
+        var source = OffsetGridSource("=SUM(D4:E5)");
+
+        var result = GatherEngine.Gather(source.Ref("G10"), source)!;
+
+        Assert.All(result.Bindings, b => Assert.Null(b.StraddlesSpillAnchor));
+        Assert.Contains(result.Bindings, b => b.SliceOf != null);
+    }
+
+    /// <summary>
+    ///     A promoted range that touches no spill at all is untouched by any
+    ///     of this: it promotes as it always has, unflagged.
+    /// </summary>
+    [Fact]
+    public void Gather_RangeTouchingNoSpill_CarriesNoStraddleWarning()
+    {
+        var source = OffsetGridSource("=SUM(H1:H4)");
+
+        var result = GatherEngine.Gather(source.Ref("G10"), source)!;
+
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal("H1:H4", binding.Rhs);
+        Assert.Null(binding.StraddlesSpillAnchor);
     }
 
     /// <summary>
@@ -630,6 +756,22 @@ public class GatherEngineSpillSliceTests
             .WithFormula("A2", "=SEQUENCE(4,3)")
             .WithSpill("A2", 4, 3)
             .WithFormula("D8", sinkFormula);
+    }
+
+    /// <summary>
+    ///     The same 4×3 spill anchored at <c>C3</c> instead of column A / row
+    ///     1, so anchor-relative geometry has to translate on both axes to get
+    ///     the right answer (a column-A anchor would let a column bug pass).
+    ///     The rectangle is <c>C3:E6</c>; the sink sits well clear at
+    ///     <c>G10</c> and no cell is labelled, so promoted ranges take the
+    ///     generic <c>step_N</c> name.
+    /// </summary>
+    private static StubCellSource OffsetGridSource(string sinkFormula)
+    {
+        return new StubCellSource()
+            .WithFormula("C3", "=SEQUENCE(4,3)")
+            .WithSpill("C3", 4, 3)
+            .WithFormula("G10", sinkFormula);
     }
 
     // --- Selection normalisation + spill-child sink ---------------------
