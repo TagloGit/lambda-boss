@@ -921,6 +921,304 @@ public class GatherEngineSpillSliceTests
         Assert.Equal(GatherDiagnosticKind.MultipleSinks, result!.Diagnostic!.Kind);
     }
 
+    // --- PR 6: Include cascading, demotion, and the Recompute path -------
+    //
+    // The two spill row kinds share a cell but not a key: the anchor's row is
+    // keyed on the spilled ref (`A2#`), every slice of it on the reference as
+    // written (`A2`, `B2`, `A2:C3`). Exclusion cascades one way only —
+    // unticking the anchor takes every slice with it; unticking a slice
+    // touches nothing else. Demotion cascades neither way.
+
+    [Fact]
+    public void Recompute_AllIncluded_MatchesGatherForASpillGraph()
+    {
+        var source = CanonicalSource();
+        var initial = GatherEngine.Gather(source.Ref("D6"), source)!;
+
+        var recomputed = GatherEngine.Recompute(
+            source.Ref("D6"), new[] { source.Ref("D6") }, source, AllIncluded(initial))!;
+
+        Assert.Null(recomputed.Diagnostic);
+        Assert.Equal(initial.SynthesisedLet, recomputed.SynthesisedLet);
+        Assert.Equal(
+            initial.Bindings.Select(b => b.Name),
+            recomputed.Bindings.Select(b => b.Name));
+    }
+
+    /// <summary>
+    ///     Regression pin for the row-key collision routed out of PR #365's
+    ///     review. The scalar slice of a spilling anchor is keyed on the bare
+    ///     <c>A2</c> while the anchor's own row is keyed <c>A2#</c>; keying the
+    ///     exclusion set on the start cell alone made them indistinguishable,
+    ///     so unticking this slice row dropped the ANCHOR — array binding and
+    ///     every sibling slice — silently. Excluding a slice must revert that
+    ///     one reference and nothing else.
+    /// </summary>
+    [Fact]
+    public void Recompute_ExcludeScalarSliceOfAnchor_KeepsAnchorAndSiblingSlices()
+    {
+        var source = CanonicalSource();
+        var initial = GatherEngine.Gather(source.Ref("D6"), source)!;
+        var states = ExcludeOne(initial, new FormulaRef(source.Ref("A2")));
+
+        var result = GatherEngine.Recompute(
+            source.Ref("D6"), new[] { source.Ref("D6") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+
+        // The anchor's array binding survives untouched...
+        var anchor = result.Bindings.Single(b => b.Source.IsSpilled);
+        Assert.Equal("extracted", anchor.Name);
+        Assert.Equal("A2#", anchor.Rhs);
+
+        // ...and so does the sibling slice that reads B2.
+        var slice = Assert.Single(result.Bindings.Where(b => b.SliceOf != null));
+        Assert.Equal("B2", slice.Source.A1Address);
+        Assert.Equal("INDEX(extracted,1,2)", slice.Rhs);
+
+        // Only the excluded reference reverted, and its step stayed a step.
+        var doubled = result.Bindings.Single(b => b.Name == "doubled");
+        Assert.Equal(BindingRole.Step, doubled.Role);
+        Assert.Equal("A2*2", doubled.Rhs);
+        Assert.Equal("second&\"x\"", result.Bindings.Single(b => b.Name == "suffixed").Rhs);
+    }
+
+    [Fact]
+    public void Recompute_ExcludeChildSliceRow_RevertsOnlyThatReference()
+    {
+        var source = CanonicalSource();
+        var initial = GatherEngine.Gather(source.Ref("D6"), source)!;
+        var states = ExcludeOne(initial, new FormulaRef(source.Ref("B2")));
+
+        var result = GatherEngine.Recompute(
+            source.Ref("D6"), new[] { source.Ref("D6") }, source, states)!;
+
+        Assert.Equal("A2#", result.Bindings.Single(b => b.Source.IsSpilled).Rhs);
+
+        var slice = Assert.Single(result.Bindings.Where(b => b.SliceOf != null));
+        Assert.Equal("A2", slice.Source.A1Address);
+        Assert.Equal("INDEX(extracted,1,1)", slice.Rhs);
+
+        Assert.Equal($"{slice.Name}*2", result.Bindings.Single(b => b.Name == "doubled").Rhs);
+        var suffixed = result.Bindings.Single(b => b.Name == "suffixed");
+        Assert.Equal(BindingRole.Step, suffixed.Role);
+        Assert.Equal("B2&\"x\"", suffixed.Rhs);
+    }
+
+    /// <summary>
+    ///     The cascading direction: excluding the anchor's row drops the cell
+    ///     from the walk, so there is no array left to slice — every slice row
+    ///     of it goes too, and each of their references reverts to the literal
+    ///     cell address in the step that wrote it.
+    /// </summary>
+    [Fact]
+    public void Recompute_ExcludeAnchor_DropsEverySliceAndRevertsToLiteralRefs()
+    {
+        var source = CanonicalSource();
+        var initial = GatherEngine.Gather(source.Ref("D6"), source)!;
+        var states = ExcludeOne(initial, new FormulaRef(source.Ref("A2"), IsSpilled: true));
+
+        var result = GatherEngine.Recompute(
+            source.Ref("D6"), new[] { source.Ref("D6") }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        Assert.DoesNotContain(result.Bindings, b => b.Source.IsSpilled);
+        Assert.DoesNotContain(result.Bindings, b => b.SliceOf != null);
+
+        Assert.Equal(new[] { "doubled", "suffixed" }, result.Bindings.Select(b => b.Name));
+        Assert.All(result.Bindings, b => Assert.Equal(BindingRole.Step, b.Role));
+        Assert.Equal("A2*2", result.Bindings[0].Rhs);
+        Assert.Equal("B2&\"x\"", result.Bindings[1].Rhs);
+        Assert.Equal("doubled&suffixed", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    /// <summary>
+    ///     The anchor's binding name must not survive anywhere once its row is
+    ///     gone — a step still saying <c>extracted*2</c> would be an unbound
+    ///     identifier and Excel would reject the whole LET.
+    /// </summary>
+    [Fact]
+    public void Recompute_ExcludeAnchor_LeavesNoDanglingBindingNameInAnyStep()
+    {
+        var source = CanonicalSource();
+        var initial = GatherEngine.Gather(source.Ref("D6"), source)!;
+        Assert.Contains(initial.Bindings, b => b.Name == "extracted");
+        var states = ExcludeOne(initial, new FormulaRef(source.Ref("A2"), IsSpilled: true));
+
+        var result = GatherEngine.Recompute(
+            source.Ref("D6"), new[] { source.Ref("D6") }, source, states)!;
+
+        Assert.DoesNotContain("extracted", result.SynthesisedLet, StringComparison.Ordinal);
+        var declared = new HashSet<string>(
+            LetParser.Parse(result.SynthesisedLet).Bindings.Select(b => b.Name),
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var binding in result.Bindings)
+            Assert.DoesNotContain("INDEX(", binding.Rhs, StringComparison.Ordinal);
+        Assert.Equal(new[] { "doubled", "suffixed" }, declared.OrderBy(n => n));
+    }
+
+    /// <summary>
+    ///     Routed from PR #367's review: <c>excludedRanges</c> gated the
+    ///     promotion loop but not the slice loop, so unticking Include on a
+    ///     RANGE slice row was inert — the row came straight back. It now
+    ///     reverts to the literal range in the calling formula, and (per the
+    ///     range-promotion precedence rule) still never promotes to a range
+    ///     input.
+    /// </summary>
+    [Fact]
+    public void Recompute_ExcludeRangeSliceRow_RevertsToLiteralRangeInTheStep()
+    {
+        var source = GridSource("=SUM(A2:C3)");
+        var initial = GatherEngine.Gather(source.Ref("D8"), source)!;
+        var sliceRow = Assert.Single(initial.Bindings.Where(b => b.SliceOf != null));
+        Assert.Equal("TAKE(grid,2)", sliceRow.Rhs);
+
+        var result = GatherEngine.Recompute(
+            source.Ref("D8"), new[] { source.Ref("D8") }, source,
+            ExcludeOne(initial, sliceRow.Source))!;
+
+        Assert.DoesNotContain(result.Bindings, b => b.SliceOf != null);
+        Assert.DoesNotContain(result.Bindings, b => b.Source.IsRange);
+        var anchor = Assert.Single(result.Bindings);
+        Assert.Equal("A2#", anchor.Rhs);
+        Assert.Equal("SUM(A2:C3)", LetParser.Parse(result.SynthesisedLet).Body);
+    }
+
+    // --- Re-entrancy -----------------------------------------------------
+
+    [Fact]
+    public void Recompute_ToggleSliceRowOffAndBackOn_RestoresOriginalShape()
+    {
+        var source = CanonicalSource();
+        var sink = source.Ref("D6");
+        var selection = new[] { sink };
+        var initial = GatherEngine.Gather(sink, source)!;
+        var sliceRef = new FormulaRef(source.Ref("B2"));
+
+        var off = GatherEngine.Recompute(sink, selection, source, ExcludeOne(initial, sliceRef))!;
+        Assert.DoesNotContain(off.Bindings, b => b.Source.Equals(sliceRef));
+
+        var backOn = GatherEngine.Recompute(sink, selection, source, AllIncluded(initial))!;
+
+        Assert.Equal(initial.SynthesisedLet, backOn.SynthesisedLet);
+        Assert.Equal(
+            initial.Bindings.Select(b => (b.Name, b.Rhs)),
+            backOn.Bindings.Select(b => (b.Name, b.Rhs)));
+    }
+
+    [Fact]
+    public void Recompute_ToggleAnchorOffAndBackOn_RestoresEverySliceRow()
+    {
+        var source = CanonicalSource();
+        var sink = source.Ref("D6");
+        var selection = new[] { sink };
+        var initial = GatherEngine.Gather(sink, source)!;
+        var anchorRef = new FormulaRef(source.Ref("A2"), IsSpilled: true);
+
+        var off = GatherEngine.Recompute(sink, selection, source, ExcludeOne(initial, anchorRef))!;
+        Assert.DoesNotContain(off.Bindings, b => b.SliceOf != null);
+
+        var backOn = GatherEngine.Recompute(sink, selection, source, AllIncluded(initial))!;
+
+        Assert.Equal(initial.SynthesisedLet, backOn.SynthesisedLet);
+        Assert.Equal(2, backOn.Bindings.Count(b => b.SliceOf != null));
+        Assert.All(
+            backOn.Bindings.Where(b => b.SliceOf != null),
+            b => Assert.Equal(anchorRef, b.SliceOf));
+    }
+
+    // --- Demotion --------------------------------------------------------
+
+    /// <summary>
+    ///     Demoting a spilling anchor to an input gives it RHS <c>A2#</c> —
+    ///     still the whole array — so every slice of it keeps indexing into
+    ///     the same binding. Only the anchor's own precedents drop, exactly as
+    ///     demotion does for any other step.
+    /// </summary>
+    [Fact]
+    public void Recompute_DemoteAnchorToInput_KeepsEverySliceWorking()
+    {
+        var source = new StubCellSource()
+            .WithLabel("A1", "Count")
+            .WithFormula("A2", "=2")
+            .WithLabel("B1", "Extracted")
+            .WithFormula("B2", "=SEQUENCE(1,A2)")
+            .WithSpill("B2", 1, 2)
+            .WithFormula("D4", "=C2*3");
+        var sink = source.Ref("D4");
+        var initial = GatherEngine.Gather(sink, source)!;
+        var anchorRef = new FormulaRef(source.Ref("B2"), IsSpilled: true);
+        Assert.Equal(BindingRole.Step, initial.Bindings.Single(b => b.Source.Equals(anchorRef)).Role);
+
+        var states = initial.Bindings
+            .Where(b => !b.IsExpansion)
+            .Select(b => b.Source.Equals(anchorRef)
+                ? new RowState(b.Source, RoleOverride: BindingRole.Input)
+                : new RowState(b.Source))
+            .ToList();
+        var result = GatherEngine.Recompute(sink, new[] { sink }, source, states)!;
+
+        Assert.Null(result.Diagnostic);
+        var anchor = result.Bindings.Single(b => b.Source.IsSpilled);
+        Assert.Equal(BindingRole.Input, anchor.Role);
+        Assert.Equal("B2#", anchor.Rhs);
+
+        var slice = Assert.Single(result.Bindings.Where(b => b.SliceOf != null));
+        Assert.Equal(anchorRef, slice.SliceOf);
+        Assert.Equal("INDEX(extracted,1,2)", slice.Rhs);
+        Assert.Equal($"{slice.Name}*3", LetParser.Parse(result.SynthesisedLet).Body);
+
+        // The demote dropped the anchor's own precedent, and nothing else.
+        Assert.DoesNotContain(result.Bindings, b => b.Source.A1Address == "A2");
+    }
+
+    /// <summary>
+    ///     Demotion is not exclusion: the anchor demoted from a step keeps its
+    ///     row and its array, where excluding it would have taken both the row
+    ///     and every slice. Pinned side by side so a future change can't
+    ///     collapse the two paths onto one key.
+    /// </summary>
+    [Fact]
+    public void Recompute_DemoteAnchorVersusExcludeAnchor_DivergeOnTheSliceRows()
+    {
+        var source = CanonicalSource();
+        var sink = source.Ref("D6");
+        var selection = new[] { sink };
+        var initial = GatherEngine.Gather(sink, source)!;
+        var anchorRef = new FormulaRef(source.Ref("A2"), IsSpilled: true);
+
+        var demoted = GatherEngine.Recompute(sink, selection, source,
+            initial.Bindings
+                .Select(b => b.Source.Equals(anchorRef)
+                    ? new RowState(b.Source, RoleOverride: BindingRole.Input)
+                    : new RowState(b.Source))
+                .ToList())!;
+        var excludedResult = GatherEngine.Recompute(
+            sink, selection, source, ExcludeOne(initial, anchorRef))!;
+
+        // The anchor was already a leaf input here, so demoting is a no-op.
+        Assert.Equal(initial.SynthesisedLet, demoted.SynthesisedLet);
+        Assert.Equal(2, demoted.Bindings.Count(b => b.SliceOf != null));
+        Assert.Empty(excludedResult.Bindings.Where(b => b.SliceOf != null));
+    }
+
+    private static List<RowState> AllIncluded(GatherResult result)
+    {
+        return result.Bindings
+            .Where(b => !b.IsExpansion)
+            .Select(b => new RowState(b.Source))
+            .ToList();
+    }
+
+    private static List<RowState> ExcludeOne(GatherResult result, FormulaRef excluded)
+    {
+        Assert.Contains(result.Bindings, b => b.Source.Equals(excluded));
+        return result.Bindings
+            .Where(b => !b.IsExpansion)
+            .Select(b => new RowState(b.Source, !b.Source.Equals(excluded)))
+            .ToList();
+    }
+
     private static StubCellSource CanonicalSource()
     {
         return new StubCellSource()
