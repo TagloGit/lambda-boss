@@ -277,25 +277,31 @@ public static class GatherEngine
             {
                 if (!p.IsRange) continue;
                 if (excludedRanges != null && excludedRanges.Contains(p)) continue;
-                // Spec 0010: a degenerate single-cell range landing inside a
-                // spill (`A2:A2`) is a scalar in Excel, not a block. It takes
-                // the single-cell slice path below, so it must not promote to
-                // a range input here. Multi-cell ranges over a spill are PR 4.
-                if (p.Start.Equals(p.End) && source.GetSpill(p.Start) != null) continue;
+                // Spec 0010, range-promotion precedence: a range lying wholly
+                // inside a spill takes the slice path below and never promotes
+                // to a range input — whether it is a degenerate single cell
+                // (`A2:A2`, a scalar in Excel), a band, an interior block, or
+                // the whole spill. A range straddling the spill's boundary is
+                // inexpressible as a slice and promotes exactly as today.
+                if (WhollyInsideSpill(p, source) != null) continue;
                 if (rangeSet.Add(p))
                     ranges.Add(p);
             }
         }
 
         // Cells covered by any range are dropped from the bindings list,
-        // even if they would otherwise have been steps. The sink itself is
-        // never dropped — it's the LET body, not a binding.
+        // even if they would otherwise have been steps. Two exemptions: the
+        // sink (it's the LET body, not a binding) and, per spec 0010, a spill
+        // anchor — it is the array every slice of it indexes into, so losing
+        // its row would leave those slices with nothing to name.
         var coveredByRange = new HashSet<CellRef>();
         foreach (var r in ranges)
         {
             foreach (var cell in walked)
             {
                 if (cell.Ref.Equals(sink))
+                    continue;
+                if (cell.HasSpill)
                     continue;
                 if (r.Covers(cell.Ref))
                     coveredByRange.Add(cell.Ref);
@@ -306,14 +312,17 @@ public static class GatherEngine
             .Where(w => !w.Ref.Equals(sink) && !coveredByRange.Contains(w.Ref))
             .ToList();
 
-        // Spec 0010 — spill slices. A single-cell reference landing inside
-        // the spill range of a cell that is already a binding becomes its
-        // own binding row holding a named slice of the anchor's array.
-        // Both single-cell cases are one code path: `B1` (a spill child,
-        // which has no formula of its own) and `A1` (a scalar reference to
-        // the spilling anchor, which Excel reads as the top-left value —
-        // the pre-existing silent widening this fixes). `A1#` is excluded:
-        // it IS the anchor's binding, and needs no row of its own.
+        // Spec 0010 — spill slices. A reference landing wholly inside the
+        // spill range of a cell that is already a binding becomes its own
+        // binding row holding a named slice of the anchor's array. The
+        // single-cell cases are one code path: `B1` (a spill child, which has
+        // no formula of its own) and `A1` (a scalar reference to the spilling
+        // anchor, which Excel reads as the top-left value — the pre-existing
+        // silent widening this fixes). PR 4 adds range refs: a sub-block
+        // becomes a `TAKE`/`DROP` slice row, and a range spanning the whole
+        // spill needs no row at all — it aliases straight to the anchor's
+        // binding name. `A1#` is excluded throughout: it IS the anchor's
+        // binding.
         var anchorCells = new HashSet<CellRef>();
         foreach (var c in nonSink)
             if (c.HasSpill)
@@ -321,6 +330,10 @@ public static class GatherEngine
 
         var slices = new List<SpillSlice>();
         var slicesByAnchor = new Dictionary<CellRef, List<SpillSlice>>();
+        // Refs that resolve to the anchor's own binding name with no row of
+        // their own: a range spanning the entire spill and covering more than
+        // one cell. Resolved into `nameByRef` once names are assigned.
+        var wholeArrayRefs = new List<(FormulaRef Ref, FormulaRef AnchorRowRef)>();
         if (anchorCells.Count > 0)
         {
             var sliceKeys = new HashSet<FormulaRef>();
@@ -330,25 +343,47 @@ public static class GatherEngine
             foreach (var p in cell.Precedents)
             {
                 if (p.IsSpilled) continue;
-                if (p.IsRange && !p.Start.Equals(p.End)) continue;
                 if (p.Start.Equals(sink)) continue;
                 if (excludedCells != null && excludedCells.Contains(p.Start)) continue;
                 if (coveredByRange.Contains(p.Start)) continue;
-                var spill = source.GetSpill(p.Start);
+                var spill = WhollyInsideSpill(p, source);
                 if (spill == null) continue;
                 // The anchor has to be a binding for there to be an array to
                 // slice. It normally is — the walker redirects every in-spill
                 // precedent to the anchor — but the user may have excluded it,
                 // in which case the reference stays a literal cell address.
                 if (!anchorCells.Contains(spill.Anchor)) continue;
-                var row = p.Start.Row - spill.Anchor.Row + 1;
-                var column = p.Start.Column - spill.Anchor.Column + 1;
-                if (row < 1 || row > spill.Rows || column < 1 || column > spill.Columns)
+                var end = p.End ?? p.Start;
+                var r1 = p.Start.Row - spill.Anchor.Row + 1;
+                var c1 = p.Start.Column - spill.Anchor.Column + 1;
+                var r2 = end.Row - spill.Anchor.Row + 1;
+                var c2 = end.Column - spill.Anchor.Column + 1;
+                // Defensive: an inverted range (`B2:A1`) would blow up the
+                // builder's argument validation. Excel normalises these on
+                // entry, so this only guards against a malformed extraction.
+                if (r1 < 1 || c1 < 1 || r2 < r1 || c2 < c1
+                    || r2 > spill.Rows || c2 > spill.Columns)
                     continue;
                 if (!sliceKeys.Add(p)) continue;
 
+                // A range spanning the whole spill and more than one cell is
+                // the array itself — it rewrites to the anchor's binding name
+                // rather than earning a row that would just re-alias it. A
+                // one-cell range is never this case: it takes the scalar
+                // `INDEX` path even on a 1×1 spill, where it is simultaneously
+                // the whole array.
+                var spansWholeSpill = r1 == 1 && c1 == 1
+                                      && r2 == spill.Rows
+                                      && c2 == spill.Columns;
+                var spansMoreThanOneCell = r2 > r1 || c2 > c1;
+                if (spansWholeSpill && spansMoreThanOneCell)
+                {
+                    wholeArrayRefs.Add((p, new FormulaRef(spill.Anchor, IsSpilled: true)));
+                    continue;
+                }
+
                 var slice = new SpillSlice(
-                    p, spill.Anchor, row, column, spill.Rows, spill.Columns,
+                    p, spill.Anchor, r1, c1, r2, c2, spill.Rows, spill.Columns,
                     p.IsRange ? SliceRefShape.Range : SliceRefShape.SingleCell);
                 slices.Add(slice);
                 if (!slicesByAnchor.TryGetValue(spill.Anchor, out var forAnchor))
@@ -366,6 +401,13 @@ public static class GatherEngine
         // names suffix around them (<c>x_2</c>) rather than the other way
         // around — an override is the user's authoritative choice.
         var nameByRef = AssignNames(ranges, nonSink, slices, source, nameOverrides);
+
+        // A range spanning the whole spill has no row; it simply resolves to
+        // the anchor's binding name, so the rewriter collapses the `A2:B4`
+        // token to `extracted` the same way it collapses `A2#`.
+        foreach (var (wholeRef, anchorRowRef) in wholeArrayRefs)
+            if (nameByRef.TryGetValue(anchorRowRef, out var anchorName))
+                nameByRef[wholeRef] = anchorName;
 
         // Build the in-scope set used to classify each cell as input vs
         // step. A cell is a step iff at least one of its precedents has a
@@ -404,7 +446,7 @@ public static class GatherEngine
                     nameByRef[slice.Ref],
                     SpillSliceBuilder.Build(
                         anchorName, slice.SpillRows, slice.SpillColumns,
-                        slice.Row, slice.Row, slice.Column, slice.Column, slice.Shape),
+                        slice.Row, slice.RowEnd, slice.Column, slice.ColumnEnd, slice.Shape),
                     // No formula to bake and nothing to demote to, so the
                     // role toggle is meaningless on a slice row.
                     CanToggleRole: false,
@@ -786,6 +828,29 @@ public static class GatherEngine
     }
 
     /// <summary>
+    ///     The spill a reference lies <em>wholly</em> inside, or null when it
+    ///     touches no spill or straddles one's boundary. A single-cell ref is
+    ///     inside iff <see cref="ICellSource.GetSpill" /> knows it; a range is
+    ///     inside iff both endpoints land in the same spill rectangle. This is
+    ///     the one predicate behind spec 0010's range-promotion precedence:
+    ///     wholly-inside means "slice", anything else means "promote as
+    ///     today", and both call sites (promotion and slice construction) read
+    ///     it so they cannot disagree. Explicit spill refs (<c>A1#</c>) are
+    ///     never slices — they are the anchor's binding.
+    /// </summary>
+    private static SpillInfo? WhollyInsideSpill(FormulaRef p, ICellSource source)
+    {
+        if (p.IsSpilled)
+            return null;
+        var spill = source.GetSpill(p.Start);
+        if (spill == null)
+            return null;
+        if (p.IsRange && !spill.Contains(p.End!))
+            return null;
+        return spill;
+    }
+
+    /// <summary>
     ///     The <see cref="FormulaRef" /> that identifies a walked cell's own
     ///     binding row. A spilling anchor's binding <em>is</em> the array, so
     ///     its row is keyed on the spilled ref (<c>A1#</c>) — which leaves
@@ -904,16 +969,21 @@ public static class GatherEngine
     ///     One reference that landed inside a spill and will become its own
     ///     binding row (spec 0010, <em>Slices are binding rows</em>).
     ///     <see cref="Ref" /> is the reference exactly as it was written —
-    ///     the child cell, the anchor cell for a scalar reference to it, or
-    ///     a degenerate one-cell range — and doubles as the row's identity
-    ///     and its rewrite-lookup key. <see cref="Row" />/<see cref="Column" />
-    ///     are 1-based relative to the anchor.
+    ///     the child cell, the anchor cell for a scalar reference to it, or a
+    ///     range lying inside the spill — and doubles as the row's identity
+    ///     and its rewrite-lookup key.
+    ///     <see cref="Row" />..<see cref="RowEnd" /> and
+    ///     <see cref="Column" />..<see cref="ColumnEnd" /> are the reference's
+    ///     rectangle, 1-based relative to the anchor; the two ends coincide
+    ///     for a single-cell reference.
     /// </summary>
     private sealed record SpillSlice(
         FormulaRef Ref,
         CellRef Anchor,
         int Row,
         int Column,
+        int RowEnd,
+        int ColumnEnd,
         int SpillRows,
         int SpillColumns,
         SliceRefShape Shape)
