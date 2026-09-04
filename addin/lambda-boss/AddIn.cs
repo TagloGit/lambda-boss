@@ -1,3 +1,5 @@
+using System.Net;
+
 using ExcelDna.Integration;
 
 using LambdaBoss.Commands;
@@ -51,6 +53,11 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         Logger.Info("Lambda Boss add-in loading");
 
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+
+        // Excel is a native host and the add-in ships no .xll.config, so the add-in AppDomain
+        // gets .NET Framework 4.0-era quirks and HttpClient offers TLS 1.0 only. GitHub requires
+        // TLS 1.2+, so every fetch failed with "Could not create SSL/TLS secure channel" (#372).
+        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 
         try
         {
