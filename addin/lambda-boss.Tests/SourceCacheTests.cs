@@ -141,6 +141,43 @@ public class SourceCacheTests : IDisposable
     }
 
     [Fact]
+    public void Load_WithTtl_ReturnsFreshEntry()
+    {
+        var cache = new SourceCache(_tempDir, ttl: TimeSpan.FromMinutes(60));
+        cache.Store(_config, CreateTestLibrary());
+
+        Assert.True(cache.IsCached(_config, "test"));
+        Assert.NotNull(cache.Load(_config, "test"));
+    }
+
+    [Fact]
+    public void Load_WithTtl_TreatsExpiredEntryAsMiss()
+    {
+        var cache = new SourceCache(_tempDir, ttl: TimeSpan.FromMinutes(60));
+        cache.Store(_config, CreateTestLibrary());
+        BackdateMarker("test", TimeSpan.FromHours(2));
+
+        Assert.False(cache.IsCached(_config, "test"));
+        Assert.Null(cache.Load(_config, "test"));
+    }
+
+    [Fact]
+    public void Load_WithoutTtl_ReturnsOldEntry()
+    {
+        _cache.Store(_config, CreateTestLibrary());
+        BackdateMarker("test", TimeSpan.FromDays(400));
+
+        Assert.True(_cache.IsCached(_config, "test"));
+        Assert.NotNull(_cache.Load(_config, "test"));
+    }
+
+    private void BackdateMarker(string libraryName, TimeSpan age)
+    {
+        var yamlPath = Path.Combine(_tempDir, _config.GetCacheKey(), libraryName, "_library.yaml");
+        File.SetLastWriteTimeUtc(yamlPath, DateTime.UtcNow - age);
+    }
+
+    [Fact]
     public void Store_OverwritesExistingCache()
     {
         var library1 = CreateTestLibrary();

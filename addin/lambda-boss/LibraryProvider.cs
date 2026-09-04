@@ -98,7 +98,11 @@ public class LibraryProvider
     /// <summary>
     ///     Clears in-memory cache and re-fetches all data from GitHub.
     /// </summary>
-    public async Task RefreshAsync()
+    /// <param name="invalidateCache">
+    ///     When true, the disk cache for every enabled repo is deleted first so all libraries are
+    ///     re-fetched from GitHub. When false, cached libraries within their TTL are reused.
+    /// </param>
+    public async Task RefreshAsync(bool invalidateCache = false)
     {
         var libraries = new List<LibraryInfo>();
         var lambdas = new List<LambdaInfo>();
@@ -110,6 +114,15 @@ public class LibraryProvider
                 var source = new GitHubSource(config, _httpClient);
                 var (owner, repo) = config.ParseOwnerRepo();
                 var repoLabel = $"{owner}/{repo}";
+
+                if (invalidateCache)
+                {
+                    try { _cache.InvalidateAll(config); }
+                    catch (Exception cacheEx)
+                    {
+                        Logger.Error($"LibraryProvider: Cache invalidation failed for {repoLabel}", cacheEx);
+                    }
+                }
 
                 var libraryNames = await source.ListLibrariesAsync();
 

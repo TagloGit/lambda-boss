@@ -227,4 +227,60 @@ default_prefix: map";
         Assert.NotSame(first, second);
         Assert.Equal(2, second.Count);
     }
+
+    /// <summary>
+    ///     Seeds the disk cache with a "string" library whose contents differ from the HTTP fixture
+    ///     (one lambda instead of two), so a test can tell which source a load came from.
+    /// </summary>
+    private static void SeedStaleStringLibrary(SourceCache cache)
+    {
+        var metadata = LibraryMetadata.LoadFromString(StringYaml);
+        var files = new Dictionary<string, string> { ["Stale.lambda"] = "Stale = LAMBDA(x, x);" };
+        cache.Store(TestConfig, new FetchedLibrary("string", metadata, files));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WithoutInvalidate_ServesCachedLibrary()
+    {
+        var cache = new SourceCache(_tempCacheDir);
+        SeedStaleStringLibrary(cache);
+        var provider = new LibraryProvider(new[] { TestConfig }, new HttpClient(CreateFullHandler()), cache);
+
+        await provider.RefreshAsync();
+        var libraries = await provider.GetLibrariesAsync();
+
+        var stringLib = libraries.First(l => l.FolderName == "string");
+        Assert.Equal(1, stringLib.LambdaCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WithInvalidate_RefetchesFromGitHub()
+    {
+        var cache = new SourceCache(_tempCacheDir);
+        SeedStaleStringLibrary(cache);
+        var provider = new LibraryProvider(new[] { TestConfig }, new HttpClient(CreateFullHandler()), cache);
+
+        await provider.RefreshAsync(invalidateCache: true);
+        var libraries = await provider.GetLibrariesAsync();
+
+        var stringLib = libraries.First(l => l.FolderName == "string");
+        Assert.Equal(2, stringLib.LambdaCount);
+        // The re-fetch also rewrote the disk cache
+        Assert.Equal(2, cache.Load(TestConfig, "string")!.Files.Count);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ExpiredCacheEntry_RefetchesFromGitHub()
+    {
+        var cache = new SourceCache(_tempCacheDir, ttl: TimeSpan.FromMinutes(60));
+        SeedStaleStringLibrary(cache);
+        var yamlPath = Path.Combine(_tempCacheDir, TestConfig.GetCacheKey(), "string", "_library.yaml");
+        File.SetLastWriteTimeUtc(yamlPath, DateTime.UtcNow - TimeSpan.FromHours(2));
+        var provider = new LibraryProvider(new[] { TestConfig }, new HttpClient(CreateFullHandler()), cache);
+
+        var libraries = await provider.GetLibrariesAsync();
+
+        var stringLib = libraries.First(l => l.FolderName == "string");
+        Assert.Equal(2, stringLib.LambdaCount);
+    }
 }
