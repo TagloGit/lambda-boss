@@ -144,7 +144,7 @@ public static class ShowLambdaPopupCommand
                 _window?.SetStatus("Refreshing libraries...");
             });
 
-            LoadDataAsync(null);
+            LoadDataAsync(null, invalidateCache: true);
         }
         catch (Exception ex)
         {
@@ -203,15 +203,18 @@ public static class ShowLambdaPopupCommand
         readyEvent.Wait();
     }
 
-    private static async void LoadDataAsync(HashSet<string>? loadedKeys)
+    private static async void LoadDataAsync(HashSet<string>? loadedKeys, bool invalidateCache = false)
     {
         try
         {
             _windowDispatcher?.Invoke(() => _window?.SetStatus("Loading libraries..."));
 
-            _provider ??= new LibraryProvider(
-                Settings.Current.EnabledRepos,
-                localSources: Settings.Current.EnabledLocalSources);
+            _provider ??= CreateProvider();
+
+            // Ribbon Refresh: drop the disk cache too, otherwise the rebuilt provider
+            // just reads the same stale libraries back (#374).
+            if (invalidateCache)
+                await _provider.RefreshAsync(invalidateCache: true);
 
             var libraries = await _provider.GetLibrariesAsync();
             var lambdas = await _provider.GetAllLambdasAsync();
@@ -232,6 +235,17 @@ public static class ShowLambdaPopupCommand
             _windowDispatcher?.Invoke(() =>
                 _window?.SetStatus("Failed to load libraries — check network"));
         }
+    }
+
+    /// <summary>
+    ///     Builds a provider over the current settings, with a disk cache that honours CacheTtlMinutes.
+    /// </summary>
+    internal static LibraryProvider CreateProvider()
+    {
+        return new LibraryProvider(
+            Settings.Current.EnabledRepos,
+            cache: new SourceCache(ttl: Settings.Current.CacheTtl),
+            localSources: Settings.Current.EnabledLocalSources);
     }
 
     private static void OnSettingsChanged(object? sender, EventArgs e)
@@ -274,9 +288,7 @@ public static class ShowLambdaPopupCommand
                 _windowDispatcher?.Invoke(() =>
                     _window?.SetStatus($"Loading {request.DisplayName}..."));
 
-                _provider ??= new LibraryProvider(
-                    Settings.Current.EnabledRepos,
-                    localSources: Settings.Current.EnabledLocalSources);
+                _provider ??= CreateProvider();
 
                 IReadOnlyList<(string Name, string Formula)> lambdas;
 

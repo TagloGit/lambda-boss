@@ -52,6 +52,12 @@ public sealed class Settings
     public int CacheTtlMinutes { get; set; } = 60;
 
     /// <summary>
+    ///     <see cref="CacheTtlMinutes"/> as a TimeSpan, or null when expiry is disabled (0 or negative).
+    /// </summary>
+    [JsonIgnore]
+    public TimeSpan? CacheTtl => CacheTtlMinutes > 0 ? TimeSpan.FromMinutes(CacheTtlMinutes) : null;
+
+    /// <summary>
     ///     Returns the current settings instance, loading from disk on first access.
     /// </summary>
     public static Settings Current => _current ??= Load();

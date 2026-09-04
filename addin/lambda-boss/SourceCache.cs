@@ -9,14 +9,21 @@ namespace LambdaBoss;
 public class SourceCache
 {
     private readonly string _cacheRoot;
+    private readonly TimeSpan? _ttl;
 
-    public SourceCache(string? cacheRootOverride = null)
+    /// <param name="cacheRootOverride">Cache root directory; defaults to %LOCALAPPDATA%\LambdaBoss\cache.</param>
+    /// <param name="ttl">
+    ///     How long a cached library stays valid, measured from its last write. Null means no expiry.
+    ///     Entries older than this are treated as absent by <see cref="Load"/> and <see cref="IsCached"/>.
+    /// </param>
+    public SourceCache(string? cacheRootOverride = null, TimeSpan? ttl = null)
     {
         _cacheRoot = cacheRootOverride
             ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "LambdaBoss",
                 "cache");
+        _ttl = ttl;
     }
 
     /// <summary>
@@ -50,7 +57,7 @@ public class SourceCache
         var dir = GetLibraryDir(config, libraryName);
         var yamlPath = Path.Combine(dir, "_library.yaml");
 
-        if (!File.Exists(yamlPath))
+        if (!IsFresh(yamlPath))
             return null;
 
         var metadata = LibraryMetadata.LoadFromFile(yamlPath);
@@ -77,7 +84,26 @@ public class SourceCache
     public bool IsCached(RepoConfig config, string libraryName)
     {
         var yamlPath = Path.Combine(GetLibraryDir(config, libraryName), "_library.yaml");
-        return File.Exists(yamlPath);
+        return IsFresh(yamlPath);
+    }
+
+    /// <summary>
+    ///     True when the cache marker file exists and is within the TTL (or no TTL is set).
+    /// </summary>
+    private bool IsFresh(string yamlPath)
+    {
+        if (!File.Exists(yamlPath))
+            return false;
+
+        if (_ttl is null)
+            return true;
+
+        var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(yamlPath);
+        if (age <= _ttl.Value)
+            return true;
+
+        Logger.Info($"SourceCache: Entry at '{yamlPath}' is {age.TotalMinutes:F0} min old, past TTL — treating as miss");
+        return false;
     }
 
     /// <summary>

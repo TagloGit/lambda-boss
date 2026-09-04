@@ -24,9 +24,7 @@ internal static class ImportAllLambdasCommand
 
         try
         {
-            var provider = new LibraryProvider(
-                Settings.Current.EnabledRepos,
-                localSources: Settings.Current.EnabledLocalSources);
+            var provider = ShowLambdaPopupCommand.CreateProvider();
 
             libraries = await provider.GetLibrariesAsync();
 
