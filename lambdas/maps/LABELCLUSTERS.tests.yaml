@@ -11,16 +11,16 @@ tests:
     args: ['={"B2";"B3";"E5"}']
     expected: [[1], [1], [2]]
 
-  - name: diagonal pair merges under default 8-way connectivity
+  - name: diagonal pair splits under the default 4-way (orthogonal) connectivity
     args: ['={"B2";"C3"}']
-    expected: [[1], [1]]
-
-  - name: diagonal pair splits under 4-way deltas
-    args: ['={"B2";"C3"}', '={-100000;100000;-1;1}']
     expected: [[1], [2]]
 
+  - name: diagonal pair merges under explicit 8-way packed deltas (_dirAll literal)
+    args: ['={"B2";"C3"}', "=", "=", '={-100000;-99999;1;100001;100000;99999;-1;-100001}']
+    expected: [[1], [1]]
+
   - name: same position on different sheets stays partitioned by group
-    args: ['={"A1";"A2";"A1";"A2"}', '={-100000;100000;-1;1}', '={"S1";"S1";"S2";"S2"}']
+    args: ['={"A1";"A2";"A1";"A2"}', "=", "=", '={-100000;100000;-1;1}', '={"S1";"S1";"S2";"S2"}']
     expected: [[1], [1], [2], [2]]
 
   - name: accepts encoded position integers directly
@@ -28,16 +28,64 @@ tests:
     expected: [[1], [1]]
 
   - name: diagonal pair splits under 4-way arrow glyphs (DIRDELTA normalisation)
-    args: ['={"B2";"C3"}', '={"↑";"→";"↓";"←"}']
+    args: ['={"B2";"C3"}', "=", "=", '={"↑";"→";"↓";"←"}']
     expected: [[1], [2]]
 
   - name: diagonal pair merges under 8-way compass codes
-    args: ['={"B2";"C3"}', '={"N";"NE";"E";"SE";"S";"SW";"W";"NW"}']
+    args: ['={"B2";"C3"}', "=", "=", '={"N";"NE";"E";"SE";"S";"SW";"W";"NW"}']
     expected: [[1], [1]]
 
   - name: orthogonal pair merges under screen-direction names
-    args: ['={"B2";"B3"}', '={"up";"down";"left";"right"}']
+    args: ['={"B2";"B3"}', "=", "=", '={"up";"down";"left";"right"}']
     expected: [[1], [1]]
+
+  - name: link_fn same-value splits an adjacent run by value
+    args: ['={"A1";"A2";"A3"}', '={1;1;2}', '=LAMBDA(a, b, a = b)']
+    expected: [[1], [1], [2]]
+
+  - name: link_fn ABS diff <= 1 chains transitively, far value isolated
+    args: ['={"A1";"A2";"A3";"A4"}', '={1;2;3;7}', '=LAMBDA(a, b, ABS(a - b) <= 1)']
+    expected: [[1], [1], [1], [2]]
+
+  - name: link_fn same-value bridges out-of-order input (transitive closure)
+    args: ['={"A1";"A3";"A2"}', '={5;5;5}', '=LAMBDA(a, b, a = b)']
+    expected: [[1], [1], [1]]
+
+  - name: link_fn with text values
+    args: ['={"B2";"C2";"D2"}', '={"x";"x";"y"}', '=LAMBDA(a, b, a = b)']
+    expected: [[1], [1], [2]]
+
+  - name: link_fn with default 4-way keeps diagonal same-values apart
+    args: ['={"B2";"C3"}', '={1;1}', '=LAMBDA(a, b, a = b)']
+    expected: [[1], [2]]
+
+  - name: link_fn combined with explicit 8-way dir_deltas joins diagonal same-values
+    args: ['={"B2";"C3"}', '={1;1}', '=LAMBDA(a, b, a = b)', '={"N";"NE";"E";"SE";"S";"SW";"W";"NW"}']
+    expected: [[1], [1]]
+
+  - name: values without link_fn is ignored (pure geometric adjacency)
+    args: ['={"A1";"A2"}', '={1;9}']
+    expected: [[1], [1]]
+
+  - name: link_fn error on a pair is treated as no link
+    args: ['={"A1";"A2";"A3"}', '={1;"x";2}', '=LAMBDA(a, b, ABS(a - b) <= 1)']
+    expected: [[1], [2], [3]]
+
+  - name: link_fn closure over a cell reference (eta-wrap regression, #343)
+    setup:
+      cells:
+        - address: "C3"
+          values: 1
+    args: ['={"A1";"A2";"A3"}', '={1;2;5}', '=LAMBDA(a, b, ABS(a - b) <= C3)']
+    expected: [[1], [1], [2]]
+
+  - name: headers prepends clusterId to the column
+    args: ['={"B2";"B3";"E5"}', "=", "=", "=", "=", "=TRUE"]
+    expected: [["clusterId"], [1], [1], [2]]
+
+  - name: row-shaped input returns a row, headers in row orientation
+    args: ['={"B2","B3","E5"}', '={1,1,1}', '=LAMBDA(a, b, a = b)', "=", "=", "=1"]
+    expected: [["clusterId", 1, 1, 2]]
 
   - name: help text
     args: []

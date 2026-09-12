@@ -1,67 +1,124 @@
 tests:
-  - name: letter clusters summed by letter value, 8-way default, largest first
-    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)']
+  - name: letter clusters summed by letter value, 4-way default, largest first
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', "=", '=LAMBDA(v, CODE(v) - 64)']
     expected: [[2, 3, 11], [1, 2, 4]]
 
   - name: default value_fn counts cells (aggregate = cluster size)
     args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))']
     expected: [[2, 3, 3], [1, 2, 2]]
 
-  - name: diagonal neighbours merge under the 8-way default
+  - name: diagonal neighbours stay apart under the 4-way default
     args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))']
+    expected: [[1, 1, 1], [2, 1, 1]]
+
+  - name: diagonal neighbours merge under explicit 8-way dir_deltas
+    args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))', "=", "=", "=", '={-100000;-99999;1;100001;100000;99999;-1;-100001}']
     expected: [[1, 2, 2]]
 
   - name: 4-way compass codes split diagonals, ties ordered by cluster id
-    args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))', "=", "=", '={"N";"E";"S";"W"}']
+    args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))', "=", "=", "=", '={"N";"E";"S";"W"}']
     expected: [[1, 1, 1], [2, 1, 1]]
 
   - name: 4-way arrow glyphs via DIRDELTA
-    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)', "=", '={"↑";"→";"↓";"←"}']
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', "=", '=LAMBDA(v, CODE(v) - 64)', "=", '={"↑";"→";"↓";"←"}']
     expected: [[2, 3, 11], [1, 2, 4]]
 
   - name: 4-way packed deltas via _dirOrthog literal
-    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)', "=", '={-100000;1;100000;-1}']
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', "=", '=LAMBDA(v, CODE(v) - 64)', "=", '={-100000;1;100000;-1}']
     expected: [[2, 3, 11], [1, 2, 4]]
 
   - name: custom agg_fn MAX per cluster
-    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=LAMBDA(v, CODE(v) - 64)', "=MAX"]
+    args: ['={"A",1,"B";"C",2,"D";3,4,"E"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', "=", '=LAMBDA(v, CODE(v) - 64)', "=MAX"]
     expected: [[2, 3, 5], [1, 2, 3]]
 
   - name: numeric grid, islands of values above a threshold
-    args: ['={9,1,1,8;9,1,1,8;1,1,1,1}', '=LAMBDA(v, v > 5)', '=LAMBDA(v, v)']
+    args: ['={9,1,1,8;9,1,1,8;1,1,1,1}', '=LAMBDA(v, v > 5)', "=", '=LAMBDA(v, v)']
     expected: [[1, 2, 18], [2, 2, 16]]
 
   - name: no matching cells returns #N/A
     args: ['={1,2;3,4}', '=LAMBDA(v, v > 100)']
     expected: -2146826246
 
+  - name: link_fn same-value regions with no predicate (every cell eligible)
+    args: ['={1,1,2;1,2,2;3,3,3}', "=", '=LAMBDA(a, b, a = b)']
+    expected: [[1, 3, 3], [2, 3, 3], [3, 3, 3]]
+
+  - name: link_fn ABS diff <= 1 chains transitively, sums cluster values (4-way default)
+    args: ['={1,2,9;5,3,9;9,9,1}', "=", '=LAMBDA(a, b, ABS(a - b) <= 1)', '=LAMBDA(v, v)']
+    expected: [[2, 2, 18], [4, 2, 18], [1, 3, 6], [3, 1, 5], [5, 1, 1]]
+
+  - name: link_fn ABS diff <= 1 with 8-way dir_deltas joins the diagonal 9s
+    args: ['={1,2,9;5,3,9;9,9,1}', "=", '=LAMBDA(a, b, ABS(a - b) <= 1)', '=LAMBDA(v, v)', "=", '={"N";"NE";"E";"SE";"S";"SW";"W";"NW"}']
+    expected: [[2, 4, 36], [1, 3, 6], [3, 1, 5], [4, 1, 1]]
+
+  - name: min_size 2 drops singleton clusters
+    args: ['={1,2,9;5,3,9;9,9,1}', "=", '=LAMBDA(a, b, ABS(a - b) <= 1)', '=LAMBDA(v, v)', "=", "=", "=2"]
+    expected: [[2, 2, 18], [4, 2, 18], [1, 3, 6]]
+
+  - name: min_size larger than every cluster returns #N/A
+    args: ['={1,2,9;5,3,9;9,9,1}', "=", '=LAMBDA(a, b, ABS(a - b) <= 1)', "=", "=", "=", "=5"]
+    expected: -2146826246
+
+  - name: predicate and link_fn combine (eligible cells, then same-value join)
+    args: ['={1,1,0;2,1,0;2,2,0}', '=LAMBDA(v, v > 0)', '=LAMBDA(a, b, a = b)']
+    expected: [[1, 3, 3], [2, 3, 3]]
+
+  - name: headers prepends the column-name row
+    args: ['={"A","B";1,1}', '=LAMBDA(v, ISTEXT(v))', "=", "=", "=", "=", "=", "=TRUE"]
+    expected: [["clusterId", "cellCount", "aggregate"], [1, 2, 2]]
+
+  - name: headers with min_size on same-value regions
+    args: ['={1,1,2;1,2,2;3,4,5}', "=", '=LAMBDA(a, b, a = b)', "=", "=", "=", "=2", "=1"]
+    expected: [["clusterId", "cellCount", "aggregate"], [1, 3, 3], [2, 3, 3]]
+
   - name: real range input
     setup:
       cells:
         - address: "G5:I7"
           values:
-            - ["A", 1, 2]
-            - [3, "B", 4]
+            - ["A", "B", 2]
+            - [3, 1, 4]
             - [5, 6, "C"]
       names:
         - { name: "testGrid", refers_to: "G5:I7" }
-    args: ["=testGrid", "=LAMBDA(v, ISTEXT(v))", "=LAMBDA(v, CODE(v) - 64)"]
-    expected: [[1, 3, 6]]
+    args: ["=testGrid", "=LAMBDA(v, ISTEXT(v))", "=", "=LAMBDA(v, CODE(v) - 64)"]
+    expected: [[1, 2, 3], [2, 1, 3]]
+
+  - name: real range input with link_fn same-value
+    setup:
+      cells:
+        - address: "G5:I7"
+          values:
+            - [1, 1, 2]
+            - [1, 2, 2]
+            - [3, 3, 3]
+      names:
+        - { name: "testGrid", refers_to: "G5:I7" }
+    args: ["=testGrid", "=", "=LAMBDA(a, b, a = b)"]
+    expected: [[1, 3, 3], [2, 3, 3], [3, 3, 3]]
 
   - name: predicate closure over a cell reference (eta-wrap regression, #343)
     setup:
       cells:
         - address: "C3"
           values: "E"
-    args: ['={"E",1;2,"E"}', "=LAMBDA(v, v=C3)"]
+    args: ['={"E","E";2,1}', "=LAMBDA(v, v=C3)"]
     expected: [[1, 2, 2]]
+
+  - name: link_fn closure over a cell reference (eta-wrap regression, #343)
+    setup:
+      cells:
+        - address: "G7"
+          values: 1
+    args: ['={1,2;5,9}', "=", "=LAMBDA(a, b, ABS(a - b) <= G7)"]
+    expected: [[1, 2, 2], [2, 1, 1], [3, 1, 1]]
 
   - name: value_fn closure over a cell reference (eta-wrap regression, #343)
     setup:
       cells:
         - address: "C3"
           values: 10
-    args: ['={"E",1;2,"E"}', '=LAMBDA(v, ISTEXT(v))', "=LAMBDA(v, C3)"]
+    args: ['={"E","E";2,1}', '=LAMBDA(v, ISTEXT(v))', "=", "=LAMBDA(v, C3)"]
     expected: [[1, 2, 20]]
 
   - name: help text
