@@ -11,13 +11,13 @@ tests:
     args: ['={"B2";"B3";"E5"}']
     expected: [[1], [1], [2]]
 
-  - name: diagonal pair merges under default 8-way connectivity
+  - name: diagonal pair splits under the default 4-way (orthogonal) connectivity
     args: ['={"B2";"C3"}']
-    expected: [[1], [1]]
-
-  - name: diagonal pair splits under 4-way deltas
-    args: ['={"B2";"C3"}', "=", "=", '={-100000;100000;-1;1}']
     expected: [[1], [2]]
+
+  - name: diagonal pair merges under explicit 8-way packed deltas (_dirAll literal)
+    args: ['={"B2";"C3"}', "=", "=", '={-100000;-99999;1;100001;100000;99999;-1;-100001}']
+    expected: [[1], [1]]
 
   - name: same position on different sheets stays partitioned by group
     args: ['={"A1";"A2";"A1";"A2"}', "=", "=", '={-100000;100000;-1;1}', '={"S1";"S1";"S2";"S2"}']
@@ -55,9 +55,13 @@ tests:
     args: ['={"B2";"C2";"D2"}', '={"x";"x";"y"}', '=LAMBDA(a, b, a = b)']
     expected: [[1], [1], [2]]
 
-  - name: link_fn combined with 4-way deltas keeps diagonal same-values apart
-    args: ['={"B2";"C3"}', '={1;1}', '=LAMBDA(a, b, a = b)', '={-100000;100000;-1;1}']
+  - name: link_fn with default 4-way keeps diagonal same-values apart
+    args: ['={"B2";"C3"}', '={1;1}', '=LAMBDA(a, b, a = b)']
     expected: [[1], [2]]
+
+  - name: link_fn combined with explicit 8-way dir_deltas joins diagonal same-values
+    args: ['={"B2";"C3"}', '={1;1}', '=LAMBDA(a, b, a = b)', '={"N";"NE";"E";"SE";"S";"SW";"W";"NW"}']
+    expected: [[1], [1]]
 
   - name: values without link_fn is ignored (pure geometric adjacency)
     args: ['={"A1";"A2"}', '={1;9}']
