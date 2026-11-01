@@ -63,6 +63,11 @@ tests:
     args: ['=VSTACK(SetVar(NewState(), "name", "alice"), SetVar(NewState(), "name", "bob"))', "name"]
     expected: [["alice"], ["bob"]]
 
+  # #376: a 1x1 array value used to make every later entry unreadable
+  - name: var set after a 1x1 array value is still readable
+    args: ['=SetVar(SetVar(SetVar(NewState(), "a", 1), "pos", {"AY50"}), "dir", "E")', "dir"]
+    expected: "E"
+
   - name: help text
     args: []
     expected_type: array

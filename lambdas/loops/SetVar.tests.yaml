@@ -23,6 +23,23 @@ tests:
     args: ['=NewState()', "done?", "=TRUE"]
     expected: "done?\x1Eb\x1ETRUE"
 
+  # #376: a 1x1 array value (e.g. MOVECELL output) must not make the state array-shaped
+  - name: 1x1 text array value appends as scalar entry
+    args: ['=SetVar(NewState(), "x", 5)', "pos", '={"AY50"}']
+    expected: "x\x1En\x1E5\x1Fpos\x1Et\x1EAY50"
+
+  - name: 1x1 numeric array value keeps n tag
+    args: ['=NewState()', "x", '={7}']
+    expected: "x\x1En\x1E7"
+
+  - name: 1x1 array state keeps every entry
+    args: ['=IF(SEQUENCE(1), SetVars("a", 1, "b", 2))', "c", "=3"]
+    expected: "a\x1En\x1E1\x1Fb\x1En\x1E2\x1Fc\x1En\x1E3"
+
+  - name: 1x1 array name is dereferenced
+    args: ['=SetVar(NewState(), "x", 5)', '={"y"}', "=7"]
+    expected: "x\x1En\x1E5\x1Fy\x1En\x1E7"
+
   - name: help text
     args: []
     expected_type: array

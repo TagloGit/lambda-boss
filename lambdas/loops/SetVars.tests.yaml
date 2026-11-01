@@ -19,6 +19,15 @@ tests:
     args: ["arr", "={10;20;30}"]
     expected: "arr\x1En\x1E10\x1D20\x1D30"
 
+  # #376 repro: a 1x1 array value mid-chain used to drop every later entry
+  - name: 1x1 array value does not drop later pairs
+    args: ["grid", '={"W";"W"}', "pos", '={"AY50"}', "dir", "E"]
+    expected: "grid\x1Et\x1EW\x1DW\x1Fpos\x1Et\x1EAY50\x1Fdir\x1Et\x1EE"
+
+  - name: MOVECELL output (1x1 array) does not drop later pairs
+    args: ["grid", '={"W";"W"}', "pos", '=MOVECELL("AX50","E")', "dir", "E"]
+    expected: "grid\x1Et\x1EW\x1DW\x1Fpos\x1Et\x1EAY50\x1Fdir\x1Et\x1EE"
+
   - name: help text
     args: []
     expected_type: array
