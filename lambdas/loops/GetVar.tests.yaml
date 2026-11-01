@@ -68,6 +68,14 @@ tests:
     args: ['=SetVar(SetVar(SetVar(NewState(), "a", 1), "pos", {"AY50"}), "dir", "E")', "dir"]
     expected: "E"
 
+  - name: 1x1 array state keeps every entry readable
+    args: ['=IF(SEQUENCE(1), SetVars("a", 1, "b", 2))', "b"]
+    expected: "2"
+
+  - name: var set under a 1x1 array name survives a later SetVar
+    args: ['=SetVar(SetVar(NewState(), {"y"}, 7), "z", 1)', "y"]
+    expected: "7"
+
   - name: help text
     args: []
     expected_type: array
