@@ -431,7 +431,7 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
 - [ ] `/State` (edit): add / remove / rename per part 2, including `SetVar` layering on a non-SetVars
       sample state, chaining past 10, the dangling-reference block on remove, and rename tests near
       references (`$B$2`, `Sheet1!B2`, `t[b]`) and case collisions.
-- [ ] LET to LAMBDA: state binding first (badge `state`), input second (badge movable), other value
+- [x] LET to LAMBDA: state binding first (badge `state`), input second (badge movable), other value
       bindings Keep off; builder accepts the state binding though it is a calculation; sampling-only
       bindings dropped; editable fold line with an absolutised seed; Write fold to writes only when
       complete. Non-state LETs unchanged (existing tests pass untouched).
