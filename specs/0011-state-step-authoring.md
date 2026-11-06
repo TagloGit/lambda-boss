@@ -479,13 +479,16 @@ Taken while building Part 3 (Labs switch `state-let-to-lambda`, "State steps in 
 - Array reads also accept the two-index forms of a row or column state: `INDEX(S, 1, k)`,
   `INDEX(S, , k)`, `INDEX(S, k, 1)`. The position must be a number literal within the output's size,
   and the output needs at least two values, so an ordinary `INDEX` of a range plus `HSTACK` rarely
-  reads as a step. An array step also needs an input binding: without one it's a lookup.
+  reads as a step. An array step also needs an input its rules read: without one it's a lookup, and
+  LET to LAMBDA shows the ordinary dialog.
 - State variables also list keys read inline (no canonical line) and keys only the output sets, after
   the read ones.
 - The input rule counts bindings read through a helper line or directly in the output's own
   expressions as "read by a next line", and tries a relative cell before a `$`-anchored one, so
-  `maxB, $K$2` loses to `inp, H270`. A binding named `v` that reads the state isn't the input. A next
-  line that doesn't read the state can be (`SetVars("last", inp)`), but never as the last resort.
+  `maxB, $K$2` loses to `inp, H270`. A binding named `v` that reads the state isn't the input. A
+  binding the rules read beats one only passed straight to the output (`SetVars("last", inp)`), which
+  is the input only if it's a single cell or `INDEX` and nothing else qualifies. Names bound inside an
+  inner `LET` or `LAMBDA` don't count as reads here.
 - An input bound to a calculation (`v, INDEX(G1:G9, 1)`, the part 4 stepper) is a parameter too, so
   the builder accepts any calculation the dialog lists on a state step. One left Keep off is made
   absolute, like any excluded input.

@@ -168,6 +168,33 @@ public class StateStepParserTests
     }
 
     [Fact]
+    public void InputThatShadowsTheStateNameInALambda_IsStillTheInput()
+    {
+        var step = Step(
+            "=LET(a, SetVars(\"p\", 0), v, SUM(MAP(G1:G3, LAMBDA(a, a + 1))), p, GetVar(a, \"p\"), SetVars(\"p\", p + v))");
+
+        Assert.Equal("v", step.InputBinding!.Name);
+    }
+
+    [Fact]
+    public void ExpressionInputReadByARule_BeatsACellOnlyStored()
+    {
+        var step = Step(
+            "=LET(a, SetVars(\"p\", 0), inp, MID(G1, 1, 1), lim, K2, p, GetVar(a, \"p\"), nextP, p + (inp = \"F\"), " +
+            "SetVars(\"p\", nextP, \"lim\", lim))");
+
+        Assert.Equal("inp", step.InputBinding!.Name);
+    }
+
+    [Fact]
+    public void CellOnlyStored_IsTheInputWhenNothingElseIs()
+    {
+        var step = Step("=LET(a, SetVars(\"p\", 0), inp, H1, p, GetVar(a, \"p\"), SetVars(\"p\", p + 1, \"last\", inp))");
+
+        Assert.Equal("inp", step.InputBinding!.Name);
+    }
+
+    [Fact]
     public void ConstantNextLine_IsNotTheInputOfLastResort()
     {
         var step = Step("=LET(a, SetVars(\"p\", 0), p, GetVar(a, \"p\"), nextQ, 0, SetVars(\"p\", p + 1, \"q\", nextQ))");
@@ -326,6 +353,8 @@ public class StateStepParserTests
     [InlineData("=LET(d, A1:C10, x, INDEX(d, 2), y, INDEX(d, 3), HSTACK(x, y))")]
     [InlineData("=LET(t, SORT(A1:A9), lo, INDEX(t, 1), hi, INDEX(t, 2), med, MEDIAN(t), VSTACK(lo, hi, med))")]
     [InlineData("=LET(t, Table1[Name], first, NTH(t, 1), HSTACK(first, COUNTA(t)))")]
+    [InlineData("=LET(d, A1:C10, n, E1, x, INDEX(d, 2), HSTACK(x, n))")]
+    [InlineData("=LET(d, A1:C10, x, INDEX(d, 2), y, E1, HSTACK(x, y))")]
     public void ArrayFamily_NonSteps(string formula)
     {
         Assert.Null(Parse(formula));
@@ -449,6 +478,23 @@ public class StateFoldTests
             "SetVars(\"p\", LOG10($H$1), \"q\", 'L12'!$H$1, \"r\", t[b])",
             Seed("=LET(a, SetVars(\"p\", LOG10(H1), \"q\", 'L12'!H1, \"r\", t[b]), v, H2, b, GetVar(a, \"p\"), " +
                  "SetVars(\"p\", b + v))"));
+    }
+
+    [Fact]
+    public void Seed_LeavesInnerNamesAlone()
+    {
+        Assert.Equal(
+            "SetVars(\"p\", SUM(MAP($G$1:$G$3, LAMBDA(v, v + 1))), \"q\", LET(k, 1, k + 1))",
+            Seed("=LET(k, 5, a, SetVars(\"p\", SUM(MAP(G1:G3, LAMBDA(v, v + 1))), \"q\", LET(k, 1, k + 1)), " +
+                 "v, H2, p, GetVar(a, \"p\"), SetVars(\"p\", p + v + k))"));
+    }
+
+    [Fact]
+    public void Seed_WritesALambdaBindingInPlace()
+    {
+        Assert.Equal(
+            "SetVars(\"p\", LAMBDA(x, x + 1)($H$1))",
+            Seed("=LET(addOne, LAMBDA(x, x + 1), a, SetVars(\"p\", addOne(H1)), v, H2, p, GetVar(a, \"p\"), SetVars(\"p\", p + v))"));
     }
 
     [Fact]

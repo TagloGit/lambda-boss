@@ -434,8 +434,12 @@ public partial class LetToLambdaWindow
         var name = LambdaNameBox.Text.Trim();
         if (name.Length > 0 && !ExcelNameValidator.Validate(name).IsValid) return;
 
+        // An unreadable fold stays as it is and keeps the old name, so a later change still finds it.
+        var updated = StateFold.WithLambdaName(FoldBox.Text, _foldName, name);
+        if (updated == FoldBox.Text) return;
+
         var caret = FoldBox.CaretIndex;
-        FoldBox.Text = StateFold.WithLambdaName(FoldBox.Text, _foldName, name);
+        FoldBox.Text = updated;
         FoldBox.CaretIndex = caret;
         _foldName = name;
     }

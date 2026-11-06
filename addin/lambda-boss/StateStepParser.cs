@@ -98,12 +98,16 @@ public static class StateStepParser
     ///     which only ever makes a caller keep more.
     /// </summary>
     /// <exception cref="FormatException">A binding's RHS can't be parsed.</exception>
-    internal static Dictionary<string, HashSet<string>> DirectReads(ParsedLet parsed)
+    internal static Dictionary<string, HashSet<string>> DirectReads(ParsedLet parsed, bool ignoreInnerNames = false)
     {
         var names = parsed.Bindings.Select(b => b.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var reads = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var b in parsed.Bindings)
+        {
             reads[b.Name] = NamesIn(b.RhsText, names);
+            if (ignoreInnerNames)
+                reads[b.Name].ExceptWith(InnerNames(FormulaParser.Parse(b.RhsText).Root));
+        }
         return reads;
     }
 
@@ -124,6 +128,31 @@ public static class StateStepParser
             if (text != null && candidates.Contains(text)) found.Add(text);
         }
         return found;
+    }
+
+    /// <summary>
+    ///     The names <paramref name="root" /> binds for itself, in inner <c>LET</c> and
+    ///     <c>LAMBDA</c> calls. Coarse: a name counts throughout the expression, not just in
+    ///     its scope, so callers use this only where a miss costs less than a false read.
+    /// </summary>
+    internal static HashSet<string> InnerNames(FormulaNode root)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var call in Walk(root).OfType<FunctionCallNode>())
+        {
+            var args = call.Arguments;
+            if (IsNamed(call.Name, "LET"))
+            {
+                for (var i = 0; i + 1 < args.Count; i += 2)
+                    if (NameLeaf(args[i]) is { } name) names.Add(name);
+            }
+            else if (IsNamed(call.Name, "LAMBDA"))
+            {
+                foreach (var arg in args.Take(args.Count - 1))
+                    if (NameLeaf(arg) is { } name) names.Add(name.Trim('[', ']'));
+            }
+        }
+        return names;
     }
 
     /// <summary>Everything reachable from <paramref name="start" /> through <paramref name="reads" />, start included.</summary>
@@ -196,9 +225,11 @@ public static class StateStepParser
 
         var getVarLines = stateReads.Where(r => r.WholeRhs).Select(r => bindings[r.Line].Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var input = FindInput(parsed, bindings[state], getVarLines, nextLineNames, pairs, roots);
+        var input = FindInput(
+            parsed, bindings[state], getVarLines, nextLineNames, pairs, roots,
+            allowStoredOnly: family == StateFamily.SetVars);
 
-        // INDEX plus HSTACK is everyday Excel. Without an input it's a lookup, not a step.
+        // INDEX plus HSTACK is everyday Excel. Without an input its rules use, it's a lookup.
         if (family == StateFamily.Array && input == null) return null;
 
         return new StateStep(family, bindings[state], input, variables, parsed.Body);
@@ -242,9 +273,10 @@ public static class StateStepParser
         HashSet<string> getVarLines,
         HashSet<string> nextLines,
         List<(string Key, string Value)> pairs,
-        List<FormulaNode> roots)
+        List<FormulaNode> roots,
+        bool allowStoredOnly)
     {
-        var reads = DirectReads(parsed);
+        var reads = DirectReads(parsed, ignoreInnerNames: true);
         var names = parsed.Bindings.Select(b => b.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Whatever reads the state, directly or through other lines, can't be a sample input.
@@ -255,28 +287,40 @@ public static class StateStepParser
             string.Equals(b.Name, "v", StringComparison.OrdinalIgnoreCase) && !Excluded(b));
         if (named != null) return named;
 
-        // What the output needs, whether through next lines or expressions written in place.
-        var neededStart = new HashSet<string>(nextLines, StringComparer.OrdinalIgnoreCase);
-        foreach (var (_, value) in pairs) neededStart.UnionWith(NamesIn(value, names));
-        var needed = Closure(neededStart, reads);
+        // What the step's rules use: read by a next line or in an expression in the output.
+        // A binding passed straight to the output is only stored, which is weaker evidence.
+        var ruleReads = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var line in nextLines) ruleReads.UnionWith(reads[line]);
+        foreach (var (_, value) in pairs)
+            if (!names.Contains(value)) ruleReads.UnionWith(NamesIn(value, names));
+        var usedByRules = Closure(ruleReads, reads);
 
-        // A next line stays a candidate: a step can store its input ("last", inp).
+        var stored = Closure(nextLines, reads);
         var candidates = new List<(LetBinding Binding, FormulaNode Root)>();
         for (var i = 0; i < parsed.Bindings.Count; i++)
         {
             var b = parsed.Bindings[i];
-            if (!Excluded(b) && needed.Contains(b.Name)) candidates.Add((b, roots[i]));
+            if (!Excluded(b) && (usedByRules.Contains(b.Name) || stored.Contains(b.Name)))
+                candidates.Add((b, roots[i]));
         }
 
+        var rules = candidates.Where(c => usedByRules.Contains(c.Binding.Name)).ToList();
+
+        // A next line stays a candidate: a step can store its input ("last", inp).
+        var input = BestSample(rules)
+            ?? rules.FirstOrDefault(c => !nextLines.Contains(c.Binding.Name)).Binding;
+        if (input != null || !allowStoredOnly) return input;
+        return BestSample(candidates);
+    }
+
+    private static LetBinding? BestSample(List<(LetBinding Binding, FormulaNode Root)> candidates)
+    {
         bool LooksLikeInput((LetBinding Binding, FormulaNode Root) c) =>
             SingleCell.IsMatch(c.Binding.RhsText) || (c.Root is FunctionCallNode call && IsNamed(call.Name, "INDEX"));
 
         // A $-anchored cell reads as a constant (maxB, $K$2), so a relative one goes first.
         var sample = candidates.FirstOrDefault(c => LooksLikeInput(c) && !c.Binding.RhsText.Contains('$'));
-        if (sample.Binding != null) return sample.Binding;
-        sample = candidates.FirstOrDefault(LooksLikeInput);
-        if (sample.Binding != null) return sample.Binding;
-        return candidates.FirstOrDefault(c => !nextLines.Contains(c.Binding.Name)).Binding;
+        return sample.Binding ?? candidates.FirstOrDefault(LooksLikeInput).Binding;
     }
 
     /// <summary>
@@ -426,26 +470,36 @@ public static class StateFold
     private static string Render(string expression, Dictionary<string, string> bindings)
     {
         var root = FormulaParser.Parse(expression).Root;
+        var inner = StateStepParser.InnerNames(root);
+        var nodes = StateStepParser.Walk(root).ToList();
+
+        // A call's name is a token too: a binding can hold a LAMBDA.
+        var tokens = nodes.OfType<LeafNode>().Select(l => (l.Token, IsCall: false))
+            .Concat(nodes.OfType<FunctionCallNode>().Select(c => (Token: c.NameToken, IsCall: true)))
+            .OrderBy(t => t.Token.Start);
+
         var sb = new StringBuilder();
         var at = 0;
-
-        foreach (var leaf in StateStepParser.Walk(root).OfType<LeafNode>().OrderBy(l => l.Start))
+        foreach (var (token, isCall) in tokens)
         {
-            sb.Append(CollapseLines(expression[at..leaf.Start]));
-            at = leaf.End;
+            sb.Append(CollapseLines(expression[at..token.Start]));
+            at = token.End;
 
-            if (leaf.TokenType != FormulaTokenType.Name)
-                sb.Append(leaf.Text);
-            else if (bindings.TryGetValue(leaf.Text, out var rhs))
-                sb.Append(InPlace(rhs, bindings.Where(b => !string.Equals(b.Key, leaf.Text, StringComparison.OrdinalIgnoreCase))
-                    .ToDictionary(b => b.Key, b => b.Value, StringComparer.OrdinalIgnoreCase)));
+            if (token.Type != FormulaTokenType.Name || inner.Contains(token.Text))
+                sb.Append(token.Text);
+            else if (bindings.TryGetValue(token.Text, out var rhs))
+                sb.Append(InPlace(rhs, Without(bindings, token.Text)));
             else
-                sb.Append(CellRef.Replace(leaf.Text, "$1$$$2$$$3"));
+                sb.Append(isCall ? token.Text : CellRef.Replace(token.Text, "$1$$$2$$$3"));
         }
 
         sb.Append(CollapseLines(expression[at..]));
         return sb.ToString().Trim();
     }
+
+    private static Dictionary<string, string> Without(Dictionary<string, string> bindings, string name) =>
+        bindings.Where(b => !string.Equals(b.Key, name, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(b => b.Key, b => b.Value, StringComparer.OrdinalIgnoreCase);
 
     private static string InPlace(string rhs, Dictionary<string, string> bindings)
     {
