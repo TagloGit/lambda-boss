@@ -91,8 +91,6 @@ Leads take a feature from design to tested and refined on their own, and Tim get
 5. **Prove it in real use.** Staging is the Parallels VM `taglo-win`: real Excel, under `~/Repositories/wt/VM-LOCK`, released straight after each run (taglo-pm `docs/windows-vm.md`). Never use real Excel on Tim's PC. Load the PR's build (the `lambda-boss-xll` artifact on its CI run, kept two days) or `dev-latest`, and drive the add-in on real case or rep files. Unit tests alone aren't proof of a feature. Screenshots and what you drove go in the PR.
 6. **Release** with the `/release` skill. Tim's approval on the release PR is the only gate he holds.
 
-**Hold new library files until Tim has updated.** Add-ins older than 0.2.0 list a library's files from the repo's default branch (now `develop`) but fetch them from `main`, so a new `.lambda` or `.const` in an existing library on `develop` makes that whole library fail to load on those builds. Until #390's first release is merged and Tim has run the updater, don't merge new files into existing libraries. Then delete this paragraph.
-
 ### Library channel and Labs switches
 
 - `Settings.LibraryChannel`: `Stable` (the default, reads `main`) or `Labs` (reads `develop`). Only this repo follows the channel; other repos stay on `main`. Each branch has its own disk cache.
