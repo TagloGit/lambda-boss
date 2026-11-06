@@ -8,19 +8,7 @@ CELLAT = LAMBDA(
 //  Parameter Declarations
     [row],
     [col],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CELLAT(row, col)¶" &
-                "DESCRIPTION:   →Builds a relative A1 address string (no $) from a row and column number. The (row,col)->address converter; inverse of ROWNUM/COLNUM. Works past column XFD and row 1048576 (no ADDRESS inside), e.g. CELLAT(1, 16385) = XFE1.¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   row            →(Required) Row number (1 or more; decimals are truncated, as ADDRESS does; below 1 gives #VALUE!). Any size. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &
-                "   col            →(Required) Column number (1 or more; below 1 gives #VALUE!). Up to 7 letters (8353082582, ZZZZZZZ; beyond gives #NUM!): 16385 is XFE, 475254 is ZZZZ. Also accepts an array of cols — result lifts element-wise (and broadcasts against row).¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=CELLAT(5, 5)¶" &
-                "Result         →E5",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(row),
     //  Procedure
@@ -33,6 +21,18 @@ CELLAT = LAMBDA(
                       v, cc - 1 - (26 ^ nL - 26) / 25,
                       CONCAT(CHAR(65 + MOD(INT(v / 26 ^ (nL - SEQUENCE(nL))), 26))) & rr)))),
         result, IF(AND(ROWS(rowB) = 1, COLUMNS(rowB) = 1), one(@rowB, @colB), MAP(rowB, colB, one)),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →CELLAT(row, col)¶" &
+                "DESCRIPTION:   →Builds a relative A1 address string (no $) from a row and column number. The (row,col)->address converter; inverse of ROWNUM/COLNUM. Works past column XFD and row 1048576 (no ADDRESS inside), e.g. CELLAT(1, 16385) = XFE1.¶" &
+                "VERSION:       →Nov 06 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   row            →(Required) Row number (1 or more; decimals are truncated, as ADDRESS does; below 1 gives #VALUE!). Any size. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &
+                "   col            →(Required) Column number (1 or more; below 1 gives #VALUE!). Up to 7 letters (8353082582, ZZZZZZZ; beyond gives #NUM!): 16385 is XFE, 475254 is ZZZZ. Also accepts an array of cols — result lifts element-wise (and broadcasts against row).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CELLAT(5, 5)¶" &
+                "Result         →E5",
+                "→", "¶"
+                ), result)
 )
 );

@@ -15,23 +15,7 @@ LABELCLUSTERS = LAMBDA(
     [dir_deltas],
     [group],
     [headers],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      ¦LABELCLUSTERS(cells, [values], [link_fn], [dir_deltas], [group], [headers])¶" &
-                "DESCRIPTION:   ¦Labels each input cell with an integer cluster id such that two cells in the same group share an id whenever they are adjacent, directly or transitively. Adjacency is geometric (dir_deltas) and, when link_fn is given, also requires the two neighbouring values to satisfy link_fn. Uses full transitive closure (min-label relaxation) so the result is independent of input order. Ids are numbered by first appearance.¶" &
-                "VERSION:       ¦Sep 12 2026¶" &
-                "PARAMETERS:    ¦¶" &
-                "   cells          ¦(Required) A column of cells - A1 address text (e.g. ""B7"") OR encoded scalar positions (row*_mult+col). Auto-detected per element via ISNUMBER; text is normalised internally via TOPOS.¶" &
-                "   values         ¦(Optional) Column of values parallel to cells, consulted only by link_fn. Omitted: link_fn is ignored and adjacency is purely geometric.¶" &
-                "   link_fn        ¦(Optional) LAMBDA(a, b, ...) returning TRUE when two geometrically adjacent cells with values a and b should be linked, e.g. LAMBDA(a, b, a = b) for same-value regions or LAMBDA(a, b, ABS(a - b) <= 1) for smooth regions. Should be symmetric. Linking is transitive (1,2,3 chain into one cluster under the ABS <= 1 rule). Omitted: every geometric neighbour is linked.¶" &
-                "   dir_deltas     ¦(Optional) A 1-D array defining connectivity, in any direction notation - packed position deltas (_dirOrthog, _dirAll, knight moves ...), arrow glyphs (_arrowsOrthog, ↑ → ↓ ←), compass codes (N, NE, north-east ...) or screen directions (U, DR, up-left ...); normalised via DIRDELTA. Default: the 4 orthogonal directions in canonical clockwise order (_dirOrthog). Pass _dirAll or _arrowsAll for 8-way (diagonals link). Positions and deltas use the _mult constant.¶" &
-                "   group          ¦(Optional) Column of area / sheet keys (numeric or text). Adjacency is only tested between cells sharing the same key, so multi-sheet maps stay partitioned. Omitted: all cells treated as one group.¶" &
-                "   headers        ¦(Optional) TRUE prepends a ""clusterId"" header to the output (in the output's orientation). Default FALSE.¶" &
-                "EXAMPLE:       ¦¶" &
-                "Formula        ¦=LABELCLUSTERS({""A1"";""A2"";""A3""}, {1;1;2}, LAMBDA(a, b, a = b))¶" &
-                "Result         ¦{1;1;2} (A1 and A2 share value 1 and are adjacent; A3 differs so starts a new cluster)",
-                "¦", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(cells),
     //  Procedure
@@ -64,6 +48,22 @@ LABELCLUSTERS = LAMBDA(
         header?, IF(ISOMITTED(headers), FALSE, N(headers) <> 0),
         labelled, IF(header?, VSTACK("clusterId", ids), ids),
         result, IF(wasRow, TRANSPOSE(labelled), labelled),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      ¦LABELCLUSTERS(cells, [values], [link_fn], [dir_deltas], [group], [headers])¶" &
+                "DESCRIPTION:   ¦Labels each input cell with an integer cluster id such that two cells in the same group share an id whenever they are adjacent, directly or transitively. Adjacency is geometric (dir_deltas) and, when link_fn is given, also requires the two neighbouring values to satisfy link_fn. Uses full transitive closure (min-label relaxation) so the result is independent of input order. Ids are numbered by first appearance.¶" &
+                "VERSION:       ¦Sep 12 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   cells          ¦(Required) A column of cells - A1 address text (e.g. ""B7"") OR encoded scalar positions (row*_mult+col). Auto-detected per element via ISNUMBER; text is normalised internally via TOPOS.¶" &
+                "   values         ¦(Optional) Column of values parallel to cells, consulted only by link_fn. Omitted: link_fn is ignored and adjacency is purely geometric.¶" &
+                "   link_fn        ¦(Optional) LAMBDA(a, b, ...) returning TRUE when two geometrically adjacent cells with values a and b should be linked, e.g. LAMBDA(a, b, a = b) for same-value regions or LAMBDA(a, b, ABS(a - b) <= 1) for smooth regions. Should be symmetric. Linking is transitive (1,2,3 chain into one cluster under the ABS <= 1 rule). Omitted: every geometric neighbour is linked.¶" &
+                "   dir_deltas     ¦(Optional) A 1-D array defining connectivity, in any direction notation - packed position deltas (_dirOrthog, _dirAll, knight moves ...), arrow glyphs (_arrowsOrthog, ↑ → ↓ ←), compass codes (N, NE, north-east ...) or screen directions (U, DR, up-left ...); normalised via DIRDELTA. Default: the 4 orthogonal directions in canonical clockwise order (_dirOrthog). Pass _dirAll or _arrowsAll for 8-way (diagonals link). Positions and deltas use the _mult constant.¶" &
+                "   group          ¦(Optional) Column of area / sheet keys (numeric or text). Adjacency is only tested between cells sharing the same key, so multi-sheet maps stay partitioned. Omitted: all cells treated as one group.¶" &
+                "   headers        ¦(Optional) TRUE prepends a ""clusterId"" header to the output (in the output's orientation). Default FALSE.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=LABELCLUSTERS({""A1"";""A2"";""A3""}, {1;1;2}, LAMBDA(a, b, a = b))¶" &
+                "Result         ¦{1;1;2} (A1 and A2 share value 1 and are adjacent; A3 differs so starts a new cluster)",
+                "¦", "¶"
+                ), result)
 )
 );

@@ -8,8 +8,14 @@ COLOF = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), _mult, mult),
+        result, MOD(pos, m),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →COLOF(pos, [mult])¶" &
                 "DESCRIPTION:   →Extracts the column number from an encoded position integer (as produced by TOPOS).¶" &
                 "VERSION:       →Nov 06 2026¶" &
@@ -20,12 +26,6 @@ COLOF = LAMBDA(
                 "Formula        →=COLOF(17000017)¶" &
                 "Result         →17",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(pos),
-    //  Procedure
-        m, IF(ISOMITTED(mult), _mult, mult),
-        result, MOD(pos, m),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

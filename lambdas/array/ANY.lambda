@@ -8,8 +8,15 @@ ANY = LAMBDA(
 //  Parameter Declarations
     [items],
     [predicate],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
+        mapped, MAP(items, LAMBDA(x_, pred(x_))),
+        result, SUM(--mapped)>0,
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →ANY(items, [predicate])¶" &
                 "DESCRIPTION:   →Returns TRUE if at least one item satisfies the predicate, else FALSE.¶" &
                 "VERSION:       →Aug 24 2026¶" &
@@ -20,13 +27,6 @@ ANY = LAMBDA(
                 "Formula        →=ANY({""A"",""B"",""C""}, LAMBDA(c, c=""B""))¶" &
                 "Result         →TRUE",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(items),
-    //  Procedure
-        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
-        mapped, MAP(items, LAMBDA(x_, pred(x_))),
-        result, SUM(--mapped)>0,
-        IF(Help?, Help, result)
+                ), result)
 )
 );

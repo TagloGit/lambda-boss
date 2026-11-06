@@ -56,8 +56,13 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 //  Parameter Declarations
     [<param1>],
     [<param2>],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(<first_required_param>),
+    //  Procedure
+        result, <formula>,
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →<Name>(<param1>, <param2>)¶" &
                 "DESCRIPTION:   →<One-line description.>¶" &
                 "VERSION:       →<Mon DD YYYY>¶" &
@@ -68,15 +73,12 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
                 "Formula        →=<Name>(<example_args>)¶" &
                 "Result         →<example_result>",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(<first_required_param>),
-    //  Procedure
-        result, <formula>,
-        IF(Help?, Help, result)
+                ), result)
 )
 );
 ```
+
+**Why Help sits in the IF (#387):** Excel evaluates every LET binding on every call, so a `Help` binding costs its TEXTSPLIT each time, about 2.3× the per-call cost of a cheap helper in a REDUCE or SCAN loop. IF's untaken branch isn't evaluated. Never bind Help in the LET.
 
 ### Format Details
 
@@ -88,16 +90,7 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 **Parameter declarations:**
 - One parameter per line, each wrapped in `[]`
 - Preceded by `//  Parameter Declarations` comment
-- Last parameter followed by a comma before the `//  Help` section
-
-**Help block:**
-- `LET(Help, TEXTSPLIT(` — opens the Help table definition
-- Each row is `"<label>→<value>¶" &` — the `→` separates columns, `¶` separates rows
-- The last row has NO `¶` and NO `&` — just the closing `",`
-- Column alignment: pad labels to 15 chars, parameter names to 14 chars
-- VERSION date format: `Mon DD YYYY` (e.g. `Apr 12 2026`)
-- Closes with `"→", "¶"` on its own line, then `),`
-- Parameter descriptions: `(Required)` or `(Optional)` prefix followed by description
+- Last parameter followed by a comma before the `LET(`
 
 **Check inputs:**
 - `//  Check inputs` comment
@@ -107,7 +100,16 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 **Procedure:**
 - `//  Procedure` comment
 - `result, <formula>,` — the computation
-- `IF(Help?, Help, result)` — return Help table or result
+
+**Help block (the last thing in the LET):**
+- `//  Help` comment
+- `IF(Help?, TEXTSPLIT(` — opens the Help table, in the IF's TRUE branch
+- Each row is `"<label>→<value>¶" &` — the `→` separates columns, `¶` separates rows
+- The last row has NO `¶` and NO `&` — just the closing `",`
+- Column alignment: pad labels to 15 chars, parameter names to 14 chars
+- VERSION date format: `Mon DD YYYY` (e.g. `Apr 12 2026`)
+- Closes with `"→", "¶"` on its own line, then `), result)`
+- Parameter descriptions: `(Required)` or `(Optional)` prefix followed by description
 
 **Closing:**
 - `)` closes the LET
@@ -116,13 +118,13 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 ### Indentation Guide
 
 - Parameter declarations: 4 spaces indent
-- `LET(Help, TEXTSPLIT(`: 4 spaces indent
-- Help string lines: 16 spaces indent (aligned under the opening `"`)
-- `"→", "¶"`: 16 spaces indent
-- `),`: 16 spaces indent
-- `//  Check inputs`: 4+4=8 spaces indent
+- `LET(`: 4 spaces indent
+- `//  Check inputs`, `//  Procedure`, `//  Help`: 4 spaces indent
 - LET variables (`Help?,`, `result,`): 8 spaces indent
-- `IF(Help?, Help, result)`: 8 spaces indent
+- `IF(Help?, TEXTSPLIT(`: 8 spaces indent
+- Help string lines: 16 spaces indent
+- `"→", "¶"`: 16 spaces indent
+- `), result)`: 16 spaces indent
 - Closing `)`: 0 spaces
 - `);`: 0 spaces
 
@@ -153,7 +155,8 @@ Keep the scalar body inside an inline `scalar` LAMBDA within the `LET`, then bra
     result, IF(OR(ROWS(<liftParam>) > 1, COLUMNS(<liftParam>) > 1),
                 MAP(<liftParam>, scalar),
                 scalar(@<liftParam>)),
-    IF(Help?, Help, result)
+//  Help
+    IF(Help?, TEXTSPLIT(...), result)
 ```
 
 The `@` is load-bearing (#318). Without it, a 1×1 *array* — produced by `CHOOSEROWS`, `TAKE`, a single-row `FILTER`, or an array-lifted `XLOOKUP` — passes the `ROWS>1` check and reaches the scalar body still array-shaped, where shape-sensitive functions (`SEQUENCE(n)`, `REGEXEXTRACT(..., 1)`, `TEXTSPLIT`) lift element-wise over the 1×1 array and collapse to a single element. The result is silently wrong values, not an error (CELLTOPOS parsed `"BY85"` as column AZ because `SEQUENCE({2})` is `{1}`). `@` collapses a 1×1 array to its value and is a no-op on true scalars.
@@ -369,6 +372,7 @@ Tell the user:
 
 - **Carriage returns:** The Write tool on Windows may produce `\r\n`. After writing, verify with format tests. If CR errors occur, re-write the file content ensuring `\n`-only line endings.
 - **Missing trailing comma:** Every LET variable line (including `Help?` and `result`) must end with a comma.
+- **Binding Help in the LET:** It runs the TEXTSPLIT on every call (#387). The table goes in the `IF(Help?, ...)` branch.
 - **Help string alignment:** Keep the `→` and `¶` delimiters consistent. The last Help string line must NOT end with `¶" &` — it ends with just `",`.
 - **Never let the `→` (or `¶`) delimiter appear inside Help *content*.** `TEXTSPLIT(..., "→", "¶")` builds a 2-column grid, so any row carrying a stray `→` in its prose (e.g. `array → type-preserved`, `(row,col)→address`) splits into extra columns and `TEXTSPLIT` pads *every other row* with `#N/A` — the whole help table renders broken. In prose, write the arrow as `->` (ASCII) instead of `→`. If the content genuinely needs the `→` glyph (e.g. a lambda that outputs compass arrows), switch that one file's column delimiter to a character absent from all its content — `¦` works well — updating both the label separators and the `TEXTSPLIT` delimiter arg. Grep new help blocks with `→[^¶"]*→` before committing; any hit is a broken row.
 - **Parameter brackets:** ALL parameters must be `[param]`, not `param`.
@@ -389,7 +393,7 @@ Tell the user:
 - **Lambdas can reference each other; the harness pre-injects in dependency order.** A lambda can call any other lambda in the library (e.g. `MOVECELL` calls `ARROWMOVES`). The AddIn test harness now bulk-injects all `.lambda` files with retries until dependencies resolve, so ordering across files doesn't matter *for tests*.
 - **A lambda must live in the SAME library as every lambda it calls — there is no cross-library dependency resolution at load time.** Libraries load as independent units in the real product, so a lambda in library A that references a helper in library B resolves to `#NAME?` when a user loads only A. **The test harness hides this** — it injects every `.lambda` across all libraries, so cross-library references pass all tests; green tests do NOT prove correct placement. Before choosing a category, list the lambda-to-lambda dependencies and place the new lambda where they live, or drop the dependency by inlining a trivial helper (e.g. PLAYERTURNS inlined `CIRCPOS`'s +1 step as `MOD(cur, nP) + 1` and moved into `loops/` beside `SCANLEAD`). Built-in Excel functions are always available — only *other lambdas* are a colocation concern.
 - **Test harness wraps each test in `=LAMBDA_NAME(args)` — you cannot wrap the call in another function via args.** Args are passed as comma-separated params inside the lambda call, not as outer expressions. Test `=INDEX(DEFAULTMOVEDELTAS(), 1, 1)` style DOES NOT WORK — the harness would produce `=DEFAULTMOVEDELTAS(INDEX(DEFAULTMOVEDELTAS(), 1, 1))`. For array-returning lambdas, assert the full spill with `expected: [[...], [...]]` (list-of-lists for 2D) or use `expected_type: array` for loose checks.
-- **Zero-arg data-getter lambdas: invert the Help IF with `IF(Help?, result, Help)`.** For lambdas where the natural call takes no arguments (e.g. returning a constant table), keep the standard `Help?, ISOMITTED(ShowHelp)` LET variable but swap the branches at the end: `IF(Help?, result, Help)`. This makes bare calls like `=DEFAULTARROWS()` return the data, and explicit `=DEFAULTARROWS(TRUE)` returns help. Tests should pass `args: []` for the data case and `args: ["=TRUE"]` for the help case.
+- **Zero-arg data-getter lambdas: invert the Help IF with `IF(Help?, result, TEXTSPLIT(...))`.** For lambdas where the natural call takes no arguments (e.g. returning a constant table), keep the standard `Help?, ISOMITTED(ShowHelp)` LET variable but swap the branches at the end: `IF(Help?, result, TEXTSPLIT(...))`. This makes bare calls like `=DEFAULTARROWS()` return the data, and explicit `=DEFAULTARROWS(TRUE)` returns help. Tests should pass `args: []` for the data case and `args: ["=TRUE"]` for the help case.
 - **`ROW()`/`COLUMN()` on array constants error; wrap with `IFERROR`.** If a lambda takes a range and computes `MIN(ROW(grid))`/`MIN(COLUMN(grid))` to find its base cell, passing an array constant like `SEQUENCE(10,10)` (common in tests, since the harness can't pass real ranges) makes `ROW`/`COLUMN` return `#VALUE!`, which propagates through the whole formula. Wrap as `IFERROR(MIN(ROW(grid)), 1)` / `IFERROR(MIN(COLUMN(grid)), 1)` so array-constant inputs fall back to base (1,1) — i.e. addresses relative to A1. Real-range inputs still get their true base.
 - **`TRUE = 1` is FALSE in Excel — coerce with `N()` when a numeric enum branch might receive a boolean.** Excel's `=` never equates booleans with numbers, so a `mode` decoded as `IF(ISOMITTED(mode), 0, mode)` and branched with `IFS(md = 1, ...)` silently falls through to `#N/A` if a caller passes `TRUE` (e.g. a param that used to be a boolean flag, or a caller guessing the old-style signature). Decode with `N(mode)` instead — `N(TRUE)` = 1, numbers pass through — so boolean spellings keep working across a flag→enum migration. The same trap applies in reverse: internal calls that passed `TRUE` to a now-numeric param must switch to `1`.
 - **`INDEX` with vector row/col indices dereferences to a value array — only all-scalar `INDEX` returns a reference.** A lambda that slices with `INDEX(grid, rowsVec, colsVec)` (the element-wise zip used for diagonals) hands its `fn` a computed array of values, never a range, even when `grid` is a real range — so `ROW(b)`/`COLUMN(b)` inside `fn` hit the array-constant `#VALUE!` failure. For *rectangular* slices this is fixable with the BYRECTANGLE pattern (`IF(ISREF(grid), OFFSET-slice, INDEX-slice)`), but a non-rectangular shape (a diagonal) has **no possible range representation** — Excel formulas cannot build discontiguous unions dynamically. Don't try; instead convert geometry to values *before* slicing: pass `ADDRESSES(range)` as the grid and each slice arrives as its cells' address text (verified: `BYDIAGONALS(ADDRESSES(rng), LAMBDA(d, TEXTJOIN(",",,d)))` returns per-diagonal address lists). Document the limitation in the lambda's grid-param help.

@@ -10,8 +10,20 @@ COMBINATIONS = LAMBDA(
     [k],
     [delim],
     [repetition],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
+        nItems,   ROWS(itemsCol),
+        rep,      IF(ISOMITTED(repetition), FALSE, repetition),
+        idx,      COMBININDICES(nItems, k, rep),
+        vals,     INDEX(itemsCol, idx),
+        result,   IF(ISOMITTED(delim),
+                     vals,
+                     BYROW(vals, LAMBDA(rowVec, TEXTJOIN(delim, FALSE, rowVec)))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →COMBINATIONS(items, k, [delim], [repetition])¶" &
                 "DESCRIPTION:   →Returns all unordered k-combinations of items, lexicographic order. With delim, joins each row into a single string.¶" &
                 "VERSION:       →Jun 27 2026¶" &
@@ -25,18 +37,6 @@ COMBINATIONS = LAMBDA(
                 "Result         →4x1: {""A|B|C""; ""A|B|D""; ""A|C|D""; ""B|C|D""}¶" &
                 "NOTE:          →Thin wrapper over COMBININDICES — splits the unranking math from value lookup so callers can reuse indices.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(items),
-    //  Procedure
-        itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
-        nItems,   ROWS(itemsCol),
-        rep,      IF(ISOMITTED(repetition), FALSE, repetition),
-        idx,      COMBININDICES(nItems, k, rep),
-        vals,     INDEX(itemsCol, idx),
-        result,   IF(ISOMITTED(delim),
-                     vals,
-                     BYROW(vals, LAMBDA(rowVec, TEXTJOIN(delim, FALSE, rowVec)))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

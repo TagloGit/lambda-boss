@@ -8,8 +8,15 @@ REDUCE1 = LAMBDA(
 //  Parameter Declarations
     [array],
     [fn],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        flat, TOCOL(array),
+        n, ROWS(flat),
+        result, IF(n = 1, INDEX(flat, 1, 1), REDUCE(INDEX(flat, 1, 1), DROP(flat, 1), LAMBDA(acc_, x_, fn(acc_, x_)))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →REDUCE1(array, fn)¶" &
                 "DESCRIPTION:   →Seedless reduce — the final-value twin of SCAN1. Folds fn over the list starting from its first element, so there is no identity/seed to invent for reductions like gcd, max, merge or join.¶" &
                 "VERSION:       →Jul 01 2026¶" &
@@ -20,13 +27,6 @@ REDUCE1 = LAMBDA(
                 "Formula        →=REDUCE1({12;18;30}, GCD)¶" &
                 "Result         →6 (gcd of the whole list)",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        flat, TOCOL(array),
-        n, ROWS(flat),
-        result, IF(n = 1, INDEX(flat, 1, 1), REDUCE(INDEX(flat, 1, 1), DROP(flat, 1), LAMBDA(acc_, x_, fn(acc_, x_)))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

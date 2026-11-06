@@ -15,25 +15,7 @@ UNTILELIST = LAMBDA(
     [v_buffer],
     [blank_rows],
     [headers],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →UNTILELIST(map, tile, [list], [labels], [h_buffer], [v_buffer], [blank_rows], [headers])¶" &
-                "DESCRIPTION:   →Splits a tiled map into equal tiles, extracts a list block from each, and stacks them into one long labelled table. Returns #VALUE! when the map does not tile cleanly with the tile size and buffers.¶" &
-                "VERSION:       →Aug 13 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   map           →(Required) The tiled grid: identical tiles repeated left-to-right, top-to-bottom (range or array), e.g. HSTACK('First:Last'!B2:D24).¶" &
-                "   tile          →(Required) A range covering exactly one tile, e.g. 'Recipe'!B2:D24. Only its size is used; contents are ignored. An in-memory array also works when list is omitted.¶" &
-                "   list          →(Optional) A sub-range of tile locating the list block, e.g. 'Recipe'!B9:D24. Must be a reference inside tile's rectangle; the window is taken from its position relative to tile. Omitted -> the whole tile.¶" &
-                "   labels        →(Optional) One label per tile, left-to-right then top-to-bottom (row or column). Fewer labels than tiles reads only the first N tiles; more labels than tiles returns #VALUE!. Omitted -> tiles numbered 1..N.¶" &
-                "   h_buffer      →(Optional) Blank columns between horizontally adjacent tiles. Default 0.¶" &
-                "   v_buffer      →(Optional) Blank rows between vertically adjacent tiles. Default 0.¶" &
-                "   blank_rows    →(Optional) (0) drop rows where every list cell is blank [default], (1) keep all rows, (2) drop rows whose first list cell is blank. Blank means empty text or numeric 0 (3D collation like HSTACK('First:Last'!range) returns 0 for empty cells).¶" &
-                "   headers       →(Optional) TRUE prepends the default header row {Label, Col1..ColW}; or pass a (width+1)-element array of custom column names. Default FALSE.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=UNTILELIST({""a"",1,""x"",9;""b"",2,"""",0}, SEQUENCE(2,2))¶" &
-                "Result         →3x3 table: rows (1,a,1) (1,b,2) (2,x,9)",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(map),
         hBuf, IF(ISOMITTED(h_buffer), 0, h_buffer),
@@ -86,6 +68,24 @@ UNTILELIST = LAMBDA(
         headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Label", "Col" & SEQUENCE(1, listW))),
         table, IF(header?, VSTACK(headerRow, kept), kept),
         result, IF(OR(NOT(geomOK), NOT(listOK), NOT(winOK), nTiles > allTiles), VALUE("!"), table),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →UNTILELIST(map, tile, [list], [labels], [h_buffer], [v_buffer], [blank_rows], [headers])¶" &
+                "DESCRIPTION:   →Splits a tiled map into equal tiles, extracts a list block from each, and stacks them into one long labelled table. Returns #VALUE! when the map does not tile cleanly with the tile size and buffers.¶" &
+                "VERSION:       →Aug 13 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   map           →(Required) The tiled grid: identical tiles repeated left-to-right, top-to-bottom (range or array), e.g. HSTACK('First:Last'!B2:D24).¶" &
+                "   tile          →(Required) A range covering exactly one tile, e.g. 'Recipe'!B2:D24. Only its size is used; contents are ignored. An in-memory array also works when list is omitted.¶" &
+                "   list          →(Optional) A sub-range of tile locating the list block, e.g. 'Recipe'!B9:D24. Must be a reference inside tile's rectangle; the window is taken from its position relative to tile. Omitted -> the whole tile.¶" &
+                "   labels        →(Optional) One label per tile, left-to-right then top-to-bottom (row or column). Fewer labels than tiles reads only the first N tiles; more labels than tiles returns #VALUE!. Omitted -> tiles numbered 1..N.¶" &
+                "   h_buffer      →(Optional) Blank columns between horizontally adjacent tiles. Default 0.¶" &
+                "   v_buffer      →(Optional) Blank rows between vertically adjacent tiles. Default 0.¶" &
+                "   blank_rows    →(Optional) (0) drop rows where every list cell is blank [default], (1) keep all rows, (2) drop rows whose first list cell is blank. Blank means empty text or numeric 0 (3D collation like HSTACK('First:Last'!range) returns 0 for empty cells).¶" &
+                "   headers       →(Optional) TRUE prepends the default header row {Label, Col1..ColW}; or pass a (width+1)-element array of custom column names. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=UNTILELIST({""a"",1,""x"",9;""b"",2,"""",0}, SEQUENCE(2,2))¶" &
+                "Result         →3x3 table: rows (1,a,1) (1,b,2) (2,x,9)",
+                "→", "¶"
+                ), result)
 )
 );

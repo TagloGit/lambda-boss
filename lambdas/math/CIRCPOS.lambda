@@ -9,8 +9,15 @@ CIRCPOS = LAMBDA(
     [n],
     [start],
     [zero_based],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(moves),
+        ZeroBased, IF(ISOMITTED(zero_based), FALSE, zero_based),
+        Start, IF(ISOMITTED(start), IF(ZeroBased, 0, 1), start),
+    //  Procedure
+        result, IF(ZeroBased, MOD(Start + moves, n), MOD(Start + moves - 1, n) + 1),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →CIRCPOS(moves, n, [start], [zero_based])¶" &
                 "DESCRIPTION:   →Position on a circular track of n items after advancing moves steps from start.¶" &
                 "VERSION:       →Apr 15 2026¶" &
@@ -23,13 +30,6 @@ CIRCPOS = LAMBDA(
                 "Formula        →=CIRCPOS(35, 19)¶" &
                 "Result         →17",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(moves),
-        ZeroBased, IF(ISOMITTED(zero_based), FALSE, zero_based),
-        Start, IF(ISOMITTED(start), IF(ZeroBased, 0, 1), start),
-    //  Procedure
-        result, IF(ZeroBased, MOD(Start + moves, n), MOD(Start + moves - 1, n) + 1),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

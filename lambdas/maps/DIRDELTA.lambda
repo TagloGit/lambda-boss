@@ -8,19 +8,7 @@ DIRDELTA = LAMBDA(
 //  Parameter Declarations
     [dir],
     [output],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      ¦DIRDELTA(dir, [output])¶" &
-                "DESCRIPTION:   ¦Normalises any direction spelling into the library convention. Returns the packed position-delta rowDelta*_mult+colDelta by default (see _dirAll; with _mult = 1000000: up=-1000000, up-right=-999999, right=1, down-right=1000001, down=1000000, down-left=999999, left=-1, up-left=-1000001), or the arrow glyph / compass code via output.¶" &
-                "VERSION:       ¦Nov 06 2026¶" &
-                "PARAMETERS:    ¦¶" &
-                "   dir            ¦(Required) A direction in any spelling: an arrow glyph (↑ ↗ → ↘ ↓ ↙ ← ↖), a compass code (N, NE ... or North, NorthEast, North-East ...), a screen direction (U, D, L, R, UR, UL, DR, DL, reversed forms like RU, LD, or Up, Down, UpRight, Down-Left ...), or a numeric packed delta. Case-insensitive; hyphens and spaces are ignored. Unrecognised text returns #N/A. Also accepts an array of directions - result lifts element-wise.¶" &
-                "   output         ¦(Optional) Output representation: (0) packed position-delta [default], (1) arrow glyph, (2) compass code (N, NE, ...). Numeric dir passes through unchanged in mode 0 (so non-compass deltas such as knight moves survive); modes 1-2 require one of the 8 compass directions.¶" &
-                "EXAMPLE:       ¦¶" &
-                "Formula        ¦=DIRDELTA(""north-east"")¶" &
-                "Result         ¦-999999 (and =DIRDELTA(""NE"", 1) returns ↗)",
-                "¦", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(dir),
     //  Procedure
@@ -37,6 +25,18 @@ DIRDELTA = LAMBDA(
         result, IF(out = 1, INDEX(arrows, kNum),
                 IF(out = 2, INDEX(codes, kNum),
                    IF(ISNUMBER(dir), dir, INDEX(deltas, kNum)))),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      ¦DIRDELTA(dir, [output])¶" &
+                "DESCRIPTION:   ¦Normalises any direction spelling into the library convention. Returns the packed position-delta rowDelta*_mult+colDelta by default (see _dirAll; with _mult = 1000000: up=-1000000, up-right=-999999, right=1, down-right=1000001, down=1000000, down-left=999999, left=-1, up-left=-1000001), or the arrow glyph / compass code via output.¶" &
+                "VERSION:       ¦Nov 06 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   dir            ¦(Required) A direction in any spelling: an arrow glyph (↑ ↗ → ↘ ↓ ↙ ← ↖), a compass code (N, NE ... or North, NorthEast, North-East ...), a screen direction (U, D, L, R, UR, UL, DR, DL, reversed forms like RU, LD, or Up, Down, UpRight, Down-Left ...), or a numeric packed delta. Case-insensitive; hyphens and spaces are ignored. Unrecognised text returns #N/A. Also accepts an array of directions - result lifts element-wise.¶" &
+                "   output         ¦(Optional) Output representation: (0) packed position-delta [default], (1) arrow glyph, (2) compass code (N, NE, ...). Numeric dir passes through unchanged in mode 0 (so non-compass deltas such as knight moves survive); modes 1-2 require one of the 8 compass directions.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=DIRDELTA(""north-east"")¶" &
+                "Result         ¦-999999 (and =DIRDELTA(""NE"", 1) returns ↗)",
+                "¦", "¶"
+                ), result)
 )
 );

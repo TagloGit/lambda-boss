@@ -9,21 +9,7 @@ EXPANDFRONTIER = LAMBDA(
     [getNext],
     [include_seeds],
     [max_depth],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →EXPANDFRONTIER(seeds, getNext, [include_seeds], [max_depth])¶" &
-                "DESCRIPTION:   →Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes.¶" &
-                "VERSION:       →Jul 22 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   seeds          →(Required) Scalar or 1-D array of starting node IDs (text or number). IDs must be type-consistent and never equal to the empty string.¶" &
-                "   getNext        →(Required) LAMBDA(node) returning the neighbours of one node - any shape; empty, error, or blank all mean no neighbours. Each node is expanded exactly once.¶" &
-                "   include_seeds  →(Optional) Default TRUE. FALSE returns only newly-reached nodes, so a count of triggered nodes is ROWS(result).¶" &
-                "   max_depth      →(Optional) Maximum expansion depth, default 1000. Returns #N/A instead of a runaway recursion.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=EXPANDFRONTIER(""A"", LAMBDA(node, FILTER({""B"";""C"";""D""}, {""A"";""A"";""C""}=node, """")))¶" &
-                "Result         →{A;B;C;D}",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(seeds),
     //  Procedure
@@ -45,6 +31,20 @@ EXPANDFRONTIER = LAMBDA(
         keepSeeds, IF(ISOMITTED(include_seeds), TRUE, include_seeds),
         result, IF(keepSeeds, reached,
                    FILTER(reached, ISNA(XMATCH(reached, seedCol)), "")),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →EXPANDFRONTIER(seeds, getNext, [include_seeds], [max_depth])¶" &
+                "DESCRIPTION:   →Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes.¶" &
+                "VERSION:       →Jul 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seeds          →(Required) Scalar or 1-D array of starting node IDs (text or number). IDs must be type-consistent and never equal to the empty string.¶" &
+                "   getNext        →(Required) LAMBDA(node) returning the neighbours of one node - any shape; empty, error, or blank all mean no neighbours. Each node is expanded exactly once.¶" &
+                "   include_seeds  →(Optional) Default TRUE. FALSE returns only newly-reached nodes, so a count of triggered nodes is ROWS(result).¶" &
+                "   max_depth      →(Optional) Maximum expansion depth, default 1000. Returns #N/A instead of a runaway recursion.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=EXPANDFRONTIER(""A"", LAMBDA(node, FILTER({""B"";""C"";""D""}, {""A"";""A"";""C""}=node, """")))¶" &
+                "Result         →{A;B;C;D}",
+                "→", "¶"
+                ), result)
 )
 );

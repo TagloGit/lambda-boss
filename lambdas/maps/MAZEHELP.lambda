@@ -7,18 +7,7 @@
 MAZEHELP = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MAZEHELP()¶" &
-                "DESCRIPTION:   →Returns the help table for MAZE. A bare call returns the MAZE help table; pass TRUE for this table.¶" &
-                "VERSION:       →Jul 18 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   ShowHelp      →(Optional) TRUE returns this help table instead of the MAZE help table.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MAZEHELP()¶" &
-                "Result         →The MAZE help table",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),
     //  Procedure
@@ -41,6 +30,17 @@ MAZEHELP = LAMBDA(
                 "Result         →4-way uniform-cost distance grid from C3 covering all reachable cells in walkMask",
                 "→", "¶"
                 ),
-        IF(Help?, result, Help)
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
+                "FUNCTION:      →MAZEHELP()¶" &
+                "DESCRIPTION:   →Returns the help table for MAZE. A bare call returns the MAZE help table; pass TRUE for this table.¶" &
+                "VERSION:       →Jul 18 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   ShowHelp      →(Optional) TRUE returns this help table instead of the MAZE help table.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAZEHELP()¶" &
+                "Result         →The MAZE help table",
+                "→", "¶"
+                ))
 )
 );

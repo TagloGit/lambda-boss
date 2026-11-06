@@ -7,8 +7,14 @@
 ROWNUM = LAMBDA(
 //  Parameter Declarations
     [address],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(address),
+    //  Procedure
+        pos, TOPOS(address),
+        result, IF(ISNUMBER(pos), INT(pos / _mult), pos),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →ROWNUM(address)¶" &
                 "DESCRIPTION:   →Returns the row number of an A1-style cell address passed as text. Like ROW() but accepts strings.¶" &
                 "VERSION:       →Nov 06 2026¶" &
@@ -18,12 +24,6 @@ ROWNUM = LAMBDA(
                 "Formula        →=ROWNUM(""Q17"")¶" &
                 "Result         →17",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(address),
-    //  Procedure
-        pos, TOPOS(address),
-        result, IF(ISNUMBER(pos), INT(pos / _mult), pos),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

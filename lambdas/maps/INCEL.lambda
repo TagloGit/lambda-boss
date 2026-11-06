@@ -9,8 +9,16 @@ INCEL = LAMBDA(
 //  Parameter Declarations
     [address],
     [sheet],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(address),
+    //  Procedure
+        scalar, LAMBDA(a, INDIRECT(IF(ISOMITTED(sheet), a, "'" & sheet & "'!" & a))),
+        result, IF(OR(ROWS(address) > 1, COLUMNS(address) > 1),
+                    MAP(address, scalar),
+                    scalar(address)),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →INCEL(address, [sheet])¶" &
                 "DESCRIPTION:   →Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.¶" &
                 "VERSION:       →May 14 2026¶" &
@@ -22,14 +30,6 @@ INCEL = LAMBDA(
                 "Result         →Value of A1 on the Data sheet¶" &
                 "NOTE:          →INDIRECT is volatile — every INCEL call recalculates on any workbook change. Prefer non-volatile alternatives (GRIDLOOKUP with return_Value=TRUE, INDEX into a known range) when you only need a value rather than a runtime reference.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(address),
-    //  Procedure
-        scalar, LAMBDA(a, INDIRECT(IF(ISOMITTED(sheet), a, "'" & sheet & "'!" & a))),
-        result, IF(OR(ROWS(address) > 1, COLUMNS(address) > 1),
-                    MAP(address, scalar),
-                    scalar(address)),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

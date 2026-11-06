@@ -7,8 +7,13 @@
 ARROWMOVES = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, HSTACK(DEFAULTARROWS(), DEFAULTMOVEDELTAS()),
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
                 "FUNCTION:      →ARROWMOVES()¶" &
                 "DESCRIPTION:   →Returns an 8x3 moves table combining DEFAULTARROWS and DEFAULTMOVEDELTAS: {arrow, dRow, dCol}.¶" &
                 "VERSION:       →Apr 15 2026¶" &
@@ -18,11 +23,6 @@ ARROWMOVES = LAMBDA(
                 "Formula        →=ARROWMOVES()¶" &
                 "Result         →8x3 array: col 1 is arrow char, cols 2-3 are dRow/dCol",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
-    //  Procedure
-        result, HSTACK(DEFAULTARROWS(), DEFAULTMOVEDELTAS()),
-        IF(Help?, result, Help)
+                ))
 )
 );

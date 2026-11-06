@@ -8,19 +8,7 @@ RUNPOS = LAMBDA(
 //  Parameter Declarations
     [vector],
     [match],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →RUNPOS(vector, match)¶" &
-                "DESCRIPTION:   →Returns each element's 1-based position within its consecutive run in a 1D array. Sibling of RUNSIZE (run length per element), RUNGROUPS (one row per run) and RUNGROUPBY (aggregate per run).¶" &
-                "VERSION:       →Jul 28 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
-                "   match          →(Optional) If omitted: counter = previous count + 1 when an element equals its predecessor, else 1 (longest run of any value). If supplied: counter increments while an element equals match, resets to 0 otherwise (longest streak of that value).¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=RUNPOS({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
-                "Result         →{1;2;3;1;2;1}",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(vector),
         useMatch, NOT(ISOMITTED(match)),
@@ -33,6 +21,18 @@ RUNPOS = LAMBDA(
         runNo, MAP(SEQUENCE(n), LAMBDA(i, i - MAX(SEQUENCE(i) * INDEX(boundaries, SEQUENCE(i))) + 1)),
         running, IF(useMatch, runWith, runNo),
         result, IF(COLUMNS(vector) > 1, TRANSPOSE(running), running),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →RUNPOS(vector, match)¶" &
+                "DESCRIPTION:   →Returns each element's 1-based position within its consecutive run in a 1D array. Sibling of RUNSIZE (run length per element), RUNGROUPS (one row per run) and RUNGROUPBY (aggregate per run).¶" &
+                "VERSION:       →Jul 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
+                "   match          →(Optional) If omitted: counter = previous count + 1 when an element equals its predecessor, else 1 (longest run of any value). If supplied: counter increments while an element equals match, resets to 0 otherwise (longest streak of that value).¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=RUNPOS({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
+                "Result         →{1;2;3;1;2;1}",
+                "→", "¶"
+                ), result)
 )
 );

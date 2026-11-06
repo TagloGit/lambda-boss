@@ -8,8 +8,18 @@ PREV = LAMBDA(
     [array],
     [fill],
     [n],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        shiftN, IF(ISOMITTED(n), 1, n),
+        fillVal, IF(ISOMITTED(fill), "", fill),
+        result, IF(horiz,
+                    SHIFT(array, 0, shiftN, 0, fillVal),
+                    SHIFT(array, shiftN, 0, 0, fillVal)),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →PREV(array, [fill], [n])¶" &
                 "DESCRIPTION:   →For each element of a 1-D array, returns its previous neighbour (the element n positions earlier) as a same-size, same-orientation array; the leading n slots are padded. Pad-only sugar over SHIFT — for a cyclic look-behind use SHIFT directly with mode 1 (wrap).¶" &
                 "VERSION:       →Jun 20 2026¶" &
@@ -21,16 +31,6 @@ PREV = LAMBDA(
                 "Formula        →=PREV({6,3,6,1,2})¶" &
                 "Result         →{"""",6,3,6,1}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
-        shiftN, IF(ISOMITTED(n), 1, n),
-        fillVal, IF(ISOMITTED(fill), "", fill),
-        result, IF(horiz,
-                    SHIFT(array, 0, shiftN, 0, fillVal),
-                    SHIFT(array, shiftN, 0, 0, fillVal)),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

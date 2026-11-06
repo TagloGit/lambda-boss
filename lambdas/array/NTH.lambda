@@ -8,19 +8,7 @@ NTH = LAMBDA(
 //  Parameter Declarations
     [arr],
     [n],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →NTH(arr, n)¶" &
-                "DESCRIPTION:   →Returns the Nth element of an array (flattened), with negative N counting from the end.¶" &
-                "VERSION:       →May 14 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   arr            →(Required) Any array or range — 1D, 2D, vertical, or horizontal.¶" &
-                "   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=NTH({""a"",""b"",""c""}, -1)¶" &
-                "Result         →""c""",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(arr),
     //  Procedure
@@ -31,6 +19,18 @@ NTH = LAMBDA(
         result, IF(OR(ROWS(n) > 1, COLUMNS(n) > 1),
                     MAP(n, scalar),
                     scalar(n)),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →NTH(arr, n)¶" &
+                "DESCRIPTION:   →Returns the Nth element of an array (flattened), with negative N counting from the end.¶" &
+                "VERSION:       →May 14 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   arr            →(Required) Any array or range — 1D, 2D, vertical, or horizontal.¶" &
+                "   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=NTH({""a"",""b"",""c""}, -1)¶" &
+                "Result         →""c""",
+                "→", "¶"
+                ), result)
 )
 );

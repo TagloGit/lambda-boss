@@ -6,8 +6,13 @@
 NewState = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, "",
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
                 "FUNCTION:      →NewState()¶" &
                 "DESCRIPTION:   →Returns an empty state for use as a REDUCE accumulator with SetVar/GetVar.¶" &
                 "VERSION:       →Apr 27 2026¶" &
@@ -18,11 +23,6 @@ NewState = LAMBDA(
                 "Result         →state string holding x=5¶" &
                 "NOTE:          →Reads from an empty state return #N/A. For REDUCE, seed with SetState(...) populating the slots iteration 1 will read.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
-    //  Procedure
-        result, "",
-        IF(Help?, result, Help)
+                ))
 )
 );

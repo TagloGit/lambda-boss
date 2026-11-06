@@ -6,18 +6,7 @@
 WTF = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →WTF()¶" &
-                "DESCRIPTION:   →Spills the lyrics of the LAMBDA lament, one line per row. A joke function.¶" &
-                "VERSION:       →Aug 15 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the lyrics.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=WTF()¶" &
-                "Result         →17-row spill of lyrics, one line per row",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),
     //  Procedure
@@ -40,6 +29,17 @@ WTF = LAMBDA(
                  "Tried to run a calc and it filled me with anger";
                  "So tell me one thing";
                  "What the f*** is a LAMBDA? 𝅘𝅥𝅮𝅘𝅥𝅮"},
-        IF(Help?, result, Help)
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
+                "FUNCTION:      →WTF()¶" &
+                "DESCRIPTION:   →Spills the lyrics of the LAMBDA lament, one line per row. A joke function.¶" &
+                "VERSION:       →Aug 15 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the lyrics.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=WTF()¶" &
+                "Result         →17-row spill of lyrics, one line per row",
+                "→", "¶"
+                ))
 )
 );

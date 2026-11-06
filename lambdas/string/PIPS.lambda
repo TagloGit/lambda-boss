@@ -6,8 +6,16 @@
 PIPS = LAMBDA(
 //  Parameter Declarations
     [Dice],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(Dice),
+    //  Procedure
+        result, IFERROR(
+                    LET(v, UNICODE(Dice) - 9855,
+                        IF((v >= 1) * (v <= 6), v, NA())),
+                    NA()),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →PIPS(Dice)¶" &
                 "DESCRIPTION:   →Returns the pip value (1-6) of a Unicode die face.¶" &
                 "VERSION:       →Jul 16 2026¶" &
@@ -17,14 +25,6 @@ PIPS = LAMBDA(
                 "Formula        →=PIPS(""⚄"")¶" &
                 "Result         →5",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(Dice),
-    //  Procedure
-        result, IFERROR(
-                    LET(v, UNICODE(Dice) - 9855,
-                        IF((v >= 1) * (v <= 6), v, NA())),
-                    NA()),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

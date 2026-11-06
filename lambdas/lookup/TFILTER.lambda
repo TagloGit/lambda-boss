@@ -7,8 +7,15 @@ TFILTER = LAMBDA(
 //  Parameter Declarations
     [Table],
     [Keep],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(Table),
+    //  Procedure
+        headers, CHOOSEROWS(Table, 1),
+        kept, FILTER(DROP(Table, 1), Keep),
+        result, LAMBDA(Header, CHOOSECOLS(kept, XMATCH(Header, headers))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →TFILTER(Table, Keep)¶" &
                 "DESCRIPTION:   →Filters a table by a predicate mask and returns a table-object closure; call it with a header name to read that whole column across all kept rows.¶" &
                 "VERSION:       →Jun 08 2026¶" &
@@ -20,13 +27,6 @@ TFILTER = LAMBDA(
                 "Formula        →=LET(t, TFILTER(tblData[#All], tblData[Age] > 30), HSTACK(t(""Person""), t(""City"")))¶" &
                 "Result         →(Person and City columns for every row where Age > 30)",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(Table),
-    //  Procedure
-        headers, CHOOSEROWS(Table, 1),
-        kept, FILTER(DROP(Table, 1), Keep),
-        result, LAMBDA(Header, CHOOSECOLS(kept, XMATCH(Header, headers))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

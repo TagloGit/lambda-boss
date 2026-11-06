@@ -13,21 +13,7 @@ CHARQ = LAMBDA(
     [Char],
     [Regex],
     [case_insensitive],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CHARQ(Text, Char, Regex, case_insensitive)¶" &
-                "DESCRIPTION:   →Counts non-overlapping occurrences of a substring within a string.¶" &
-                "VERSION:       →Aug 16 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   Text           →(Required) The string to search within. Also accepts an array of strings — result lifts element-wise.¶" &
-                "   Char           →(Required) The character(s) to count, or a regex pattern if Regex is TRUE.¶" &
-                "   Regex          →(Optional) If TRUE, treat Char as a regex pattern. Default: FALSE.¶" &
-                "   case_insensitive →(Optional) (0) case-sensitive [default], (1) case-insensitive.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=CHARQ(""MASSAGE"",""S"")¶" &
-                "Result         →2",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(Text),
         _regex, IF(ISOMITTED(Regex), FALSE, Regex),
@@ -42,6 +28,20 @@ CHARQ = LAMBDA(
         result, IF(OR(ROWS(Text) > 1, COLUMNS(Text) > 1),
                     MAP(Text, scalar),
                     scalar(@Text)),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →CHARQ(Text, Char, Regex, case_insensitive)¶" &
+                "DESCRIPTION:   →Counts non-overlapping occurrences of a substring within a string.¶" &
+                "VERSION:       →Aug 16 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Text           →(Required) The string to search within. Also accepts an array of strings — result lifts element-wise.¶" &
+                "   Char           →(Required) The character(s) to count, or a regex pattern if Regex is TRUE.¶" &
+                "   Regex          →(Optional) If TRUE, treat Char as a regex pattern. Default: FALSE.¶" &
+                "   case_insensitive →(Optional) (0) case-sensitive [default], (1) case-insensitive.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=CHARQ(""MASSAGE"",""S"")¶" &
+                "Result         →2",
+                "→", "¶"
+                ), result)
 )
 );

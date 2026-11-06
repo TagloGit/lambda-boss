@@ -9,8 +9,14 @@ POSAT = LAMBDA(
     [row],
     [col],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(row),
+    //  Procedure
+        m, IF(ISOMITTED(mult), _mult, mult),
+        result, row * m + col,
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →POSAT(row, col, [mult])¶" &
                 "DESCRIPTION:   →Builds an encoded position integer (row*mult+col) from a row and column number. The (row,col)->pos converter; inverse of ROWOF/COLOF.¶" &
                 "VERSION:       →Nov 06 2026¶" &
@@ -22,12 +28,6 @@ POSAT = LAMBDA(
                 "Formula        →=POSAT(17, 17)¶" &
                 "Result         →17000017",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(row),
-    //  Procedure
-        m, IF(ISOMITTED(mult), _mult, mult),
-        result, row * m + col,
-        IF(Help?, Help, result)
+                ), result)
 )
 );

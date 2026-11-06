@@ -13,8 +13,20 @@ FINDFIRST = LAMBDA(
     [predicate],
     [if_not_found],
     [no_match],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(cases),
+    //  Procedure
+        sentinel, IF(ISOMITTED(no_match), "", no_match),
+        notFound, IF(ISOMITTED(if_not_found), sentinel, if_not_found),
+        flat, TOCOL(cases),
+        n, ROWS(flat),
+        answers, MAP(flat, SEQUENCE(n), LAMBDA(cur, i, IFERROR(predicate(cur, i), sentinel))),
+        matches, IFERROR(FILTER(answers, answers <> sentinel, sentinel), sentinel),
+        first, INDEX(matches, 1),
+        result, IF(@first = sentinel, notFound, first),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →FINDFIRST(cases, predicate, [if_not_found], [no_match])¶" &
                 "DESCRIPTION:   →Returns the first non-sentinel answer from applying predicate to each case.¶" &
                 "VERSION:       →May 03 2026¶" &
@@ -29,18 +41,6 @@ FINDFIRST = LAMBDA(
                 "DEBUGGING:     →Predicate must take exactly two args — LAMBDA(case, i) — even if i is unused. A one-arg predicate silently returns no matches because every call errors and is caught as a miss. To diagnose, MAP the predicate over the cases yourself and look for #VALUE! in every row.¶" &
                 "NOTE:          →Excel REDUCE has no real short-circuit, so all predicates are evaluated regardless. The sentinel is compared with `<>` so it must be a comparable value (text, number, boolean) — not NA() or another error. Errors thrown inside the predicate are caught and treated as a miss.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(cases),
-    //  Procedure
-        sentinel, IF(ISOMITTED(no_match), "", no_match),
-        notFound, IF(ISOMITTED(if_not_found), sentinel, if_not_found),
-        flat, TOCOL(cases),
-        n, ROWS(flat),
-        answers, MAP(flat, SEQUENCE(n), LAMBDA(cur, i, IFERROR(predicate(cur, i), sentinel))),
-        matches, IFERROR(FILTER(answers, answers <> sentinel, sentinel), sentinel),
-        first, INDEX(matches, 1),
-        result, IF(@first = sentinel, notFound, first),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

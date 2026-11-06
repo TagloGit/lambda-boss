@@ -8,8 +8,15 @@ COUNTOF = LAMBDA(
 //  Parameter Declarations
     [items],
     [predicate],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
+        mapped, MAP(items, LAMBDA(x_, pred(x_))),
+        result, SUM(--mapped),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →COUNTOF(items, [predicate])¶" &
                 "DESCRIPTION:   →Counts items for which the predicate is TRUE (or truthy items when predicate is omitted).¶" &
                 "VERSION:       →Aug 24 2026¶" &
@@ -20,13 +27,6 @@ COUNTOF = LAMBDA(
                 "Formula        →=COUNTOF({1,2,3,4,5}, LAMBDA(n, n>=3))¶" &
                 "Result         →3",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(items),
-    //  Procedure
-        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
-        mapped, MAP(items, LAMBDA(x_, pred(x_))),
-        result, SUM(--mapped),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

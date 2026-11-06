@@ -9,8 +9,13 @@ GetVarAt = LAMBDA(
 //  Parameter Declarations
     [state],
     [index],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(state),
+    //  Procedure
+        result, GetVar(state, index & ""),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →GetVarAt(state, index)¶" &
                 "DESCRIPTION:   →Reads a positional slot from a state built with SetState. Returns a native-typed scalar or vertical array. Broadcasts over a column of states (scalar slots only).¶" &
                 "VERSION:       →Apr 29 2026¶" &
@@ -22,11 +27,6 @@ GetVarAt = LAMBDA(
                 "Result         →20 (number — element type recovered from the slot's tag)¶" &
                 "NOTE:          →When state is a column, the slot must be scalar — array slots collapse to their first element under broadcast.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(state),
-    //  Procedure
-        result, GetVar(state, index & ""),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

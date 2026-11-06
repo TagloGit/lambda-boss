@@ -6,8 +6,14 @@
 MINOCCUR = LAMBDA(
 //  Parameter Declarations
     [array],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        _arr, IF(ROWS(array)=1, TRANSPOSE(array), array),
+        result, INDEX(GROUPBY(_arr, _arr, ROWS, , 0, 2), 1, 1),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →MINOCCUR(array)¶" &
                 "DESCRIPTION:   →Returns the value that occurs least often in an array. Ties broken by first-seen.¶" &
                 "VERSION:       →Apr 15 2026¶" &
@@ -17,12 +23,6 @@ MINOCCUR = LAMBDA(
                 "Formula        →=MINOCCUR({""A"",""A"",""B"",""B"",""B"",""C""})¶" &
                 "Result         →C",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        _arr, IF(ROWS(array)=1, TRANSPOSE(array), array),
-        result, INDEX(GROUPBY(_arr, _arr, ROWS, , 0, 2), 1, 1),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

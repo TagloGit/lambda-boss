@@ -8,20 +8,7 @@ ALPHABET = LAMBDA(
     [Case],
     [Subset],
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →ALPHABET(Case, Subset, ShowHelp)¶" &
-                "DESCRIPTION:   →Returns a spilled array of letters: all 26, just vowels, or just consonants, in upper or lower case.¶" &
-                "VERSION:       →Jun 28 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   Case           →(Optional) 0 = uppercase [default], 1 = lowercase.¶" &
-                "   Subset         →(Optional) 0 = all 26 letters [default], 1 = vowels (5), 2 = consonants (21).¶" &
-                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the letters.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=ALPHABET(1, 1)¶" &
-                "Result         →{a;e;i;o;u}",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(ShowHelp),
         _case, IF(ISOMITTED(Case), 0, Case),
@@ -33,6 +20,19 @@ ALPHABET = LAMBDA(
                     1, FILTER(full, vowelMask),
                     2, FILTER(full, NOT(vowelMask)),
                     full),
-        IF(Help?, result, Help)
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
+                "FUNCTION:      →ALPHABET(Case, Subset, ShowHelp)¶" &
+                "DESCRIPTION:   →Returns a spilled array of letters: all 26, just vowels, or just consonants, in upper or lower case.¶" &
+                "VERSION:       →Jun 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Case           →(Optional) 0 = uppercase [default], 1 = lowercase.¶" &
+                "   Subset         →(Optional) 0 = all 26 letters [default], 1 = vowels (5), 2 = consonants (21).¶" &
+                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the letters.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=ALPHABET(1, 1)¶" &
+                "Result         →{a;e;i;o;u}",
+                "→", "¶"
+                ))
 )
 );

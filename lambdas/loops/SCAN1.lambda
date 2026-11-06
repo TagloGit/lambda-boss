@@ -8,8 +8,17 @@ SCAN1 = LAMBDA(
 //  Parameter Declarations
     [array],
     [fn],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        wasRow, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        flat, TOCOL(array),
+        col, IF(ROWS(flat) = 1, flat,
+                VSTACK(INDEX(flat, 1, 1), SCAN(INDEX(flat, 1, 1), DROP(flat, 1), LAMBDA(acc_, x_, fn(acc_, x_))))),
+        result, IF(wasRow, TRANSPOSE(col), col),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →SCAN1(array, fn)¶" &
                 "DESCRIPTION:   →Seedless inclusive scan. Uses array's first element as the seed and folds fn over the rest, so out[1] is the first element unchanged. For running max/min/gcd/join where there is no natural identity to seed a plain SCAN with.¶" &
                 "VERSION:       →Jul 01 2026¶" &
@@ -20,15 +29,6 @@ SCAN1 = LAMBDA(
                 "Formula        →=SCAN1({3;7;2;9}, MAX)¶" &
                 "Result         →{3;7;7;9} (running maximum)",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        wasRow, AND(ROWS(array) = 1, COLUMNS(array) > 1),
-        flat, TOCOL(array),
-        col, IF(ROWS(flat) = 1, flat,
-                VSTACK(INDEX(flat, 1, 1), SCAN(INDEX(flat, 1, 1), DROP(flat, 1), LAMBDA(acc_, x_, fn(acc_, x_))))),
-        result, IF(wasRow, TRANSPOSE(col), col),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

@@ -7,8 +7,16 @@ SORT1D = LAMBDA(
 //  Parameter Declarations
     [array],
     [descending],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        order, IF(ISOMITTED(descending), 1, IF(descending, -1, 1)),
+        result, IF(ROWS(array) = 1, SORT(array, 1, order, TRUE),
+                   IF(COLUMNS(array) = 1, SORT(array, 1, order),
+                      SORT(TOCOL(array), 1, order))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →SORT1D(array, [descending])¶" &
                 "DESCRIPTION:   →Sorts a 1D array, auto-orienting by shape: a row returns a sorted row, a column a sorted column, and a 2D grid flattens (row by row) into a single sorted column.¶" &
                 "VERSION:       →Aug 24 2026¶" &
@@ -19,14 +27,6 @@ SORT1D = LAMBDA(
                 "Formula        →=CONCAT(SORT1D({""C"",""A"",""B""}))¶" &
                 "Result         →ABC (a row in returns a row out)",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        order, IF(ISOMITTED(descending), 1, IF(descending, -1, 1)),
-        result, IF(ROWS(array) = 1, SORT(array, 1, order, TRUE),
-                   IF(COLUMNS(array) = 1, SORT(array, 1, order),
-                      SORT(TOCOL(array), 1, order))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

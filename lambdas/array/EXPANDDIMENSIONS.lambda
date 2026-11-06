@@ -9,20 +9,7 @@ EXPANDDIMENSIONS = LAMBDA(
     [Dimensions],
     [CycleFromLeft],
     [Delimiter],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →EXPANDDIMENSIONS(Dimensions, CycleFromLeft, Delimiter)¶" &
-                "DESCRIPTION:   →Constructs all possible combinations (Cartesian product) of supplied dimensions.¶" &
-                "VERSION:       →Apr 29 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   Dimensions     →(Required) A 2D array where each column is one dimension (combined via HSTACK).¶" &
-                "   CycleFromLeft  →(Optional) If TRUE, the leftmost dimension cycles every row. Default FALSE.¶" &
-                "   Delimiter      →(Optional) Text separator to combine results into a single delimited column.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=EXPANDDIMENSIONS(HSTACK({""Apples"";""Oranges""},{""Small"";""Medium"";""Large""}))¶" &
-                "Result         →6-row x 2-col array of all combinations",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(Dimensions),
         Delimit?, NOT(ISOMITTED(Delimiter)),
@@ -41,6 +28,19 @@ EXPANDDIMENSIONS = LAMBDA(
                            LAMBDA(acc, col, HSTACK(acc, indexCol(col))))),
         resultBeforeDelimiter, INDEX(Dimensions, indices, SEQUENCE(1, cols)),
         result, IF(Delimit?, BYROW(resultBeforeDelimiter, LAMBDA(row, TEXTJOIN(Delimiter, TRUE, row))), resultBeforeDelimiter),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →EXPANDDIMENSIONS(Dimensions, CycleFromLeft, Delimiter)¶" &
+                "DESCRIPTION:   →Constructs all possible combinations (Cartesian product) of supplied dimensions.¶" &
+                "VERSION:       →Apr 29 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Dimensions     →(Required) A 2D array where each column is one dimension (combined via HSTACK).¶" &
+                "   CycleFromLeft  →(Optional) If TRUE, the leftmost dimension cycles every row. Default FALSE.¶" &
+                "   Delimiter      →(Optional) Text separator to combine results into a single delimited column.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=EXPANDDIMENSIONS(HSTACK({""Apples"";""Oranges""},{""Small"";""Medium"";""Large""}))¶" &
+                "Result         →6-row x 2-col array of all combinations",
+                "→", "¶"
+                ), result)
 )
 );

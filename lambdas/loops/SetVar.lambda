@@ -10,21 +10,7 @@ SetVar = LAMBDA(
     [state],
     [name],
     [value],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SetVar(state, name, value)¶" &
-                "DESCRIPTION:   →Sets or replaces a named variable (scalar or 1-D array) in a state string. Records the element type so GetVar returns native types.¶" &
-                "VERSION:       →Nov 01 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   state          →(Required) Current state string. Use NewState() to start fresh.¶" &
-                "   name           →(Required) Variable name. Cannot contain CHAR(30).¶" &
-                "   value          →(Required) Scalar or 1-D array. Element type (number, boolean, or text) is recorded in the entry's tag.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetVar(NewState(), ""best"", 5)¶" &
-                "Result         →state string holding best=5 (tagged as number)¶" &
-                "NOTE:          →All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element.",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(state),
     //  Procedure
@@ -46,6 +32,20 @@ SetVar = LAMBDA(
                     )
                 ),
         result, IF(cleaned = "", newPair, cleaned & us & newPair),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →SetVar(state, name, value)¶" &
+                "DESCRIPTION:   →Sets or replaces a named variable (scalar or 1-D array) in a state string. Records the element type so GetVar returns native types.¶" &
+                "VERSION:       →Nov 01 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   state          →(Required) Current state string. Use NewState() to start fresh.¶" &
+                "   name           →(Required) Variable name. Cannot contain CHAR(30).¶" &
+                "   value          →(Required) Scalar or 1-D array. Element type (number, boolean, or text) is recorded in the entry's tag.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SetVar(NewState(), ""best"", 5)¶" &
+                "Result         →state string holding best=5 (tagged as number)¶" &
+                "NOTE:          →All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element.",
+                "→", "¶"
+                ), result)
 )
 );

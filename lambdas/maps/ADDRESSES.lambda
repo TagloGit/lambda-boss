@@ -6,8 +6,13 @@
 ADDRESSES = LAMBDA(
 //  Parameter Declarations
     [cells],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(cells),
+    //  Procedure
+        result, ADDRESS(ROW(cells), COLUMN(cells), 4),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →ADDRESSES(cells)¶" &
                 "DESCRIPTION:   →Returns the A1-style addresses of cells in a range as text, shape-matching the input range.¶" &
                 "VERSION:       →May 20 2026¶" &
@@ -17,11 +22,6 @@ ADDRESSES = LAMBDA(
                 "Formula        →=ADDRESSES(F28:H30)¶" &
                 "Result         →3x3 grid of ""F28"" through ""H30""",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(cells),
-    //  Procedure
-        result, ADDRESS(ROW(cells), COLUMN(cells), 4),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

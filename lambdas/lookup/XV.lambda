@@ -13,25 +13,7 @@ XV = LAMBDA(
     [Match_mode],
     [Search_mode],
     [Case_sensitive],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →XV(Lookup_value, Table, [Return_col_no], [Lookup_col_no], [If_not_found], [Match_mode], [Search_mode], [Case_sensitive])¶" &
-                "DESCRIPTION:   →Vertical table lookup that matches in one column and returns one or more columns by index, with case-sensitive matching and array-of-lookups support.¶" &
-                "VERSION:       →Jun 26 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   Lookup_value   →(Required) Value to find in the lookup column. Also accepts an array of values — result lifts to one row per value.¶" &
-                "   Table          →(Required) Multi-column table of data (no header row needed).¶" &
-                "   Return_col_no  →(Optional) Column index(es) to return; negative counts from the right (-1 = last). Accepts a list like {3,1,4} for reordered/non-contiguous columns. Default -1.¶" &
-                "   Lookup_col_no  →(Optional) Column index to search; negative from right. Default: last column when returning column 1, else first column.¶" &
-                "   If_not_found   →(Optional) Value returned when no match is found. Default #N/A.¶" &
-                "   Match_mode     →(Optional) XMATCH match mode: (0) exact [default], (-1) exact-or-next-smaller, (1) exact-or-next-larger, (2) wildcard. Ignored when Case_sensitive is TRUE.¶" &
-                "   Search_mode    →(Optional) XMATCH search mode: (1) first-to-last [default], (-1) last-to-first, (2) binary ascending, (-2) binary descending. Ignored when Case_sensitive is TRUE.¶" &
-                "   Case_sensitive →(Optional) TRUE for case-sensitive exact match (R is not r). Exact match only. Default FALSE.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=XV(""Bravo"", A2:C5, {3,1})¶" &
-                "Result         →returns columns 3 and 1 from the row whose first column equals Bravo",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(Lookup_value),
     //  Procedure
@@ -53,6 +35,24 @@ XV = LAMBDA(
         multiLookup, OR(ROWS(lookupVals) > 1, COLUMNS(lookupVals) > 1),
         posVec, IF(multiLookup, MAP(lookupVals, posOf), posOf(lookupVals)),
         result, IFERROR(INDEX(Table, posVec, retIdx), notFound),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →XV(Lookup_value, Table, [Return_col_no], [Lookup_col_no], [If_not_found], [Match_mode], [Search_mode], [Case_sensitive])¶" &
+                "DESCRIPTION:   →Vertical table lookup that matches in one column and returns one or more columns by index, with case-sensitive matching and array-of-lookups support.¶" &
+                "VERSION:       →Jun 26 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   Lookup_value   →(Required) Value to find in the lookup column. Also accepts an array of values — result lifts to one row per value.¶" &
+                "   Table          →(Required) Multi-column table of data (no header row needed).¶" &
+                "   Return_col_no  →(Optional) Column index(es) to return; negative counts from the right (-1 = last). Accepts a list like {3,1,4} for reordered/non-contiguous columns. Default -1.¶" &
+                "   Lookup_col_no  →(Optional) Column index to search; negative from right. Default: last column when returning column 1, else first column.¶" &
+                "   If_not_found   →(Optional) Value returned when no match is found. Default #N/A.¶" &
+                "   Match_mode     →(Optional) XMATCH match mode: (0) exact [default], (-1) exact-or-next-smaller, (1) exact-or-next-larger, (2) wildcard. Ignored when Case_sensitive is TRUE.¶" &
+                "   Search_mode    →(Optional) XMATCH search mode: (1) first-to-last [default], (-1) last-to-first, (2) binary ascending, (-2) binary descending. Ignored when Case_sensitive is TRUE.¶" &
+                "   Case_sensitive →(Optional) TRUE for case-sensitive exact match (R is not r). Exact match only. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=XV(""Bravo"", A2:C5, {3,1})¶" &
+                "Result         →returns columns 3 and 1 from the row whose first column equals Bravo",
+                "→", "¶"
+                ), result)
 )
 );

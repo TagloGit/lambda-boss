@@ -13,8 +13,14 @@ MAZELAM_DIAG = LAMBDA(
     [distFrom],
     [dirDelta],
     [prevDir],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(costFrom),
+    //  Procedure
+        diagonal, (ROWNUM(cellFrom) <> ROWNUM(cellTo)) * (COLNUM(cellFrom) <> COLNUM(cellTo)),
+        result, IF(diagonal = 1, costTo * 1.5, costTo),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →MAZELAM_DIAG(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir)¶" &
                 "DESCRIPTION:   →Stock Mazelam for MAZE: diagonal steps cost 1.5x the destination cell's Cost; cardinal steps cost 1x. Pass by name to MAZE: =MAZE(""C3"", myCosts, , , , , , MAZELAM_DIAG).¶" &
                 "VERSION:       →May 27 2026¶" &
@@ -30,12 +36,6 @@ MAZELAM_DIAG = LAMBDA(
                 "Formula        →=MAZE(""A1"", myCosts, , , , , , MAZELAM_DIAG)¶" &
                 "Result         →Distance grid where diagonal moves cost 1.5x and cardinals cost 1x",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(costFrom),
-    //  Procedure
-        diagonal, (ROWNUM(cellFrom) <> ROWNUM(cellTo)) * (COLNUM(cellFrom) <> COLNUM(cellTo)),
-        result, IF(diagonal = 1, costTo * 1.5, costTo),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

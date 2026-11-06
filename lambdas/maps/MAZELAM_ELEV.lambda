@@ -13,8 +13,14 @@ MAZELAM_ELEV = LAMBDA(
     [distFrom],
     [dirDelta],
     [prevDir],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(costFrom),
+    //  Procedure
+        delta, costTo - costFrom,
+        result, 1 + IF(delta > 0, delta * 2, delta * 0.5),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →MAZELAM_ELEV(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir)¶" &
                 "DESCRIPTION:   →Stock Mazelam for MAZE that treats Cost as elevation. Cost of a step = 1 + 2*rise for uphill, 1 + 0.5*drop for downhill (drop is negative, so the step is cheaper than 1), and 1 for flat.¶" &
                 "VERSION:       →May 27 2026¶" &
@@ -30,12 +36,6 @@ MAZELAM_ELEV = LAMBDA(
                 "Formula        →=MAZE(""A1"", elevationMap, , , , , , MAZELAM_ELEV)¶" &
                 "Result         →Distance grid where uphill is penalised 2x and downhill is rewarded 0.5x",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(costFrom),
-    //  Procedure
-        delta, costTo - costFrom,
-        result, 1 + IF(delta > 0, delta * 2, delta * 0.5),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

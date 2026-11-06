@@ -8,8 +8,14 @@ ROWOF = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), _mult, mult),
+        result, INT(pos / m),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →ROWOF(pos, [mult])¶" &
                 "DESCRIPTION:   →Extracts the row number from an encoded position integer (as produced by TOPOS).¶" &
                 "VERSION:       →Nov 06 2026¶" &
@@ -20,12 +26,6 @@ ROWOF = LAMBDA(
                 "Formula        →=ROWOF(17000017)¶" &
                 "Result         →17",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(pos),
-    //  Procedure
-        m, IF(ISOMITTED(mult), _mult, mult),
-        result, INT(pos / m),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

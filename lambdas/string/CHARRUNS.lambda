@@ -10,8 +10,14 @@ CHARRUNS = LAMBDA(
 //  Parameter Declarations
     [input],
     [case_insensitive],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(input),
+        _ci, IF(ISOMITTED(case_insensitive), 0, case_insensitive),
+    //  Procedure
+        result, TRANSPOSE(REGEXEXTRACT(input, "(\X)\1*", 1, _ci)),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →CHARRUNS(input, case_insensitive)¶" &
                 "DESCRIPTION:   →Decomposes a string into an array of consecutive-character run groups. String twin of the array run family (RUNPOS, RUNSIZE, RUNGROUPS, RUNGROUPBY). Grapheme-aware: a repeated multi-codepoint emoji forms one run.¶" &
                 "VERSION:       →Aug 17 2026¶" &
@@ -22,12 +28,6 @@ CHARRUNS = LAMBDA(
                 "Formula        →=CHARRUNS(""AABBBCA"")¶" &
                 "Result         →{""AA"";""BBB"";""C"";""A""}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(input),
-        _ci, IF(ISOMITTED(case_insensitive), 0, case_insensitive),
-    //  Procedure
-        result, TRANSPOSE(REGEXEXTRACT(input, "(\X)\1*", 1, _ci)),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

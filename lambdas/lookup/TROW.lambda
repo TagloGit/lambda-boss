@@ -8,8 +8,15 @@ TROW = LAMBDA(
     [Table],
     [Item],
     [LookupCol],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(Table),
+    //  Procedure
+        headers, CHOOSEROWS(Table, 1),
+        row, XLOOKUP(Item, LookupCol, DROP(Table, 1)),
+        result, LAMBDA(Header, INDEX(row, XMATCH(Header, headers))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →TROW(Table, Item, LookupCol)¶" &
                 "DESCRIPTION:   →Looks up one row in a table (first match) and returns a row-object closure; call it with a header name to read that column's value.¶" &
                 "VERSION:       →Jun 08 2026¶" &
@@ -22,13 +29,6 @@ TROW = LAMBDA(
                 "Formula        →=LET(tim, TROW(tblData[#All], ""Tim"", tblData[Person]), tim(""Age""))¶" &
                 "Result         →42",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(Table),
-    //  Procedure
-        headers, CHOOSEROWS(Table, 1),
-        row, XLOOKUP(Item, LookupCol, DROP(Table, 1)),
-        result, LAMBDA(Header, INDEX(row, XMATCH(Header, headers))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

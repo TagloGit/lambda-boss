@@ -10,8 +10,17 @@ PLAYERTURNS = LAMBDA(
     [advance],
     [players],
     [start],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(advance),
+    //  Procedure
+        ps, TOCOL(IF(ISOMITTED(players), {1;2}, players)),
+        nP, ROWS(ps),
+        s0, IF(ISOMITTED(start), 1, IF(ISTEXT(start), XMATCH(start, ps), start)),
+        idx, SCANLEAD(s0, advance, LAMBDA(cur, a, IF(a, MOD(cur, nP) + 1, cur))),
+        result, INDEX(ps, idx),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →PLAYERTURNS(advance, [players], [start])¶" &
                 "DESCRIPTION:   →Builds a same-length array of which player owns each turn. Play stays with the current player or passes to the next based on the per-turn advance flag. Any number of players; the previous-turn alignment is handled internally via SCANLEAD (no seed-offset trick).¶" &
                 "VERSION:       →Jul 01 2026¶" &
@@ -23,15 +32,6 @@ PLAYERTURNS = LAMBDA(
                 "Formula        →=PLAYERTURNS({TRUE;TRUE;TRUE;TRUE;TRUE}, {""A"";""B"";""C""})¶" &
                 "Result         →{A;B;C;A;B}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(advance),
-    //  Procedure
-        ps, TOCOL(IF(ISOMITTED(players), {1;2}, players)),
-        nP, ROWS(ps),
-        s0, IF(ISOMITTED(start), 1, IF(ISTEXT(start), XMATCH(start, ps), start)),
-        idx, SCANLEAD(s0, advance, LAMBDA(cur, a, IF(a, MOD(cur, nP) + 1, cur))),
-        result, INDEX(ps, idx),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

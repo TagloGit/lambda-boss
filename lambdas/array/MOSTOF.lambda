@@ -10,8 +10,17 @@ MOSTOF = LAMBDA(
     [values],
     [weights],
     [function],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(values),
+        HasWeights?, NOT(ISOMITTED(weights)),
+    //  Procedure
+        _keys, IF(ROWS(values)=1, TRANSPOSE(values), values),
+        _vals, IF(HasWeights?, IF(ROWS(weights)=1, TRANSPOSE(weights), weights), _keys),
+        _fn, IF(ISOMITTED(function), IF(HasWeights?, SUM, ROWS), function),
+        result, GROUPBY(_keys, _vals, LAMBDA(col_, _fn(col_)), 0, 0, -2),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →MOSTOF(values, [weights], [function])¶" &
                 "DESCRIPTION:   →Returns a two-column table of distinct values and their tally, sorted by tally descending (largest first). A simpler GROUPBY for the common most-common case.¶" &
                 "VERSION:       →Aug 24 2026¶" &
@@ -23,15 +32,6 @@ MOSTOF = LAMBDA(
                 "Formula        →=MOSTOF({""A"",""A"",""B"",""B"",""B"",""C""})¶" &
                 "Result         →B 3 / A 2 / C 1",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(values),
-        HasWeights?, NOT(ISOMITTED(weights)),
-    //  Procedure
-        _keys, IF(ROWS(values)=1, TRANSPOSE(values), values),
-        _vals, IF(HasWeights?, IF(ROWS(weights)=1, TRANSPOSE(weights), weights), _keys),
-        _fn, IF(ISOMITTED(function), IF(HasWeights?, SUM, ROWS), function),
-        result, GROUPBY(_keys, _vals, LAMBDA(col_, _fn(col_)), 0, 0, -2),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

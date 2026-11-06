@@ -26,20 +26,7 @@ SetVars = LAMBDA(
     [v_9],
     [n_10],
     [v_10],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], ..., [n_10], [v_10])¶" &
-                "DESCRIPTION:   →Builds a fresh state holding up to 10 named variables. Alternating positional pairs.¶" &
-                "VERSION:       →May 02 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   n_1, v_1       →(Required) First name and value pair.¶" &
-                "   n_2..v_10      →(Optional) Up to nine more name/value pairs.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetVars(""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
-                "Result         →state holding cur=1, best=1, ends=1¶" &
-                "NOTE:          →To partially update an existing state by name, use SetVar.",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(n_1),
     //  Procedure
@@ -54,6 +41,19 @@ SetVars = LAMBDA(
         s_9, IF(ISOMITTED(n_9), s_8, SetVar(s_8, n_9, v_9)),
         s_10, IF(ISOMITTED(n_10), s_9, SetVar(s_9, n_10, v_10)),
         result, s_10,
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], ..., [n_10], [v_10])¶" &
+                "DESCRIPTION:   →Builds a fresh state holding up to 10 named variables. Alternating positional pairs.¶" &
+                "VERSION:       →May 02 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   n_1, v_1       →(Required) First name and value pair.¶" &
+                "   n_2..v_10      →(Optional) Up to nine more name/value pairs.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SetVars(""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
+                "Result         →state holding cur=1, best=1, ends=1¶" &
+                "NOTE:          →To partially update an existing state by name, use SetVar.",
+                "→", "¶"
+                ), result)
 )
 );

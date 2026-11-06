@@ -12,8 +12,13 @@ SCANWHILE = LAMBDA(
     [cases],
     [fn],
     [continue],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        result, SCANUNTIL(seed, cases, fn, LAMBDA(a, v, i, NOT(continue(a, v, i)))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →SCANWHILE(seed, cases, fn, continue)¶" &
                 "DESCRIPTION:   →SCAN counterpart to REDUCEWHILE. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEWHILE — swap the name to switch views.¶" &
                 "VERSION:       →Jul 20 2026¶" &
@@ -27,11 +32,6 @@ SCANWHILE = LAMBDA(
                 "Result         →column {1; 4; 9; 18; 18} — running sums; halts before consuming 10, so the final row repeats¶" &
                 "NOTE:          →Mechanically equivalent to SCANUNTIL with the predicate negated. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(seed),
-    //  Procedure
-        result, SCANUNTIL(seed, cases, fn, LAMBDA(a, v, i, NOT(continue(a, v, i)))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

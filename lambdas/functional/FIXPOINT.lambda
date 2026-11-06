@@ -9,21 +9,7 @@ FIXPOINT = LAMBDA(
     [fn],
     [same],
     [max_iter],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →FIXPOINT(init, fn, [same], [max_iter])¶" &
-                "DESCRIPTION:   →Applies fn repeatedly until the value stops changing, then returns the converged state.¶" &
-                "VERSION:       →Jul 22 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   init           →(Required) Starting value - scalar or array.¶" &
-                "   fn             →(Required) LAMBDA(state) returning the next state.¶" &
-                "   same           →(Optional) LAMBDA(a, b) returning TRUE when converged. Default: exact shape plus element-wise equality, so growing arrays are handled.¶" &
-                "   max_iter       →(Optional) Iteration cap, default 1000. Returns #N/A instead of hanging when convergence never fires.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=FIXPOINT(40, LAMBDA(x, IF(x>5, x/2, x)))¶" &
-                "Result         →5",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(init),
     //  Procedure
@@ -37,6 +23,20 @@ FIXPOINT = LAMBDA(
                        IF(n <= 0, NA(),
                           self(self, nextState, n - 1))))),
         result, rec(rec, init, iterCap),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →FIXPOINT(init, fn, [same], [max_iter])¶" &
+                "DESCRIPTION:   →Applies fn repeatedly until the value stops changing, then returns the converged state.¶" &
+                "VERSION:       →Jul 22 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   init           →(Required) Starting value - scalar or array.¶" &
+                "   fn             →(Required) LAMBDA(state) returning the next state.¶" &
+                "   same           →(Optional) LAMBDA(a, b) returning TRUE when converged. Default: exact shape plus element-wise equality, so growing arrays are handled.¶" &
+                "   max_iter       →(Optional) Iteration cap, default 1000. Returns #N/A instead of hanging when convergence never fires.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=FIXPOINT(40, LAMBDA(x, IF(x>5, x/2, x)))¶" &
+                "Result         →5",
+                "→", "¶"
+                ), result)
 )
 );

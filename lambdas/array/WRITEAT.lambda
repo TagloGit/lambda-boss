@@ -9,8 +9,16 @@ WRITEAT = LAMBDA(
     [array],
     [value],
     [pos],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        len, IF(horiz, COLUMNS(array), ROWS(array)),
+        idx, SEQUENCE(IF(horiz, 1, len), IF(horiz, len, 1)),
+        result, IF(OR(pos < 1, pos > len), NA(), IF(idx = pos, value, array)),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →WRITEAT(array, value, pos)¶" &
                 "DESCRIPTION:   →Overwrites the element at a 1-based position in a 1-D array, preserving its length. Orientation auto-detected. The overwrite-counterpart to INSERTAT (which inserts and grows); for 2-D blocks use REPLACEARRAY.¶" &
                 "VERSION:       →Jun 16 2026¶" &
@@ -22,14 +30,6 @@ WRITEAT = LAMBDA(
                 "Formula        →=WRITEAT({""a"";""b"";""c""}, ""X"", 1)¶" &
                 "Result         →{""X"";""b"";""c""}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
-        len, IF(horiz, COLUMNS(array), ROWS(array)),
-        idx, SEQUENCE(IF(horiz, 1, len), IF(horiz, len, 1)),
-        result, IF(OR(pos < 1, pos > len), NA(), IF(idx = pos, value, array)),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

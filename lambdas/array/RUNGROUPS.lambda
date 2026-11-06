@@ -6,18 +6,7 @@
 RUNGROUPS = LAMBDA(
 //  Parameter Declarations
     [vector],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →RUNGROUPS(vector)¶" &
-                "DESCRIPTION:   →Run-length-encodes a 1D array into consecutive {value, length} segments.¶" &
-                "VERSION:       →Jun 12 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=RUNGROUPS({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
-                "Result         →{""A"",3;""B"",2;""C"",1}",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(vector),
     //  Procedure
@@ -30,6 +19,17 @@ RUNGROUPS = LAMBDA(
         lengths, nextStarts - startPositions,
         values, INDEX(col, startPositions),
         result, HSTACK(values, lengths),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →RUNGROUPS(vector)¶" &
+                "DESCRIPTION:   →Run-length-encodes a 1D array into consecutive {value, length} segments.¶" &
+                "VERSION:       →Jun 12 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=RUNGROUPS({""A"";""A"";""A"";""B"";""B"";""C""})¶" &
+                "Result         →{""A"",3;""B"",2;""C"",1}",
+                "→", "¶"
+                ), result)
 )
 );

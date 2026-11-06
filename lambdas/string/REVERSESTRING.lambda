@@ -9,18 +9,7 @@
 REVERSESTRING = LAMBDA(
 //  Parameter Declarations
     [text],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →REVERSESTRING(text)¶" &
-                "DESCRIPTION:   →Reverses the characters in a text string. Grapheme-aware: a multi-codepoint emoji counts as one character and survives reversal intact.¶" &
-                "VERSION:       →Aug 17 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   text          →(Required) The string to reverse. Also accepts an array of strings — result lifts element-wise.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=REVERSESTRING(""863FOVW595"")¶" &
-                "Result         →595WVOF368",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(text),
     //  Procedure
@@ -33,6 +22,17 @@ REVERSESTRING = LAMBDA(
         result, IF(OR(ROWS(text) > 1, COLUMNS(text) > 1),
                     MAP(text, scalar),
                     scalar(@text)),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →REVERSESTRING(text)¶" &
+                "DESCRIPTION:   →Reverses the characters in a text string. Grapheme-aware: a multi-codepoint emoji counts as one character and survives reversal intact.¶" &
+                "VERSION:       →Aug 17 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   text          →(Required) The string to reverse. Also accepts an array of strings — result lifts element-wise.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=REVERSESTRING(""863FOVW595"")¶" &
+                "Result         →595WVOF368",
+                "→", "¶"
+                ), result)
 )
 );

@@ -9,8 +9,20 @@ SNAQUENCE = LAMBDA(
     [columns],
     [start],
     [step],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(rows),
+        Cols, IF(ISOMITTED(columns), 1, columns),
+        StartVal, IF(ISOMITTED(start), 1, start),
+        StepVal, IF(ISOMITTED(step), 1, step),
+    //  Procedure
+        rowIdx, SEQUENCE(rows),
+        colIdx, SEQUENCE(, Cols),
+        parity, MOD(rowIdx, 2),
+        linear, (rowIdx - 1) * Cols + parity * colIdx + (1 - parity) * (Cols + 1 - colIdx),
+        result, StartVal + (linear - 1) * StepVal,
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →SNAQUENCE(rows, [columns], [start], [step])¶" &
                 "DESCRIPTION:   →Generates a 2D array filled with a sequence in a snake (boustrophedon) pattern, alternating direction each row.¶" &
                 "VERSION:       →Apr 30 2026¶" &
@@ -23,18 +35,6 @@ SNAQUENCE = LAMBDA(
                 "Formula        →=SNAQUENCE(3, 4)¶" &
                 "Result         →{1,2,3,4;8,7,6,5;9,10,11,12}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(rows),
-        Cols, IF(ISOMITTED(columns), 1, columns),
-        StartVal, IF(ISOMITTED(start), 1, start),
-        StepVal, IF(ISOMITTED(step), 1, step),
-    //  Procedure
-        rowIdx, SEQUENCE(rows),
-        colIdx, SEQUENCE(, Cols),
-        parity, MOD(rowIdx, 2),
-        linear, (rowIdx - 1) * Cols + parity * colIdx + (1 - parity) * (Cols + 1 - colIdx),
-        result, StartVal + (linear - 1) * StepVal,
-        IF(Help?, Help, result)
+                ), result)
 )
 );

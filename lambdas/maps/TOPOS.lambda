@@ -13,19 +13,7 @@ TOPOS = LAMBDA(
 //  Parameter Declarations
     [value],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      ¦TOPOS(value, [mult])¶" &
-                "DESCRIPTION:   ¦Converts anything to a scalar packed position: A1-style address text encodes as an absolute position ROW*mult+COLUMN, any direction spelling becomes a relative movement delta (via DIRDELTA), and numbers pass through unchanged.¶" &
-                "VERSION:       ¦Nov 06 2026¶" &
-                "PARAMETERS:    ¦¶" &
-                "   value          ¦(Required) A cell address as text (e.g. ""E5""; any number of column letters, so ""XFE1"" and ""ABCD9"" work, and rows past 1048576; sheet prefixes and $ anchors are ignored; for a range such as ""B2:D9"" only the first cell, B2, is used), OR a direction in any spelling DIRDELTA accepts (arrow glyph ↑ ↗ → ↘ ↓ ↙ ← ↖, compass code N, NE, North-East ..., screen direction U, DR, up-left ...), OR a number (passes through unchanged, so pre-packed positions, deltas and knight moves survive). Also accepts an array/range of values - result lifts element-wise. Text that is not an address or a direction returns a message ""TOPOS: can't read ..."" (text, so it shows in the cell; arithmetic on it gives #VALUE!).¶" &
-                "   mult           ¦(Optional) Multiplier for the row component. Default: the _mult constant (1000000), which fits any column up to 999999 (ZZZZ = 475254) and keeps the trailing 6 digits readable as the column. A column >= mult returns a message rather than a wrong number. Applies to both branches: addresses encode as ROW*mult+COLUMN, direction deltas repack as rowDelta*mult+colDelta.¶" &
-                "EXAMPLE:       ¦¶" &
-                "Formula        ¦=TOPOS(""E5"")¶" &
-                "Result         ¦5000005 (and =TOPOS(""↑"") returns -1000000)",
-                "¦", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(value),
     //  Procedure
@@ -54,6 +42,18 @@ TOPOS = LAMBDA(
         result, IF(OR(ROWS(value) > 1, COLUMNS(value) > 1),
                     MAP(value, scalar),
                     scalar(@value)),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      ¦TOPOS(value, [mult])¶" &
+                "DESCRIPTION:   ¦Converts anything to a scalar packed position: A1-style address text encodes as an absolute position ROW*mult+COLUMN, any direction spelling becomes a relative movement delta (via DIRDELTA), and numbers pass through unchanged.¶" &
+                "VERSION:       ¦Nov 06 2026¶" &
+                "PARAMETERS:    ¦¶" &
+                "   value          ¦(Required) A cell address as text (e.g. ""E5""; any number of column letters, so ""XFE1"" and ""ABCD9"" work, and rows past 1048576; sheet prefixes and $ anchors are ignored; for a range such as ""B2:D9"" only the first cell, B2, is used), OR a direction in any spelling DIRDELTA accepts (arrow glyph ↑ ↗ → ↘ ↓ ↙ ← ↖, compass code N, NE, North-East ..., screen direction U, DR, up-left ...), OR a number (passes through unchanged, so pre-packed positions, deltas and knight moves survive). Also accepts an array/range of values - result lifts element-wise. Text that is not an address or a direction returns a message ""TOPOS: can't read ..."" (text, so it shows in the cell; arithmetic on it gives #VALUE!).¶" &
+                "   mult           ¦(Optional) Multiplier for the row component. Default: the _mult constant (1000000), which fits any column up to 999999 (ZZZZ = 475254) and keeps the trailing 6 digits readable as the column. A column >= mult returns a message rather than a wrong number. Applies to both branches: addresses encode as ROW*mult+COLUMN, direction deltas repack as rowDelta*mult+colDelta.¶" &
+                "EXAMPLE:       ¦¶" &
+                "Formula        ¦=TOPOS(""E5"")¶" &
+                "Result         ¦5000005 (and =TOPOS(""↑"") returns -1000000)",
+                "¦", "¶"
+                ), result)
 )
 );

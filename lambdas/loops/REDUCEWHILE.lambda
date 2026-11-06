@@ -13,8 +13,13 @@ REDUCEWHILE = LAMBDA(
     [cases],
     [fn],
     [continue],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(seed),
+    //  Procedure
+        result, REDUCEUNTIL(seed, cases, fn, LAMBDA(a, v, i, NOT(continue(a, v, i)))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →REDUCEWHILE(seed, cases, fn, continue)¶" &
                 "DESCRIPTION:   →REDUCE that halts when continue returns FALSE. Continue is checked before each fn call — the element that fails it is never consumed. Returns whatever the user passed in (scalar / array / state-string).¶" &
                 "VERSION:       →Jul 20 2026¶" &
@@ -28,11 +33,6 @@ REDUCEWHILE = LAMBDA(
                 "Result         →18 (number — sums while elements stay ≤ 9; halts before consuming 10)¶" &
                 "NOTE:          →Mechanically equivalent to REDUCEUNTIL with the predicate negated. Use whichever phrasing reads more naturally.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(seed),
-    //  Procedure
-        result, REDUCEUNTIL(seed, cases, fn, LAMBDA(a, v, i, NOT(continue(a, v, i)))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

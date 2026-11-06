@@ -10,8 +10,18 @@ POSTOCELL = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), _mult, mult),
+        scalar, LAMBDA(p, LET(rowN, INT(p / m), colN, MOD(p, m),
+                    IF(AND(colN <= 16384, rowN <= 1048576), ADDRESS(rowN, colN, 4), CELLAT(rowN, colN)))),
+        result, IF(OR(ROWS(pos) > 1, COLUMNS(pos) > 1),
+                    MAP(pos, scalar),
+                    scalar(pos)),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →POSTOCELL(pos, [mult])¶" &
                 "DESCRIPTION:   →Decodes an integer position (from TOPOS) back to an A1-style cell address string.¶" &
                 "VERSION:       →Nov 06 2026¶" &
@@ -22,16 +32,6 @@ POSTOCELL = LAMBDA(
                 "Formula        →=POSTOCELL(5000005)¶" &
                 "Result         →E5",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(pos),
-    //  Procedure
-        m, IF(ISOMITTED(mult), _mult, mult),
-        scalar, LAMBDA(p, LET(rowN, INT(p / m), colN, MOD(p, m),
-                    IF(AND(colN <= 16384, rowN <= 1048576), ADDRESS(rowN, colN, 4), CELLAT(rowN, colN)))),
-        result, IF(OR(ROWS(pos) > 1, COLUMNS(pos) > 1),
-                    MAP(pos, scalar),
-                    scalar(pos)),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

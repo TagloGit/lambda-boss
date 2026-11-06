@@ -40,20 +40,22 @@ Clamp = LAMBDA(
     [value],
     [min_val],
     [max_val],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →Clamp(value, min_val, max_val)¶" &
-                ...
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(value),
     //  Procedure
         result, MIN(MAX(value, min_val), max_val),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →Clamp(value, min_val, max_val)¶" &
+                ...
+                "→", "¶"
+                ), result)
 )
 );
 ```
+
+The Help table sits in the IF's TRUE branch, not in a LET binding: Excel evaluates every LET binding on every call, but not IF's untaken branch (#387, spec 0011 appendix).
 
 Key changes:
 - All LAMBDA parameters are wrapped in `[]` in the file itself (since any LAMBDA with Help support must accept zero arguments)

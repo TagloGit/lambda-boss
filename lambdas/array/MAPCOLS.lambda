@@ -11,22 +11,7 @@ MAPCOLS = LAMBDA(
     [fnc],
     [placement],
     [keep_source],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MAPCOLS(array, cols, fnc, [placement], [keep_source])¶" &
-                "DESCRIPTION:   →Applies a function to selected columns of an array, placing results in-place, appended at right, or prepended at left. fnc may widen a column into multiple columns.¶" &
-                "VERSION:       →Jun 28 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   array          →(Required) A 2D array.¶" &
-                "   cols           →(Required) Index list of columns to transform; negative counts from the end (-1 = last). Order is preserved when results land in a new position.¶" &
-                "   fnc            →(Required) A LAMBDA taking one column (height m) and returning an m-row block of one or more columns. Selected columns may expand by different widths; each expands independently and blocks are concatenated.¶" &
-                "   placement      →(Optional) Where results land: (0) in place [default], (1) append at right, (-1) prepend at left.¶" &
-                "   keep_source    →(Optional) When placement is non-zero, keep the source columns (TRUE [default]) or drop them (FALSE). Ignored when in place.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MAPCOLS({1,2,3;4,5,6}, 2, LAMBDA(c, HSTACK(c, c*10)))¶" &
-                "Result         →{1,2,20,3;4,5,50,6}",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(array),
     //  Procedure
@@ -54,6 +39,21 @@ MAPCOLS = LAMBDA(
                                   IF(nKept = 0, mapped, HSTACK(mapped, remaining))),
                     TRUE, inPlace
                 ),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →MAPCOLS(array, cols, fnc, [placement], [keep_source])¶" &
+                "DESCRIPTION:   →Applies a function to selected columns of an array, placing results in-place, appended at right, or prepended at left. fnc may widen a column into multiple columns.¶" &
+                "VERSION:       →Jun 28 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   array          →(Required) A 2D array.¶" &
+                "   cols           →(Required) Index list of columns to transform; negative counts from the end (-1 = last). Order is preserved when results land in a new position.¶" &
+                "   fnc            →(Required) A LAMBDA taking one column (height m) and returning an m-row block of one or more columns. Selected columns may expand by different widths; each expands independently and blocks are concatenated.¶" &
+                "   placement      →(Optional) Where results land: (0) in place [default], (1) append at right, (-1) prepend at left.¶" &
+                "   keep_source    →(Optional) When placement is non-zero, keep the source columns (TRUE [default]) or drop them (FALSE). Ignored when in place.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MAPCOLS({1,2,3;4,5,6}, 2, LAMBDA(c, HSTACK(c, c*10)))¶" &
+                "Result         →{1,2,20,3;4,5,50,6}",
+                "→", "¶"
+                ), result)
 )
 );

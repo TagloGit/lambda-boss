@@ -11,21 +11,7 @@ COMBININDICES = LAMBDA(
     [n],
     [k],
     [repetition],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →COMBININDICES(n, k, [repetition])¶" &
-                "DESCRIPTION:   →Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.¶" &
-                "VERSION:       →Jun 27 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   n              →(Required) Population size. Positive integer.¶" &
-                "   k              →(Required) Combination size. Without repetition, 1 ≤ k ≤ n. With repetition, any k ≥ 1.¶" &
-                "   repetition     →(Optional) FALSE (default) = distinct indices. TRUE = allow repeats (multisets), giving non-decreasing sequences, C(n+k-1, k) rows.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=COMBININDICES(5, 3)¶" &
-                "Result         →10x3 matrix: {1,2,3; 1,2,4; ...; 3,4,5}¶" &
-                "NOTE:          →Pair with COMBINATIONS for value lookup. Returns NA() when n<1, k<1, k>n (without repetition), or either argument is non-integer.",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(n),
         rep,   IF(ISOMITTED(repetition), FALSE, repetition),
@@ -49,6 +35,20 @@ COMBININDICES = LAMBDA(
                           )
                       ))
                    )),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →COMBININDICES(n, k, [repetition])¶" &
+                "DESCRIPTION:   →Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.¶" &
+                "VERSION:       →Jun 27 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   n              →(Required) Population size. Positive integer.¶" &
+                "   k              →(Required) Combination size. Without repetition, 1 ≤ k ≤ n. With repetition, any k ≥ 1.¶" &
+                "   repetition     →(Optional) FALSE (default) = distinct indices. TRUE = allow repeats (multisets), giving non-decreasing sequences, C(n+k-1, k) rows.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=COMBININDICES(5, 3)¶" &
+                "Result         →10x3 matrix: {1,2,3; 1,2,4; ...; 3,4,5}¶" &
+                "NOTE:          →Pair with COMBINATIONS for value lookup. Returns NA() when n<1, k<1, k>n (without repetition), or either argument is non-integer.",
+                "→", "¶"
+                ), result)
 )
 );

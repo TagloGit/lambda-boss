@@ -10,8 +10,20 @@ CUMSUMGRID = LAMBDA(
     [horizontal],
     [function],
     [seed],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+        Horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
+        Fn, IF(ISOMITTED(function), SUM, function),
+        Seed0, IF(ISOMITTED(seed), 0, seed),
+    //  Procedure
+        result, IF(
+                    Horiz,
+                    BIROW(array, LAMBDA(r, SCAN(Seed0, r, LAMBDA(acc_, x_, Fn(acc_, x_))))),
+                    BICOL(array, LAMBDA(c, SCAN(Seed0, c, LAMBDA(acc_, x_, Fn(acc_, x_)))))
+                ),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →CUMSUMGRID(array, [horizontal], [function], [seed])¶" &
                 "DESCRIPTION:   →Cumulative running totals across a 2D array, column-wise by default or row-wise when horizontal=TRUE.¶" &
                 "VERSION:       →Apr 14 2026¶" &
@@ -24,18 +36,6 @@ CUMSUMGRID = LAMBDA(
                 "Formula        →=CUMSUMGRID({3,0;2,8;2,6;4,0})¶" &
                 "Result         →{3,0;5,8;7,14;11,14}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-        Horiz, IF(ISOMITTED(horizontal), FALSE, horizontal),
-        Fn, IF(ISOMITTED(function), SUM, function),
-        Seed0, IF(ISOMITTED(seed), 0, seed),
-    //  Procedure
-        result, IF(
-                    Horiz,
-                    BIROW(array, LAMBDA(r, SCAN(Seed0, r, LAMBDA(acc_, x_, Fn(acc_, x_))))),
-                    BICOL(array, LAMBDA(c, SCAN(Seed0, c, LAMBDA(acc_, x_, Fn(acc_, x_)))))
-                ),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

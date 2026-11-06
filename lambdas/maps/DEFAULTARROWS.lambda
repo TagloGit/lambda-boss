@@ -7,8 +7,13 @@
 DEFAULTARROWS = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, {"↑";"↗";"→";"↘";"↓";"↙";"←";"↖"},
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
                 "FUNCTION:      ¦DEFAULTARROWS()¶" &
                 "DESCRIPTION:   ¦Returns the 8 default compass arrow characters as a vertical array, in canonical clockwise order from north (the order produced by SORT), matching DEFAULTMOVEDELTAS.¶" &
                 "VERSION:       ¦Aug 20 2026¶" &
@@ -18,11 +23,6 @@ DEFAULTARROWS = LAMBDA(
                 "Formula        ¦=DEFAULTARROWS()¶" &
                 "Result         ¦{↑;↗;→;↘;↓;↙;←;↖}",
                 "¦", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
-    //  Procedure
-        result, {"↑";"↗";"→";"↘";"↓";"↙";"←";"↖"},
-        IF(Help?, result, Help)
+                ))
 )
 );

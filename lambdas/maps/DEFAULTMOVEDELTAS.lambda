@@ -7,8 +7,13 @@
 DEFAULTMOVEDELTAS = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, {-1,0;-1,1;0,1;1,1;1,0;1,-1;0,-1;-1,-1},
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
                 "FUNCTION:      →DEFAULTMOVEDELTAS()¶" &
                 "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in canonical clockwise order from north, matching DEFAULTARROWS.¶" &
                 "VERSION:       →Aug 20 2026¶" &
@@ -18,11 +23,6 @@ DEFAULTMOVEDELTAS = LAMBDA(
                 "Formula        →=DEFAULTMOVEDELTAS()¶" &
                 "Result         →8x2 array: up, up-right, right, down-right, down, down-left, left, up-left",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
-    //  Procedure
-        result, {-1,0;-1,1;0,1;1,1;1,0;1,-1;0,-1;-1,-1},
-        IF(Help?, result, Help)
+                ))
 )
 );

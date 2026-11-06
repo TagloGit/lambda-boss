@@ -12,24 +12,7 @@ MATCHSPLIT = LAMBDA(
     [keyCols],
     [interleave],
     [resultHeaders],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MATCHSPLIT(sideA, sideB, teamIdA, teamIdB, keyCols, interleave, resultHeaders)¶" &
-                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), then own/opponent column pairs (Team, OppTeam, Own1, Opp1, Own2, Opp2, ...). Eliminates the opponent self-XLOOKUP.¶" &
-                "VERSION:       →Jul 24 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   sideA          →(Required) N x W block of side-1 (""home"") columns, one match per row (e.g. team name, score).¶" &
-                "   sideB          →(Required) N x W block of side-2 (""away"") columns, same width and column order as sideA. Returns #VALUE! if the shapes differ.¶" &
-                "   teamIdA        →(Optional) N x 1 column of side-1 team IDs. Appears as the row's own Team column on side-1 rows and as OppTeam on side-2 rows. Supply both teamIdA and teamIdB or neither.¶" &
-                "   teamIdB        →(Optional) N x 1 column of side-2 team IDs, paired with teamIdA.¶" &
-                "   keyCols        →(Optional) N x K per-match identifier column(s) repeated on both output rows (match number, date, ...).¶" &
-                "   interleave     →(Optional) TRUE (default) pairs each match's two rows adjacently, side 1 first; FALSE stacks all side-1 rows then all side-2 rows.¶" &
-                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Team, OppTeam, Own1, Opp1, ..., OwnW, OppW); or pass a custom header array. Default FALSE.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MATCHSPLIT({3;1}, {2;4}, {""G"";""H""}, {""H"";""G""}, {""M1"";""M2""})¶" &
-                "Result         →4 rows: M1,1,G,H,3,2 / M1,2,H,G,2,3 / M2,1,H,G,1,4 / M2,2,G,H,4,1",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(sideA),
     //  Procedure
@@ -69,6 +52,23 @@ MATCHSPLIT = LAMBDA(
         headerRow, IF(hdrCount > 1, TOROW(resultHeaders), defaultHeader),
         body, IF(header?, VSTACK(headerRow, ordered), ordered),
         result, IF(shapeOk, body, VALUE("x")),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →MATCHSPLIT(sideA, sideB, teamIdA, teamIdB, keyCols, interleave, resultHeaders)¶" &
+                "DESCRIPTION:   →Flattens a two-sided match table (one row per match) into one row per team per match: keys, Side (1 = listed first, 2 = listed second), then own/opponent column pairs (Team, OppTeam, Own1, Opp1, Own2, Opp2, ...). Eliminates the opponent self-XLOOKUP.¶" &
+                "VERSION:       →Jul 24 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   sideA          →(Required) N x W block of side-1 (""home"") columns, one match per row (e.g. team name, score).¶" &
+                "   sideB          →(Required) N x W block of side-2 (""away"") columns, same width and column order as sideA. Returns #VALUE! if the shapes differ.¶" &
+                "   teamIdA        →(Optional) N x 1 column of side-1 team IDs. Appears as the row's own Team column on side-1 rows and as OppTeam on side-2 rows. Supply both teamIdA and teamIdB or neither.¶" &
+                "   teamIdB        →(Optional) N x 1 column of side-2 team IDs, paired with teamIdA.¶" &
+                "   keyCols        →(Optional) N x K per-match identifier column(s) repeated on both output rows (match number, date, ...).¶" &
+                "   interleave     →(Optional) TRUE (default) pairs each match's two rows adjacently, side 1 first; FALSE stacks all side-1 rows then all side-2 rows.¶" &
+                "   resultHeaders  →(Optional) TRUE prepends a default header row (Key1..KeyK, Side, Team, OppTeam, Own1, Opp1, ..., OwnW, OppW); or pass a custom header array. Default FALSE.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=MATCHSPLIT({3;1}, {2;4}, {""G"";""H""}, {""H"";""G""}, {""M1"";""M2""})¶" &
+                "Result         →4 rows: M1,1,G,H,3,2 / M1,2,H,G,2,3 / M2,1,H,G,1,4 / M2,2,G,H,4,1",
+                "→", "¶"
+                ), result)
 )
 );

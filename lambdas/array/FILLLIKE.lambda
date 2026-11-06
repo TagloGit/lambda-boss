@@ -7,8 +7,14 @@ FILLLIKE = LAMBDA(
 //  Parameter Declarations
     [array],
     [value],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        v, IF(ISOMITTED(value), 1, value),
+        result, EXPAND(v, ROWS(array), COLUMNS(array), v),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →FILLLIKE(array, [value])¶" &
                 "DESCRIPTION:   →Constant array with the same shape as an existing array. Copies the shape, not the contents. Handy for building default MAZE inputs: FILLLIKE(map) is a uniform cost grid, FILLLIKE(map, TRUE) an all-walkable mask.¶" &
                 "VERSION:       →Jul 16 2026¶" &
@@ -19,12 +25,6 @@ FILLLIKE = LAMBDA(
                 "Formula        →=FILLLIKE({1,2;3,4})¶" &
                 "Result         →2-row x 2-col array of 1s",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        v, IF(ISOMITTED(value), 1, value),
-        result, EXPAND(v, ROWS(array), COLUMNS(array), v),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

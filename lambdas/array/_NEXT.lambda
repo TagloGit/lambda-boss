@@ -9,8 +9,18 @@ _NEXT = LAMBDA(
     [array],
     [fill],
     [n],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        shiftN, IF(ISOMITTED(n), 1, n),
+        fillVal, IF(ISOMITTED(fill), "", fill),
+        result, IF(horiz,
+                    SHIFT(array, 0, -shiftN, 0, fillVal),
+                    SHIFT(array, -shiftN, 0, 0, fillVal)),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →_NEXT(array, [fill], [n])¶" &
                 "DESCRIPTION:   →For each element of a 1-D array, returns its next neighbour (the element n positions later) as a same-size, same-orientation array; the trailing n slots are padded. Pad-only sugar over SHIFT — for a cyclic look-ahead use SHIFT directly with mode 1 (wrap). Named with a leading underscore because NEXT is a reserved Excel name.¶" &
                 "VERSION:       →Jun 20 2026¶" &
@@ -22,16 +32,6 @@ _NEXT = LAMBDA(
                 "Formula        →=_NEXT({6,3,6,1,2})¶" &
                 "Result         →{3,6,1,2,""""}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
-        shiftN, IF(ISOMITTED(n), 1, n),
-        fillVal, IF(ISOMITTED(fill), "", fill),
-        result, IF(horiz,
-                    SHIFT(array, 0, -shiftN, 0, fillVal),
-                    SHIFT(array, -shiftN, 0, 0, fillVal)),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

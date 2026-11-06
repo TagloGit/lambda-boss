@@ -8,8 +8,15 @@ COLSTROF = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(pos),
+    //  Procedure
+        m, IF(ISOMITTED(mult), _mult, mult),
+        rowOne, CELLAT(1, MOD(pos, m)),
+        result, LEFT(rowOne, LEN(rowOne) - 1),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →COLSTROF(pos, [mult])¶" &
                 "DESCRIPTION:   →Extracts the column letters (e.g. ""AB"") from an encoded position integer (as produced by TOPOS). The letters twin of COLOF.¶" &
                 "VERSION:       →Nov 06 2026¶" &
@@ -20,13 +27,6 @@ COLSTROF = LAMBDA(
                 "Formula        →=COLSTROF(12000028)¶" &
                 "Result         →AB",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(pos),
-    //  Procedure
-        m, IF(ISOMITTED(mult), _mult, mult),
-        rowOne, CELLAT(1, MOD(pos, m)),
-        result, LEFT(rowOne, LEN(rowOne) - 1),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

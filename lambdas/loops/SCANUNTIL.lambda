@@ -12,22 +12,7 @@ SCANUNTIL = LAMBDA(
     [cases],
     [fn],
     [stop],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SCANUNTIL(seed, cases, fn, [stop])¶" &
-                "DESCRIPTION:   →SCAN counterpart to REDUCEUNTIL. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEUNTIL — swap the name to switch views.¶" &
-                "VERSION:       →Jul 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
-                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
-                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
-                "   stop           →(Optional) LAMBDA(acc, current, i) returning TRUE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when stop returns TRUE. Default never stops.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SCANUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v > 9))¶" &
-                "Result         →column {1; 4; 9; 18; 18} — running sums; halts before consuming 10, so the final row repeats¶" &
-                "NOTE:          →Stop is a pre-check: once it fires, BREAK is set and that iteration onwards passes the accumulator through unchanged — rows from the halt repeat the last consumed value. If stop is TRUE for the seed on iteration 1, every row is the seed. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(seed),
     //  Procedure
@@ -70,6 +55,21 @@ SCANUNTIL = LAMBDA(
                         IF(wrap?, GetVar(userPart, "v"), userPart)
                     )),
         result, MAP(rawScan, extract),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →SCANUNTIL(seed, cases, fn, [stop])¶" &
+                "DESCRIPTION:   →SCAN counterpart to REDUCEUNTIL. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEUNTIL — swap the name to switch views.¶" &
+                "VERSION:       →Jul 20 2026¶" &
+                "PARAMETERS:    →¶" &
+                "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
+                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
+                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
+                "   stop           →(Optional) LAMBDA(acc, current, i) returning TRUE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when stop returns TRUE. Default never stops.¶" &
+                "EXAMPLE:       →¶" &
+                "Formula        →=SCANUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v > 9))¶" &
+                "Result         →column {1; 4; 9; 18; 18} — running sums; halts before consuming 10, so the final row repeats¶" &
+                "NOTE:          →Stop is a pre-check: once it fires, BREAK is set and that iteration onwards passes the accumulator through unchanged — rows from the halt repeat the last consumed value. If stop is TRUE for the seed on iteration 1, every row is the seed. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
+                "→", "¶"
+                ), result)
 )
 );

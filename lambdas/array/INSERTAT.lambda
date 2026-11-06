@@ -8,8 +8,18 @@ INSERTAT = LAMBDA(
     [array],
     [value],
     [pos],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(array),
+    //  Procedure
+        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
+        len, IF(horiz, COLUMNS(array), ROWS(array)),
+        idx, SEQUENCE(IF(horiz, 1, len + 1), IF(horiz, len + 1, 1)),
+        src, idx - (idx > pos),
+        safe, IF(src > len, len, src),
+        result, IF(idx = pos, value, IF(horiz, INDEX(array, 1, safe), INDEX(array, safe, 1))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →INSERTAT(array, value, pos)¶" &
                 "DESCRIPTION:   →Inserts a scalar value into a 1-D array at the given 1-based position, lengthening the array by 1. Orientation auto-detected from the array shape.¶" &
                 "VERSION:       →May 04 2026¶" &
@@ -21,16 +31,6 @@ INSERTAT = LAMBDA(
                 "Formula        →=INSERTAT({""a"";""b"";""c""}, ""X"", 2)¶" &
                 "Result         →{""a"";""X"";""b"";""c""}",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(array),
-    //  Procedure
-        horiz, AND(ROWS(array) = 1, COLUMNS(array) > 1),
-        len, IF(horiz, COLUMNS(array), ROWS(array)),
-        idx, SEQUENCE(IF(horiz, 1, len + 1), IF(horiz, len + 1, 1)),
-        src, idx - (idx > pos),
-        safe, IF(src > len, len, src),
-        result, IF(idx = pos, value, IF(horiz, INDEX(array, 1, safe), INDEX(array, safe, 1))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

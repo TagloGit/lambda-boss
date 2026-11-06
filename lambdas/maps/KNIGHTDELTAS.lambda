@@ -6,8 +6,13 @@
 KNIGHTDELTAS = LAMBDA(
 //  Parameter Declarations
     [ShowHelp],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(ShowHelp),
+    //  Procedure
+        result, {-2,1;-1,2;1,2;2,1;2,-1;1,-2;-1,-2;-2,-1},
+    //  Help
+        IF(Help?, result, TEXTSPLIT(
                 "FUNCTION:      →KNIGHTDELTAS()¶" &
                 "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for a chess knight's L-shaped moves, ordered clockwise from NNE.¶" &
                 "VERSION:       →Apr 15 2026¶" &
@@ -17,11 +22,6 @@ KNIGHTDELTAS = LAMBDA(
                 "Formula        →=KNIGHTDELTAS()¶" &
                 "Result         →8x2 array: NNE, ENE, ESE, SSE, SSW, WSW, WNW, NNW knight moves",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
-    //  Procedure
-        result, {-2,1;-1,2;1,2;2,1;2,-1;1,-2;-1,-2;-2,-1},
-        IF(Help?, result, Help)
+                ))
 )
 );

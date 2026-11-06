@@ -10,8 +10,21 @@ PERMUTATIONS = LAMBDA(
     [k],
     [delim],
     [repetition],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
+        nItems,   ROWS(itemsCol),
+        kEff,     IF(ISOMITTED(k), nItems, k),
+        rep,      IF(ISOMITTED(repetition), FALSE, repetition),
+        idx,      PERMUTEINDICES(nItems, kEff, rep),
+        vals,     INDEX(itemsCol, idx),
+        result,   IF(ISOMITTED(delim),
+                     vals,
+                     BYROW(vals, LAMBDA(rowVec, TEXTJOIN(delim, FALSE, rowVec)))),
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →PERMUTATIONS(items, k, [delim], [repetition])¶" &
                 "DESCRIPTION:   →Returns all ordered k-permutations of items, lexicographic order. With delim, joins each row into a single string.¶" &
                 "VERSION:       →Jun 27 2026¶" &
@@ -25,19 +38,6 @@ PERMUTATIONS = LAMBDA(
                 "Result         →6x1: {""A|B""; ""A|C""; ""B|A""; ""B|C""; ""C|A""; ""C|B""}¶" &
                 "NOTE:          →Thin wrapper over PERMUTEINDICES — splits the unranking math from value lookup so callers can reuse indices.",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(items),
-    //  Procedure
-        itemsCol, IF(ROWS(items) = 1, TRANSPOSE(items), items),
-        nItems,   ROWS(itemsCol),
-        kEff,     IF(ISOMITTED(k), nItems, k),
-        rep,      IF(ISOMITTED(repetition), FALSE, repetition),
-        idx,      PERMUTEINDICES(nItems, kEff, rep),
-        vals,     INDEX(itemsCol, idx),
-        result,   IF(ISOMITTED(delim),
-                     vals,
-                     BYROW(vals, LAMBDA(rowVec, TEXTJOIN(delim, FALSE, rowVec)))),
-        IF(Help?, Help, result)
+                ), result)
 )
 );

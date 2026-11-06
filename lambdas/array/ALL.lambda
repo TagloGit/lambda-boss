@@ -8,8 +8,15 @@ ALL = LAMBDA(
 //  Parameter Declarations
     [items],
     [predicate],
-//  Help
-    LET(Help, TEXTSPLIT(
+    LET(
+    //  Check inputs
+        Help?, ISOMITTED(items),
+    //  Procedure
+        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
+        mapped, MAP(items, LAMBDA(x_, pred(x_))),
+        result, SUM(--NOT(mapped))=0,
+    //  Help
+        IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →ALL(items, [predicate])¶" &
                 "DESCRIPTION:   →Returns TRUE if every item satisfies the predicate, else FALSE.¶" &
                 "VERSION:       →Aug 24 2026¶" &
@@ -20,13 +27,6 @@ ALL = LAMBDA(
                 "Formula        →=ALL({""A"",""B"",""C""}, LAMBDA(c, CODE(c)>=65))¶" &
                 "Result         →TRUE",
                 "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(items),
-    //  Procedure
-        pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
-        mapped, MAP(items, LAMBDA(x_, pred(x_))),
-        result, SUM(--NOT(mapped))=0,
-        IF(Help?, Help, result)
+                ), result)
 )
 );
