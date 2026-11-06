@@ -137,6 +137,15 @@ public class SettingsTests : IDisposable
     }
 
     [Fact]
+    public void DefaultRepo_IsNotSharedBetweenInstances()
+    {
+        var first = new Settings();
+        first.Repos[0].Enabled = false;
+
+        Assert.True(new Settings().Repos[0].Enabled);
+    }
+
+    [Fact]
     public void EnabledRepos_ExcludesDisabled()
     {
         var settings = new Settings();

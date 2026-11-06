@@ -50,17 +50,12 @@ public sealed class Settings
         Converters = { new LibraryChannelConverter() }
     };
 
-    private static readonly RepoConfig DefaultRepo = new()
-    {
-        Url = RepoConfig.HomeRepoUrl
-    };
-
     private static Settings? _current;
 
     /// <summary>
     ///     Configured repository sources.
     /// </summary>
-    public List<RepoConfig> Repos { get; set; } = new() { DefaultRepo };
+    public List<RepoConfig> Repos { get; set; } = new() { new RepoConfig { Url = RepoConfig.HomeRepoUrl } };
 
     /// <summary>
     ///     Configured local directory sources.
@@ -118,7 +113,7 @@ public sealed class Settings
 
             // Ensure there's always at least the default repo
             if (settings.Repos.Count == 0)
-                settings.Repos.Add(DefaultRepo);
+                settings.Repos.Add(new RepoConfig { Url = RepoConfig.HomeRepoUrl });
 
             return settings;
         }
