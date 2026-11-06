@@ -1,6 +1,7 @@
 /*  CONSTANT NAME:      _dirS
-    DESCRIPTION:*//**The scalar position-delta for south (down): rowDelta +1 encoded as rowDelta*100000+colDelta (default mult 100000). Arrow twin: _arrowS.*/
+    DESCRIPTION:*//**The scalar position-delta for south (down): rowDelta +1 encoded as rowDelta*_mult+colDelta (derived from _mult, so it follows the one multiplier). Arrow twin: _arrowS.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-20  Claude      Initial version
+                        2026-11-06  Claude      Derived from _mult instead of a literal 100000 (#380)
 */
-_dirS = 100000;
+_dirS = _mult;

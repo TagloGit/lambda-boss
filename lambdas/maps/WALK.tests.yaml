@@ -4,7 +4,7 @@ tests:
     expected: [[0, "", ""], [1, "", ""], [2, 5, 6]]
 
   - name: motivating case - down else left else right, walker gets stuck in a pocket
-    args: ['="B1"', "=", "={1,1,1;0,1,0;0,1,0;0,0,0}", "=", "={100000,-1,1}"]
+    args: ['="B1"', "=", "={1,1,1;0,1,0;0,1,0;0,0,0}", "=", "={1000000,-1,1}"]
     expected: [["", 0, ""], ["", 1, ""], ["", 2, ""], ["", "", ""]]
 
   - name: Costs define shape and accumulate along the route without driving it
@@ -32,7 +32,7 @@ tests:
     expected: [[0, ""], ["", ""]]
 
   - name: water flow - down, down-left, down-right around an obstacle
-    args: ['="B1"', "=", "={1,1,1,1;1,1,1,1;1,0,1,1;1,1,1,1}", "=", "={100000,99999,100001}"]
+    args: ['="B1"', "=", "={1,1,1,1;1,1,1,1;1,0,1,1;1,1,1,1}", "=", "={1000000,999999,1000001}"]
     expected: [["", 0, "", ""], ["", 1, "", ""], [2, "", "", ""], [3, "", "", ""]]
 
   - name: Dirs accepts direction tokens - D,L,R matches the numeric pocket walk
@@ -44,7 +44,7 @@ tests:
     expected: [["", 0, "", ""], ["", 1, "", ""], [2, "", "", ""], [3, "", "", ""]]
 
   - name: custom Walklam - always down until blocked, using the dirOK sibling context
-    args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),100000,NA()))"]
+    args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),1000000,NA()))"]
     expected: [["", 0, ""], ["", 1, ""], ["", 2, ""]]
 
   - name: real range AllowMp anchors the frame - st and route read in the H3 frame

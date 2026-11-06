@@ -50,3 +50,11 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: centre past XFD with no grid (#380)
+    args: ["XFE5"]
+    expected: [["XFE4"], ["XFD5"], ["XFF5"], ["XFE6"]]
+
+  - name: packed integer centre (#380)
+    args: ["=3000003"]
+    expected: [["C2"], ["B3"], ["D3"], ["C4"]]

@@ -16,15 +16,15 @@ tests:
     expected: [[1], [2]]
 
   - name: diagonal pair merges under explicit 8-way packed deltas (_dirAll literal)
-    args: ['={"B2";"C3"}', "=", "=", '={-100000;-99999;1;100001;100000;99999;-1;-100001}']
+    args: ['={"B2";"C3"}', "=", "=", '={-1000000;-999999;1;1000001;1000000;999999;-1;-1000001}']
     expected: [[1], [1]]
 
   - name: same position on different sheets stays partitioned by group
-    args: ['={"A1";"A2";"A1";"A2"}', "=", "=", '={-100000;100000;-1;1}', '={"S1";"S1";"S2";"S2"}']
+    args: ['={"A1";"A2";"A1";"A2"}', "=", "=", '={-1000000;1000000;-1;1}', '={"S1";"S1";"S2";"S2"}']
     expected: [[1], [1], [2], [2]]
 
   - name: accepts encoded position integers directly
-    args: ['={200002;300002}']
+    args: ['={2000002;3000002}']
     expected: [[1], [1]]
 
   - name: diagonal pair splits under 4-way arrow glyphs (DIRDELTA normalisation)

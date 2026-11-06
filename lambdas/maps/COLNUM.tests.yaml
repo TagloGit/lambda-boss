@@ -50,3 +50,23 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: first column past XFD (#380)
+    args: ["XFE1"]
+    expected: 16385
+
+  - name: 4-letter column ABCD (#380)
+    args: ["ABCD9"]
+    expected: 19010
+
+  - name: 4-letter column ZZZZ with dollars (#380)
+    args: ["$ZZZZ$7"]
+    expected: 475254
+
+  - name: packed integer (#380)
+    args: ["=9019010"]
+    expected: 19010
+
+  - name: unparseable text returns TOPOS message (#380)
+    args: ["nonsense"]
+    expected: "TOPOS: can't read 'nonsense' (not an address, direction or number)"

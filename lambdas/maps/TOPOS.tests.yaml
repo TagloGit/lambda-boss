@@ -1,43 +1,43 @@
 tests:
   - name: literal string E5
     args: ["E5"]
-    expected: 500005
+    expected: 5000005
 
   - name: literal string C3
     args: ["C3"]
-    expected: 300003
+    expected: 3000003
 
   - name: literal string L12
     args: ["L12"]
-    expected: 1200012
+    expected: 12000012
 
   - name: lowercase address
     args: ["e5"]
-    expected: 500005
+    expected: 5000005
 
   - name: absolute reference dollars stripped
     args: ["$E$5"]
-    expected: 500005
+    expected: 5000005
 
   - name: range collapses to first cell
     args: ["E5:F6"]
-    expected: 500005
+    expected: 5000005
 
   - name: sheet-prefixed address
     args: ["Sheet1!E5"]
-    expected: 500005
+    expected: 5000005
 
   - name: sheet prefix with range
     args: ["Sheet1!E5:F6"]
-    expected: 500005
+    expected: 5000005
 
   - name: quoted sheet name with space
     args: ["'My Sheet'!E5"]
-    expected: 500005
+    expected: 5000005
 
   - name: multi-letter column AB12
     args: ["AB12"]
-    expected: 1200028
+    expected: 12000028
 
   - name: custom mult A1
     args: ["A1", "=100"]
@@ -49,11 +49,11 @@ tests:
 
   - name: arrow up converts to relative delta
     args: ["↑"]
-    expected: -100000
+    expected: -1000000
 
   - name: arrow up-right converts to relative delta
     args: ["↗"]
-    expected: -99999
+    expected: -999999
 
   - name: arrow left converts to relative delta
     args: ["←"]
@@ -61,27 +61,27 @@ tests:
 
   - name: compass code NE
     args: ["NE"]
-    expected: -99999
+    expected: -999999
 
   - name: verbose compass north-east
     args: ["north-east"]
-    expected: -99999
+    expected: -999999
 
   - name: screen direction down
     args: ["down"]
-    expected: 100000
+    expected: 1000000
 
   - name: screen direction DL
     args: ["DL"]
-    expected: 99999
+    expected: 999999
 
   - name: number passes through unchanged
-    args: ["=100001"]
-    expected: 100001
+    args: ["=1000001"]
+    expected: 1000001
 
   - name: knight-move delta passes through unchanged
-    args: ["=-199999"]
-    expected: -199999
+    args: ["=-1999999"]
+    expected: -1999999
 
   - name: custom mult repacks direction delta down
     args: ["↓", "=100"]
@@ -91,9 +91,9 @@ tests:
     args: ["NE", "=100"]
     expected: -99
 
-  - name: unrecognised text returns NA
+  - name: unrecognised text returns a readable message (#380)
     args: ["nonsense"]
-    expected: -2146826246
+    expected: "TOPOS: can't read 'nonsense' (not an address, direction or number)"
 
   - name: cell containing address string
     setup:
@@ -101,7 +101,7 @@ tests:
         - address: "C3"
           values: "E5"
     args: ["=C3"]
-    expected: 500005
+    expected: 5000005
 
   - name: cell containing arrow glyph
     setup:
@@ -109,23 +109,23 @@ tests:
         - address: "C3"
           values: "↖"
     args: ["=C3"]
-    expected: -100001
+    expected: -1000001
 
   - name: vertical array of addresses lifts
     args: ['={"E5";"C3"}']
-    expected: [[500005], [300003]]
+    expected: [[5000005], [3000003]]
 
   - name: horizontal array of addresses lifts
     args: ['={"E5","C3"}']
-    expected: [[500005, 300003]]
+    expected: [[5000005, 3000003]]
 
   - name: 2D array of addresses lifts
     args: ['={"E5","F6";"C3","D4"}']
-    expected: [[500005, 600006], [300003, 400004]]
+    expected: [[5000005, 6000006], [3000003, 4000004]]
 
   - name: mixed array of address and direction lifts
     args: ['={"E5","↑","NE"}']
-    expected: [[500005, -100000, -99999]]
+    expected: [[5000005, -1000000, -999999]]
 
   - name: range of cells containing addresses lifts
     setup:
@@ -133,12 +133,57 @@ tests:
         - address: "D2:E2"
           values: [["E5", "F6"]]
     args: ["=D2:E2"]
-    expected: [[500005, 600006]]
+    expected: [[5000005, 6000006]]
 
   - name: 1x1 array input with multi-letter column parses fully (#318)
     args: ['=CHOOSEROWS({"BY85";"C2"},1)']
-    expected: 8500077
+    expected: 85000077
 
   - name: help text
     args: []
     expected_type: array
+
+  # --- #380: past XFD / row 1048576, the _mult default, clear errors ---
+  - name: first column past XFD (XFE1) (#380)
+    args: ["XFE1"]
+    expected: 1016385
+
+  - name: 4-letter column ABCD9 (#380)
+    args: ["ABCD9"]
+    expected: 9019010
+
+  - name: 4-letter column ZZZZ1 (#380)
+    args: ["ZZZZ1"]
+    expected: 1475254
+
+  - name: row above 1048576 (#380)
+    args: ["A2000000"]
+    expected: 2000000000001
+
+  - name: dollar anchors on a 4-letter column (#380)
+    args: ["$ABCD$9"]
+    expected: 9019010
+
+  - name: range past XFD uses its first cell (#380)
+    args: ["Sheet1!ABCD9:ABCE10"]
+    expected: 9019010
+
+  - name: explicit mult _mult matches default (#380)
+    args: ["E5", "=_mult"]
+    expected: 5000005
+
+  - name: column too wide for _mult returns a message, not a wrong number (#380)
+    args: ["AAAAAA1"]
+    expected: "TOPOS: column AAAAAA (12356631) does not fit under mult 1000000"
+
+  - name: column too wide for a custom mult returns a message (#380)
+    args: ["AA1", "=10"]
+    expected: "TOPOS: column AA (27) does not fit under mult 10"
+
+  - name: row 0 is not an address (#380)
+    args: ["A0"]
+    expected: "TOPOS: can't read 'A0' (not an address, direction or number)"
+
+  - name: packed integer passes through (#380)
+    args: ["=9019010"]
+    expected: 9019010

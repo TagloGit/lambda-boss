@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Extracts the row number from an encoded position integer (as produced by TOPOS).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
+                        2026-11-06  Claude      Default mult is the _mult constant (1000000), was a literal 100000 (#380)
 */
 ROWOF = LAMBDA(
 //  Parameter Declarations
@@ -11,19 +12,19 @@ ROWOF = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →ROWOF(pos, [mult])¶" &
                 "DESCRIPTION:   →Extracts the row number from an encoded position integer (as produced by TOPOS).¶" &
-                "VERSION:       →May 20 2026¶" &
+                "VERSION:       →Nov 06 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches TOPOS). Must match the mult used to encode pos.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=ROWOF(1700017)¶" &
+                "Formula        →=ROWOF(17000017)¶" &
                 "Result         →17",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(pos),
     //  Procedure
-        m, IF(ISOMITTED(mult), 100000, mult),
+        m, IF(ISOMITTED(mult), _mult, mult),
         result, INT(pos / m),
         IF(Help?, Help, result)
 )

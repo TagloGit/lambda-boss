@@ -24,7 +24,7 @@ MAZELAM_DIAG = LAMBDA(
                 "   cellFrom       →(Required) A1 address of source cell (e.g. ""C3""). Use ROWNUM/COLNUM to decode.¶" &
                 "   cellTo         →(Required) A1 address of destination cell (e.g. ""D4"").¶" &
                 "   distFrom       →(Required) Cumulative cost to reach source. (Unused by this Mazelam.)¶" &
-                "   dirDelta       →(Required) This step's direction, encoded row*100000+col. (Unused.)¶" &
+                "   dirDelta       →(Required) This step's direction, encoded row*_mult+col. (Unused.)¶" &
                 "   prevDir        →(Required) Previous direction. (Unused.)¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MAZE(""A1"", myCosts, , , , , , MAZELAM_DIAG)¶" &

@@ -56,7 +56,13 @@ public class LambdaLoaderIntegrationTests
         var arrowsAll = loaded.Single(l => l.Name == "maps._arrowsAll");
         Assert.Equal("={\"↑\";\"↗\";\"→\";\"↘\";\"↓\";\"↙\";\"←\";\"↖\"}", arrowsAll.Formula);
 
+        // A constant derived from another constant gets the other's reference prefixed too (#380).
         var dirAll = loaded.Single(l => l.Name == "maps._dirAll");
-        Assert.Equal("={-100000;-99999;1;100001;100000;99999;-1;-100001}", dirAll.Formula);
+        Assert.Equal("=maps._mult * {-1;-1;0;1;1;1;0;-1} + {0;1;1;1;0;-1;-1;-1}", dirAll.Formula);
+
+        // Lambdas read the one multiplier constant, prefixed with the library (#380).
+        var topos = loaded.Single(l => l.Name == "maps.TOPOS");
+        Assert.Contains("maps._mult", topos.Formula);
+        Assert.DoesNotContain("100000", topos.Formula);
     }
 }

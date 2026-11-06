@@ -1,5 +1,5 @@
 /*  CONSTANT NAME:      _dirW
-    DESCRIPTION:*//**The scalar position-delta for west (left): colDelta -1 encoded as rowDelta*100000+colDelta (mult-independent). Arrow twin: _arrowW.*/
+    DESCRIPTION:*//**The scalar position-delta for west (left): colDelta -1 encoded as rowDelta*_mult+colDelta (mult-independent). Arrow twin: _arrowW.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-20  Claude      Initial version
 */

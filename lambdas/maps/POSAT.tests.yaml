@@ -1,40 +1,44 @@
 tests:
   - name: simple Q17 (row 17, col 17)
     args: ["=17", "=17"]
-    expected: 1700017
+    expected: 17000017
 
   - name: top-left A1
     args: ["=1", "=1"]
-    expected: 100001
+    expected: 1000001
 
   - name: single-digit row and col
     args: ["=5", "=5"]
-    expected: 500005
+    expected: 5000005
 
   - name: max column XFD (16384)
     args: ["=16384", "=16384"]
-    expected: 1638416384
+    expected: 16384016384
 
   - name: custom mult 50
     args: ["=10", "=26", "=50"]
     expected: 526
 
   - name: inverse of ROWOF
-    args: ['=ROWOF(1700017)', '=COLOF(1700017)']
-    expected: 1700017
+    args: ['=ROWOF(17000017)', '=COLOF(17000017)']
+    expected: 17000017
 
   - name: vertical array of rows lifts
     args: ['={1;5;17}', "=2"]
-    expected: [[100002], [500002], [1700002]]
+    expected: [[1000002], [5000002], [17000002]]
 
   - name: horizontal array of cols lifts
     args: ["=3", '={1,2,3}']
-    expected: [[300001, 300002, 300003]]
+    expected: [[3000001, 3000002, 3000003]]
 
   - name: row column-vector broadcasts against col row-vector into a grid
     args: ['={1;2}', '={1,2,3}']
-    expected: [[100001, 100002, 100003], [200001, 200002, 200003]]
+    expected: [[1000001, 1000002, 1000003], [2000001, 2000002, 2000003]]
 
   - name: help text
     args: []
     expected_type: array
+
+  - name: inverse of TOPOS past XFD (#380)
+    args: ["=9", "=19010"]
+    expected: 9019010

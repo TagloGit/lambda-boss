@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns an array the same shape as grid where each cell holds a chosen geometric measure relative to an anchor cell (row/col deltas, diagonals, distances, quadrants).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-24  Claude      Initial version (#350)
+                        2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS) (#380)
 */
 RELGRID = LAMBDA(
 //  Parameter Declarations
@@ -27,7 +28,7 @@ RELGRID = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(grid),
     //  Procedure
-        safeMult, 16385,
+        safeMult, _mult,
         met, IF(ISOMITTED(measure), 0, N(measure)),
         baseRow, IFERROR(MIN(ROW(grid)), 1),
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),

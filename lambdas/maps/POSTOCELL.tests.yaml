@@ -1,18 +1,18 @@
 tests:
-  - name: default mult 500005
-    args: ["=500005"]
+  - name: default mult 5000005
+    args: ["=5000005"]
     expected: "E5"
 
-  - name: default mult 300003
-    args: ["=300003"]
+  - name: default mult 3000003
+    args: ["=3000003"]
     expected: "C3"
 
-  - name: default mult 1200012
-    args: ["=1200012"]
+  - name: default mult 12000012
+    args: ["=12000012"]
     expected: "L12"
 
-  - name: default mult 1200028 (AB12)
-    args: ["=1200028"]
+  - name: default mult 12000028 (AB12)
+    args: ["=12000028"]
     expected: "AB12"
 
   - name: custom mult 101
@@ -24,13 +24,41 @@ tests:
     expected: "Z10"
 
   - name: vertical array of positions lifts
-    args: ['={500005;300003}']
+    args: ['={5000005;3000003}']
     expected: [["E5"], ["C3"]]
 
   - name: horizontal array of positions lifts
-    args: ['={500005,300003}']
+    args: ['={5000005,3000003}']
     expected: [["E5", "C3"]]
 
   - name: help text
     args: []
     expected_type: array
+
+  - name: first column past XFD (#380)
+    args: ["=5016385"]
+    expected: "XFE5"
+
+  - name: 4-letter column (#380)
+    args: ["=9019010"]
+    expected: "ABCD9"
+
+  - name: row above 1048576 (#380)
+    args: ["=2000000000001"]
+    expected: "A2000000"
+
+  - name: last in-sheet cell keeps the fast path (#380)
+    args: ["=1048576016384"]
+    expected: "XFD1048576"
+
+  - name: round trip ZZZZ1048577 via TOPOS (#380)
+    args: ['=TOPOS("ZZZZ1048577")']
+    expected: "ZZZZ1048577"
+
+  - name: round trip $ anchored address drops anchors (#380)
+    args: ['=TOPOS("$AB$12")']
+    expected: "AB12"
+
+  - name: array mixing in-sheet and past-XFD positions (#380)
+    args: ['={1016385;5000005}']
+    expected: [["XFE1"], ["E5"]]

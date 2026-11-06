@@ -92,3 +92,19 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: packed integers decode at _mult (#380)
+    args: ["=5000005", "=7000008"]
+    expected: 5
+
+  - name: packed integer and address mixed (#380)
+    args: ["=5000005", "G7"]
+    expected: 4
+
+  - name: columns past XFD (#380)
+    args: ["XFD1", "XFH1"]
+    expected: 4
+
+  - name: rows past 1048576 (#380)
+    args: ["A1048576", "A1048580"]
+    expected: 4

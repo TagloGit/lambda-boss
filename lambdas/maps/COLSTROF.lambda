@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Extracts the column letters (e.g. "AB") from an encoded position integer (as produced by TOPOS).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-28  Claude      Initial version
+                        2026-11-06  Claude      Default mult is the _mult constant (1000000); letters via CELLAT, so columns past XFD work (was ADDRESS) (#380)
 */
 COLSTROF = LAMBDA(
 //  Parameter Declarations
@@ -11,20 +12,21 @@ COLSTROF = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →COLSTROF(pos, [mult])¶" &
                 "DESCRIPTION:   →Extracts the column letters (e.g. ""AB"") from an encoded position integer (as produced by TOPOS). The letters twin of COLOF.¶" &
-                "VERSION:       →Aug 28 2026¶" &
+                "VERSION:       →Nov 06 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches TOPOS). Must match the mult used to encode pos.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos. Columns past XFD work (16385 gives XFE).¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=COLSTROF(1200028)¶" &
+                "Formula        →=COLSTROF(12000028)¶" &
                 "Result         →AB",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(pos),
     //  Procedure
-        m, IF(ISOMITTED(mult), 100000, mult),
-        result, SUBSTITUTE(ADDRESS(1, MOD(pos, m), 4), "1", ""),
+        m, IF(ISOMITTED(mult), _mult, mult),
+        a1, CELLAT(1, MOD(pos, m)),
+        result, LEFT(a1, LEN(a1) - 1),
         IF(Help?, Help, result)
 )
 );

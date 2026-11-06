@@ -13,7 +13,7 @@ tests:
 
   - name: return_mode 3 returns encoded positions
     args: ['={1,"A",2;"B",3,"C"}', '=LAMBDA(v, NOT(ISNUMBER(v)))', '=3']
-    expected: [[100002], [200001], [200003]]
+    expected: [[1000002], [2000001], [2000003]]
 
   - name: numeric predicate on values
     args: ['={5,12;20,3}', '=LAMBDA(v, v > 10)']
@@ -54,7 +54,7 @@ tests:
         - address: "M10"
           values: "anchor"
     args: ['={"A",1;1,"B"}', '=LAMBDA(v, ISTEXT(v))', "=3", "=M10"]
-    expected: [[1000013], [1100014]]
+    expected: [[10000013], [11000014]]
 
   - name: predicate closure over a cell reference (eta-wrap regression, #343)
     # NOTE: the harness formula lives at A1, where the #343 re-anchoring is the

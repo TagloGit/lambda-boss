@@ -20,7 +20,7 @@ REPLACEARRAY = LAMBDA(
                 "PARAMETERS:    →¶" &
                 "   replace        →(Required) Host array to write into.¶" &
                 "   with           →(Required) Scalar, vector, or 2-D block to stamp in. Blank cells read as 0 (INDEX quirk).¶" &
-                "   at             →(Optional) Anchor (top-left) as a single scalar: an A1 text address like ""B2"" or an encoded pos (row*100000+col, e.g. from POSAT). Default = origin (top-left).¶" &
+                "   at             →(Optional) Anchor (top-left) as a single scalar: an A1 text address like ""B2"" or an encoded pos (row*_mult+col, e.g. from POSAT). Default = origin (top-left).¶" &
                 "   overflow       →(Optional) Edge handling when the block runs past the host: (0) clip [default], (1) error, (2) expand, (3) wrap.¶" &
                 "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Defaults to the host's own top-left — inferred for a reference, (1,1) for an array.¶" &
                 "EXAMPLE:       →¶" &

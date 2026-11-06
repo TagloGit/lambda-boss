@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-22  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
+                        2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
 */
 GRIDWHERE = LAMBDA(
 //  Parameter Declarations
@@ -18,7 +19,7 @@ GRIDWHERE = LAMBDA(
                 "PARAMETERS:    →¶" &
                 "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
                 "   predicate      →(Required) LAMBDA(v, ...) returning TRUE/FALSE for each cell value, e.g. LAMBDA(v, NOT(ISNUMBER(v))).¶" &
-                "   return_mode    →(Optional) What to return per matching cell: (0) A1 address text [default], (1) the cell value, (2) a two-column {address, value} table, (3) encoded position row*100000+col (the TOPOS convention).¶" &
+                "   return_mode    →(Optional) What to return per matching cell: (0) A1 address text [default], (1) the cell value, (2) a two-column {address, value} table, (3) encoded position row*_mult+col (the TOPOS convention).¶" &
                 "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position so addresses/positions map to that frame, matching GRIDLOOKUP / MAZE / SUBGRID. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=GRIDWHERE(mp, LAMBDA(v, NOT(ISNUMBER(v))))¶" &
@@ -29,7 +30,7 @@ GRIDWHERE = LAMBDA(
         Help?, ISOMITTED(grid),
         mode, IF(ISOMITTED(return_mode), 0, return_mode),
     //  Procedure
-        theMult, 100000,
+        theMult, _mult,
         baseRow, IFERROR(MIN(ROW(grid)), 1),
         baseCol, IFERROR(MIN(COLUMN(grid)), 1),
         originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),

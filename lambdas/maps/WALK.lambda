@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-10  Claude      Initial version (#302)
                         2026-08-20  Claude      Dirs entries may now be any DIRDELTA spelling (arrows, NE, UL, down, ...) as well as numeric deltas
+                        2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
 */
 WALK = LAMBDA(
 //  Parameter Declarations
@@ -24,7 +25,7 @@ WALK = LAMBDA(
                 "   Costs         →(Optional*) Per-cell step cost. Defines the grid shape and, if a reference, the default anchor. Costs do not drive the route — they accumulate along it. Defaults to uniform 1.¶" &
                 "   AllowMp       →(Optional*) Boolean walkability mask. Defines shape/anchor when Costs is omitted; defaults to everywhere walkable. *At least one of Costs / AllowMp must be supplied — the grid needs a shape.¶" &
                 "   Targets       →(Optional) A1 address(es). The walk halts the moment it steps onto any target, so at most one target is ever reached; the rest return NA.¶" &
-                "   Dirs          →(Optional) ORDERED move list. Entries are numeric deltas encoded rowDelta*100000+colDelta (down=100000, right=1, left=-1, up=-100000) or any DIRDELTA spelling (arrows, ""NE"", ""UL"", ""down"", ...). Order is the rule: each step takes the first direction in the list whose destination is walkable. Default {100000,1,-1,-100000} (down, right, left, up) - a deliberate priority rule, not the library listing order.¶" &
+                "   Dirs          →(Optional) ORDERED move list. Entries are numeric deltas encoded rowDelta*_mult+colDelta (down=_mult, right=1, left=-1, up=-_mult) or any DIRDELTA spelling (arrows, ""NE"", ""UL"", ""down"", ...). Order is the rule: each step takes the first direction in the list whose destination is walkable. Default {_mult,1,-1,-_mult} (down, right, left, up) - a deliberate priority rule, not the library listing order.¶" &
                 "   Show_Steps    →(Optional) TRUE shows step numbers (0,1,2,...) instead of cumulative cost. A cell crossed more than once shows its last visit.¶" &
                 "   Walklam       →(Optional) Custom step rule: LAMBDA(cell, prevDir, distSoFar, stepNum, dirOK, dirCost) returning the chosen direction delta, or NA() to halt. cell is the A1 address of the current cell; dirOK/dirCost are rows aligned with Dirs giving each candidate's walkability and destination cost. The returned move is validated — off-grid or unwalkable halts as blocked.¶" &
                 "   origin        →(Optional) Top-left anchor as a workbook reference (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
@@ -36,8 +37,8 @@ WALK = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
     //  Procedure
-        M, 100000,
-        moveSet, IF(ISOMITTED(Dirs), {100000, 1, -1, -100000}, TOROW(DIRDELTA(Dirs), 3)),
+        M, _mult,
+        moveSet, IF(ISOMITTED(Dirs), _mult * {1, 0, 0, -1} + {0, 1, -1, 0}, TOROW(DIRDELTA(Dirs), 3)),
         nRows, IF(ISOMITTED(Costs), ROWS(AllowMp), ROWS(Costs)),
         nCols, IF(ISOMITTED(Costs), COLUMNS(AllowMp), COLUMNS(Costs)),
         baseRow, IFERROR(IF(ISOMITTED(Costs), NA(), MIN(ROW(Costs))), IFERROR(IF(ISOMITTED(AllowMp), NA(), MIN(ROW(AllowMp))), 1)),

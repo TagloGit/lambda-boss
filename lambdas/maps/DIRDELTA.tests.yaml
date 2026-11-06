@@ -1,38 +1,38 @@
 tests:
   - name: compass short code to packed delta
     args: ["NE"]
-    expected: -99999
+    expected: -999999
 
   - name: arrow glyph to packed delta
     args: ["↘"]
-    expected: 100001
+    expected: 1000001
 
   - name: compass long form with hyphen and mixed case
     args: ["north-east"]
-    expected: -99999
+    expected: -999999
 
   - name: screen long form with space
     args: ["up left"]
-    expected: -100001
+    expected: -1000001
 
   - name: reversed two-letter screen form
     args: ["LD"]
-    expected: 99999
+    expected: 999999
 
   - name: single letter screen form
     args: ["d"]
-    expected: 100000
+    expected: 1000000
 
   - name: numeric delta passes through in delta mode
-    args: ["=-100000"]
-    expected: -100000
+    args: ["=-1000000"]
+    expected: -1000000
 
   - name: non-compass numeric delta (knight move) passes through in delta mode
-    args: ["=-199998"]
-    expected: -199998
+    args: ["=-1999998"]
+    expected: -1999998
 
   - name: numeric delta to arrow glyph
-    args: ["=-99999", "=1"]
+    args: ["=-999999", "=1"]
     expected: "↗"
 
   - name: token to arrow glyph
@@ -44,7 +44,7 @@ tests:
     expected: "W"
 
   - name: non-compass numeric delta errors in arrow mode
-    args: ["=-199998", "=1"]
+    args: ["=-1999998", "=1"]
     expected: -2146826246
 
   - name: unrecognised token returns NA
@@ -53,15 +53,15 @@ tests:
 
   - name: horizontal array of screen tokens lifts
     args: ['={"D","R","L","U"}']
-    expected: [[100000, 1, -1, -100000]]
+    expected: [[1000000, 1, -1, -1000000]]
 
   - name: vertical array of mixed spellings lifts
     args: ['={"N";"↘";"west"}']
-    expected: [[-100000], [100001], [-1]]
+    expected: [[-1000000], [1000001], [-1]]
 
   - name: 1x1 array input behaves as scalar
     args: ['=CHOOSEROWS({"NE";"SW"},1)']
-    expected: -99999
+    expected: -999999
 
   - name: help text
     args: []

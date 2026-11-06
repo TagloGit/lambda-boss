@@ -7,6 +7,7 @@
                         2026-05-14  Claude      Replace inline 20000 with named safeMult (XFD+1 = 16385)
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory grid can be anchored to a worksheet position — matches SUBGRID/GRIDLOOKUP convention
                         2026-08-24  Claude      Add overflow modes — (0) clip [default], (1) pad to guaranteed rows x cols with centerCell dead-centre, (2) error — and fill value for pad mode (#349)
+                        2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS) (#380)
 */
 GRIDAREA = LAMBDA(
 //  Parameter Declarations
@@ -38,7 +39,7 @@ GRIDAREA = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(grid),
     //  Procedure
-        safeMult, 16385,
+        safeMult, _mult,
         winR, IF(ISOMITTED(rows), 3, rows),
         winC, IF(ISOMITTED(cols), winR, cols),
         ovf, IF(ISOMITTED(overflow), 0, N(overflow)),

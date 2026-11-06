@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns the A1-style addresses of all cells within a given distance of a centre cell (Manhattan, Chebyshev, or Euclidean), excluding the centre.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-08  Claude      Initial version
+                        2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS); with grid omitted, no longer cut at XFD / row 1048576 (#380)
 */
 NEIGHBOURS = LAMBDA(
 //  Parameter Declarations
@@ -19,7 +20,7 @@ NEIGHBOURS = LAMBDA(
                 "   centerCell     →(Required) Centre cell address as text (e.g. ""C3""), or a cell containing one. Scalar only.¶" &
                 "   distance       →(Optional) Maximum distance from the centre; cells with 0 < dist <= distance are returned. Default 1. Non-integer values are meaningful for the Euclidean metric (e.g. 1.5 includes diagonals).¶" &
                 "   metric         →(Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line). Mirrors CELLDIST.¶" &
-                "   grid           →(Optional) A grid range or array bounding the result - neighbours outside it are dropped. Omitted, results are bounded only by the sheet edges.¶" &
+                "   grid           →(Optional) A grid range or array bounding the result - neighbours outside it are dropped. Omitted, results are bounded only by row 1 and column A (no upper limit, so neighbours past XFD or row 1048576 are returned, e.g. XFE5).¶" &
                 "   origin         →(Optional) Top-left anchor as a workbook reference - a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position - matches GRIDAREA/SUBGRID convention. Ignored when grid is omitted. Defaults to the grid's own top-left - inferred for a reference, (1,1) for an array.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=NEIGHBOURS(""C3"")¶" &
@@ -29,7 +30,7 @@ NEIGHBOURS = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(centerCell),
     //  Procedure
-        safeMult, 16385,
+        safeMult, _mult,
         rad, IF(ISOMITTED(distance), 1, @distance),
         met, IF(ISOMITTED(metric), 0, @metric),
         pos, TOPOS(@centerCell, safeMult),
@@ -45,11 +46,11 @@ NEIGHBOURS = LAMBDA(
         cellCol, ctrCol + dCol,
         baseRow, IF(ISOMITTED(grid), 1, IF(ISOMITTED(origin), IFERROR(MIN(ROW(grid)), 1), MIN(ROW(origin)))),
         baseCol, IF(ISOMITTED(grid), 1, IF(ISOMITTED(origin), IFERROR(MIN(COLUMN(grid)), 1), MIN(COLUMN(origin)))),
-        maxRow, IF(ISOMITTED(grid), 1048576, baseRow + ROWS(grid) - 1),
-        maxCol, IF(ISOMITTED(grid), 16384, baseCol + COLUMNS(grid) - 1),
+        maxRow, IF(ISOMITTED(grid), ctrRow + span, baseRow + ROWS(grid) - 1),
+        maxCol, IF(ISOMITTED(grid), ctrCol + span, baseCol + COLUMNS(grid) - 1),
         inBounds, (cellRow >= baseRow) * (cellRow <= maxRow) * (cellCol >= baseCol) * (cellCol <= maxCol),
         keep, (distGrid > 0) * (distGrid <= rad) * inBounds,
-        addrGrid, ADDRESS(cellRow, cellCol, 4),
+        addrGrid, IF(OR(MAX(cellCol) > 16384, MAX(cellRow) > 1048576), CELLAT(cellRow, cellCol), ADDRESS(cellRow, cellCol, 4)),
         result, IFERROR(TOCOL(IF(keep = 1, addrGrid, NA()), 2), NA()),
         IF(Help?, Help, result)
 )

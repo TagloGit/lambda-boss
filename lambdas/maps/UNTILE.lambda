@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Extracts items from repeated key-shaped sections of a tiled map into a flat Section/Item/Value table.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-20  Claude      Initial version
+                        2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
 */
 UNTILE = LAMBDA(
 //  Parameter Declarations
@@ -38,7 +39,7 @@ UNTILE = LAMBDA(
         vBuf, IF(ISOMITTED(v_buffer), 0, v_buffer),
         invalid, IF(ISOMITTED(if_invalid), NA(), if_invalid),
     //  Procedure
-        theMult, 100000,
+        theMult, _mult,
         mapRows, ROWS(map),
         mapCols, COLUMNS(map),
         keyRows, ROWS(key),

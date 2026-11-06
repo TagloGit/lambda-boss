@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns the grid distance between two A1-style cell addresses (Manhattan, Chebyshev, or Euclidean).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
+                        2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS) (#380)
 */
 CELLDIST = LAMBDA(
 //  Parameter Declarations
@@ -25,7 +26,7 @@ CELLDIST = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(cell1),
     //  Procedure
-        safeMult, 16385,
+        safeMult, _mult,
         met, IF(ISOMITTED(metric), 0, metric),
         posA, TOPOS(cell1, safeMult),
         posB, TOPOS(cell2, safeMult),

@@ -2,6 +2,7 @@
     DESCRIPTION:*//**Returns every scan line through a grid as a string - rows, columns, diagonals, anti-diagonals, in any of the 8 reading directions - stacked as one column.*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-24  Claude      Initial version
+                        2026-11-06  Claude      Deltas read from _mult / _dirAll instead of literal 100000-packed values (#380)
 */
 GRIDSTRINGS = LAMBDA(
 //  Parameter Declarations
@@ -29,21 +30,22 @@ GRIDSTRINGS = LAMBDA(
         nC, COLUMNS(grid),
         withRev, IF(ISOMITTED(include_reverse), FALSE, include_reverse),
     //  Normalise tokens to packed deltas; default = the four forward families (right, down-right, down, down-left)
-        chosen, IF(ISOMITTED(directions), {1;100001;100000;99999}, TOCOL(DIRDELTA(directions, 0))),
+        M, _mult,
+        chosen, IF(ISOMITTED(directions), M * {0;1;1;1} + {1;1;0;-1}, TOCOL(DIRDELTA(directions, 0))),
         full, IF(withRev, VSTACK(chosen, -chosen), chosen),
     //  Canonical clockwise order from north (= _dirAll); membership test dedupes the selection
-        canon, {-100000;-99999;1;100001;100000;99999;-1;-100001},
+        canon, _dirAll,
         picked, FILTER(canon, ISNUMBER(XMATCH(canon, full, 0))),
         revCat, LAMBDA(line, CONCAT(INDEX(line, SEQUENCE(ROWS(line), 1, ROWS(line), -1)))),
         block, LAMBDA(delta,
                  IFS(delta = 1, BYROW(grid, CONCAT),
                      delta = -1, BYROW(INDEX(grid, SEQUENCE(nR), SEQUENCE(1, nC, nC, -1)), CONCAT),
-                     delta = 100000, TRANSPOSE(BYCOL(grid, CONCAT)),
-                     delta = -100000, TRANSPOSE(BYCOL(INDEX(grid, SEQUENCE(nR, 1, nR, -1), SEQUENCE(1, nC)), CONCAT)),
-                     delta = 100001, BYDIAGONALS(grid),
-                     delta = -100001, BYDIAGONALS(grid, revCat),
-                     delta = 99999, BYDIAGONALS(grid, CONCAT, 1),
-                     delta = -99999, BYDIAGONALS(grid, revCat, 1))),
+                     delta = M, TRANSPOSE(BYCOL(grid, CONCAT)),
+                     delta = -M, TRANSPOSE(BYCOL(INDEX(grid, SEQUENCE(nR, 1, nR, -1), SEQUENCE(1, nC)), CONCAT)),
+                     delta = M + 1, BYDIAGONALS(grid),
+                     delta = -M - 1, BYDIAGONALS(grid, revCat),
+                     delta = M - 1, BYDIAGONALS(grid, CONCAT, 1),
+                     delta = 1 - M, BYDIAGONALS(grid, revCat, 1))),
         result, DROP(REDUCE(0, picked, LAMBDA(acc, delta, VSTACK(acc, block(delta)))), 1),
         IF(Help?, Help, result)
 )

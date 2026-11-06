@@ -11,6 +11,7 @@
                         2026-07-18  Claude      Fix step counter inflation: the frontier-rows SEQUENCE omitted its step argument, so each proposal's step number gained the source cell's index within the sorted frontier. Now a true zero column — stepNum is uniformly iter+1, i.e. the number of moves on the path
                         2026-07-18  Claude      Help table extracted to MAZEHELP — the combined formula exceeded Excel's 8192-character limit on saved formulas; the Help? branch now delegates via IF(Help?, MAZEHELP(), output)
                         2026-08-20  Claude      Default direction order aligned to the library canonical clockwise-from-north order (changes tie-breaks between equal-cost paths, not distances); Cus_Dir entries may now be any DIRDELTA spelling (arrows, NE, UL, down, ...) as well as numeric deltas
+                        2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000; default moves are _dirOrthog / _dirAll (#380)
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -28,8 +29,8 @@ MAZE = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
     //  Procedure
-        M, 100000,
-        defaultDirs, IF(8 - 4 * No_Diag = 4, {-100000, 1, 100000, -1}, {-100000, -99999, 1, 100001, 100000, 99999, -1, -100001}),
+        M, _mult,
+        defaultDirs, IF(8 - 4 * No_Diag = 4, TOROW(_dirOrthog), TOROW(_dirAll)),
         moveSet, IF(ISOMITTED(Cus_Dir), defaultDirs, TOROW(DIRDELTA(Cus_Dir), 3)),
         nRows, IF(ISOMITTED(Costs), ROWS(AllowMp), ROWS(Costs)),
         nCols, IF(ISOMITTED(Costs), COLUMNS(AllowMp), COLUMNS(Costs)),

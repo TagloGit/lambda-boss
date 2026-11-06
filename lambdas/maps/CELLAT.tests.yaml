@@ -34,3 +34,31 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: Z and AA boundary (#380)
+    args: ["=1", '={26,27,702,703}']
+    expected: [["Z1", "AA1", "ZZ1", "AAA1"]]
+
+  - name: first column past XFD (#380)
+    args: ["=1", "=16385"]
+    expected: "XFE1"
+
+  - name: 4-letter column ABCD (#380)
+    args: ["=9", "=19010"]
+    expected: "ABCD9"
+
+  - name: ZZZZ and the first 5-letter column (#380)
+    args: ["=7", '={475254,475255}']
+    expected: [["ZZZZ7", "AAAAA7"]]
+
+  - name: row above 1048576 (#380)
+    args: ["=2000000", "=1"]
+    expected: "A2000000"
+
+  - name: row 0 gives VALUE (#380)
+    args: ["=0", "=1"]
+    expected: -2146826273
+
+  - name: round trip address to row/col to address past XFD (#380)
+    args: ['=ROWNUM("XFE1048577")', '=COLNUM("XFE1048577")']
+    expected: "XFE1048577"

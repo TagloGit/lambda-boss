@@ -1,6 +1,7 @@
 /*  CONSTANT NAME:      _mult
-    DESCRIPTION:*//**The default multiple used in positional lambda calculations (multiple of row increment)*/
+    DESCRIPTION:*//**The one row multiplier for packed positions: a cell is ROW * _mult + COLUMN. Every positions function and every _dir* constant reads it; change it here and nowhere else. Must exceed the largest column a case uses (1000000 covers 5-letter columns up to column 999999).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-19  Claude      Initial version
+                        2026-11-06  Claude      Now the real default everywhere (was unused); 100000 -> 1000000 so 4-letter columns (ZZZZ = 475254) fit (#380)
 */
-_mult = 100000;
+_mult = 1000000;

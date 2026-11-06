@@ -4,6 +4,7 @@
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      Default mult bumped from 1000 to 100000 to match CELLTOPOS
                         2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
+                        2026-11-06  Claude      Default mult is the _mult constant (1000000); positions past XFD / row 1048576 decode via CELLAT (ADDRESS kept as the fast path inside the sheet) (#380)
 */
 POSTOCELL = LAMBDA(
 //  Parameter Declarations
@@ -13,20 +14,21 @@ POSTOCELL = LAMBDA(
     LET(Help, TEXTSPLIT(
                 "FUNCTION:      →POSTOCELL(pos, [mult])¶" &
                 "DESCRIPTION:   →Decodes an integer position (from TOPOS) back to an A1-style cell address string.¶" &
-                "VERSION:       →May 14 2026¶" &
+                "VERSION:       →Nov 06 2026¶" &
                 "PARAMETERS:    →¶" &
-                "   pos            →(Required) Integer position to decode. Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: 100000 (matches TOPOS). Must match the mult used by TOPOS.¶" &
+                "   pos            →(Required) Integer position to decode (row*mult+col). Columns past XFD and rows past 1048576 decode too (e.g. XFE5). Also accepts an array/range of positions — result lifts element-wise.¶" &
+                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.¶" &
                 "EXAMPLE:       →¶" &
-                "Formula        →=POSTOCELL(500005)¶" &
+                "Formula        →=POSTOCELL(5000005)¶" &
                 "Result         →E5",
                 "→", "¶"
                 ),
     //  Check inputs
         Help?, ISOMITTED(pos),
     //  Procedure
-        m, IF(ISOMITTED(mult), 100000, mult),
-        scalar, LAMBDA(p, ADDRESS(ROUNDDOWN(p / m, 0), MOD(p, m), 4)),
+        m, IF(ISOMITTED(mult), _mult, mult),
+        scalar, LAMBDA(p, LET(r, INT(p / m), c, MOD(p, m),
+                    IF(AND(c <= 16384, r <= 1048576), ADDRESS(r, c, 4), CELLAT(r, c)))),
         result, IF(OR(ROWS(pos) > 1, COLUMNS(pos) > 1),
                     MAP(pos, scalar),
                     scalar(pos)),

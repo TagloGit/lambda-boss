@@ -1,7 +1,8 @@
 /*  CONSTANT NAME:      _dirVert
-    DESCRIPTION:*//**The 2 scalar position-deltas for the vertical directions, as a vertical array in canonical clockwise order from north (up, down) matching _arrowsVert. Each is a single integer to add to a TOPOS position (row ±1, i.e. ∓mult; default mult 100000).*/
+    DESCRIPTION:*//**The 2 scalar position-deltas for the vertical directions, as a vertical array in canonical clockwise order from north (up, down) matching _arrowsVert. Each is a single integer to add to a TOPOS position (row ±1, i.e. ∓_mult; derived from _mult).*/
 /*  REVISIONS:          Date        Developer   Description
                         2026-06-19  Claude      Initial version
                         2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of _arrowsAll)
+                        2026-11-06  Claude      Derived from _mult instead of a literal 100000 (#380)
 */
-_dirVert = {-100000;100000};
+_dirVert = _mult * {-1;1};

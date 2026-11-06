@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-08-13  Claude      Initial version
                         2026-08-13  Claude      tile/list become ranges: tile size read from the tile range, list window from its position within the tile (replaces {rows,cols} + {r1,c1,r2,c2} numeric args)
+                        2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
 */
 UNTILELIST = LAMBDA(
 //  Parameter Declarations
@@ -39,7 +40,7 @@ UNTILELIST = LAMBDA(
         vBuf, IF(ISOMITTED(v_buffer), 0, v_buffer),
         blankMode, IF(ISOMITTED(blank_rows), 0, blank_rows),
     //  Procedure
-        theMult, 100000,
+        theMult, _mult,
         mapRows, ROWS(map),
         mapCols, COLUMNS(map),
         tileRows, ROWS(tile),

@@ -1,14 +1,14 @@
 tests:
   - name: simple position Q17
-    args: ["=1700017"]
+    args: ["=17000017"]
     expected: 17
 
   - name: column 5 from position E5
-    args: ["=500005"]
+    args: ["=5000005"]
     expected: 5
 
   - name: top-left A1
-    args: ["=100001"]
+    args: ["=1000001"]
     expected: 1
 
   - name: multi-letter column AB
@@ -28,13 +28,21 @@ tests:
     expected: 26
 
   - name: vertical array of positions lifts
-    args: ['={100001;500005;1700017}']
+    args: ['={1000001;5000005;17000017}']
     expected: [[1], [5], [17]]
 
   - name: horizontal array of positions lifts
-    args: ['={100001,500005,1700017}']
+    args: ['={1000001,5000005,17000017}']
     expected: [[1, 5, 17]]
 
   - name: help text
     args: []
     expected_type: array
+
+  - name: packed row above 1048576 (#380)
+    args: ["=2000000000001"]
+    expected: 1
+
+  - name: column past XFD (#380)
+    args: ['=TOPOS("ABCD9")']
+    expected: 19010

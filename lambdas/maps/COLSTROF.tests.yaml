@@ -1,14 +1,14 @@
 tests:
   - name: single letter from position E5
-    args: ["=500005"]
+    args: ["=5000005"]
     expected: "E"
 
   - name: top-left A1
-    args: ["=100001"]
+    args: ["=1000001"]
     expected: "A"
 
   - name: multi-letter column AB
-    args: ["=1200028"]
+    args: ["=12000028"]
     expected: "AB"
 
   - name: composed with TOPOS multi-letter
@@ -28,13 +28,25 @@ tests:
     expected: "Z"
 
   - name: vertical array of positions lifts
-    args: ['={100001;500005;1200028}']
+    args: ['={1000001;5000005;12000028}']
     expected: [["A"], ["E"], ["AB"]]
 
   - name: horizontal array of positions lifts
-    args: ['={100001,500005,1200028}']
+    args: ['={1000001,5000005,12000028}']
     expected: [["A", "E", "AB"]]
 
   - name: help text
     args: []
     expected_type: array
+
+  - name: first column past XFD (#380)
+    args: ["=1016385"]
+    expected: "XFE"
+
+  - name: 4-letter column (#380)
+    args: ["=9019010"]
+    expected: "ABCD"
+
+  - name: round trip ZZZZ via TOPOS (#380)
+    args: ['=TOPOS("ZZZZ1")']
+    expected: "ZZZZ"

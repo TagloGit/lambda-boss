@@ -31,20 +31,20 @@ tests:
     args: ["B2", "=-1"]
     expected: "A2"
 
-  - name: numeric dir 100000 moves down
-    args: ["F3", "=100000"]
+  - name: numeric dir 1000000 moves down
+    args: ["F3", "=1000000"]
     expected: "F4"
 
-  - name: numeric dir -100000 moves up
-    args: ["C10", "=-100000"]
+  - name: numeric dir -1000000 moves up
+    args: ["C10", "=-1000000"]
     expected: "C9"
 
-  - name: numeric dir -100001 moves up-left
-    args: ["E5", "=-100001"]
+  - name: numeric dir -1000001 moves up-left
+    args: ["E5", "=-1000001"]
     expected: "D4"
 
-  - name: numeric dir 99999 moves down-left
-    args: ["E5", "=99999"]
+  - name: numeric dir 999999 moves down-left
+    args: ["E5", "=999999"]
     expected: "D6"
 
   - name: numeric dir 0 stays put
@@ -60,7 +60,7 @@ tests:
     expected: "B4"
 
   - name: numeric knight delta bypasses moves table
-    args: ["D4", "=-199999"]
+    args: ["D4", "=-1999999"]
     expected: "E2"
 
   - name: numeric dir respects bounds clip
@@ -261,3 +261,39 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: right from XFD goes past the sheet edge (#380)
+    args: ["XFD5", '="→"']
+    expected: "XFE5"
+
+  - name: down from row 1048576 goes past the sheet edge (#380)
+    args: ["ZZZ1048576", '="↓"']
+    expected: "ZZZ1048577"
+
+  - name: left from XFE comes back to XFD (#380)
+    args: ["XFE5", '="←"']
+    expected: "XFD5"
+
+  - name: packed integer cell decodes at _mult (#380)
+    args: ["=5000005", '="→"']
+    expected: "F5"
+
+  - name: packed integer with numeric dir (#380)
+    args: ["=5000005", "=_dirS"]
+    expected: "E6"
+
+  - name: steps array crossing XFD (#380)
+    args: ["XFC5", '="→"', '={1,2,3}']
+    expected: [["XFD5", "XFE5", "XFF5"]]
+
+  - name: clip to bounds past XFD (#380)
+    args: ["XFD5", '="→"', "=3", "=", '="XFC1:XFF9"']
+    expected: "XFF5"
+
+  - name: wrap within bounds past XFD (#380)
+    args: ["XFF5", '="→"', "=1", "=", '="XFC1:XFF9"', "=3"]
+    expected: "XFC5"
+
+  - name: 4-letter column moves (#380)
+    args: ["ABCD9", '="NE"', "=2"]
+    expected: "ABCF7"
