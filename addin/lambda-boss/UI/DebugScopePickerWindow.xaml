@@ -1,0 +1,67 @@
+<Window x:Class="LambdaBoss.UI.DebugScopePickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lambda Boss — Debug Lambda"
+        Width="560" Height="300"
+        WindowStyle="ToolWindow"
+        ShowInTaskbar="True"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Background="#1e1e1e"
+        PreviewKeyDown="Window_PreviewKeyDown">
+
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0"
+                   Text="Extract a nested LAMBDA to a scratch sheet"
+                   FontSize="14" FontWeight="Bold" Foreground="#dcdcaa" />
+
+        <TextBlock Grid.Row="1"
+                   Text="Pick the lambda to debug and which example element to pin. A new sheet is created with the body as an editable LET wired to sample inputs."
+                   Foreground="#9d9d9d" FontSize="11" TextWrapping="Wrap"
+                   Margin="0,4,0,10" />
+
+        <TextBlock Grid.Row="2"
+                   Text="Lambda" FontSize="12" Foreground="#dcdcaa" Margin="0,0,0,3" />
+
+        <ComboBox x:Name="ScopeCombo"
+                  Grid.Row="3"
+                  DisplayMemberPath="Display"
+                  Padding="6,4" FontFamily="Consolas" FontSize="12" />
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,12,0,0">
+            <TextBlock Text="Example #" Foreground="#dcdcaa" FontSize="12"
+                       VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox x:Name="IndexBox"
+                     Text="1" Width="56" Padding="4,2"
+                     FontFamily="Consolas" FontSize="12"
+                     Background="#252526" Foreground="#cccccc"
+                     CaretBrush="#cccccc" BorderBrush="#3e3e3e" BorderThickness="1"
+                     ToolTip="1-based element for a recognised iterator (BYROW/BYCOL/MAP)" />
+        </StackPanel>
+
+        <DockPanel Grid.Row="6" Margin="0,12,0,0" VerticalAlignment="Bottom">
+            <Button x:Name="CancelButton"
+                    DockPanel.Dock="Right"
+                    Content="Cancel" Padding="16,4" Margin="6,0,0,0"
+                    Background="Transparent" Foreground="#cccccc"
+                    BorderBrush="#3e3e3e" BorderThickness="1" Cursor="Hand"
+                    Click="CancelButton_Click" />
+            <Button x:Name="GenerateButton"
+                    DockPanel.Dock="Right"
+                    Content="Generate sheet" Padding="16,4" Cursor="Hand"
+                    Background="#0e639c" Foreground="#ffffff" BorderThickness="0"
+                    Click="GenerateButton_Click" />
+            <TextBlock Text="" />
+        </DockPanel>
+    </Grid>
+</Window>
