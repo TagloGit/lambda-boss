@@ -7,9 +7,9 @@ state carriers: SetVars/GetVar, HSTACK + INDEX, text and number packing. Method 
 - `gen.py <out dir> <label>=<lambda-boss checkout> [...]` reads
   `lambdas/loops/{SetVars,SetVar,GetVar,NewState}.lambda` from each checkout and writes
   `lb386-names.tsv` (name, RefersTo) and `lb386-cases.tsv` (case id, formula) to `<out dir>`. Each
-  label gets its own names (`GetVar_<label>`) and `a_<label>_*` cases, so versions of the library
-  race in one workbook. The lean, lazy-Help and prototype variants in the appendix are in this
-  file's history (before #387).
+  label (letters and digits only: it goes into an Excel name) gets its own names
+  (`GetVar_<label>`) and `a_<label>_*` cases, so versions of the library race in one workbook. The
+  lean, lazy-Help and prototype variants in the appendix are in `gen.py`'s history (before #387).
 - `bench.ps1` runs in Windows with Excel installed. It reads both TSVs from `\\Mac\serve` (the
   taglo-win shared folder; edit `$dir` for another location), defines the names in a fresh hidden
   workbook, and times `Range.Calculate` per case. Environment: `LB386_FILTER` (regex on case id),

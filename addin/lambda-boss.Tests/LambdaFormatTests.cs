@@ -109,6 +109,17 @@ public class LambdaFormatTests
 
     [Theory]
     [MemberData(nameof(LambdaFiles))]
+    public void HelpIsNotBoundInLet(string relativePath)
+    {
+        var content = ReadFile(relativePath);
+
+        // Excel evaluates every LET binding on every call, so the Help table belongs in the
+        // IF(Help?, ...) branch, which isn't evaluated unless taken (#387).
+        Assert.DoesNotMatch(@"\bHelp,\s*TEXTSPLIT\(", content);
+    }
+
+    [Theory]
+    [MemberData(nameof(LambdaFiles))]
     public void NoTabCharacters(string relativePath)
     {
         var content = ReadFile(relativePath);
