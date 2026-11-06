@@ -266,3 +266,4 @@ Rate limiting: GitHub API allows 60 requests/hour unauthenticated. Directory lis
 - **Unit tests** (`lambda-boss.Tests`): Parser, prefix rewriter, cache, settings — all pure logic, no Excel dependency.
 - **AddIn tests** (`lambda-boss.AddinTests`): Launch real Excel, load XLL, exercise end-to-end flows. Adapted from Formula Boss's proven AddIn test infrastructure.
 - Each PR includes tests for the functionality it introduces.
+<!-- proof -->
