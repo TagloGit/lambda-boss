@@ -20,8 +20,8 @@ public record InputChoice(
     string? DefaultExpression = null);
 
 /// <summary>
-///     Marks a LET as a state step. The named bindings may be parameters even when they are
-///     calculations, and bindings that only fed them are dropped from the LAMBDA body.
+///     Marks a LET as a state step. A binding with an input choice may be a parameter even when
+///     it is a calculation, and bindings that only fed the named two are dropped from the LAMBDA body.
 /// </summary>
 public record StateStepRoles(string StateBinding, string? InputBinding);
 
@@ -49,8 +49,11 @@ public static class LetToLambdaBuilder
                     $"No input choice provided for binding '{b.Name}'.");
         }
 
-        var roleNames = new[] { request.StateStep?.StateBinding, request.StateStep?.InputBinding }
-            .Where(n => n != null)
+        // On a state step the dialog lists the role bindings, and a row keeps its choice when
+        // the input badge moves away, so any listed calculation counts.
+        var roleNames = (request.StateStep == null
+                ? Enumerable.Empty<string>()
+                : request.Inputs.Select(c => c.OriginalBindingName))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var bindingsByName = parsed.Bindings

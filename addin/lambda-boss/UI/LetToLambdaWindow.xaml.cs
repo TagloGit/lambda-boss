@@ -65,6 +65,12 @@ public class LetInputRow : INotifyPropertyChanged
 
     public bool ShowBadge => Badge.Length > 0;
 
+    /// <summary>
+    ///     A state row's RHS is a whole SetVars call, so it's capped to leave room for the
+    ///     parameter box. Ordinary rows stay uncapped.
+    /// </summary>
+    public double RhsPreviewMaxWidth => _isStateStepRow ? 200 : double.PositiveInfinity;
+
     /// <summary>True on the rows of a state step that the input badge can move to.</summary>
     public bool CanTakeInputBadge => _isStateStepRow && Badge.Length == 0;
 
@@ -143,6 +149,7 @@ public partial class LetToLambdaWindow
     private readonly ParsedLet _parsed;
     private readonly ObservableCollection<LetInputRow> _rows;
     private readonly bool _isStateStep;
+    private string _foldName = "";
 
     /// <summary>
     ///     Creates the dialog. <paramref name="resolveExistingRefersTo" />
@@ -266,6 +273,9 @@ public partial class LetToLambdaWindow
 
         var stateIndex = _rows.IndexOf(_rows.First(r => r.Badge == LetInputRow.StateBadge));
         _rows.Move(_rows.IndexOf(row), stateIndex + 1);
+
+        // The clicked button has just collapsed, so give the keyboard somewhere to be.
+        LambdaNameBox.Focus();
     }
 
     private void CopyFold()
@@ -414,14 +424,20 @@ public partial class LetToLambdaWindow
 
     private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_isStateStep)
-        {
-            var caret = FoldBox.CaretIndex;
-            FoldBox.Text = StateFold.WithLambdaName(FoldBox.Text, LambdaNameBox.Text.Trim());
-            FoldBox.CaretIndex = caret;
-        }
+        if (_isStateStep) SyncFoldName();
 
         UpdateSaveEnabled();
+    }
+
+    private void SyncFoldName()
+    {
+        var name = LambdaNameBox.Text.Trim();
+        if (name.Length > 0 && !ExcelNameValidator.Validate(name).IsValid) return;
+
+        var caret = FoldBox.CaretIndex;
+        FoldBox.Text = StateFold.WithLambdaName(FoldBox.Text, _foldName, name);
+        FoldBox.CaretIndex = caret;
+        _foldName = name;
     }
 
     private void UpdateSaveEnabled()

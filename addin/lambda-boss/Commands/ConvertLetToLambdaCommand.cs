@@ -50,7 +50,7 @@ internal static class ConvertLetToLambdaCommand
             var existingNames = GetExistingNames(workbook);
             var excelHwnd = new IntPtr(app.Hwnd);
             var stateStep = Labs.IsOn(Labs.StateLetToLambda) ? StateStepParser.TryParse(parsed) : null;
-            dynamic sheet = activeCell!.Worksheet;
+            dynamic? sheet = stateStep == null ? null : activeCell!.Worksheet;
 
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
@@ -107,7 +107,7 @@ internal static class ConvertLetToLambdaCommand
         try
         {
             dynamic target = sheet.Range[fold.Target];
-            if (!string.IsNullOrEmpty(target.Formula2 as string))
+            if (!string.IsNullOrEmpty(Convert.ToString(target.Formula2)))
             {
                 ShowError($"The LAMBDA is registered, but {fold.Target} isn't empty, so the fold wasn't written.");
                 return;

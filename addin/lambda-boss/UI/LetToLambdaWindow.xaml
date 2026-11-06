@@ -132,6 +132,7 @@
                                     ToolTip="Use this binding as the step's input" />
                             <TextBlock DockPanel.Dock="Right"
                                        Text="{Binding RhsPreview}"
+                                       MaxWidth="{Binding RhsPreviewMaxWidth}"
                                        Visibility="{Binding ShowRhsPreview, Converter={StaticResource BoolToVis}}"
                                        Foreground="#808080"
                                        FontFamily="Consolas"

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace LambdaBoss;
@@ -197,6 +198,9 @@ public static class StateStepParser
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var input = FindInput(parsed, bindings[state], getVarLines, nextLineNames, pairs, roots);
 
+        // INDEX plus HSTACK is everyday Excel. Without an input it's a lookup, not a step.
+        if (family == StateFamily.Array && input == null) return null;
+
         return new StateStep(family, bindings[state], input, variables, parsed.Body);
     }
 
@@ -243,8 +247,9 @@ public static class StateStepParser
         var reads = DirectReads(parsed);
         var names = parsed.Bindings.Select(b => b.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Whatever reads the state, directly or through other lines, can't be a sample input.
         bool Excluded(LetBinding b) =>
-            string.Equals(b.Name, state.Name, StringComparison.OrdinalIgnoreCase) || getVarLines.Contains(b.Name);
+            getVarLines.Contains(b.Name) || Closure(new[] { b.Name }, reads).Contains(state.Name);
 
         var named = parsed.Bindings.FirstOrDefault(b =>
             string.Equals(b.Name, "v", StringComparison.OrdinalIgnoreCase) && !Excluded(b));
@@ -255,13 +260,12 @@ public static class StateStepParser
         foreach (var (_, value) in pairs) neededStart.UnionWith(NamesIn(value, names));
         var needed = Closure(neededStart, reads);
 
+        // A next line stays a candidate: a step can store its input ("last", inp).
         var candidates = new List<(LetBinding Binding, FormulaNode Root)>();
         for (var i = 0; i < parsed.Bindings.Count; i++)
         {
             var b = parsed.Bindings[i];
-            if (Excluded(b) || nextLines.Contains(b.Name) || !needed.Contains(b.Name)) continue;
-            if (Closure(new[] { b.Name }, reads).Contains(state.Name)) continue;
-            candidates.Add((b, roots[i]));
+            if (!Excluded(b) && needed.Contains(b.Name)) candidates.Add((b, roots[i]));
         }
 
         bool LooksLikeInput((LetBinding Binding, FormulaNode Root) c) =>
@@ -271,7 +275,8 @@ public static class StateStepParser
         var sample = candidates.FirstOrDefault(c => LooksLikeInput(c) && !c.Binding.RhsText.Contains('$'));
         if (sample.Binding != null) return sample.Binding;
         sample = candidates.FirstOrDefault(LooksLikeInput);
-        return sample.Binding ?? candidates.FirstOrDefault().Binding;
+        if (sample.Binding != null) return sample.Binding;
+        return candidates.FirstOrDefault(c => !nextLines.Contains(c.Binding.Name)).Binding;
     }
 
     /// <summary>
@@ -391,6 +396,8 @@ public static class StateStepParser
 public static class StateFold
 {
     private static readonly Regex CellAddress = new(@"^\$?[A-Za-z]{1,3}\$?[1-9][0-9]*$");
+    private static readonly Regex CellRef = new(@"^(.*!)?\$?([A-Za-z]{1,3})\$?([0-9]+)$");
+    private static readonly Regex LineBreak = new(@"\s*\r?\n\s*");
 
     /// <summary>
     ///     The seed for a step: its state binding's RHS when that builds a state, with other
@@ -405,18 +412,48 @@ public static class StateFold
 
         var others = parsed.Bindings
             .Where(b => !string.Equals(b.Name, step.StateBinding.Name, StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(b => b.Name, InPlaceText, StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(b => b.Name, b => b.RhsText, StringComparer.OrdinalIgnoreCase);
 
-        var text = step.StateBinding.RhsText;
-        for (var pass = 0; pass < parsed.Bindings.Count; pass++)
+        return Render(step.StateBinding.RhsText, others);
+    }
+
+    /// <summary>
+    ///     Rewrites the leaves of <paramref name="expression" />: a binding becomes its RHS, a
+    ///     cell becomes absolute, everything else keeps its text. Working on leaves leaves
+    ///     strings, sheet names, table columns and function names like LOG10 alone. Whitespace
+    ///     between tokens collapses, so the seed fits the fold's single line.
+    /// </summary>
+    private static string Render(string expression, Dictionary<string, string> bindings)
+    {
+        var root = FormulaParser.Parse(expression).Root;
+        var sb = new StringBuilder();
+        var at = 0;
+
+        foreach (var leaf in StateStepParser.Walk(root).OfType<LeafNode>().OrderBy(l => l.Start))
         {
-            var used = StateStepParser.NamesIn(text, others.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
-            if (used.Count == 0) break;
-            text = LetToLambdaBuilder.ApplyRenames(text, used.ToDictionary(n => n, n => others[n]));
+            sb.Append(CollapseLines(expression[at..leaf.Start]));
+            at = leaf.End;
+
+            if (leaf.TokenType != FormulaTokenType.Name)
+                sb.Append(leaf.Text);
+            else if (bindings.TryGetValue(leaf.Text, out var rhs))
+                sb.Append(InPlace(rhs, bindings.Where(b => !string.Equals(b.Key, leaf.Text, StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(b => b.Key, b => b.Value, StringComparer.OrdinalIgnoreCase)));
+            else
+                sb.Append(CellRef.Replace(leaf.Text, "$1$$$2$$$3"));
         }
 
-        return Regex.Replace(LetToLambdaBuilder.AbsolutizeCellRefs(text), @"\s*\r?\n\s*", " ");
+        sb.Append(CollapseLines(expression[at..]));
+        return sb.ToString().Trim();
     }
+
+    private static string InPlace(string rhs, Dictionary<string, string> bindings)
+    {
+        var text = Render(rhs, bindings);
+        return FormulaParser.Parse(rhs).Root is LeafNode or FunctionCallNode ? text : $"({text})";
+    }
+
+    private static string CollapseLines(string gap) => LineBreak.Replace(gap, " ");
 
     /// <summary>The fold text for a seed and a step name, with the inputs slot empty.</summary>
     public static string Build(string seed, string lambdaName) => $"=REDUCE({seed}, , {lambdaName})";
@@ -425,26 +462,37 @@ public static class StateFold
     public static int InputsCaret(string fold) =>
         FindFold(fold) is { } call && call.Arguments[1] is EmptyArgNode slot ? slot.Position : -1;
 
-    /// <summary>Rewrites the step name in <paramref name="fold" />, leaving the rest of Tim's edits alone.</summary>
-    public static string WithLambdaName(string fold, string lambdaName)
+    /// <summary>
+    ///     Moves the fold's step from <paramref name="oldName" /> to <paramref name="newName" />,
+    ///     leaving the rest of Tim's edits alone. A fold whose step is anything else stays as it is.
+    /// </summary>
+    public static string WithLambdaName(string fold, string oldName, string newName)
     {
-        if (FindFold(fold) is not { } call) return fold;
+        var call = Folds(fold).FirstOrDefault(c => c.Arguments[2] switch
+        {
+            EmptyArgNode => true,
+            LeafNode { TokenType: FormulaTokenType.Name } leaf =>
+                string.Equals(leaf.Text, oldName, StringComparison.OrdinalIgnoreCase),
+            _ => false
+        });
+        if (call == null) return fold;
+
         var step = call.Arguments[2];
-        return fold[..step.Start] + lambdaName + fold[step.End..];
+        return fold[..step.Start] + newName + fold[step.End..];
     }
 
-    /// <summary>True when the text parses and its fold has a seed, inputs and a step.</summary>
+    /// <summary>True when the text is a formula whose fold has a seed, inputs and a step.</summary>
     public static bool IsComplete(string fold) =>
-        FindFold(fold) is { } call && call.Arguments.All(a => a is not EmptyArgNode);
+        fold.TrimStart().StartsWith("=", StringComparison.Ordinal)
+        && FindFold(fold) is { } call
+        && call.Arguments.All(a => a is not EmptyArgNode);
 
     public static bool IsCellAddress(string text) => CellAddress.IsMatch(text.Trim());
 
-    private static string InPlaceText(LetBinding binding) =>
-        !binding.IsCalculation || FormulaParser.Parse(binding.RhsText).Root is FunctionCallNode
-            ? binding.RhsText
-            : $"({binding.RhsText})";
+    private static FunctionCallNode? FindFold(string fold) => Folds(fold).FirstOrDefault();
 
-    private static FunctionCallNode? FindFold(string fold)
+    // The fold can be wrapped (=TEXTJOIN(" ",,REDUCE(…))), so look past the outermost call.
+    private static IEnumerable<FunctionCallNode> Folds(string fold)
     {
         FormulaNode root;
         try
@@ -453,11 +501,10 @@ public static class StateFold
         }
         catch (FormatException)
         {
-            return null;
+            return Array.Empty<FunctionCallNode>();
         }
 
-        // The fold can be wrapped (=TEXTJOIN(" ",,REDUCE(…))), so look past the outermost call.
-        return StateStepParser.Walk(root).OfType<FunctionCallNode>().FirstOrDefault(IsFold);
+        return StateStepParser.Walk(root).OfType<FunctionCallNode>().Where(IsFold).ToList();
     }
 
     private static bool IsFold(FunctionCallNode call) =>

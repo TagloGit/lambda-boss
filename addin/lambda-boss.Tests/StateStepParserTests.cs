@@ -147,6 +147,34 @@ public class StateStepParserTests
         Assert.Equal("inp", step.InputBinding!.Name);
     }
 
+    [Theory]
+    [InlineData("v, p + inp")]
+    [InlineData("v, GetVar(a, \"p\") + inp")]
+    public void CalculationNamedVThatReadsTheState_IsNotTheInput(string line)
+    {
+        var step = Step($"=LET(a, A1, inp, B1, p, GetVar(a, \"p\"), {line}, SetVars(\"p\", v))");
+
+        Assert.Equal("inp", step.InputBinding!.Name);
+    }
+
+    [Fact]
+    public void InputAlsoStoredInTheState_IsStillTheInput()
+    {
+        var step = Step(
+            "=LET(a, SetVars(\"p\", 0), cap, 6, inp, H270, p, GetVar(a, \"p\"), nextP, MIN(cap, p + (inp = \"F\")), " +
+            "SetVars(\"p\", nextP, \"last\", inp))");
+
+        Assert.Equal("inp", step.InputBinding!.Name);
+    }
+
+    [Fact]
+    public void ConstantNextLine_IsNotTheInputOfLastResort()
+    {
+        var step = Step("=LET(a, SetVars(\"p\", 0), p, GetVar(a, \"p\"), nextQ, 0, SetVars(\"p\", p + 1, \"q\", nextQ))");
+
+        Assert.Null(step.InputBinding);
+    }
+
     [Fact]
     public void ExtraConstantAndCommentBindings_AreNotRoles()
     {
@@ -295,6 +323,9 @@ public class StateStepParserTests
     [InlineData("=LET(a, A1:A5, x, INDEX(a, n), HSTACK(x, x + 1))")]
     [InlineData("=LET(a, A1:A5, x, INDEX(a, 1), HSTACK(x))")]
     [InlineData("=LET(a, A1:A5, x, INDEX(a, 2, 3), HSTACK(x, x + 1))")]
+    [InlineData("=LET(d, A1:C10, x, INDEX(d, 2), y, INDEX(d, 3), HSTACK(x, y))")]
+    [InlineData("=LET(t, SORT(A1:A9), lo, INDEX(t, 1), hi, INDEX(t, 2), med, MEDIAN(t), VSTACK(lo, hi, med))")]
+    [InlineData("=LET(t, Table1[Name], first, NTH(t, 1), HSTACK(first, COUNTA(t)))")]
     public void ArrayFamily_NonSteps(string formula)
     {
         Assert.Null(Parse(formula));
@@ -412,6 +443,31 @@ public class StateFoldTests
     }
 
     [Fact]
+    public void Seed_LeavesFunctionsSheetsAndTablesAlone()
+    {
+        Assert.Equal(
+            "SetVars(\"p\", LOG10($H$1), \"q\", 'L12'!$H$1, \"r\", t[b])",
+            Seed("=LET(a, SetVars(\"p\", LOG10(H1), \"q\", 'L12'!H1, \"r\", t[b]), v, H2, b, GetVar(a, \"p\"), " +
+                 "SetVars(\"p\", b + v))"));
+    }
+
+    [Fact]
+    public void Seed_AlreadyAbsoluteStaysSingleDollared()
+    {
+        Assert.Equal(
+            "SetVars(\"p\", $H$1, \"q\", $I$1)",
+            Seed("=LET(i, H1, a, SetVars(\"p\", i, \"q\", $I$1), v, H2, p, GetVar(a, \"p\"), SetVars(\"p\", p + v))"));
+    }
+
+    [Fact]
+    public void Seed_KeepsLineBreaksInsideStrings()
+    {
+        Assert.Equal(
+            "SetVars(\"p\", \"x\n  y\")",
+            Seed("=LET(a, SetVars(\"p\", \"x\n  y\"), v, H2, p, GetVar(a, \"p\"), SetVars(\"p\", p & v))"));
+    }
+
+    [Fact]
     public void Build_LeavesTheInputsSlotEmpty()
     {
         Assert.Equal("=REDUCE(SetVars(\"p\", 0), , moveRobot)", StateFold.Build("SetVars(\"p\", 0)", "moveRobot"));
@@ -441,11 +497,11 @@ public class StateFoldTests
     public void WithLambdaName_FillsAnEmptyNameAndChangesIt()
     {
         var empty = StateFold.Build("seed", "");
-        var named = StateFold.WithLambdaName(empty, "moveRobot");
+        var named = StateFold.WithLambdaName(empty, "", "moveRobot");
 
         Assert.Equal("=REDUCE(seed, , moveRobot)", named);
-        Assert.Equal("=REDUCE(seed, , go)", StateFold.WithLambdaName(named, "go"));
-        Assert.Equal(empty, StateFold.WithLambdaName(named, ""));
+        Assert.Equal("=REDUCE(seed, , go)", StateFold.WithLambdaName(named, "moveRobot", "go"));
+        Assert.Equal(empty, StateFold.WithLambdaName(named, "moveRobot", ""));
     }
 
     [Fact]
@@ -453,13 +509,24 @@ public class StateFoldTests
     {
         Assert.Equal(
             "=\"P\"&TEXTJOIN(\" \",,REDUCE(seed, G1#, go))",
-            StateFold.WithLambdaName("=\"P\"&TEXTJOIN(\" \",,REDUCE(seed, G1#, step))", "go"));
+            StateFold.WithLambdaName("=\"P\"&TEXTJOIN(\" \",,REDUCE(seed, G1#, step))", "step", "go"));
     }
 
     [Fact]
-    public void WithLambdaName_LeavesUnreadableTextAlone()
+    public void WithLambdaName_FindsTheFoldThatUsesTheOldName()
     {
-        Assert.Equal("=REDUCE(seed, (", StateFold.WithLambdaName("=REDUCE(seed, (", "go"));
+        Assert.Equal(
+            "=SUM(SCAN(0, A1:A3, helper), REDUCE(s, G1#, go))",
+            StateFold.WithLambdaName("=SUM(SCAN(0, A1:A3, helper), REDUCE(s, G1#, old))", "old", "go"));
+    }
+
+    [Theory]
+    [InlineData("=REDUCE(seed, (")]
+    [InlineData("=REDUCE(seed, G1#, LAMBDA(a, v, a + v))")]
+    [InlineData("=REDUCE(seed, G1#, someOtherStep)")]
+    public void WithLambdaName_LeavesAnythingElseAlone(string fold)
+    {
+        Assert.Equal(fold, StateFold.WithLambdaName(fold, "step", "go"));
     }
 
     [Theory]
@@ -471,6 +538,7 @@ public class StateFoldTests
     [InlineData("=REDUCE(seed, G1#, )", false)]
     [InlineData("=REDUCE(seed, (, step)", false)]
     [InlineData("=SUM(A1)", false)]
+    [InlineData("REDUCE(seed, G1#, step)", false)]
     [InlineData("", false)]
     public void IsComplete_NeedsEverySlot(string fold, bool expected)
     {

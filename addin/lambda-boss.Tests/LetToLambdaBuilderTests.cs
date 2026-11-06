@@ -784,6 +784,26 @@ public class LetToLambdaBuilderTests
     }
 
     [Fact]
+    public void StateStep_CalculationRowCanBeKeptAfterTheBadgeMoved()
+    {
+        var result = BuildStep(
+            "=LET(a, SetVars(\"p\", 0), cap, 6, v, INDEX(G1:G9, 1), p, GetVar(a, \"p\"), SetVars(\"p\", MIN(cap, p + v)))",
+            "a", "cap", ("a", "a", true), ("cap", "cap", true), ("v", "v", true));
+
+        Assert.StartsWith(Lines("=LAMBDA(", "    a,", "    cap,", "    v,"), result);
+    }
+
+    [Fact]
+    public void StateStep_CalculationRowKeptOffIsAbsolute()
+    {
+        var result = BuildStep(
+            "=LET(a, SetVars(\"p\", 0), cap, 6, v, INDEX(G1:G9, 1), p, GetVar(a, \"p\"), SetVars(\"p\", MIN(cap, p + v)))",
+            "a", "cap", ("a", "a", true), ("cap", "cap", true), ("v", "v", false));
+
+        Assert.Contains("v, INDEX($G$1:$G$9, 1),", result);
+    }
+
+    [Fact]
     public void StateStep_NoInputBinding()
     {
         var result = BuildStep(
