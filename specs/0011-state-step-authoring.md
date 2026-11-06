@@ -365,8 +365,8 @@ Measured in the appendix: at 10,000 steps, `SetVars`/`GetVar` costs **34×** (2 
 steps. That's fine for one fold of a few thousand steps and costly for a fold per row over long
 inputs. What costs:
 
-1. **The inline Help block: ~2.3×.** Every library LAMBDA binds `Help, TEXTSPLIT(...)` in its LET,
-   and Excel evaluates it on every call. Moving the TEXTSPLIT into the `IF(Help?, …)` branch brings
+1. **The inline Help block: ~2.3×.** Every library LAMBDA bound `Help, TEXTSPLIT(...)` in its LET
+   (until #387), and Excel evaluates a binding on every call. Moving the TEXTSPLIT into the `IF(Help?, …)` branch brings
    the cost down to the Help-deleted level, within noise (measured). Library-wide: filed as #387.
 2. **GetVar's parse and SetVars' rebuild together: ~1.7×** (Help-free current code 187 ms → Help-free
    fast form 110 ms, 2 values). GetVar does `TEXTSPLIT` of the whole state then `FILTER` with `LEFT`
@@ -375,21 +375,24 @@ inputs. What costs:
    re-joining the growing state; a fresh state needs one `TEXTJOIN`. The benchmark doesn't split
    this 1.7× between the two (its single-fix rows also dropped Help).
 
-**Decision: include the faster form, same API and same state format.** A `GetVar` that finds its
-entry with `TEXTAFTER(us & s, us & name & rs, -1, 1)` then `TEXTBEFORE(… & us, us)` (case-insensitive
-like today's `LEFT(…) = name & rs`; a miss gives `#N/A` as today), and a `SetVars` that encodes all
-pairs in one `TEXTJOIN`, both with Help in the IF branch. The **unique-key invariant stays**: when a
-name repeats in one `SetVars` call, the fast form drops the earlier pair before joining (a 10-slot
-comparison), so the state text is what today's `SetVars` produces, and the positional readers
-(`SplitState` today, `GetVarAt`) see no change. The broadcast path (a column of states, via `MAP`)
-and the array-value path are kept.
+**Decision: include the faster form, same API and same state format.** `GetVar` finds its entry with
+`TEXTAFTER(us & s & key, key, 1, 1)` then `TEXTBEFORE(… & us, us)`, where `key` is `us & name & rs`
+(case-insensitive like today's `LEFT(…) = name & rs`; first match like today's `@FILTER`). The key on
+the end of the text makes the search always succeed: TEXTAFTER gives `#VALUE!` when the text is
+shorter than the delimiter, even with `if_not_found`, so a missing name reads as an empty entry and
+returns `#N/A`. The single-state path is inline; a column of states goes through `MAP` and a
+recursive call, because building a helper LAMBDA on every call cost ~20% of a step.
 
-Measured with prototypes `GetVarF`/`SetVarsF` (first match, no dedupe, no broadcast path; see the
-appendix): **8.5×** (2 values) and **11×** (5 values) `HSTACK`, 4–4.6× faster than today. The
-implementation PR re-measures the final form. The remaining gap to `HSTACK` is probably the per-call
-cost of invoking named LAMBDAs (inferred, not measured). No change to how Tim writes a step, so it
-lands as a library PR with the harness tests (broadcast over a column of states, 1×1 arrays from
-#377, types) unchanged.
+`SetVars` encodes all pairs in one `TEXTJOIN`. The **unique-key invariant stays**: a triangle of
+comparisons over the 10 slots spots a repeated name, and a repeat takes the old `SetVar` chain, so the
+text is what it always was and the positional readers (`SplitState` today, `GetVarAt`) see no change.
+The chain also catches anything TEXTJOIN can't do (`IFERROR`): a state over 32,767 characters, an
+error value. The broadcast path (a column of states) and the array-value path are kept.
+
+**Final form: 3.5× (2 values) and 3.7× (5 values) cheaper than before #387, at 9× and 15× `HSTACK`.**
+The prototypes reached 4–4.6×; they had no repeat check (4–8%), no `Help?` or column check, and made no
+promise on a miss. The remaining gap to `HSTACK` is probably the per-call cost of invoking named
+LAMBDAs (inferred, not measured). No change to how Tim writes a step.
 
 **Guidance this gives** (for excel-esports `docs/wisdom/tools.md`): SetVars is the default state
 form for authoring and debugging. Switch to `HSTACK` + `INDEX` (or a packed number) when the run is
@@ -473,6 +476,32 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
 - First slice is the add-in work in two PRs (Part 3, then Part 1).
 
 ## Appendix — GetVar hot-loop benchmark (6 Nov 2026)
+
+**Final numbers** (after #387 and Part 6). Same method as below, re-run with
+`scripts/bench/state-engine/`: all versions as labelled names in one workbook, 10,000 steps, the
+median of 3 rounds of 7 recalcs.
+
+| Library | 2 values, ms | × today | × (b) | 5 values, ms | × today | × (b) |
+|---|---|---|---|---|---|---|
+| today (`6e01e21`) | 453 | 1 | 31× | 1,120 | 1 | 56× |
+| lazy Help (#387) | 198 | 2.3× cheaper | 13× | 528 | 2.1× cheaper | 26× |
+| lazy Help + fast GetVar/SetVars | 131 | 3.5× cheaper | 8.9× | 302 | 3.7× cheaper | 15× |
+| (b) HSTACK + INDEX | 14.7 | | 1× | 20.1 | | 1× |
+
+Where the prototypes' lead went (2 / 5 values, ms, two rounds): final `GetVar` with a helper LAMBDA
+171 / 377, inlined 139 / 305; prototype pair 108 / 244. Dropping the repeat check would save 4–8%
+(134 / 281), and comparing names without `& ""` ~4%, but that would miss `1` against `"1"`. A
+`UNIQUE(VSTACK(…))` check was slower (171 / 329).
+
+A one-off probe of old against new on 377 calls in one workbook (SetVars, GetVar, odd states and
+names; not kept in the repo) gave the same value, type and shape except: a value holding an empty
+`CHAR(31)` field, at its end or doubled (SetVars no longer strips it; the old chain did so by accident); an array `name` (GetVar takes the first, as SetVar does; a 1×1 array name now
+gives a true scalar, and a 2×1 name no longer errors); an error `name` on an empty state (the name's
+error, not `#N/A`). States over 32,767 characters are cut when read, before and after; at exactly 32,767 the new read
+loses the last character too (the leading separator pushes it over), and at 32,766 or fewer it
+doesn't (checked in real Excel).
+
+The sections below are the original measurement that led to Part 6.
 
 **Question.** What does a `SetVars`/`GetVar` state cost per REDUCE step, against `HSTACK` + `INDEX`
 and packed states, and what in its implementation costs?

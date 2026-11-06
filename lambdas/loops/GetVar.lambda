@@ -5,6 +5,7 @@
                         2026-04-29  Claude      Read per-entry tag and coerce to native type
                         2026-04-29  Claude      Broadcast over a column of states via MAP
                         2026-11-01  Claude      Deref a single state with @: a 1x1-array state (e.g. INDEX of a SCAN inside a LAMBDA) made TEXTSPLIT keep only its first entry (#376)
+                        2026-11-06  Claude      Find the entry with TEXTAFTER/TEXTBEFORE instead of splitting the whole state (spec 0011 part 6)
 */
 GetVar = LAMBDA(
 //  Parameter Declarations
@@ -17,29 +18,27 @@ GetVar = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
-        readOne, LAMBDA(s,
-                    IF(s = "", NA(),
-                       LET(
-                           parts, TEXTSPLIT(s, us),
-                           match, @FILTER(parts, LEFT(parts, LEN(name) + 1) = name & rs, ""),
-                           IF(match = "", NA(),
-                              LET(
-                                  tag, MID(match, LEN(name) + 2, 1),
-                                  payload, MID(match, LEN(name) + 4, LEN(match)),
-                                  raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
-                                  IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", raw))
-                              )
-                           )
-                       )
-                    )
-                ),
+        key, us & @name & rs,
         single?, AND(ROWS(state) = 1, COLUMNS(state) = 1),
-        result, IF(single?, readOne(@state), MAP(state, readOne)),
+    //  Inline, not a helper LAMBDA: building one costs ~20% of a hot-loop step (spec 0011 appendix)
+        result, IF(single?,
+                LET(
+                //  Match mode 1 ignores case, like =. The key on the end means TEXTAFTER always finds
+                //  it (a state shorter than the key gives #VALUE!, even with if_not_found), so a
+                //  missing name reads as an empty entry.
+                    entry, TEXTBEFORE(TEXTAFTER(us & @state & key, key, 1, 1) & us, us),
+                    tag, LEFT(entry, 1),
+                    payload, MID(entry, 3, LEN(entry)),
+                    raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
+                    IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", IF(tag = "", NA(), raw)))
+                ),
+                MAP(state, LAMBDA(s, GetVar(s, name)))
+            ),
     //  Help
         IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →GetVar(state, name)¶" &
                 "DESCRIPTION:   →Reads a named variable from a state string. Returns a native-typed scalar or vertical array based on the entry's type tag. Broadcasts over a column of states (scalar variables only).¶" &
-                "VERSION:       →Nov 01 2026¶" &
+                "VERSION:       →Nov 06 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   state          →(Required) Single state string, or a vertical column of states (e.g. a SCAN result).¶" &
                 "   name           →(Required) Variable name to read.¶" &

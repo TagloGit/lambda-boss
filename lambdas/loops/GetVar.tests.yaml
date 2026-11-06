@@ -76,6 +76,26 @@ tests:
     args: ['=SetVar(SetVar(NewState(), {"y"}, 7), "z", 1)', "y"]
     expected: "7"
 
+  - name: name match ignores case
+    args: ['=SetVar(NewState(), "best", 5)', "BEST"]
+    expected: 5
+
+  - name: a name inside an earlier entry's key is not a match
+    args: ['=SetVars("abc", 1, "b", 2)', "b"]
+    expected: 2
+
+  - name: a name inside an earlier entry's value is not a match
+    args: ['=SetVars("t", "xbx", "b", 2)', "b"]
+    expected: 2
+
+  - name: a name with wildcard characters matches literally
+    args: ['=SetVars("a?", 1, "ab", 2)', "a?"]
+    expected: 1
+
+  - name: broadcast with a missing state row returns NA for that row
+    args: ['=VSTACK(SetVar(NewState(), "x", 5), SetVar(NewState(), "y", 6))', "x"]
+    expected: [[5], [-2146826246]]
+
   - name: help text
     args: []
     expected_type: array
