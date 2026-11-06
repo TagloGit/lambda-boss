@@ -24,6 +24,7 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0"
@@ -104,6 +105,31 @@
                                       VerticalAlignment="Center"
                                       Margin="0,0,8,0"
                                       ToolTip="Caller may omit this argument; edit the default it falls back to" />
+                            <Border DockPanel.Dock="Left"
+                                    Visibility="{Binding ShowBadge, Converter={StaticResource BoolToVis}}"
+                                    Background="#0e639c"
+                                    CornerRadius="3"
+                                    Padding="5,1"
+                                    Margin="0,0,8,0"
+                                    VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Badge}"
+                                           Foreground="#ffffff"
+                                           FontSize="11" />
+                            </Border>
+                            <Button DockPanel.Dock="Right"
+                                    dd:DragDrop.DragSourceIgnore="True"
+                                    Visibility="{Binding CanTakeInputBadge, Converter={StaticResource BoolToVis}}"
+                                    Content="make input"
+                                    FontSize="11"
+                                    Padding="5,0"
+                                    Margin="8,0,0,0"
+                                    Background="Transparent"
+                                    Foreground="#cccccc"
+                                    BorderBrush="#3e3e3e"
+                                    BorderThickness="1"
+                                    VerticalAlignment="Center"
+                                    Click="MakeInput_Click"
+                                    ToolTip="Use this binding as the step's input" />
                             <TextBlock DockPanel.Dock="Right"
                                        Text="{Binding RhsPreview}"
                                        Visibility="{Binding ShowRhsPreview, Converter={StaticResource BoolToVis}}"
@@ -157,7 +183,56 @@
                    Visibility="Collapsed"
                    Text="Cell references in optional defaults and hardcoded inputs are made absolute (e.g. $A$1) so the LAMBDA resolves them the same regardless of where it's called from." />
 
-        <DockPanel Grid.Row="6" Margin="0,12,0,0">
+        <StackPanel x:Name="FoldPanel"
+                    Grid.Row="6"
+                    Margin="0,8,0,0"
+                    Visibility="Collapsed">
+            <Label Content="_Fold"
+                   Target="{Binding ElementName=FoldBox}"
+                   Padding="0"
+                   FontSize="13"
+                   FontWeight="Bold"
+                   Foreground="#dcdcaa"
+                   Margin="0,0,0,4" />
+            <TextBox x:Name="FoldBox"
+                     Padding="6,4"
+                     FontSize="13"
+                     FontFamily="Consolas"
+                     Background="#2d2d2d"
+                     Foreground="#cccccc"
+                     CaretBrush="#cccccc"
+                     BorderBrush="#3e3e3e"
+                     BorderThickness="1"
+                     GotKeyboardFocus="FoldBox_GotKeyboardFocus"
+                     TextChanged="Fold_TextChanged" />
+            <DockPanel Margin="0,6,0,0">
+                <TextBlock DockPanel.Dock="Left"
+                           Text="Write fold to"
+                           Foreground="#cccccc"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0" />
+                <TextBox x:Name="FoldTargetBox"
+                         DockPanel.Dock="Left"
+                         Width="80"
+                         Padding="4,2"
+                         FontFamily="Consolas"
+                         FontSize="13"
+                         Background="#2d2d2d"
+                         Foreground="#cccccc"
+                         CaretBrush="#cccccc"
+                         BorderBrush="#3e3e3e"
+                         BorderThickness="1"
+                         TextChanged="Fold_TextChanged" />
+                <TextBlock x:Name="FoldHintText"
+                           Foreground="#808080"
+                           FontSize="11"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0" />
+            </DockPanel>
+        </StackPanel>
+
+        <DockPanel Grid.Row="7" Margin="0,12,0,0">
             <Button x:Name="CancelButton"
                     DockPanel.Dock="Right"
                     Content="Cancel"

@@ -19,10 +19,17 @@ public record InputChoice(
     bool IsOptional = false,
     string? DefaultExpression = null);
 
+/// <summary>
+///     Marks a LET as a state step. The named bindings may be parameters even when they are
+///     calculations, and bindings that only fed them are dropped from the LAMBDA body.
+/// </summary>
+public record StateStepRoles(string StateBinding, string? InputBinding);
+
 public record LambdaGenerationRequest(
     string LambdaName,
     ParsedLet ParsedLet,
-    IReadOnlyList<InputChoice> Inputs);
+    IReadOnlyList<InputChoice> Inputs,
+    StateStepRoles? StateStep = null);
 
 public static class LetToLambdaBuilder
 {
@@ -42,8 +49,12 @@ public static class LetToLambdaBuilder
                     $"No input choice provided for binding '{b.Name}'.");
         }
 
+        var roleNames = new[] { request.StateStep?.StateBinding, request.StateStep?.InputBinding }
+            .Where(n => n != null)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var bindingsByName = parsed.Bindings
-            .Where(b => !b.IsCalculation)
+            .Where(b => !b.IsCalculation || roleNames.Contains(b.Name))
             .ToDictionary(b => b.Name, b => b, StringComparer.OrdinalIgnoreCase);
 
         // Kept bindings follow the order of request.Inputs, which lets the
@@ -64,7 +75,14 @@ public static class LetToLambdaBuilder
         if (dup != null)
             throw new InvalidOperationException($"Duplicate parameter name: '{dup.Key}'.");
 
+        var keptNames = kept.Select(k => k.Binding.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var dropped = request.StateStep == null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : SamplingOnlyBindings(parsed, request.StateStep, kept.Select(k => k.Choice).ToList());
+
         var internalBindingNames = parsed.Bindings
+            .Where(b => !keptNames.Contains(b.Name) && !dropped.Contains(b.Name))
             .Where(b => b.IsCalculation
                 || (choicesByName.TryGetValue(b.Name, out var c) && !c.Keep))
             .Select(b => b.Name)
@@ -92,15 +110,17 @@ public static class LetToLambdaBuilder
         // keep) the RHS is hardcoded into the LAMBDA body, so cell refs are
         // forced absolute for the same reason as optional defaults — see the
         // note on AbsolutizeCellRefs. Calculation bindings are left untouched
-        // to preserve the author's original expression verbatim.
-        var keptNames = kept.Select(k => k.Binding.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // to preserve the author's original expression verbatim, unless they are
+        // a state step's role binding the user chose not to keep: those are
+        // excluded inputs too.
         var internalBindings = parsed.Bindings
-            .Where(b => !keptNames.Contains(b.Name))
+            .Where(b => !keptNames.Contains(b.Name) && !dropped.Contains(b.Name))
             .Select(b =>
             {
                 var renamed = ApplyRenames(b.RhsText, renames);
-                var rhs = b.IsCalculation ? renamed : AbsolutizeCellRefs(renamed);
+                var rhs = b.IsCalculation && !roleNames.Contains(b.Name)
+                    ? renamed
+                    : AbsolutizeCellRefs(renamed);
                 return new LetBinding(b.Name, rhs, b.IsCalculation);
             })
             .ToList();
@@ -167,6 +187,60 @@ public static class LetToLambdaBuilder
         sb.Append('=');
         FormulaFormatter.AppendLambda(sb, indent: 0, paramSignatures, lambdaBody);
         return sb.ToString();
+    }
+
+    /// <summary>
+    ///     The bindings that only fed a state step's sample state or sample input. Once those
+    ///     two are parameters their RHS is gone, so anything nothing else reads goes with it
+    ///     (<c>k</c> in the part 4 stepper). A kept binding always stays, and so does a binding
+    ///     that fed neither (a <c>_note</c>). When a RHS can't be parsed nothing is dropped.
+    /// </summary>
+    private static HashSet<string> SamplingOnlyBindings(
+        ParsedLet parsed, StateStepRoles roles, IReadOnlyList<InputChoice> keptChoices)
+    {
+        var dropped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keptNames = keptChoices.Select(c => c.OriginalBindingName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = parsed.Bindings.Select(b => b.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var reads = StateStepParser.DirectReads(parsed);
+
+            var samples = new[] { roles.StateBinding, roles.InputBinding }
+                .Where(n => n != null && keptNames.Contains(n))
+                .SelectMany(n => reads[n!]);
+            var fedSamples = StateStepParser.Closure(samples, reads);
+            fedSamples.ExceptWith(keptNames);
+
+            var stillRead = new HashSet<string>(StateStepParser.NamesIn(parsed.Body, names),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var b in parsed.Bindings)
+                if (!fedSamples.Contains(b.Name) && !keptNames.Contains(b.Name))
+                    stillRead.UnionWith(reads[b.Name]);
+
+            // An optional parameter's default still lands in the body.
+            foreach (var c in keptChoices.Where(c => c.IsOptional))
+            {
+                var rhs = string.IsNullOrWhiteSpace(c.DefaultExpression)
+                    ? parsed.Bindings.First(b => string.Equals(b.Name, c.OriginalBindingName,
+                        StringComparison.OrdinalIgnoreCase)).RhsText
+                    : c.DefaultExpression!;
+                stillRead.UnionWith(StateStepParser.NamesIn(rhs, names));
+            }
+
+            // A kept binding's RHS is gone, so reading it no longer reads what it read.
+            foreach (var kept in keptNames) reads.Remove(kept);
+
+            dropped.UnionWith(fedSamples);
+            dropped.ExceptWith(StateStepParser.Closure(stillRead, reads));
+        }
+        catch (FormatException)
+        {
+            dropped.Clear();
+        }
+
+        return dropped;
     }
 
     /// <summary>

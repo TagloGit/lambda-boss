@@ -419,7 +419,7 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
 
 ## Acceptance criteria
 
-- [ ] `StateStepParser` recognises SetVars-family (incl. SetVar-chain output) and array-family state
+- [x] `StateStepParser` recognises SetVars-family (incl. SetVar-chain output) and array-family state
       steps per the rules above, with bare or `<prefix>.` names only, and returns the state binding,
       input binding, state variables (key, binding name, GetVar line, next line) and output; unit
       tests include non-canonical lines, a cell-bound state, `v` after the GetVar lines, an extra
@@ -471,6 +471,33 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
 - The faster GetVar/SetVars replace the current ones (same API and state format) rather than living
   alongside as new names.
 - First slice is the add-in work in two PRs (Part 3, then Part 1).
+
+Taken while building Part 3 (Labs switch `state-let-to-lambda`, "State steps in LET to LAMBDA"):
+
+- A `SetVar` chain on a `SetVars` call counts as an output, as well as a chain on the state, because
+  Part 1 writes that shape past ten variables.
+- Array reads also accept the two-index forms of a row or column state: `INDEX(S, 1, k)`,
+  `INDEX(S, , k)`, `INDEX(S, k, 1)`. The position must be a number literal within the output's size,
+  and the output needs at least two values, so an ordinary `INDEX` of a range plus `HSTACK` rarely
+  reads as a step.
+- State variables also list keys read inline (no canonical line) and keys only the output sets, after
+  the read ones.
+- The input rule counts bindings read through a helper line or directly in the output's own
+  expressions as "read by a next line", leaves next lines out of the candidates, and tries a relative
+  cell before a `$`-anchored one, so `maxB, $K$2` loses to `inp, H270`.
+- An input bound to a calculation (`v, INDEX(G1:G9, 1)`, the part 4 stepper) is a parameter too, so
+  the builder's marked bindings are the state and the input, not only the state. A marked binding
+  left Keep off is made absolute, like any excluded input.
+- The seed writes other LET bindings in place (`input1`, `k`), since a cell can't see them, and is
+  flattened to one line.
+- The fold line also takes `SCAN` and a wrapped fold (`=TEXTJOIN(" ",,REDUCE(…))`). Renaming the
+  LAMBDA rewrites only the step argument, so Tim's edits survive.
+- **Write fold to** takes a cell on the active sheet and never overwrites a filled cell: the LAMBDA
+  is registered and a message says the fold wasn't written.
+- Tab order in the dialog is name, fold, target, then the input rows, and Alt+F jumps to the fold.
+  Ctrl+C copies the fold unless text is selected in a box.
+- The `input` badge moves with a **make input** button on the other rows. The row that loses it goes
+  Keep off.
 
 ## Appendix — GetVar hot-loop benchmark (6 Nov 2026)
 

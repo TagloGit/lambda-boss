@@ -208,6 +208,13 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
+    public void StateLetToLambda_IsListedAndOffByDefault()
+    {
+        Assert.Contains(Labs.StateLetToLambda, Labs.All);
+        Assert.DoesNotContain(Labs.StateLetToLambda.Id, new Settings().LabsSwitchesOn);
+    }
+
+    [Fact]
     public void LabsSwitches_HaveUniqueIds()
     {
         Assert.Equal(Labs.All.Count, Labs.All.Select(s => s.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());

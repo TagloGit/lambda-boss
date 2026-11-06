@@ -18,7 +18,12 @@ public static class Labs
         "Show library channel in the popup",
         "Adds the channel the library is read from to the popup's status bar.");
 
-    public static readonly IReadOnlyList<LabsSwitch> All = new[] { PopupChannelBadge };
+    public static readonly LabsSwitch StateLetToLambda = new(
+        "state-let-to-lambda",
+        "State steps in LET to LAMBDA",
+        "Turns a SetVars/GetVar or HSTACK state step into LAMBDA(state, input, ...) and offers the REDUCE fold line.");
+
+    public static readonly IReadOnlyList<LabsSwitch> All = new[] { PopupChannelBadge, StateLetToLambda };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

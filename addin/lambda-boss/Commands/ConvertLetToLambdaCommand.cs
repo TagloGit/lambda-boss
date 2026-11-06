@@ -49,22 +49,29 @@ internal static class ConvertLetToLambdaCommand
 
             var existingNames = GetExistingNames(workbook);
             var excelHwnd = new IntPtr(app.Hwnd);
+            var stateStep = Labs.IsOn(Labs.StateLetToLambda) ? StateStepParser.TryParse(parsed) : null;
+            dynamic sheet = activeCell!.Worksheet;
 
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
                 LambdaGenerationRequest? result = null;
+                FoldWrite? foldWrite = null;
 
                 dispatcher.Invoke(() =>
                 {
                     var window = new LetToLambdaWindow(
                         parsed,
-                        name => existingNames.TryGetValue(name, out string? refersTo) ? refersTo : null);
+                        name => existingNames.TryGetValue(name, out string? refersTo) ? refersTo : null,
+                        stateStep);
 
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
 
                     if (window.ShowDialog() == true)
+                    {
                         result = window.Result;
+                        foldWrite = window.FoldToWrite;
+                    }
                 });
 
                 if (result == null) return;
@@ -74,6 +81,7 @@ internal static class ConvertLetToLambdaCommand
                     var generatedFormula = LetToLambdaBuilder.Build(result);
                     LambdaLoader.InjectLambda(result.LambdaName, generatedFormula);
                     Logger.Info($"ConvertLetToLambda: Created '{result.LambdaName}'");
+                    if (foldWrite != null) WriteFold(sheet, foldWrite);
                 }
                 catch (Exception ex)
                 {
@@ -86,6 +94,32 @@ internal static class ConvertLetToLambdaCommand
         {
             Logger.Error("ConvertLetToLambda", ex);
             ShowError($"Unexpected error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Writes the fold after the LAMBDA is registered. The LAMBDA stands either way, so a
+    ///     fold that can't be written is reported, not treated as a failed conversion, and a
+    ///     cell that already holds something is never overwritten.
+    /// </summary>
+    private static void WriteFold(dynamic sheet, FoldWrite fold)
+    {
+        try
+        {
+            dynamic target = sheet.Range[fold.Target];
+            if (!string.IsNullOrEmpty(target.Formula2 as string))
+            {
+                ShowError($"The LAMBDA is registered, but {fold.Target} isn't empty, so the fold wasn't written.");
+                return;
+            }
+
+            target.Formula2 = fold.Formula;
+            Logger.Info($"ConvertLetToLambda: Fold written to {fold.Target}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("ConvertLetToLambda/WriteFold", ex);
+            ShowError($"The LAMBDA is registered, but the fold wasn't written: {ex.Message}");
         }
     }
 

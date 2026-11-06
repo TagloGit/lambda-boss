@@ -597,4 +597,209 @@ public class LetToLambdaBuilderTests
         Assert.Equal(new[] { "x", "y" }, sig.Parameters);
         Assert.Equal("SUM(x, y)", sig.Body);
     }
+
+    // --- State steps (spec 0011, part 3) ---
+
+    private const string RobotStep =
+        "=LET(a, SetVars(\"p\", I266, \"b\", I267), v, I268, " +
+        "p, GetVar(a, \"p\"), b, GetVar(a, \"b\"), " +
+        "nextP, p + IF(b > 0, SWITCH(v, \"F\", 1, \"B\", -1, 0)), " +
+        "nextB, MEDIAN(0, 6, IF(v = \"C\", b + 2, b - 1)), " +
+        "SetVars(\"p\", nextP, \"b\", nextB))";
+
+    private static string BuildStep(string formula, string state, string? input,
+        params (string name, string paramName, bool keep)[] choices)
+    {
+        var parsed = LetParser.Parse(formula);
+        var inputs = choices.Select(c => new InputChoice(c.name, c.paramName, c.keep)).ToList();
+        return LetToLambdaBuilder.Build(
+            new LambdaGenerationRequest("step", parsed, inputs, new StateStepRoles(state, input)));
+    }
+
+    [Fact]
+    public void StateStep_RobotGivesTheSpecLambda()
+    {
+        var result = BuildStep(RobotStep, "a", "v", ("a", "a", true), ("v", "v", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    a,",
+            "    v,",
+            "    LET(",
+            "        p, GetVar(a, \"p\"),",
+            "        b, GetVar(a, \"b\"),",
+            "        nextP, p + IF(b > 0, SWITCH(v, \"F\", 1, \"B\", -1, 0)),",
+            "        nextB, MEDIAN(0, 6, IF(v = \"C\", b + 2, b - 1)),",
+            "        SetVars(\"p\", nextP, \"b\", nextB)",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void StateStep_ParameterOrderIsStateThenInputWhateverTheLetOrder()
+    {
+        var result = BuildStep(
+            "=LET(v, H1, a, SetVars(\"p\", 0), p, GetVar(a, \"p\"), SetVars(\"p\", p + v))",
+            "a", "v", ("a", "a", true), ("v", "v", true));
+
+        Assert.StartsWith(Lines("=LAMBDA(", "    a,", "    v,"), result);
+    }
+
+    [Fact]
+    public void StateStep_CalculationStateRowNeedsNoRename()
+    {
+        // The state's own name isn't "retained" once it's a parameter.
+        var result = BuildStep(
+            "=LET(s, SetVars(\"p\", 0), v, H1, p, GetVar(s, \"p\"), SetVars(\"p\", p + v))",
+            "s", "v", ("s", "state", true), ("v", "input", true));
+
+        Assert.Contains("p, GetVar(state, \"p\")", result);
+        Assert.Contains("SetVars(\"p\", p + input)", result);
+        Assert.DoesNotContain("s, SetVars", result);
+    }
+
+    [Fact]
+    public void StateStep_CalculationInputCanBeAParameter()
+    {
+        var result = BuildStep(
+            "=LET(a, SetVars(\"p\", 0), v, INDEX(G1:G9, 1), p, GetVar(a, \"p\"), SetVars(\"p\", p + v))",
+            "a", "v", ("a", "a", true), ("v", "v", true));
+
+        Assert.StartsWith(Lines("=LAMBDA(", "    a,", "    v,"), result);
+        Assert.DoesNotContain("INDEX", result);
+    }
+
+    [Fact]
+    public void StateStep_OtherValueKeptOffIsHardcodedAbsolute()
+    {
+        var result = BuildStep(
+            "=LET(a, SetVars(\"b\", 4), v, H1, maxB, K2, b, GetVar(a, \"b\"), " +
+            "nextB, MIN(maxB, b + v), SetVars(\"b\", nextB))",
+            "a", "v", ("a", "a", true), ("v", "v", true), ("maxB", "maxB", false));
+
+        Assert.Contains("maxB, $K$2,", result);
+    }
+
+    [Fact]
+    public void StateStep_CommentBindingStays()
+    {
+        var result = BuildStep(
+            "=LET(_note, \"caps at 6\", a, SetVars(\"b\", 4), v, H1, b, GetVar(a, \"b\"), SetVars(\"b\", b + v))",
+            "a", "v", ("_note", "_note", false), ("a", "a", true), ("v", "v", true));
+
+        Assert.Contains("_note, \"caps at 6\",", result);
+    }
+
+    [Fact]
+    public void StateStep_SamplingOnlyBindingsAreDropped()
+    {
+        // The part 4 stepper: k feeds only the sample state and input.
+        var result = BuildStep(
+            "=LET(k, 1, " +
+            "a, IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), EXPLODE(G270), moveRobot), k - 1)), " +
+            "v, INDEX(EXPLODE(G270), k), p, GetVar(a, \"p\"), nextP, p + v, SetVars(\"p\", nextP))",
+            "a", "v", ("k", "k", false), ("a", "a", true), ("v", "v", true));
+
+        Assert.Equal(Lines(
+            "=LAMBDA(",
+            "    a,",
+            "    v,",
+            "    LET(",
+            "        p, GetVar(a, \"p\"),",
+            "        nextP, p + v,",
+            "        SetVars(\"p\", nextP)",
+            "    )",
+            ")"), result);
+    }
+
+    [Fact]
+    public void StateStep_ChainsOfSamplingBindingsAreDropped()
+    {
+        var result = BuildStep(
+            "=LET(x, H1, y, x + 1, a, HSTACK(y, 0), v, H2, p, INDEX(a, 1), HSTACK(p + v, 0))",
+            "a", "v", ("x", "x", false), ("a", "a", true), ("v", "v", true));
+
+        Assert.DoesNotContain("x,", result);
+        Assert.DoesNotContain("y,", result);
+    }
+
+    [Fact]
+    public void StateStep_BindingAlsoReadByTheStepStays()
+    {
+        var result = BuildStep(
+            "=LET(k, 5, a, SetVars(\"p\", k), v, H1, p, GetVar(a, \"p\"), SetVars(\"p\", p + v + k))",
+            "a", "v", ("k", "k", false), ("a", "a", true), ("v", "v", true));
+
+        Assert.Contains("k, 5,", result);
+    }
+
+    [Fact]
+    public void StateStep_BindingReadThroughARetainedLineStays()
+    {
+        var result = BuildStep(
+            "=LET(k, 5, a, SetVars(\"p\", k), v, H1, twice, k * 2, p, GetVar(a, \"p\"), SetVars(\"p\", p + v + twice))",
+            "a", "v", ("k", "k", false), ("a", "a", true), ("v", "v", true));
+
+        Assert.Contains("k, 5,", result);
+        Assert.Contains("twice, k * 2,", result);
+    }
+
+    [Fact]
+    public void StateStep_KeptBindingIsNotDropped()
+    {
+        var result = BuildStep(
+            "=LET(k, 5, a, SetVars(\"p\", k), v, H1, p, GetVar(a, \"p\"), SetVars(\"p\", p + v))",
+            "a", "v", ("a", "a", true), ("v", "v", true), ("k", "k", true));
+
+        Assert.Contains("    k,", result);
+    }
+
+    [Fact]
+    public void StateStep_StateKeptOffStaysInsideAbsolute()
+    {
+        var result = BuildStep(
+            "=LET(a, SetVars(\"p\", H1), v, H2, p, GetVar(a, \"p\"), SetVars(\"p\", p + v))",
+            "a", "v", ("a", "a", false), ("v", "v", true));
+
+        Assert.Contains("a, SetVars(\"p\", $H$1),", result);
+    }
+
+    [Fact]
+    public void StateStep_OptionalDefaultKeepsTheBindingItNeeds()
+    {
+        var parsed = LetParser.Parse(
+            "=LET(k, 5, a, SetVars(\"p\", k), v, H1, p, GetVar(a, \"p\"), SetVars(\"p\", p + v))");
+        var inputs = new[]
+        {
+            new InputChoice("a", "a", true, IsOptional: true),
+            new InputChoice("v", "v", true),
+            new InputChoice("k", "k", false)
+        };
+
+        var result = LetToLambdaBuilder.Build(
+            new LambdaGenerationRequest("step", parsed, inputs, new StateStepRoles("a", "v")));
+
+        Assert.Contains("k, 5,", result);
+        Assert.Contains("IF(ISOMITTED(a), SetVars(\"p\", k), a)", result);
+    }
+
+    [Fact]
+    public void StateStep_NoInputBinding()
+    {
+        var result = BuildStep(
+            "=LET(a, SetVars(\"p\", 0), p, GetVar(a, \"p\"), SetVars(\"p\", p + 1))",
+            "a", null, ("a", "a", true));
+
+        Assert.StartsWith(Lines("=LAMBDA(", "    a,", "    LET("), result);
+    }
+
+    [Fact]
+    public void NoStateRoles_CalculationChoiceStillThrows()
+    {
+        var parsed = LetParser.Parse("=LET(x, 1, y, x + 1, y)");
+        var inputs = new[] { new InputChoice("x", "x", true), new InputChoice("y", "y", true) };
+
+        Assert.ThrowsAny<Exception>(() =>
+            LetToLambdaBuilder.Build(new LambdaGenerationRequest("n", parsed, inputs)));
+    }
 }
