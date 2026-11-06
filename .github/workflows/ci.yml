@@ -2,13 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [develop, main]
   pull_request:
-    branches: [main]
+    branches: [develop, main]
 
 jobs:
   build-and-test:
     runs-on: blacksmith-4vcpu-windows-2025
+
+    outputs:
+      version: ${{ steps.stamp.outputs.version }}
+      commit: ${{ steps.stamp.outputs.commit }}
 
     steps:
       - uses: actions/checkout@v4
@@ -18,11 +22,82 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Stamp build identity
+        id: stamp
+        shell: pwsh
+        env:
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          $base = (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
+          $version = "$base-dev.$env:RUN_NUMBER"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "commit=$env:COMMIT" >> $env:GITHUB_OUTPUT
+          "informational=$version+$env:COMMIT" >> $env:GITHUB_OUTPUT
+
       - name: Restore
         run: dotnet restore addin/lambda-boss.slnx
 
       - name: Build
-        run: dotnet build addin/lambda-boss.slnx --no-restore --configuration Release
+        run: >-
+          dotnet build addin/lambda-boss.slnx --no-restore --configuration Release
+          -p:InformationalVersion=${{ steps.stamp.outputs.informational }}
+          -p:IncludeSourceRevisionInInformationalVersion=false
 
       - name: Test (unit tests only)
         run: dotnet test addin/lambda-boss.Tests/lambda-boss.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      # Every build keeps its XLL for a few days, so a lead can load a PR's build in the VM
+      # before merging. publish-dev-latest reuses the same artifact.
+      - name: Upload packed XLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-boss-xll
+          path: addin/lambda-boss/bin/Release/net48/publish/lambda-boss64-packed.xll
+          if-no-files-found: error
+          retention-days: 5
+
+  # Replaces the rolling dev-latest pre-release on every merge to develop.
+  publish-dev-latest:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: dev-latest
+      cancel-in-progress: false
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.build-and-test.outputs.version }}
+      COMMIT: ${{ needs.build-and-test.outputs.commit }}
+
+    steps:
+      - name: Download packed XLL
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-boss-xll
+
+      - name: Prepare assets and notes
+        run: |
+          mkdir -p assets
+          mv lambda-boss64-packed.xll assets/lambda-boss64.xll
+          {
+            echo "Dev build of \`develop\`. Unsigned. Replaced on every merge."
+            echo
+            echo "version: $VERSION"
+            echo "commit: $COMMIT"
+            echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > notes.md
+
+      - name: Publish dev-latest
+        run: |
+          if gh release view dev-latest > /dev/null 2>&1; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/dev-latest" -f sha="$COMMIT" -F force=true
+            gh release upload dev-latest assets/* --clobber
+            gh release edit dev-latest --title "Dev build $VERSION" --notes-file notes.md --prerelease --latest=false
+          else
+            gh release create dev-latest assets/* --target "$COMMIT" --title "Dev build $VERSION" --notes-file notes.md --prerelease --latest=false
+          fi
