@@ -72,6 +72,45 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
+    public void ChangingChannel_LeavesARunningLoadOnItsBranch()
+    {
+        var settings = WithRepos(LibraryChannel.Labs, RepoConfig.HomeRepoUrl);
+        var running = settings.EnabledRepos.Single();
+
+        settings.LibraryChannel = LibraryChannel.Stable;
+        _ = settings.EnabledRepos;
+
+        Assert.Equal("develop", running.Branch);
+        Assert.EndsWith("__develop", running.GetCacheKey());
+    }
+
+    [Fact]
+    public void FetchTime_ReachesTheConfiguredRepo()
+    {
+        var settings = WithRepos(LibraryChannel.Labs, RepoConfig.HomeRepoUrl);
+        var fetched = new DateTime(2026, 11, 6, 0, 0, 0, DateTimeKind.Utc);
+
+        settings.EnabledRepos.Single().LastFetched = fetched;
+
+        Assert.Equal(fetched, settings.Repos.Single().LastFetched);
+    }
+
+    [Theory]
+    [InlineData("\"Nightly\"")]
+    [InlineData("7")]
+    public void Settings_WithUnknownChannel_KeepTheRestAndReadStable(string channel)
+    {
+        Directory.CreateDirectory(_tempDir);
+        var path = Path.Combine(_tempDir, "settings.json");
+        File.WriteAllText(path, "{\"KeyboardShortcut\":\"^+K\",\"LibraryChannel\":" + channel + "}");
+
+        var loaded = Settings.Load(path);
+
+        Assert.Equal("^+K", loaded.KeyboardShortcut);
+        Assert.Equal(LibraryChannel.Stable, loaded.LibraryChannel);
+    }
+
+    [Fact]
     public void CacheKey_StableKeepsExistingKey_LabsGetsItsOwn()
     {
         var config = new RepoConfig { Url = RepoConfig.HomeRepoUrl };

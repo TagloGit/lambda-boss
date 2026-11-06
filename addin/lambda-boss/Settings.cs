@@ -15,6 +15,22 @@ public enum LibraryChannel
 }
 
 /// <summary>
+///     Saves the channel by name and reads anything unknown as Stable, so one bad value can't
+///     reset the rest of the user's settings.
+/// </summary>
+internal sealed class LibraryChannelConverter : JsonConverter<LibraryChannel>
+{
+    public override LibraryChannel Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType == JsonTokenType.String
+        && string.Equals(reader.GetString(), nameof(LibraryChannel.Labs), StringComparison.OrdinalIgnoreCase)
+            ? LibraryChannel.Labs
+            : LibraryChannel.Stable;
+
+    public override void Write(Utf8JsonWriter writer, LibraryChannel value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.ToString());
+}
+
+/// <summary>
 ///     Persists user settings to %APPDATA%\LambdaBoss\settings.json.
 /// </summary>
 public sealed class Settings
@@ -31,7 +47,7 @@ public sealed class Settings
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() }
+        Converters = { new LibraryChannelConverter() }
     };
 
     private static readonly RepoConfig DefaultRepo = new()
@@ -138,24 +154,18 @@ public sealed class Settings
     ///     Returns only the enabled repos, each pointed at the branch the library channel selects.
     ///     Lambda Boss's own repo follows the channel; other repos stay on main.
     /// </summary>
-    public IReadOnlyList<RepoConfig> EnabledRepos
-    {
-        get
-        {
-            foreach (var repo in Repos)
-            {
-                repo.Branch = repo.IsHomeRepo && LibraryChannel == LibraryChannel.Labs
-                    ? RepoConfig.LabsBranch
-                    : RepoConfig.StableBranch;
-            }
-
-            return Repos.Where(r => r.Enabled).ToList();
-        }
-    }
+    [JsonIgnore]
+    public IReadOnlyList<RepoConfig> EnabledRepos =>
+        Repos.Where(r => r.Enabled)
+            .Select(r => r.OnBranch(r.IsHomeRepo && LibraryChannel == LibraryChannel.Labs
+                ? RepoConfig.LabsBranch
+                : RepoConfig.StableBranch))
+            .ToList();
 
     /// <summary>
     ///     Returns only the enabled local sources.
     /// </summary>
+    [JsonIgnore]
     public IReadOnlyList<LocalSourceConfig> EnabledLocalSources =>
         LocalSources.Where(s => s.Enabled).ToList();
 

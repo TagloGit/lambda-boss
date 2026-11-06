@@ -271,18 +271,14 @@ If the issue is missing key details or the approach is ambiguous, ask the user t
 
 ### Step 3 — Create a Branch
 
-Create a feature branch from main:
+Create a feature branch from `develop`:
 
 ```bash
-git checkout main
+git fetch origin
 ```
 
 ```bash
-git pull
-```
-
-```bash
-git checkout -b lambda-<name-lowercase>
+git checkout -b lambda-<name-lowercase> origin/develop
 ```
 
 If working from an issue, update its status:

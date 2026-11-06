@@ -11,6 +11,9 @@ public sealed class RepoConfig
     public const string StableBranch = "main";
     public const string LabsBranch = "develop";
 
+    private DateTime? _lastFetched;
+    private RepoConfig? _configured;
+
     /// <summary>
     ///     The GitHub repository URL (e.g. "https://github.com/TagloGit/lambda-boss").
     /// </summary>
@@ -24,14 +27,37 @@ public sealed class RepoConfig
     /// <summary>
     ///     UTC timestamp of the last successful fetch from this repo. Null if never fetched.
     /// </summary>
-    public DateTime? LastFetched { get; set; }
+    public DateTime? LastFetched
+    {
+        get => _lastFetched;
+        set
+        {
+            _lastFetched = value;
+            if (_configured != null)
+                _configured.LastFetched = value;
+        }
+    }
 
     /// <summary>
     ///     The branch this repo is read from. Not saved: <see cref="Settings"/> resolves it from the
-    ///     library channel.
+    ///     library channel. See <see cref="OnBranch"/>.
     /// </summary>
     [JsonIgnore]
     public string Branch { get; set; } = StableBranch;
+
+    /// <summary>
+    ///     A copy of this config that reads the given branch. A load keeps its copy, so changing
+    ///     channel mid-load can't send one branch's files to the other's cache. Fetch times still
+    ///     reach this config.
+    /// </summary>
+    public RepoConfig OnBranch(string branch) => new()
+    {
+        Url = Url,
+        Enabled = Enabled,
+        LastFetched = LastFetched,
+        Branch = branch,
+        _configured = this
+    };
 
     /// <summary>
     ///     True for Lambda Boss's own repo, the only one with a Labs branch. Other repos stay on main.

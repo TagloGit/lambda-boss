@@ -35,7 +35,7 @@ fi
 
 changes=$(git log --no-merges --format='- %s' "origin/main..$head")
 body=$(cat <<BODY
-<Tim's part, on the first line: anything he must do on his PC, or "Nothing on your PC.">
+<First line: what Tim must do on his PC, or "Nothing on your PC.">
 
 Release v$version: a frozen snapshot of \`develop\` at $head.
 

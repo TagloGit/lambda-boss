@@ -22,7 +22,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT%" %*
 set "RESULT=%ERRORLEVEL%"
 if defined FETCHED del "%SCRIPT%"
 :done
-REM Keep the window open after a double-click.
+REM Keep the window open after a double-click. Automation sets LB_NO_PAUSE.
+if defined LB_NO_PAUSE exit /b %RESULT%
 echo %cmdcmdline% | findstr /i /c:"%~nx0" >nul
 if not errorlevel 1 pause <con
 exit /b %RESULT%
