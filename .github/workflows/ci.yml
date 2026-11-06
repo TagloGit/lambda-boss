@@ -38,7 +38,7 @@ jobs:
       # Anything not on the doc-only list builds, and so does a change that can't be classified.
       # --no-renames: a source file moved into docs/ must count as a source change.
       # A push compares with what dev-latest holds, not the previous push, so a doc-only merge
-      # still builds if the code merge before it never published.
+      # still builds if the code merge before it never published. No dev-latest, no base: it builds.
       # lambdas/*.tests.yaml only: _library.yaml is runtime data, and unit tests load it.
       - name: Decide scope
         id: scope
@@ -48,7 +48,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           TARGET: ${{ github.base_ref || github.ref_name }}
-          BEFORE: ${{ github.event.before }}
         run: |
           code=true
           if [ "$TARGET" != main ]; then
@@ -56,8 +55,8 @@ jobs:
               base=HEAD^1
             else
               base=$(gh release view dev-latest --json body --jq .body | sed -n 's/^commit: //p') || true
-              base=${base:-$BEFORE}
             fi
+            echo "base=$base"
             if files=$(git diff --name-only --no-renames "$base" HEAD) && [ -n "$files" ]; then
               code=false
               while IFS= read -r file; do
