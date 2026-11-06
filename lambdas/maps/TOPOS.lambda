@@ -36,7 +36,7 @@ TOPOS = LAMBDA(
                       afterSheet, IFERROR(TEXTAFTER(v, "!", -1), v),
                       firstCell, IFERROR(TEXTBEFORE(afterSheet, ":"), afterSheet),
                       upper, SUBSTITUTE(UPPER(firstCell), "$", ""),
-                      IF(REGEXTEST(upper, "^[A-Z]+[1-9][0-9]*$"),
+                      IF(REGEXTEST(upper, "^[A-Z]+0*[1-9][0-9]*$"),
                         LET(
                           letters, REGEXEXTRACT(upper, "[A-Z]+"),
                           rowNum, --REGEXEXTRACT(upper, "\d+"),

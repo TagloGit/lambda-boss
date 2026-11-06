@@ -24,7 +24,7 @@ LABELCLUSTERS = LAMBDA(
                 "   cells          ¦(Required) A column of cells - A1 address text (e.g. ""B7"") OR encoded scalar positions (row*_mult+col). Auto-detected per element via ISNUMBER; text is normalised internally via TOPOS.¶" &
                 "   values         ¦(Optional) Column of values parallel to cells, consulted only by link_fn. Omitted: link_fn is ignored and adjacency is purely geometric.¶" &
                 "   link_fn        ¦(Optional) LAMBDA(a, b, ...) returning TRUE when two geometrically adjacent cells with values a and b should be linked, e.g. LAMBDA(a, b, a = b) for same-value regions or LAMBDA(a, b, ABS(a - b) <= 1) for smooth regions. Should be symmetric. Linking is transitive (1,2,3 chain into one cluster under the ABS <= 1 rule). Omitted: every geometric neighbour is linked.¶" &
-                "   dir_deltas     ¦(Optional) A 1-D array defining connectivity, in any direction notation - packed position deltas (_dirOrthog, _dirAll, knight moves ...), arrow glyphs (_arrowsOrthog, ↑ → ↓ ←), compass codes (N, NE, north-east ...) or screen directions (U, DR, up-left ...); normalised via DIRDELTA. Default: the 4 orthogonal directions in canonical clockwise order (_dirOrthog). Pass _dirAll or _arrowsAll for 8-way (diagonals link). Positions and deltas use the _mult constant; rows up to 999999 at _mult = 1000000.¶" &
+                "   dir_deltas     ¦(Optional) A 1-D array defining connectivity, in any direction notation - packed position deltas (_dirOrthog, _dirAll, knight moves ...), arrow glyphs (_arrowsOrthog, ↑ → ↓ ←), compass codes (N, NE, north-east ...) or screen directions (U, DR, up-left ...); normalised via DIRDELTA. Default: the 4 orthogonal directions in canonical clockwise order (_dirOrthog). Pass _dirAll or _arrowsAll for 8-way (diagonals link). Positions and deltas use the _mult constant.¶" &
                 "   group          ¦(Optional) Column of area / sheet keys (numeric or text). Adjacency is only tested between cells sharing the same key, so multi-sheet maps stay partitioned. Omitted: all cells treated as one group.¶" &
                 "   headers        ¦(Optional) TRUE prepends a ""clusterId"" header to the output (in the output's orientation). Default FALSE.¶" &
                 "EXAMPLE:       ¦¶" &
@@ -41,7 +41,8 @@ LABELCLUSTERS = LAMBDA(
         pos, MAP(cellsC, LAMBDA(c_, IF(ISNUMBER(c_), c_, TOPOS(c_)))),
         grpRaw, IF(ISOMITTED(group), SEQUENCE(n, , 0, 0), IF(wasRow, TRANSPOSE(group), group)),
         gi, XMATCH(grpRaw, UNIQUE(grpRaw)),
-        BIG, 1000000000000,
+    //  Group separator: bigger than any key plus any delta (rows + 4 of headroom covers knight moves); follows _mult
+        BIG, _mult * (MAX(INT(pos / _mult)) + 4),
         K, gi * BIG + pos,
         dts, IF(ISOMITTED(dir_deltas), _dirOrthog, DIRDELTA(dir_deltas)),
         hasLink, AND(NOT(ISOMITTED(values)), NOT(ISOMITTED(link_fn))),

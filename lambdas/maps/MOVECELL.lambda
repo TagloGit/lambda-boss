@@ -62,10 +62,10 @@ MOVECELL = LAMBDA(
         cornerPosB, IF(ISOMITTED(bounds), 1048576 * safeMult + 16384,
                      IF(ISREF(bounds), MAX(ROW(bounds)) * safeMult + MAX(COLUMN(bounds)),
                         TOPOS(IFERROR(TEXTAFTER(bounds, ":"), bounds), safeMult))),
-        rowCornerA, INT(cornerPosA / safeMult),
-        colCornerA, MOD(cornerPosA, safeMult),
-        rowCornerB, INT(cornerPosB / safeMult),
-        colCornerB, MOD(cornerPosB, safeMult),
+        rowCornerA, IF(ISOMITTED(bounds), 1, INT(cornerPosA / safeMult)),
+        colCornerA, IF(ISOMITTED(bounds), 1, MOD(cornerPosA, safeMult)),
+        rowCornerB, IF(ISOMITTED(bounds), 1048576, INT(cornerPosB / safeMult)),
+        colCornerB, IF(ISOMITTED(bounds), 16384, MOD(cornerPosB, safeMult)),
         loRow, MIN(rowCornerA, rowCornerB),
         hiRow, MAX(rowCornerA, rowCornerB),
         loCol, MIN(colCornerA, colCornerB),
@@ -90,7 +90,10 @@ MOVECELL = LAMBDA(
     //  ADDRESS is the fast path inside the sheet; CELLAT covers columns past XFD and rows past 1048576
         pastSheet?, OR(IFERROR(outCol > 16384, FALSE), IFERROR(outRow > 1048576, FALSE)),
         addr, IF(pastSheet?, CELLAT(outRow, outCol), ADDRESS(outRow, outCol, 4)),
-        result, IF(bounded? * (mode = 1) * NOT(inArea), NA(), addr),
+        moved, IF(bounded? * (mode = 1) * NOT(inArea), NA(), addr),
+    //  Readable failures: TOPOS's message passes through; a numeric dir whose column part is beyond one sheet width is almost certainly an old 100000-packed delta
+        result, IF(numDir? * (ABS(dC) > 16384), "MOVECELL: dir " & dir & " has a column step of " & dC & "; numeric dirs are packed rowDelta*_mult+colDelta (_mult = " & _mult & "), e.g. _dirS",
+                IF(ISTEXT(pos), pos, moved)),
         IF(Help?, Help, result)
 )
 );

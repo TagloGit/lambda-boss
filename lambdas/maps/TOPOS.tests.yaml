@@ -187,3 +187,7 @@ tests:
   - name: packed integer passes through (#380)
     args: ["=9019010"]
     expected: 9019010
+
+  - name: leading zero in the row still parses (#380 review)
+    args: ["A05"]
+    expected: 5000001

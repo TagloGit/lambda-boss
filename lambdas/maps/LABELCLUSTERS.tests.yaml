@@ -90,3 +90,7 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  - name: groups stay apart when rows reach 1000000 (#380 review)
+    args: ['={"A1000000";"A1"}', "=", "=", "=", '={"G1";"G2"}']
+    expected: [[1], [2]]

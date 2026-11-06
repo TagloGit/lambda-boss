@@ -108,3 +108,7 @@ tests:
   - name: rows past 1048576 (#380)
     args: ["A1048576", "A1048580"]
     expected: 4
+
+  - name: unparseable cell passes TOPOS message through (#380 review)
+    args: ["E5", "nonsense"]
+    expected: "TOPOS: can't read 'nonsense' (not an address, direction or number)"

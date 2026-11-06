@@ -36,8 +36,9 @@ CELLDIST = LAMBDA(
         colB, MOD(posB, safeMult),
         dR, ABS(rowA - rowB),
         dC, ABS(colA - colB),
-        result, IF(met = 2, SQRT((rowA - rowB)^2 + (colA - colB)^2),
+        dist, IF(met = 2, SQRT((rowA - rowB)^2 + (colA - colB)^2),
                 IF(met = 1, IF(dR > dC, dR, dC), dR + dC)),
+        result, IF(ISTEXT(posA), posA, IF(ISTEXT(posB), posB, dist)),
         IF(Help?, Help, result)
 )
 );

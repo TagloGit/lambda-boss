@@ -51,7 +51,7 @@ NEIGHBOURS = LAMBDA(
         inBounds, (cellRow >= baseRow) * (cellRow <= maxRow) * (cellCol >= baseCol) * (cellCol <= maxCol),
         keep, (distGrid > 0) * (distGrid <= rad) * inBounds,
         addrGrid, IF(OR(MAX(cellCol) > 16384, MAX(cellRow) > 1048576), CELLAT(cellRow, cellCol), ADDRESS(cellRow, cellCol, 4)),
-        result, IFERROR(TOCOL(IF(keep = 1, addrGrid, NA()), 2), NA()),
+        result, IF(ISTEXT(pos), pos, IFERROR(TOCOL(IF(keep = 1, addrGrid, NA()), 2), NA())),
         IF(Help?, Help, result)
 )
 );
