@@ -103,7 +103,7 @@ Leads take a feature from design to tested and refined on their own, and Tim get
 
 CI replaces the `dev-latest` pre-release on every merge to `develop` that isn't doc-only: an unsigned `lambda-boss64.xll`, with `version:` and `commit:` lines in its notes (the update check reads those). On the Labs channel the update check compares commits with `dev-latest`.
 
-CI runs on GitHub-hosted `windows-latest` (free for a public repo; net48 and ExcelDna's pack need Windows). Never use `taglo-box` or another self-hosted label: this repo is public. Tests run on PRs and on `main`, not on the push to `develop`, which only builds and publishes. Doc-only changes (`docs/`, `specs/`, `plans/`, `*.md` outside `addin/`, `lambdas/**/*.yaml`) skip the build inside the workflow, so `build-and-test` still reports. `.github/workflows/ci.yml` has the table.
+CI runs on GitHub-hosted `windows-latest` (free for a public repo; net48 and ExcelDna's pack need Windows). Never use `taglo-box` or another self-hosted label: this repo is public. Tests run on PRs and on `main`, not on the push to `develop`, which only builds and publishes. Doc-only changes (`docs/`, `specs/`, `plans/`, `*.md` outside `addin/`, `lambdas/**/*.tests.yaml`) skip the build inside the workflow, so `build-and-test` still reports. `.github/workflows/ci.yml` has the table.
 
 On a Windows PC with Excel closed, `scripts\update-lambda-boss.cmd` installs `dev-latest` to `%APPDATA%\Microsoft\AddIns\lambda-boss64.xll`, unblocks it and prints the version. `--stable` installs the latest release instead. The `.cmd` is also a `dev-latest` asset and works alone.
 

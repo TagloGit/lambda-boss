@@ -37,23 +37,33 @@ jobs:
 
       # Anything not on the doc-only list builds, and so does a change that can't be classified.
       # --no-renames: a source file moved into docs/ must count as a source change.
+      # A push compares with what dev-latest holds, not the previous push, so a doc-only merge
+      # still builds if the code merge before it never published.
+      # lambdas/*.tests.yaml only: _library.yaml is runtime data, and unit tests load it.
       - name: Decide scope
         id: scope
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           TARGET: ${{ github.base_ref || github.ref_name }}
           BEFORE: ${{ github.event.before }}
         run: |
           code=true
           if [ "$TARGET" != main ]; then
-            if [ "$EVENT" = pull_request ]; then base=HEAD^1; else base=$BEFORE; fi
+            if [ "$EVENT" = pull_request ]; then
+              base=HEAD^1
+            else
+              base=$(gh release view dev-latest --json body --jq .body | sed -n 's/^commit: //p') || true
+              base=${base:-$BEFORE}
+            fi
             if files=$(git diff --name-only --no-renames "$base" HEAD) && [ -n "$files" ]; then
               code=false
               while IFS= read -r file; do
                 case "$file" in
                   addin/*) code=true ;;
-                  docs/*|specs/*|plans/*|*.md|lambdas/*.yaml) ;;
+                  docs/*|specs/*|plans/*|*.md|lambdas/*.tests.yaml) ;;
                   *) code=true ;;
                 esac
               done <<< "$files"
@@ -158,7 +168,7 @@ jobs:
       # recreate rather than move the tag: GITHUB_TOKEN may not move a tag across workflow changes.
       - name: Publish dev-latest
         run: |
-          published=$(gh release view dev-latest --json body --jq .body | sed -n 's/^commit: //p') || true
+          published=$(gh release view dev-latest --json body --jq .body | sed -n 's/^commit: //p')
           if [ -n "$published" ]; then
             status=$(gh api "repos/$GH_REPO/compare/$COMMIT...$published" --jq .status)
             if [ "$status" = ahead ] || [ "$status" = identical ]; then
