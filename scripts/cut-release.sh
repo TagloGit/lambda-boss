@@ -8,7 +8,8 @@ REPO=TagloGit/lambda-boss
 DRY_RUN=false
 if [[ "${1:-}" == "--dry-run" ]]; then DRY_RUN=true; fi
 
-git fetch origin develop main --tags
+# No --tags: dev-latest moves, so fetching tags fails once a local copy is stale.
+git fetch origin develop main
 
 head=$(git rev-parse origin/develop)
 version=$(git show origin/develop:Directory.Build.props | sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p')
@@ -17,7 +18,7 @@ if [[ -z "$version" ]]; then
     exit 1
 fi
 
-if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
     echo "v$version already exists: bump Version on develop first." >&2
     exit 1
 fi
