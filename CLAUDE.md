@@ -46,7 +46,7 @@ The packed XLL lands at `addin/lambda-boss/bin/Release/net48/publish/lambda-boss
 
 ## Conventions
 
-- Default branch: `main`
+- Default branch: `develop` (see [How work ships](#how-work-ships)). `main` is what Stable users get.
 - **Never use compound Bash commands** (no `&&`, `;`, or `|` chaining). Use separate Bash tool calls instead — independent calls can run in parallel. Compound commands trigger extra permission prompts.
 - **Never prefix Bash commands with `cd`**. The working directory is already the project root. All commands (`gh`, `git`, `npm`, etc.) work without `cd`.
 - **Passing `gh` bodies and commit messages (multi-line text with apostrophes / quotes / `@`).** The Bash tool here is **real git-bash**, so the robust default is a **bash quoted heredoc** — `<<'EOF'` disables every expansion, making apostrophes (`doesn't`), `@`, `"`, `$`, and backticks all literal. No temp file, no delete:
@@ -80,18 +80,35 @@ On net48 there's no `deps.json`, so ExcelDNA's pack step can't auto-enumerate ma
 
 To check what a new package adds to the build, look at `addin/lambda-boss/bin/Release/net48/` after a Release build and cross-reference against the `<Reference>` list in the `.dna`. Don't forget transitive deps — most NuGets pull in several `System.*` shim assemblies on net48.
 
+## How work ships
+
+Leads take a feature from design to tested and refined on their own, and Tim gets finished work in Labs and one release PR now and then. [Spec 0012](specs/0012-develop-labs-release-flow.md) has the reasoning.
+
+1. **Design.** Design talks happen with the Excel director. Write the spec in `specs/` as the lead's record; Tim doesn't review it. Where a UI choice is open, build the options side by side in Labs.
+2. **Branch from `develop`, PR to `develop`.** A PR needs one independent review and green CI, then the lead merges it (squash, or rebase for an epic). No Tim approval. A merge publishes `dev-latest`.
+3. **New add-in features go behind a Labs switch**, off by default: see `addin/lambda-boss/Labs.cs`. Fixes don't need one. Delete the switch and its guard once the feature ships to everyone or is dropped.
+4. **Library changes** reach Labs users on merge to `develop` and Stable users at the next release.
+5. **Prove it in real use.** Staging is the Parallels VM `taglo-win`: real Excel, under `~/Repositories/wt/VM-LOCK`, released straight after each run (taglo-pm `docs/windows-vm.md`). Never use real Excel on Tim's PC. Load the PR's build (the `lambda-boss-xll` artifact on its CI run) or `dev-latest`, and drive the add-in on real case or rep files. Unit tests alone aren't proof of a feature. Screenshots and what you drove go in the PR.
+6. **Release** with the `/release` skill. Tim's approval on the release PR is the only gate he holds.
+
+**Hold new library files until Tim has updated.** Add-ins older than 0.2.0 list a library's files from the repo's default branch (now `develop`) but fetch them from `main`, so a new `.lambda` or `.const` in an existing library on `develop` makes that whole library fail to load on those builds. Until #390's first release is merged and Tim has run the updater, don't merge new files into existing libraries. Then delete this paragraph.
+
+### Library channel and Labs switches
+
+- `Settings.LibraryChannel`: `Stable` (the default, reads `main`) or `Labs` (reads `develop`). Only this repo follows the channel; other repos stay on `main`. Each branch has its own disk cache.
+- `Settings.LabsSwitchesOn`: the switches that are on. Channel and switches are independent, and both are in the settings window, which the ribbon's channel button opens.
+- The ribbon's channel button shows the current channel. Check it before a competition.
+
+### Dev builds
+
+CI replaces the `dev-latest` pre-release on every merge to `develop`: an unsigned `lambda-boss64.xll`, with `version:` and `commit:` lines in its notes (the update check reads those). On the Labs channel the update check compares commits with `dev-latest`.
+
+On a Windows PC with Excel closed, `scripts\update-lambda-boss.cmd` installs `dev-latest` to `%APPDATA%\Microsoft\AddIns\lambda-boss64.xll`, unblocks it and prints the version. `--stable` installs the latest release instead. The `.cmd` is also a `dev-latest` asset and works alone.
+
 ## Publishing a release
 
-End-to-end release publishing is handled by `scripts/publish-release.ps1`. Run it from a clean `main` branch; it walks through version bump, build, test, code-signing, release-zip bundling, PR merge, tagging, and draft GitHub Release creation.
+Use the `/release` skill. In short: `scripts/cut-release.sh` cuts `release/<date>` from `develop` and opens the PR to `main` with reviewer `taglotacks`; after Tim approves, an agent merges with a merge commit (never `--admin`) and pushes the tag `v<version>`; `.github/workflows/release.yml` builds, tests and publishes the unsigned zip.
 
-```powershell
-# Interactive (prompts for version, cert path, cert password)
-.\scripts\publish-release.ps1
+**Default cadence: every week or two, on Tim's word. No release in the days before an MEWC round** (the competition freeze): Stable stays put and nothing merges to `main`.
 
-# Dry run end-to-end without any destructive steps (no PR, no tag, no release)
-.\scripts\publish-release.ps1 -DryRun -SkipSign
-```
-
-The release artifact is `release/output/LambdaBoss-<version>.zip` — a small zip containing the signed `lambda-boss64.xll`, a `README.txt`, and an `unblock.cmd` helper for clearing `Zone.Identifier` ADS on USB-copied files. Both `release/README.txt` and `release/unblock.cmd` are checked-in source files; `release/output/` is gitignored.
-
-For signed releases, have the Sectigo `.pfx` certificate path and password ready. The version bump only lands on `main` after the build and signing steps succeed, so a failed release never leaves `main` in a bumped state.
+`Directory.Build.props` holds the *next* release's version, so a tag can only match it once. The release artifact is `LambdaBoss-<version>.zip`: `lambda-boss64.xll`, `README.txt` and an `unblock.cmd` helper for clearing `Zone.Identifier` ADS on USB-copied files. Both `release/README.txt` and `release/unblock.cmd` are checked-in source files. Releases are unsigned: Tim isn't renewing the Sectigo certificate. Excel trusts its AddIns folder, so the recommended load path shows no warning.

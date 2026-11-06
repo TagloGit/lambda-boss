@@ -8,7 +8,7 @@ ExcelDNA and .NET Framework 4.8 — no runtime install required.
 What's in this zip
 ------------------
 
-  lambda-boss64.xll   The add-in itself. Code-signed.
+  lambda-boss64.xll   The add-in itself. Not code-signed.
   README.txt          This file.
   unblock.cmd         Optional helper for clearing the "downloaded from
                       the internet" mark Windows applies to USB-copied
@@ -49,6 +49,13 @@ There are three ways to load the add-in. Pick whichever fits your setup.
    Just double-click lambda-boss64.xll. Excel will launch with Lambda
    Boss enabled for that session only. Quickest if you only need it
    once.
+
+If Excel warns about an unsigned add-in
+---------------------------------------
+
+Releases are not code-signed. Load path 1 avoids the warning, because
+Excel trusts its AddIns folder. From any other folder, choose "Enable
+this add-in for this session only".
 
 If Excel says "this add-in is blocked"
 --------------------------------------

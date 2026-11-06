@@ -13,6 +13,7 @@ public partial class SettingsWindow
         InitializeComponent();
         RefreshRepoList();
         RefreshLocalSourceList();
+        RefreshChannelAndLabs();
         PreviewKeyDown += OnPreviewKeyDown;
     }
 
@@ -143,6 +144,54 @@ public partial class SettingsWindow
         }
     }
 
+    // --- Library channel and Labs switches ---
+
+    private void RefreshChannelAndLabs()
+    {
+        var settings = Settings.Current;
+        ChannelStableRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Stable;
+        ChannelLabsRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Labs;
+
+        LabsSwitchList.ItemsSource = Labs.All
+            .Select(s => new LabsSwitchDisplayItem
+            {
+                Id = s.Id,
+                Title = s.Title,
+                Description = s.Description,
+                IsOn = Labs.IsOn(s)
+            })
+            .ToList();
+    }
+
+    private void ChannelRadio_Click(object sender, RoutedEventArgs e)
+    {
+        var channel = ChannelLabsRadio.IsChecked == true ? LibraryChannel.Labs : LibraryChannel.Stable;
+        var settings = Settings.Current;
+        if (settings.LibraryChannel == channel)
+            return;
+
+        settings.LibraryChannel = channel;
+        settings.Save();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        StatusText.Text = $"Library channel: {Labs.ChannelLabel(channel)}";
+    }
+
+    private void LabsSwitch_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not CheckBox { DataContext: LabsSwitchDisplayItem item })
+            return;
+
+        var settings = Settings.Current;
+        if (item.IsOn)
+            settings.LabsSwitchesOn.Add(item.Id);
+        else
+            settings.LabsSwitchesOn.Remove(item.Id);
+
+        settings.Save();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        StatusText.Text = $"{item.Title}: {(item.IsOn ? "on" : "off")}";
+    }
+
     // --- Local directory sources ---
 
     private void RefreshLocalSourceList()
@@ -242,6 +291,14 @@ public partial class SettingsWindow
             SettingsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+}
+
+internal class LabsSwitchDisplayItem
+{
+    public string Id { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Description { get; init; } = "";
+    public bool IsOn { get; set; }
 }
 
 internal class RepoDisplayItem

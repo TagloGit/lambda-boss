@@ -1,20 +1,20 @@
 ﻿<#
 .SYNOPSIS
-    Builds the Lambda Boss release zip: signed packed XLL + README + unblock.cmd.
+    Builds the Lambda Boss release zip: packed XLL + README + unblock.cmd.
 
 .DESCRIPTION
-    Stages a signed `lambda-boss64.xll` plus the README and `unblock.cmd` from
+    Stages `lambda-boss64.xll` plus the README and `unblock.cmd` from
     `release/` into a temporary folder, then zips it as
     `release/output/LambdaBoss-<version>.zip`.
 
-    The script assumes the build has already happened and the XLL is signed --
-    `publish-release.ps1` handles those steps and calls this script after.
+    The script assumes the build has already happened. The Release workflow
+    (.github/workflows/release.yml) calls it after building. Releases are unsigned.
 
 .PARAMETER Version
     The version string, e.g. "0.2.0". Used in the zip filename.
 
-.PARAMETER SignedXllPath
-    Full path to the signed packed XLL. Defaults to
+.PARAMETER XllPath
+    Full path to the packed XLL. Defaults to
     `addin/lambda-boss/bin/Release/net48/publish/lambda-boss64-packed.xll`.
 
 .EXAMPLE
@@ -26,7 +26,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
 
-    [string]$SignedXllPath
+    [string]$XllPath
 )
 
 Set-StrictMode -Version Latest
@@ -37,12 +37,12 @@ $ReleaseDir = "$RepoRoot\release"
 $OutputDir = "$ReleaseDir\output"
 $StagingDir = "$OutputDir\staging-$Version"
 
-if (-not $SignedXllPath) {
-    $SignedXllPath = "$RepoRoot\addin\lambda-boss\bin\Release\net48\publish\lambda-boss64-packed.xll"
+if (-not $XllPath) {
+    $XllPath = "$RepoRoot\addin\lambda-boss\bin\Release\net48\publish\lambda-boss64-packed.xll"
 }
 
-if (-not (Test-Path $SignedXllPath)) {
-    Write-Error "Signed XLL not found at: $SignedXllPath"
+if (-not (Test-Path $XllPath)) {
+    Write-Error "Packed XLL not found at: $XllPath"
 }
 
 $readmePath = "$ReleaseDir\README.txt"
@@ -63,7 +63,7 @@ New-Item -ItemType Directory -Force -Path $StagingDir | Out-Null
 
 # Copy in the three deliverables. Rename the XLL to drop the "-packed" suffix
 # -- end users don't need to see ExcelDNA's internal naming.
-Copy-Item $SignedXllPath "$StagingDir\lambda-boss64.xll"
+Copy-Item $XllPath "$StagingDir\lambda-boss64.xll"
 Copy-Item $readmePath "$StagingDir\README.txt"
 Copy-Item $unblockPath "$StagingDir\unblock.cmd"
 

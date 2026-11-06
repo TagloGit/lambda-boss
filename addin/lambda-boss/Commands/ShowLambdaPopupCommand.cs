@@ -23,6 +23,11 @@ public static class ShowLambdaPopupCommand
     private static LibraryProvider? _provider;
     private static bool _dataLoaded;
 
+    /// <summary>
+    ///     Raised on the window thread after the settings window saves a change.
+    /// </summary>
+    public static event Action? SettingsSaved;
+
     public static void Cleanup()
     {
         _windowDispatcher?.InvokeShutdown();
@@ -253,6 +258,7 @@ public static class ShowLambdaPopupCommand
         // Invalidate cached data so next popup open re-fetches with updated repos
         _provider = null;
         _dataLoaded = false;
+        SettingsSaved?.Invoke();
     }
 
     /// <summary>

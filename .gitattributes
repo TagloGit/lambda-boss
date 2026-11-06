@@ -1,3 +1,6 @@
 # Force LF line endings for lambda files (no carriage returns allowed)
 *.lambda text eol=lf
 *.const text eol=lf
+
+# Windows scripts need CRLF
+*.cmd text eol=crlf

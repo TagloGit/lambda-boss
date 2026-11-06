@@ -23,6 +23,8 @@ Review a PR for code quality and adherence to spec/plan.
    - Are there tests? Are they meaningful?
    - Does it follow the repo's coding conventions?
    - Any obvious bugs or edge cases?
+   - Is a new add-in feature behind a Labs switch, off by default?
+   - Is there VM proof in the PR for anything a user touches, and does the PR target `develop`?
 7. Report findings
 
 ## Output Format
@@ -38,7 +40,7 @@ Review a PR for code quality and adherence to spec/plan.
 ## Behaviour Notes
 
 - Do NOT write code or make changes
-- Do NOT merge PRs
+- Do NOT merge PRs: the lead merges to `develop` after this review
 - Be constructive — flag issues but also note what's done well
 
 ## Self-Improvement

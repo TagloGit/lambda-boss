@@ -200,11 +200,17 @@
         </Border>
 
         <!-- Status bar -->
-        <TextBlock x:Name="StatusText"
-                   Grid.Row="4"
-                   Margin="0,4,0,0"
-                   Foreground="#808080"
-                   FontSize="11"
-                   Text="↑↓ navigate · Enter load · Tab switch · Esc close" />
+        <DockPanel Grid.Row="4" Margin="0,4,0,0">
+            <TextBlock x:Name="ChannelBadge"
+                       DockPanel.Dock="Right"
+                       Margin="8,0,0,0"
+                       Foreground="#569cd6"
+                       FontSize="11"
+                       Visibility="Collapsed" />
+            <TextBlock x:Name="StatusText"
+                       Foreground="#808080"
+                       FontSize="11"
+                       Text="↑↓ navigate · Enter load · Tab switch · Esc close" />
+        </DockPanel>
     </Grid>
 </Window>

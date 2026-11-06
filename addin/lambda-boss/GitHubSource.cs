@@ -29,7 +29,7 @@ public class GitHubSource
     public async Task<IReadOnlyList<string>> ListLibrariesAsync()
     {
         // GET /repos/{owner}/{repo}/contents/lambdas → JSON array of entries
-        var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/lambdas";
+        var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/lambdas?ref={_config.Branch}";
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("User-Agent", "LambdaBoss");
         request.Headers.Add("Accept", "application/vnd.github.v3+json");
@@ -49,16 +49,16 @@ public class GitHubSource
             }
         }
 
-        Logger.Info($"GitHubSource: Found {libraries.Count} libraries in {_owner}/{_repo}");
+        Logger.Info($"GitHubSource: Found {libraries.Count} libraries in {_owner}/{_repo}@{_config.Branch}");
         return libraries;
     }
 
     /// <summary>
-    ///     Fetches a raw file from the repository's default branch.
+    ///     Fetches a raw file from the branch the repo config points at.
     /// </summary>
     public async Task<string> FetchFileAsync(string path)
     {
-        var url = $"https://raw.githubusercontent.com/{_owner}/{_repo}/main/{path}";
+        var url = $"https://raw.githubusercontent.com/{_owner}/{_repo}/{_config.Branch}/{path}";
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("User-Agent", "LambdaBoss");
 
@@ -82,7 +82,7 @@ public class GitHubSource
     /// </summary>
     public async Task<IReadOnlyList<string>> ListLambdaFilesAsync(string libraryName)
     {
-        var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/lambdas/{libraryName}";
+        var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/lambdas/{libraryName}?ref={_config.Branch}";
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("User-Agent", "LambdaBoss");
         request.Headers.Add("Accept", "application/vnd.github.v3+json");
@@ -125,7 +125,7 @@ public class GitHubSource
 
         _config.LastFetched = DateTime.UtcNow;
 
-        Logger.Info($"GitHubSource: Fetched library '{libraryName}' ({files.Count} files) from {_owner}/{_repo}");
+        Logger.Info($"GitHubSource: Fetched library '{libraryName}' ({files.Count} files) from {_owner}/{_repo}@{_config.Branch}");
         return new FetchedLibrary(libraryName, metadata, files);
     }
 }

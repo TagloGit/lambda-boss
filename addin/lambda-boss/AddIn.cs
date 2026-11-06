@@ -70,7 +70,12 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             UpdateChecker.Initialize(
                 "https://api.github.com/repos/TagloGit/lambda-boss/releases/latest",
                 $"LambdaBoss/{assemblyVersion}");
-            UpdateChecker.CheckForUpdateAsync(assemblyVersion);
+            if (Settings.Current.LibraryChannel == LibraryChannel.Labs)
+                UpdateChecker.CheckForDevBuildAsync(
+                    "https://api.github.com/repos/TagloGit/lambda-boss/releases/tags/dev-latest",
+                    BuildInfo.Commit);
+            else
+                UpdateChecker.CheckForUpdateAsync(assemblyVersion);
 
             Logger.Info("Lambda Boss add-in loaded successfully");
         }

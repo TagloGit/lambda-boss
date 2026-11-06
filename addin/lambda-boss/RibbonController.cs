@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 
+using ExcelDna.Integration;
 using ExcelDna.Integration.CustomUI;
 
 using LambdaBoss.Commands;
@@ -53,6 +54,12 @@ public class RibbonController : ExcelRibbon
                   imageMso='Refresh'
                   onAction='OnRefresh'
                   screentip='Re-fetch libraries from all repos' />
+          <button id='ChannelButton'
+                  getLabel='GetChannelLabel'
+                  size='normal'
+                  imageMso='ControlProperties'
+                  onAction='OnSettings'
+                  screentip='Library channel: Stable reads main, Labs reads develop. Click for channel and Labs switches.' />
         </group>
         <group id='InfoGroup' label='Info'>
           <button id='AboutButton'
@@ -82,7 +89,15 @@ public class RibbonController : ExcelRibbon
             try { _ribbon?.InvalidateControl("UpdateButton"); }
             catch { /* ribbon may be disposed */ }
         };
+
+        ShowLambdaPopupCommand.SettingsSaved += () => ExcelAsyncUtil.QueueAsMacro(() =>
+        {
+            try { _ribbon?.InvalidateControl("ChannelButton"); }
+            catch { /* ribbon may be disposed */ }
+        });
     }
+
+    public string GetChannelLabel(IRibbonControl control) => Labs.ChannelLabel(Settings.Current.LibraryChannel);
 
     public void OnLoadLibrary(IRibbonControl control)
     {
@@ -113,10 +128,9 @@ public class RibbonController : ExcelRibbon
     {
         try
         {
-            var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
-                          ?? new Version(0, 0, 0);
             System.Windows.MessageBox.Show(
-                $"Lambda Boss v{version.Major}.{version.Minor}.{version.Build}\n\n"
+                $"Lambda Boss v{BuildInfo.Display}\n"
+                + $"Library channel: {Labs.ChannelLabel(Settings.Current.LibraryChannel)}\n\n"
                 + "Excel add-in for accessing GitHub Lambda libraries.\n\n"
                 + "https://github.com/TagloGit/lambda-boss",
                 "About Lambda Boss",

@@ -75,6 +75,83 @@ internal static class UpdateChecker
         }
     }
 
+    /// <summary>
+    ///     On the Labs channel: reports an update when the rolling dev-latest pre-release was built
+    ///     from a different commit than this add-in. Dev builds share a base version, so only the
+    ///     commit tells them apart.
+    /// </summary>
+    public static async void CheckForDevBuildAsync(string devReleaseUrl, string? currentCommit)
+    {
+        if (_userAgent == null)
+        {
+            return;
+        }
+
+        try
+        {
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(_userAgent);
+
+            var json = await client.GetStringAsync(new Uri(devReleaseUrl));
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            var notes = root.GetProperty("body").GetString();
+            var htmlUrl = root.GetProperty("html_url").GetString();
+            var remoteVersion = ParseNotesField(notes, "version");
+            var remoteCommit = ParseNotesField(notes, "commit");
+
+            if (remoteCommit == null || htmlUrl == null)
+            {
+                return;
+            }
+
+            if (IsDifferentBuild(currentCommit, remoteCommit))
+            {
+                NewVersionAvailable = remoteVersion ?? remoteCommit;
+                ReleaseUrl = htmlUrl;
+                Logger.Info($"Dev build available: {NewVersionAvailable} (current commit: {currentCommit})");
+                UpdateAvailable?.Invoke();
+            }
+            else
+            {
+                Logger.Info($"Dev build is current ({remoteVersion})");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"Dev build check failed (silent): {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Reads a "name: value" line from dev-latest's release notes.
+    /// </summary>
+    public static string? ParseNotesField(string? notes, string name)
+    {
+        if (notes == null)
+        {
+            return null;
+        }
+
+        var prefix = name + ":";
+        foreach (var line in notes.Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = trimmed.Substring(prefix.Length).Trim();
+                return value.Length > 0 ? value : null;
+            }
+        }
+
+        return null;
+    }
+
+    public static bool IsDifferentBuild(string? currentCommit, string remoteCommit) =>
+        !string.Equals(currentCommit, remoteCommit, StringComparison.OrdinalIgnoreCase);
+
     public static Version? ParseVersion(string tag)
     {
         var cleaned = tag.TrimStart('v', 'V');

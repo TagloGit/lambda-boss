@@ -101,10 +101,22 @@ public partial class LambdaPopup
         SearchBox.Text = "";
         HidePrefixPrompt();
         SwitchMode(Mode.Library);
+        UpdateChannelBadge();
 
         Show();
         Activate();
         SearchBox.Focus();
+    }
+
+    /// <summary>
+    ///     Labs switch: shows which library channel the popup is reading.
+    /// </summary>
+    private void UpdateChannelBadge()
+    {
+        var on = Labs.IsOn(Labs.PopupChannelBadge);
+        ChannelBadge.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        if (on)
+            ChannelBadge.Text = Labs.ChannelLabel(Settings.Current.LibraryChannel);
     }
 
     public void SetStatus(string text)

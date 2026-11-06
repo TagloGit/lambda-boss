@@ -1,0 +1,60 @@
+name: Release
+
+# Pushing a vX.Y.Z tag on main builds the unsigned zip and publishes the GitHub Release.
+# The steps around it are in .claude/skills/release/SKILL.md.
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+jobs:
+  release:
+    runs-on: blacksmith-4vcpu-windows-2025
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Check the tag
+        id: tag
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart('v')
+          $props = (Select-Xml -Path Directory.Build.props -XPath '//Version').Node.InnerText
+          if ($version -ne $props) { throw "Tag $env:GITHUB_REF_NAME doesn't match Directory.Build.props ($props)." }
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) { throw "Tag $env:GITHUB_REF_NAME isn't on main." }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore
+        run: dotnet restore addin/lambda-boss.slnx
+
+      - name: Build
+        run: >-
+          dotnet build addin/lambda-boss.slnx --no-restore --configuration Release
+          -p:InformationalVersion=${{ steps.tag.outputs.version }}+${{ github.sha }}
+          -p:IncludeSourceRevisionInInformationalVersion=false
+
+      - name: Test (unit tests only)
+        run: dotnet test addin/lambda-boss.Tests/lambda-boss.Tests.csproj --no-build --configuration Release --verbosity normal
+
+      - name: Build release zip
+        shell: pwsh
+        run: ./scripts/build-release-bundle.ps1 -Version ${{ steps.tag.outputs.version }}
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: >-
+          gh release create $env:GITHUB_REF_NAME "release/output/LambdaBoss-$env:VERSION.zip"
+          --title "Lambda Boss $env:VERSION" --generate-notes --verify-tag --latest
