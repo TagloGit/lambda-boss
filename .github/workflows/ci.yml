@@ -92,12 +92,14 @@ jobs:
             echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > notes.md
 
+      # A slow or re-run build must not put dev-latest back on an older commit. Delete and
+      # recreate rather than move the tag: GITHUB_TOKEN may not move a tag across workflow changes.
       - name: Publish dev-latest
         run: |
-          if gh release view dev-latest > /dev/null 2>&1; then
-            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/dev-latest" -f sha="$COMMIT" -F force=true
-            gh release upload dev-latest assets/* --clobber
-            gh release edit dev-latest --title "Dev build $VERSION" --notes-file notes.md --prerelease --latest=false
-          else
-            gh release create dev-latest assets/* --target "$COMMIT" --title "Dev build $VERSION" --notes-file notes.md --prerelease --latest=false
+          head=$(gh api "repos/$GH_REPO/commits/develop" --jq .sha)
+          if [ "$head" != "$COMMIT" ]; then
+            echo "develop has moved on to $head; skipping $COMMIT."
+            exit 0
           fi
+          gh release delete dev-latest --cleanup-tag --yes || true
+          gh release create dev-latest assets/* --target "$COMMIT" --title "Dev build $VERSION" --notes-file notes.md --prerelease --latest=false
