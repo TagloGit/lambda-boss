@@ -4,7 +4,7 @@ on:
   push:
     branches: [develop, main]
   pull_request:
-    branches: [develop, main, ci/cost]
+    branches: [develop, main]
 
 # A new push to a PR replaces its running build. Pushes to develop and main each get their own
 # group: sharing one would let a newer push cancel a queued one.
