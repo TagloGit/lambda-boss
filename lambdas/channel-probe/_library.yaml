@@ -1,0 +1,3 @@
+name: Channel Probe
+description: Temporary, for the #390 VM proof. Only on develop
+default_prefix: probe

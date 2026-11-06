@@ -1,0 +1,6 @@
+/*  FUNCTION NAME:      ChannelProbe
+    DESCRIPTION:*//**Temporary proof that the Labs channel reads develop. Removed before the first release.*/
+ChannelProbe = LAMBDA(
+    [ShowHelp],
+    "read from develop"
+);
