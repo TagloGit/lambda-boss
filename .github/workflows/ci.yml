@@ -6,23 +6,73 @@ on:
   pull_request:
     branches: [develop, main]
 
+# A new push to a PR replaces its running build. Pushes to develop and main each get their own
+# group: sharing one would let a newer push cancel a queued one.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# What each trigger runs:
+#   PR to develop      build and test; doc-only: neither
+#   push to develop    build (no test) and publish dev-latest; doc-only: neither
+#   PR to main         build and test
+#   push to main       build and test
+# build-and-test is a required check, so doc-only changes skip its steps, not the job, and
+# never use paths-ignore: a check that doesn't report blocks the merge.
 jobs:
   build-and-test:
-    runs-on: blacksmith-4vcpu-windows-2025
+    # Windows-hosted because the add-in is net48 and ExcelDna's pack needs kernel32. Public repo,
+    # so these minutes are free; never give it a self-hosted label (a public repo can't use one safely).
+    runs-on: windows-latest
 
     outputs:
+      built: ${{ steps.scope.outputs.build }}
       version: ${{ steps.stamp.outputs.version }}
       commit: ${{ steps.stamp.outputs.commit }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Anything not on the doc-only list builds, and so does a change that can't be classified.
+      # --no-renames: a source file moved into docs/ must count as a source change.
+      - name: Decide scope
+        id: scope
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          TARGET: ${{ github.base_ref || github.ref_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          code=true
+          if [ "$TARGET" != main ]; then
+            if [ "$EVENT" = pull_request ]; then base=HEAD^1; else base=$BEFORE; fi
+            if files=$(git diff --name-only --no-renames "$base" HEAD) && [ -n "$files" ]; then
+              code=false
+              while IFS= read -r file; do
+                case "$file" in
+                  addin/*) code=true ;;
+                  docs/*|specs/*|plans/*|*.md|lambdas/*.yaml) ;;
+                  *) code=true ;;
+                esac
+              done <<< "$files"
+            fi
+          fi
+          test=$code
+          if [ "$EVENT" = push ] && [ "$TARGET" = develop ]; then test=false; fi
+          echo "build=$code" >> "$GITHUB_OUTPUT"
+          echo "test=$test" >> "$GITHUB_OUTPUT"
+          echo "build=$code test=$test"
 
       - name: Setup .NET SDK
+        if: steps.scope.outputs.build == 'true'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
       - name: Stamp build identity
+        if: steps.scope.outputs.build == 'true'
         id: stamp
         shell: pwsh
         env:
@@ -36,30 +86,37 @@ jobs:
           "informational=$version+$env:COMMIT" >> $env:GITHUB_OUTPUT
 
       - name: Restore
+        if: steps.scope.outputs.build == 'true'
         run: dotnet restore addin/lambda-boss.slnx
 
+      # Packs too. The push to develop builds its own XLL rather than reuse the PR's: the XLL
+      # embeds the commit it was built from, and the Labs update check compares that with
+      # dev-latest's notes; a PR build also lacks whatever merged after it.
       - name: Build
+        if: steps.scope.outputs.build == 'true'
         run: >-
           dotnet build addin/lambda-boss.slnx --no-restore --configuration Release
           -p:InformationalVersion=${{ steps.stamp.outputs.informational }}
           -p:IncludeSourceRevisionInInformationalVersion=false
 
       - name: Test (unit tests only)
+        if: steps.scope.outputs.test == 'true'
         run: dotnet test addin/lambda-boss.Tests/lambda-boss.Tests.csproj --no-build --configuration Release --verbosity normal
 
-      # Every build keeps its XLL for a few days, so a lead can load a PR's build in the VM
-      # before merging. publish-dev-latest reuses the same artifact.
+      # Every build keeps its XLL for two days, so a lead can load a PR's build in the VM
+      # before merging. publish-dev-latest uses the same run's artifact.
       - name: Upload packed XLL
+        if: steps.scope.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: lambda-boss-xll
           path: addin/lambda-boss/bin/Release/net48/publish/lambda-boss64-packed.xll
           if-no-files-found: error
-          retention-days: 5
+          retention-days: 2
 
-  # Replaces the rolling dev-latest pre-release on every merge to develop.
+  # Replaces the rolling dev-latest pre-release on every built merge to develop.
   publish-dev-latest:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.build-and-test.outputs.built == 'true'
     needs: build-and-test
     runs-on: ubuntu-latest
     permissions:
@@ -95,14 +152,19 @@ jobs:
             echo "built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > notes.md
 
-      # A slow or re-run build must not put dev-latest back on an older commit. Delete and
+      # A slow or re-run build must not put dev-latest back on an older commit. Compare with what's
+      # published, not with develop's head: a doc-only merge right after this one moves the head
+      # and publishes nothing itself, so this build would never reach dev-latest. Delete and
       # recreate rather than move the tag: GITHUB_TOKEN may not move a tag across workflow changes.
       - name: Publish dev-latest
         run: |
-          head=$(gh api "repos/$GH_REPO/commits/develop" --jq .sha)
-          if [ "$head" != "$COMMIT" ]; then
-            echo "develop has moved on to $head; skipping $COMMIT."
-            exit 0
+          published=$(gh release view dev-latest --json body --jq .body | sed -n 's/^commit: //p') || true
+          if [ -n "$published" ]; then
+            status=$(gh api "repos/$GH_REPO/compare/$COMMIT...$published" --jq .status)
+            if [ "$status" = ahead ] || [ "$status" = identical ]; then
+              echo "dev-latest is already at $published; skipping $COMMIT."
+              exit 0
+            fi
           fi
           gh release delete dev-latest --cleanup-tag --yes || true
           gh release create dev-latest assets/* --target "$COMMIT" --title "Dev build $VERSION" --notes-file notes.md --prerelease --latest=false
