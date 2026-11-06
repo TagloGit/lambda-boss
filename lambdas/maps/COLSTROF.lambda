@@ -25,8 +25,8 @@ COLSTROF = LAMBDA(
         Help?, ISOMITTED(pos),
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
-        a1, CELLAT(1, MOD(pos, m)),
-        result, LEFT(a1, LEN(a1) - 1),
+        rowOne, CELLAT(1, MOD(pos, m)),
+        result, LEFT(rowOne, LEN(rowOne) - 1),
         IF(Help?, Help, result)
 )
 );

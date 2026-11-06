@@ -63,6 +63,6 @@ public class LambdaLoaderIntegrationTests
         // Lambdas read the one multiplier constant, prefixed with the library (#380).
         var topos = loaded.Single(l => l.Name == "maps.TOPOS");
         Assert.Contains("maps._mult", topos.Formula);
-        Assert.DoesNotContain("100000", topos.Formula);
+        Assert.Contains("IF(ISOMITTED(mult), maps._mult, mult)", topos.Formula);
     }
 }

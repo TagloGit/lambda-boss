@@ -27,8 +27,8 @@ POSTOCELL = LAMBDA(
         Help?, ISOMITTED(pos),
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
-        scalar, LAMBDA(p, LET(r, INT(p / m), c, MOD(p, m),
-                    IF(AND(c <= 16384, r <= 1048576), ADDRESS(r, c, 4), CELLAT(r, c)))),
+        scalar, LAMBDA(p, LET(rowN, INT(p / m), colN, MOD(p, m),
+                    IF(AND(colN <= 16384, rowN <= 1048576), ADDRESS(rowN, colN, 4), CELLAT(rowN, colN)))),
         result, IF(OR(ROWS(pos) > 1, COLUMNS(pos) > 1),
                     MAP(pos, scalar),
                     scalar(pos)),

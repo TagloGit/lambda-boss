@@ -24,14 +24,14 @@ CELLAT = LAMBDA(
     //  Check inputs
         Help?, ISOMITTED(row),
     //  Procedure
-        r, INT(row + 0 * col),
-        c, INT(col + 0 * row),
+        rowB, INT(row + 0 * col),
+        colB, INT(col + 0 * row),
         one, LAMBDA(rr, cc,
                IF(OR(rr < 1, cc < 1), #VALUE!,
                   LET(nL, 1 + (cc > 26) + (cc > 702) + (cc > 18278) + (cc > 475254) + (cc > 12356630),
                       v, cc - 1 - (26 ^ nL - 26) / 25,
                       CONCAT(CHAR(65 + MOD(INT(v / 26 ^ (nL - SEQUENCE(nL))), 26))) & rr))),
-        result, IF(AND(ROWS(r) = 1, COLUMNS(r) = 1), one(@r, @c), MAP(r, c, one)),
+        result, IF(AND(ROWS(rowB) = 1, COLUMNS(rowB) = 1), one(@rowB, @colB), MAP(rowB, colB, one)),
         IF(Help?, Help, result)
 )
 );
