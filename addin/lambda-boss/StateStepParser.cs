@@ -415,20 +415,20 @@ public static class StateStepParser
     {
         yield return node;
 
-        IEnumerable<FormulaNode> children = node switch
-        {
-            FunctionCallNode call => call.Arguments,
-            BinaryNode binary => new[] { binary.Left, binary.Right },
-            UnaryNode unary => new[] { unary.Operand },
-            PostfixNode postfix => new[] { postfix.Operand },
-            ParenNode paren => paren.Items,
-            _ => Array.Empty<FormulaNode>()
-        };
-
-        foreach (var child in children)
+        foreach (var child in Children(node))
             foreach (var descendant in Walk(child))
                 yield return descendant;
     }
+
+    internal static IEnumerable<FormulaNode> Children(FormulaNode node) => node switch
+    {
+        FunctionCallNode call => call.Arguments,
+        BinaryNode binary => new[] { binary.Left, binary.Right },
+        UnaryNode unary => new[] { unary.Operand },
+        PostfixNode postfix => new[] { postfix.Operand },
+        ParenNode paren => paren.Items,
+        _ => Array.Empty<FormulaNode>()
+    };
 
     private sealed record StateRead(int Line, int Source, string Key, bool WholeRhs);
 }
@@ -466,7 +466,7 @@ public static class StateFold
     ///     strings, sheet names, table columns and function names like LOG10 alone. Whitespace
     ///     between tokens collapses, so the seed fits the fold's single line.
     /// </summary>
-    private static string Render(string expression, Dictionary<string, string> bindings)
+    private static string Render(string expression, Dictionary<string, string> bindings, bool absolute = true)
     {
         var root = FormulaParser.Parse(expression).Root;
         var inner = StateStepParser.InnerNames(root);
@@ -487,9 +487,9 @@ public static class StateFold
             if (token.Type != FormulaTokenType.Name || inner.Contains(token.Text))
                 sb.Append(token.Text);
             else if (bindings.TryGetValue(token.Text, out var rhs))
-                sb.Append(InPlace(rhs, Without(bindings, token.Text)));
+                sb.Append(InPlace(rhs, Without(bindings, token.Text), absolute));
             else
-                sb.Append(isCall ? token.Text : LetToLambdaBuilder.AbsolutizeReference(token.Text));
+                sb.Append(isCall || !absolute ? token.Text : LetToLambdaBuilder.AbsolutizeReference(token.Text));
         }
 
         sb.Append(CollapseLines(expression[at..]));
@@ -500,9 +500,16 @@ public static class StateFold
         bindings.Where(b => !string.Equals(b.Key, name, StringComparison.OrdinalIgnoreCase))
             .ToDictionary(b => b.Key, b => b.Value, StringComparer.OrdinalIgnoreCase);
 
-    private static string InPlace(string rhs, Dictionary<string, string> bindings)
+    /// <summary>
+    ///     <paramref name="expression" /> with <paramref name="bindings" /> written in place and on
+    ///     one line. Cell references keep their text, for a formula on the same sheet.
+    /// </summary>
+    internal static string Inline(string expression, Dictionary<string, string> bindings) =>
+        Render(expression, bindings, absolute: false);
+
+    private static string InPlace(string rhs, Dictionary<string, string> bindings, bool absolute)
     {
-        var text = Render(rhs, bindings);
+        var text = Render(rhs, bindings, absolute);
         return FormulaParser.Parse(rhs).Root is LeafNode or FunctionCallNode ? text : $"({text})";
     }
 
@@ -560,7 +567,7 @@ public static class StateFold
         return StateStepParser.Walk(root).OfType<FunctionCallNode>().Where(IsFold).ToList();
     }
 
-    private static bool IsFold(FunctionCallNode call) =>
+    internal static bool IsFold(FunctionCallNode call) =>
         call.Arguments.Count == 3
         && (StateStepParser.IsNamed(call.Name, "REDUCE") || StateStepParser.IsNamed(call.Name, "SCAN"));
 }

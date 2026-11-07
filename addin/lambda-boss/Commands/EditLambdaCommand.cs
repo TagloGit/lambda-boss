@@ -43,6 +43,9 @@ internal static class EditLambdaCommand
             var activeCell = app.ActiveCell;
             var formula = activeCell?.Formula2 as string;
 
+            if (Labs.IsOn(Labs.StateEditLambda) && TryEditFold(app, workbook, activeCell, formula))
+                return;
+
             var call = TryParseLambdaCall(formula);
             if (call == null)
             {
@@ -96,6 +99,54 @@ internal static class EditLambdaCommand
             ShowError($"Unexpected error: {ex.Message}");
         }
     }
+
+    /// <summary>
+    ///     On a fold cell, writes a prototype of the fold's step next to it and leaves the fold
+    ///     alone (spec 0011, part 4). Returns false when the cell isn't a fold, so the ordinary
+    ///     command runs.
+    /// </summary>
+    private static bool TryEditFold(dynamic app, dynamic workbook, dynamic activeCell, string? formula)
+    {
+        Func<string, string?> refersTo = name => ResolveName(workbook, name);
+        var outcome = StateStepper.Build(formula, refersTo);
+        if (outcome == null)
+            return false;
+
+        if (outcome.Refusal != null)
+        {
+            ShowError(outcome.Refusal);
+            return true;
+        }
+
+        dynamic sheet = activeCell.Worksheet;
+        int row = activeCell.Row;
+        int column = activeCell.Column;
+        var target = StateStepper.FindTarget(row, column, (r, c) => IsEmptyCell(sheet.Cells[r, c]));
+        if (target == null)
+        {
+            ShowError(StateStepper.NoRoomMessage);
+            return true;
+        }
+
+        try
+        {
+            dynamic cell = sheet.Cells[target.Value.Row, target.Value.Column];
+            cell.Formula2 = outcome.Formula;
+            cell.Select();
+            Logger.Info($"EditLambda: Wrote a prototype of '{outcome.StepName}' to {cell.Address(false, false)}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("EditLambda/WritePrototype", ex);
+            ShowError($"Failed to write the step prototype: {ex.Message}");
+        }
+
+        return true;
+    }
+
+    // A spilled cell has a formula only in its anchor, on some builds, so ask about the spill too.
+    private static bool IsEmptyCell(dynamic cell) =>
+        string.IsNullOrEmpty(Convert.ToString(cell.Formula2)) && !(bool)cell.HasSpill;
 
     /// <summary>
     ///     Parses a formula that looks like <c>=Name(args...)</c> into the name
@@ -155,6 +206,23 @@ internal static class EditLambdaCommand
     ///     </para>
     /// </summary>
     internal static string BuildExpandedLet(LambdaSignature signature, IReadOnlyList<string> arguments)
+    {
+        var (pairs, body) = ExpandBindings(signature, arguments);
+        if (pairs.Count == 0)
+            return "=" + body;
+
+        var sb = new StringBuilder();
+        sb.Append('=');
+        FormulaFormatter.AppendLet(sb, 0, pairs, body);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    ///     The bindings and body of <see cref="BuildExpandedLet" />, before layout: every
+    ///     parameter bound to its argument or default, then the LAMBDA's own bindings.
+    /// </summary>
+    internal static (List<(string Name, string Value)> Pairs, string Body) ExpandBindings(
+        LambdaSignature signature, IReadOnlyList<string> arguments)
     {
         if (signature is null) throw new ArgumentNullException(nameof(signature));
         if (arguments is null) throw new ArgumentNullException(nameof(arguments));
@@ -231,15 +299,7 @@ internal static class EditLambdaCommand
         // ISOMITTED is meaningless in a LET, and every parameter now has a
         // concrete value, so neutralise any remaining ISOMITTED(x) to FALSE.
         pairs = pairs.Select(p => (p.Name, NeutralizeIsOmitted(p.Value))).ToList();
-        body = NeutralizeIsOmitted(body);
-
-        if (pairs.Count == 0)
-            return "=" + body;
-
-        var sb = new StringBuilder();
-        sb.Append('=');
-        FormulaFormatter.AppendLet(sb, 0, pairs, body);
-        return sb.ToString();
+        return (pairs, NeutralizeIsOmitted(body));
     }
 
     private static readonly Regex IsOmittedCallPattern = new(

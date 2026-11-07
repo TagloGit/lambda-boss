@@ -28,7 +28,13 @@ public static class Labs
         "/State: new state step",
         "Adds the /State popup command, which writes a SetVars/GetVar state step from names and initial values.");
 
-    public static readonly IReadOnlyList<LabsSwitch> All = new[] { PopupChannelBadge, StateLetToLambda, StateScaffold };
+    public static readonly LabsSwitch StateEditLambda = new(
+        "state-edit-lambda",
+        "Edit Lambda on a fold",
+        "On a REDUCE or SCAN cell with a named step, Edit Lambda writes the step beside it, with a k stepper.");
+
+    public static readonly IReadOnlyList<LabsSwitch> All =
+        new[] { PopupChannelBadge, StateLetToLambda, StateScaffold, StateEditLambda };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

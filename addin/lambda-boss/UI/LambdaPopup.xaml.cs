@@ -438,7 +438,18 @@ public partial class LambdaPopup
             {
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
-            }),
+            },
+            () => !Labs.IsOn(Labs.StateEditLambda)),
+        new SlashCommand(
+            "Edit Lambda",
+            "Expand a LAMBDA call back to =LET(...). On a fold, write its step beside it with a k stepper: "
+            + "states come from the registered step, so re-register with LET to LAMBDA and trace to check a fix",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
+            },
+            () => Labs.IsOn(Labs.StateEditLambda)),
         new SlashCommand(
             "Gather",
             "Roll up the active cell's precedents into a single =LET(...)",
