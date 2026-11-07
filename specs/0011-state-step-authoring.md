@@ -513,10 +513,15 @@ in `taglo-win` settled these:
 - `b:b` and `b:c` follow a LET name: `LET(b, B2, c, B3, COLUMNS(b:c))` is 1, not 2. They're renamed.
 - A built-in wins over a LET name: `LET(max, 5, MAX(max, 1))` is 5, and `LET(sum, LAMBDA(x, x+1), sum(1))`
   is entered as `SUM(1)`, giving 1. Excel writes a binding's call in the binding's case (`FOO(1)` comes
-  back `foo(1)`), so a call is renamed only when it matches the binding's case exactly.
+  back `foo(1)`), so a call is renamed only when it matches the binding's case exactly. A binding in
+  capitals spelt like a built-in (`LET(MAX, …)`) still renames the call, which shows as `#NAME?`.
 - `A0`, `XFE1` and `A1048577` are names, not cells, so they aren't made absolute.
-- This build lets a LET name shadow a cell (`LET(x1, 5, x1)` is 5, as are `c` and `H1`). Names bound in
-  the LET are left alone when refs are made absolute. Part 1 still suffixes these, as specified.
+- `Data!A:B` stays: `LET(b, 2, COLUMNS(Sheet1!A:b))` is 2, so a qualified range's end isn't a LET name.
+- This build lets a LET name shadow a cell (`LET(x1, 5, x1)` is 5, as are `c` and `H1`). Excel then
+  writes every other use of that cell in the formula as the name `'H1'`, which gives `#NAME?`. Names
+  bound in the LET are left alone when refs are made absolute. Part 1 still suffixes these, as
+  specified.
+- Excel refuses `LOG10 (100)`, so a `(` after a space is an intersection, not a call.
 - Text the lexer can't read (an unterminated string) comes back unchanged. Excel refuses it anyway.
 
 ## Appendix — GetVar hot-loop benchmark (6 Nov 2026)

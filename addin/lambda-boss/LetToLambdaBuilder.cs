@@ -255,8 +255,9 @@ public static class LetToLambdaBuilder
     ///     Replaces each name in <paramref name="text" /> that is a rename key, matched
     ///     case-insensitively on whole tokens. A token is a whole reference, so strings, array
     ///     constants, errors, <c>$B$2</c>, <c>Sheet1!B2</c>, <c>t[b]</c> and <c>'b'!A1</c> are never
-    ///     hit. <c>b:b</c> is renamed, because in real Excel a LET name wins over the column.
-    ///     Text the lexer can't read comes back unchanged.
+    ///     hit. <c>b:b</c> is renamed, because in real Excel a LET name wins over the column, but
+    ///     <c>Data!A:B</c> isn't: both ends are on the sheet. An inner optional parameter
+    ///     (<c>LAMBDA([x], …)</c>) follows its body. Text the lexer can't read comes back unchanged.
     /// </summary>
     internal static string ApplyRenames(string text, IReadOnlyDictionary<string, string> renames)
     {
@@ -265,15 +266,18 @@ public static class LetToLambdaBuilder
         var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, newName) in renames) byName[name] = newName;
 
-        return RewriteNames(text, (token, isCall) =>
+        return RewriteNames(text, use =>
         {
-            if (!byName.TryGetValue(token, out var newName)) return token;
+            if (use.IsOptionalParam)
+                return byName.TryGetValue(use.Text[1..^1], out var newParam) ? $"[{newParam}]" : use.Text;
+
+            if (use.EndsSheetRange || !byName.TryGetValue(use.Text, out var newName)) return use.Text;
 
             // A binding can hold a LAMBDA, so a call can be a rename. But a built-in wins over a
             // LET name of the same spelling (LET(max, 5, MAX(max, 1)) is 5). Excel shows a
             // built-in in capitals and a binding's call in the binding's case, so the exact case
             // tells them apart.
-            return !isCall || renames.Keys.Contains(token, StringComparer.Ordinal) ? newName : token;
+            return !use.IsCall || renames.Keys.Contains(use.Text, StringComparer.Ordinal) ? newName : use.Text;
         });
     }
 
@@ -290,13 +294,24 @@ public static class LetToLambdaBuilder
     /// <param name="text">The expression. Text the lexer can't read comes back unchanged.</param>
     /// <param name="letNames">
     ///     Names bound around the expression. Excel lets a LET name shadow a cell
-    ///     (<c>LET(x1, 5, x1)</c> is 5), so these are left alone.
+    ///     (<c>LET(x1, 5, x1)</c> is 5), so these are left alone, as are names the expression
+    ///     binds itself. Excel writes the shadowed cell's other uses as <c>'x1'</c>, which
+    ///     isn't an address.
     /// </param>
     internal static string AbsolutizeCellRefs(string text, IReadOnlyCollection<string>? letNames = null)
     {
         var shadowed = new HashSet<string>(letNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
-        return RewriteNames(text, (token, isCall) =>
-            isCall || shadowed.Contains(token) ? token : AbsolutizeReference(token));
+        try
+        {
+            shadowed.UnionWith(StateStepParser.InnerNames(FormulaParser.Parse(text).Root));
+        }
+        catch (FormatException)
+        {
+            // Inner names only sharpen the rewrite, and it works without a tree.
+        }
+
+        return RewriteNames(text, use =>
+            use.IsCall || shadowed.Contains(use.Text) ? use.Text : AbsolutizeReference(use.Text));
     }
 
     /// <summary>
@@ -321,8 +336,14 @@ public static class LetToLambdaBuilder
                     i = FormulaParser.SkipBrackets(token, i);
                     break;
                 case '!':
-                    var end = token.IndexOf(':', i);
-                    if (end < 0) end = token.Length;
+                    var end = i + 1;
+                    while (end < token.Length && token[end] != ':')
+                        end = token[end] switch
+                        {
+                            '\'' => FormulaParser.SkipSingleQuoted(token, end),
+                            '[' => FormulaParser.SkipBrackets(token, end),
+                            _ => end + 1
+                        };
                     sb.Append(token, copied, i + 1 - copied);
                     sb.Append(AbsoluteAddress(token[(i + 1)..end]));
                     copied = i = end;
@@ -355,11 +376,18 @@ public static class LetToLambdaBuilder
             && int.Parse(digits, CultureInfo.InvariantCulture) <= 1048576;
     }
 
+    /// <summary>One name token and how it's used.</summary>
+    /// <param name="Text">The token.</param>
+    /// <param name="IsCall">A <c>(</c> touches it. With a space it's an intersection: Excel refuses <c>LOG10 (1)</c>.</param>
+    /// <param name="EndsSheetRange">It's the end of a qualified range, like <c>B</c> in <c>Data!A:B</c>.</param>
+    /// <param name="IsOptionalParam">It's <c>[x]</c> in the parameters of an inner <c>LAMBDA</c>.</param>
+    private readonly record struct NameUse(string Text, bool IsCall, bool EndsSheetRange, bool IsOptionalParam);
+
     /// <summary>
     ///     Copies <paramref name="text" /> with each name token passed through
-    ///     <paramref name="rewrite" /> (the token, and whether it's a call).
+    ///     <paramref name="rewrite" />.
     /// </summary>
-    private static string RewriteNames(string text, Func<string, bool, string> rewrite)
+    private static string RewriteNames(string text, Func<NameUse, string> rewrite)
     {
         IReadOnlyList<FormulaToken> tokens;
         try
@@ -373,13 +401,30 @@ public static class LetToLambdaBuilder
 
         var result = new StringBuilder();
         var copied = 0;
+        var calls = new Stack<string>();
         for (var i = 0; i < tokens.Count; i++)
         {
             var token = tokens[i];
+            var previous = i == 0 ? null : tokens[i - 1];
+
+            if (token.Type == FormulaTokenType.LParen)
+                calls.Push(previous is { Type: FormulaTokenType.Name } && token.Lead.Length == 0 ? previous.Text : "");
+            else if (token.Type == FormulaTokenType.RParen && calls.Count > 0)
+                calls.Pop();
+
             if (token.Type != FormulaTokenType.Name) continue;
 
+            var next = tokens[i + 1];
+            var isCall = next.Type == FormulaTokenType.LParen && next.Lead.Length == 0;
+            var endsSheetRange = previous is { Type: FormulaTokenType.Operator, Text: ":" }
+                && i >= 2 && tokens[i - 2].Type == FormulaTokenType.Name && tokens[i - 2].Text.Contains('!');
+            var isOptionalParam = token.Text.StartsWith("[", StringComparison.Ordinal)
+                && token.Text.EndsWith("]", StringComparison.Ordinal)
+                && next.Type == FormulaTokenType.Comma
+                && calls.Count > 0 && StateStepParser.IsNamed(calls.Peek(), "LAMBDA");
+
             result.Append(text, copied, token.Start - copied);
-            result.Append(rewrite(token.Text, tokens[i + 1].Type == FormulaTokenType.LParen));
+            result.Append(rewrite(new NameUse(token.Text, isCall, endsSheetRange, isOptionalParam)));
             copied = token.End;
         }
 
