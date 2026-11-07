@@ -96,6 +96,31 @@ tests:
     args: ['=VSTACK(SetVar(NewState(), "x", 5), SetVar(NewState(), "y", 6))', "x"]
     expected: [[5], [-2146826246]]
 
+  # #407: DROP to one row leaves a 1x1 array. Stored as a scalar, so REDUCE and SCAN agree.
+  - name: SetVars with a 1x1 array value keeps a later array variable readable
+    args: ['=SetVars("path", DROP({"E4";"E3"}, -1), "seen", {"E4";"E3"})', "seen"]
+    expected: [["E4"], ["E3"]]
+
+  - name: SetVar chain with a 1x1 array value keeps a later array variable readable
+    args: ['=SetVar(SetVar(NewState(), "path", DROP({"E4";"E3"}, -1)), "seen", {"E4";"E3"})', "seen"]
+    expected: [["E4"], ["E3"]]
+
+  - name: REDUCE step shrinking a list to one row keeps every variable readable
+    args: ['=REDUCE(SetVars("path", {"E4";"E3";"E2"}, "n", 0), {1;2}, LAMBDA(a, v, SetVars("path", DROP(GetVar(a, "path"), -1), "n", GetVar(a, "n") + 1)))', "n"]
+    expected: 2
+
+  - name: SCAN gives the same state as REDUCE for that step
+    args: ['=INDEX(SCAN(SetVars("path", {"E4";"E3";"E2"}, "n", 0), {1;2}, LAMBDA(a, v, SetVars("path", DROP(GetVar(a, "path"), -1), "n", GetVar(a, "n") + 1))), 2)', "n"]
+    expected: 2
+
+  - name: REDUCE step retreating to one row keeps the longer list
+    args: ['=REDUCE(SetVars("path", {"E4";"E3"}, "seen", {"E4";"E3"}), {1;2}, LAMBDA(a, v, SetVars("path", IF(ROWS(GetVar(a, "path")) > 1, DROP(GetVar(a, "path"), -1), GetVar(a, "path")), "seen", GetVar(a, "seen"))))', "seen"]
+    expected: [["E4"], ["E3"]]
+
+  - name: a 1x1 array state from the step's own IF stays readable through REDUCE
+    args: ['=REDUCE(SetVars("p", {1;2}, "q", 3), {1;2;3}, LAMBDA(a, v, IF({TRUE}, SetVar(a, "q", GetVar(a, "q") + v))))', "p"]
+    expected: [[1], [2]]
+
   - name: help text
     args: []
     expected_type: array
