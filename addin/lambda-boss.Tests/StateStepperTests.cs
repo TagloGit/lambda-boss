@@ -141,18 +141,16 @@ public class StateStepperTests
             result);
     }
 
-    [Fact]
-    public void AnUnrecognisedStep_GoesByItsSeed()
+    [Theory]
+    [InlineData("=LAMBDA(a, v, LET(p, GetVar(a, \"p\"), SINGLE(IF(p > 1, a, SetVars(\"p\", p + v)))))", "SetVars(\"p\", 0)", true)]
+    [InlineData("=LAMBDA(a, v, a + v)", "0", true)]
+    [InlineData("=LAMBDA(a, v, IF(v > 0, a + v, a))", "HSTACK(0, 1)", false)]
+    [InlineData("=LAMBDA(a, v, IF(v > 0, a + v, a))", "{0,1}", false)]
+    public void AnUnrecognisedStep_GoesByItsSeed(string step, string seed, bool stepper)
     {
-        var walk = "=LAMBDA(a, v, LET(p, GetVar(a, \"p\"), SINGLE(IF(p > 1, a, SetVars(\"p\", p + v)))))";
-        var sum = "=LAMBDA(a, v, a + v)";
-        var pairs = "=LAMBDA(a, v, IF(v > 0, a + v, a))";
-        var names = Defined(("walk", walk), ("total", sum), ("pairs", pairs));
+        var result = Prototype($"=REDUCE({seed}, G1:G9, go)", Defined(("go", step)));
 
-        Assert.Contains("k, 1,", Prototype("=REDUCE(SetVars(\"p\", 0), G1:G9, walk)", names));
-        Assert.Contains("k, 1,", Prototype("=REDUCE(0, G1:G9, total)", names));
-        Assert.DoesNotContain("k, 1,", Prototype("=REDUCE(HSTACK(0, 1), G1:G9, pairs)", names));
-        Assert.DoesNotContain("k, 1,", Prototype("=REDUCE({0,1}, G1:G9, pairs)", names));
+        Assert.Equal(stepper, result.Contains("k, 1,"));
     }
 
     [Fact]
@@ -307,7 +305,7 @@ public class StateStepperTests
     [Fact]
     public void APrototypePastExcelsLimit_IsRefused()
     {
-        var seed = "SetVars(\"p\", \"" + new string('x', 3000) + "\")";
+        var seed = "SetVars(\"p\", \"" + new string('x', 4500) + "\")";
 
         Assert.Contains("limit", Refusal($"=REDUCE({seed}, G1:G9, moveRobot)"));
     }
