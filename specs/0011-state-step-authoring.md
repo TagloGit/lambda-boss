@@ -145,8 +145,9 @@ until a different target is typed).
   and Tim replaces each RHS with the rule. No `#NAME?` or `#VALUE!` while the step is half-written.
 - Next-line names are `next` + the variable with its first letter upper-cased (`p` → `nextP`,
   `best` → `nextBest`), matching Tim's own convention.
-- Enter saves, Escape cancels (same keys as the other dialogs). One Excel operation (`Formula2`),
-  native undo.
+- Enter saves, Escape cancels (same keys as the other dialogs). One Excel operation (`Formula2`).
+  It doesn't get native undo: a COM write clears Excel's undo stack, as with every add-in command
+  (checked in the VM: Ctrl+Z left the step in place).
 
 **Edge cases.**
 

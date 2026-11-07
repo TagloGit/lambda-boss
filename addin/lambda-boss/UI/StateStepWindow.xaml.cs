@@ -62,7 +62,8 @@ public partial class StateStepWindow
         var targetError = TargetError();
         SaveButton.IsEnabled = built.Formula != null && targetError == null;
 
-        var message = _message ?? built.Error ?? targetError;
+        // A filled target comes first: on a single filled cell the state is still empty.
+        var message = _message ?? (TargetIsFilled() ? targetError : null) ?? built.Error ?? targetError;
         MessageText.Text = message ?? "";
         MessageText.Visibility = message == null ? Visibility.Collapsed : Visibility.Visible;
     }
