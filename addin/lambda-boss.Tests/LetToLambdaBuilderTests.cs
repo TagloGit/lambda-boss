@@ -477,6 +477,126 @@ public class LetToLambdaBuilderTests
         Assert.Equal(expected, LetToLambdaBuilder.AbsolutizeCellRefs(input));
     }
 
+    [Theory]
+    [InlineData("LOG10(H1)", "LOG10($H$1)")]
+    [InlineData("DEC2HEX(A1) & ATAN2(B2, C3)", "DEC2HEX($A$1) & ATAN2($B$2, $C$3)")]
+    [InlineData("'L12'!H1", "'L12'!$H$1")]
+    [InlineData("'Q1 data'!H1", "'Q1 data'!$H$1")]
+    [InlineData("'Q1!R2'!H1", "'Q1!R2'!$H$1")]
+    [InlineData("Q1!H1", "Q1!$H$1")]
+    [InlineData("'Q1 data'!H1:J2", "'Q1 data'!$H$1:$J$2")]
+    [InlineData("Sheet1!A1:Sheet1!B2", "Sheet1!$A$1:Sheet1!$B$2")]
+    [InlineData("Sheet1:Sheet3!A1", "Sheet1:Sheet3!$A$1")]
+    [InlineData("Q1:Q4!A1", "Q1:Q4!$A$1")]
+    [InlineData("[Book1.xlsx]Sheet1!A1", "[Book1.xlsx]Sheet1!$A$1")]
+    [InlineData("t[Q1] + t[@H1]", "t[Q1] + t[@H1]")]
+    [InlineData("t[[Q1]:[Q4]]", "t[[Q1]:[Q4]]")]
+    [InlineData("A:A", "A:A")]
+    [InlineData("1:1", "1:1")]
+    [InlineData("A1#", "$A$1#")]
+    [InlineData("{1,\"A1\"}", "{1,\"A1\"}")]
+    [InlineData("#N/A", "#N/A")]
+    [InlineData("1E5 + 2E5", "1E5 + 2E5")]
+    [InlineData("a1", "$a$1")]
+    [InlineData("A0", "A0")]
+    [InlineData("XFD1", "$XFD$1")]
+    [InlineData("XFE1", "XFE1")]
+    [InlineData("A1048576", "$A$1048576")]
+    [InlineData("A1048577", "A1048577")]
+    [InlineData("A99999999999", "A99999999999")]
+    [InlineData("SUM(\r\n    A1,\r\n    \"B2\"\r\n)", "SUM(\r\n    $A$1,\r\n    \"B2\"\r\n)")]
+    [InlineData("\"unterminated A1", "\"unterminated A1")]
+    public void AbsolutizeCellRefs_TouchesOnlyCells(string input, string expected)
+    {
+        Assert.Equal(expected, LetToLambdaBuilder.AbsolutizeCellRefs(input));
+    }
+
+    [Fact]
+    public void AbsolutizeCellRefs_LeavesALetNameThatShadowsACell()
+    {
+        Assert.Equal("x1 + $x$2", LetToLambdaBuilder.AbsolutizeCellRefs("x1 + x2", new[] { "X1" }));
+    }
+
+    [Theory]
+    [InlineData("$B$2 + t[b]", "$B$2 + t[b]")]
+    [InlineData("b + $B$2 + B2 + $B2 + B$2", "bat + $B$2 + B2 + $B2 + B$2")]
+    [InlineData("Sheet1!B2", "Sheet1!B2")]
+    [InlineData("Sheet1!b", "Sheet1!b")]
+    [InlineData("b!A1 + 'b'!A1", "b!A1 + 'b'!A1")]
+    [InlineData("b[x] + t[[b]:[c]] + [@b]", "b[x] + t[[b]:[c]] + [@b]")]
+    [InlineData("\"b\" & b & \"say \"\"b\"\"\"", "\"b\" & bat & \"say \"\"b\"\"\"")]
+    [InlineData("{1,\"b\"}", "{1,\"b\"}")]
+    [InlineData("b.x + x.b + b_ + _b + b? + ?b", "b.x + x.b + b_ + _b + b? + ?b")]
+    [InlineData("B + b", "bat + bat")]
+    [InlineData("b:b", "bat:bat")]
+    [InlineData("A1:b", "A1:bat")]
+    [InlineData("b# + @b", "bat# + @bat")]
+    [InlineData("b(1)", "bat(1)")]
+    [InlineData("B(1)", "B(1)")]
+    [InlineData("\"unterminated b", "\"unterminated b")]
+    public void ApplyRenames_TouchesOnlyTheName(string input, string expected)
+    {
+        var renames = new Dictionary<string, string> { ["b"] = "bat" };
+        Assert.Equal(expected, LetToLambdaBuilder.ApplyRenames(input, renames));
+    }
+
+    [Theory]
+    [InlineData("#N/A", "n", "x", "#N/A")]
+    [InlineData("MAX(max, 1) + max", "max", "top", "MAX(top, 1) + top")]
+    [InlineData("LOG10(H1)", "log", "x", "LOG10(H1)")]
+    [InlineData("t[a]", "t", "x", "t[a]")]
+    public void ApplyRenames_LeavesWhatIsNotTheBinding(string input, string from, string to, string expected)
+    {
+        var renames = new Dictionary<string, string> { [from] = to };
+        Assert.Equal(expected, LetToLambdaBuilder.ApplyRenames(input, renames));
+    }
+
+    [Fact]
+    public void ApplyRenames_SwapsInOnePass()
+    {
+        var renames = new Dictionary<string, string> { ["a"] = "b", ["b"] = "a" };
+        Assert.Equal("b + a", LetToLambdaBuilder.ApplyRenames("a + b", renames));
+    }
+
+    [Fact]
+    public void ApplyRenames_MatchesAnyCaseWhicheverDictionaryIsPassed()
+    {
+        var renames = new Dictionary<string, string> { ["Bat"] = "cat" };
+        Assert.Equal("cat + cat", LetToLambdaBuilder.ApplyRenames("BAT + bat", renames));
+    }
+
+    [Fact]
+    public void RenamedParam_LeavesAbsoluteRefsAndTableColumnsInTheBody()
+    {
+        var result = Build("=LET(b, 1, $B$2 + t[b] + b)", "Add", ("b", "bat", true));
+
+        Assert.Contains("$B$2 + t[b] + bat", result);
+    }
+
+    [Fact]
+    public void KeepOff_MakesCellsAbsoluteAndLeavesSheetNames()
+    {
+        var result = Build("=LET(x, 'Q1 data'!H2, y, 1, x + y)", "Add", ("x", "x", false), ("y", "y", true));
+
+        Assert.Contains("x, 'Q1 data'!$H$2,", result);
+    }
+
+    [Fact]
+    public void KeepOff_LeavesALetNameThatShadowsACell()
+    {
+        var result = Build("=LET(x1, 5, y, x1, x1 + y)", "Add", ("x1", "x1", true), ("y", "y", false));
+
+        Assert.Contains("y, x1,", result);
+    }
+
+    [Fact]
+    public void OptionalDefault_KeepsFunctionNames()
+    {
+        var result = BuildWithDefault("=LET(x, 1, x + 1)", "Add", ("x", "x", true, true, "LOG10(H1)"));
+
+        Assert.Contains("IF(ISOMITTED(x), LOG10($H$1), x)", result);
+    }
+
     [Fact]
     public void OptionalOnlyParam_StillProducesLet()
     {

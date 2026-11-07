@@ -28,6 +28,20 @@ internal static class FormulaParser
     };
 
     /// <summary>
+    ///     Splits <paramref name="formula" /> into tokens without building a tree, ending
+    ///     with an <see cref="FormulaTokenType.Eof" /> token. Text between tokens is whitespace.
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="formula" /> is null.</exception>
+    /// <exception cref="FormatException">An unterminated string or bracket, or an unexpected character.</exception>
+    public static IReadOnlyList<FormulaToken> Tokenize(string formula)
+    {
+        if (formula is null)
+            throw new ArgumentNullException(nameof(formula));
+
+        return Lex(formula);
+    }
+
+    /// <summary>
     ///     Parses <paramref name="formula" /> (with or without a leading <c>=</c>)
     ///     into an expression tree.
     /// </summary>
@@ -351,7 +365,7 @@ internal static class FormulaParser
         return i;
     }
 
-    private static int SkipSingleQuoted(string s, int i)
+    internal static int SkipSingleQuoted(string s, int i)
     {
         // i points at the opening single quote. '' is an escaped literal quote.
         i++;
@@ -374,7 +388,7 @@ internal static class FormulaParser
         throw new FormatException("Unterminated quoted sheet/workbook name in formula.");
     }
 
-    private static int SkipBrackets(string s, int i)
+    internal static int SkipBrackets(string s, int i)
     {
         // i points at the opening '['. Brackets may nest (t[[A]:[B]]); inside,
         // a leading single quote escapes the next character ('[ '] '# '@ '').

@@ -66,7 +66,8 @@ built on what exists:
 - `FormulaParser` (spec 0009's AST) to recognise calls inside a binding's RHS: `GetVar(S, "k")`,
   the body's `SetVars("k1", e1, …)`, and (round trip) a `REDUCE`/`SCAN` call anywhere in a cell
   formula.
-- `LetToLambdaBuilder.ApplyRenames` for identifier renames (word-boundary, string-skipping).
+- `LetToLambdaBuilder.ApplyRenames` for identifier renames (on whole tokens, so strings and
+  references are skipped; #403).
 - `FormulaFormatter.AppendLet` for output layout (one binding per line, 4-space indent).
 - `ExcelNameValidator` + `LetNameSanitizer` for binding names.
 - `EditLambdaCommand.BuildExpandedLet` for the LAMBDA → LET direction.
@@ -203,8 +204,7 @@ tool never leaves a dangling name.
 **Rename** `b` → `bat`: renames the bindings (`b` → `bat`, `nextB` → `nextBat`) through
 `ApplyRenames`, so every expression that reads them follows, and rewrites the key string in every
 `GetVar(S, …)`, the output `SetVars` and `S`'s `SetVars`. Strings elsewhere (`SWITCH(v, "b", …)`)
-are not touched. `ApplyRenames` matches case-insensitively (`LetToLambdaBuilder.cs` regex uses
-`IgnoreCase`), which is right for Excel names (`b` and `B` are the same binding), so a rename that
+are not touched. `ApplyRenames` matches case-insensitively, which is right for Excel names (`b` and `B` are the same binding), so a rename that
 would collide with another binding differing only in case is blocked like any clash. Tests cover
 text near references: `$B$2`, `B2`, `Sheet1!B2`, `t[b]` must not change when `b` is renamed.
 
@@ -496,8 +496,8 @@ Taken while building Part 3 (Labs switch `state-let-to-lambda`, "State steps in 
   the builder accepts any calculation the dialog lists on a state step. One left Keep off is made
   absolute, like any excluded input.
 - The seed writes other LET bindings in place (`input1`, `k`), since a cell can't see them, and is
-  flattened to one line. It's rewritten on the formula tree, not with `ApplyRenames` and
-  `AbsolutizeCellRefs`, which corrupt `$B$2`, `t[b]`, `LOG10(` and quoted sheet names.
+  flattened to one line. It's rewritten on the formula tree. Its cell references go through
+  `LetToLambdaBuilder.AbsolutizeReference`, the same code as `AbsolutizeCellRefs`.
 - The fold line also takes `SCAN` and a wrapped fold (`=TEXTJOIN(" ",,REDUCE(…))`). Renaming the
   LAMBDA rewrites only a step argument that is empty or the previous name, so Tim's edits survive.
 - **Write fold to** takes a cell on the active sheet and never overwrites a filled cell: the LAMBDA
@@ -506,6 +506,18 @@ Taken while building Part 3 (Labs switch `state-let-to-lambda`, "State steps in 
   Ctrl+C copies the fold unless text is selected in a box.
 - The `input` badge moves with a **make input** button on the other rows. The row that loses it goes
   Keep off.
+
+Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
+in `taglo-win` settled these:
+
+- `b:b` and `b:c` follow a LET name: `LET(b, B2, c, B3, COLUMNS(b:c))` is 1, not 2. They're renamed.
+- A built-in wins over a LET name: `LET(max, 5, MAX(max, 1))` is 5, and `LET(sum, LAMBDA(x, x+1), sum(1))`
+  is entered as `SUM(1)`, giving 1. Excel writes a binding's call in the binding's case (`FOO(1)` comes
+  back `foo(1)`), so a call is renamed only when it matches the binding's case exactly.
+- `A0`, `XFE1` and `A1048577` are names, not cells, so they aren't made absolute.
+- This build lets a LET name shadow a cell (`LET(x1, 5, x1)` is 5, as are `c` and `H1`). Names bound in
+  the LET are left alone when refs are made absolute. Part 1 still suffixes these, as specified.
+- Text the lexer can't read (an unterminated string) comes back unchanged. Excel refuses it anyway.
 
 ## Appendix — GetVar hot-loop benchmark (6 Nov 2026)
 

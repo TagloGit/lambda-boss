@@ -440,7 +440,6 @@ public static class StateStepParser
 public static class StateFold
 {
     private static readonly Regex CellAddress = new(@"^\$?[A-Za-z]{1,3}\$?[1-9][0-9]*$");
-    private static readonly Regex CellRef = new(@"^(.*!)?\$?([A-Za-z]{1,3})\$?([0-9]+)$");
     private static readonly Regex LineBreak = new(@"\s*\r?\n\s*");
 
     /// <summary>
@@ -490,7 +489,7 @@ public static class StateFold
             else if (bindings.TryGetValue(token.Text, out var rhs))
                 sb.Append(InPlace(rhs, Without(bindings, token.Text)));
             else
-                sb.Append(isCall ? token.Text : CellRef.Replace(token.Text, "$1$$$2$$$3"));
+                sb.Append(isCall ? token.Text : LetToLambdaBuilder.AbsolutizeReference(token.Text));
         }
 
         sb.Append(CollapseLines(expression[at..]));

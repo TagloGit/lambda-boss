@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -33,6 +34,8 @@ public record LambdaGenerationRequest(
 
 public static class LetToLambdaBuilder
 {
+    private static readonly Regex CellAddress = new(@"^\$?([A-Za-z]{1,3})\$?([0-9]+)$");
+
     public static string Build(LambdaGenerationRequest request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
@@ -108,6 +111,8 @@ public static class LetToLambdaBuilder
             .ToDictionary(k => k.Binding.Name, k => k.Choice.ParamName,
                 StringComparer.OrdinalIgnoreCase);
 
+        var letNames = parsed.Bindings.Select(b => b.Name).Concat(paramNames).ToList();
+
         // Internal bindings preserve source order; their RHS text has renames
         // applied. For excluded inputs (value bindings the user chose not to
         // keep) the RHS is hardcoded into the LAMBDA body, so cell refs are
@@ -123,7 +128,7 @@ public static class LetToLambdaBuilder
                 var renamed = ApplyRenames(b.RhsText, renames);
                 var rhs = b.IsCalculation && !roleNames.Contains(b.Name)
                     ? renamed
-                    : AbsolutizeCellRefs(renamed);
+                    : AbsolutizeCellRefs(renamed, letNames);
                 return new LetBinding(b.Name, rhs, b.IsCalculation);
             })
             .ToList();
@@ -149,7 +154,7 @@ public static class LetToLambdaBuilder
                     : k.Choice.DefaultExpression!;
                 return new LetBinding(
                     k.Choice.ParamName,
-                    $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(defaultExpr, renames))}, {k.Choice.ParamName})",
+                    $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(defaultExpr, renames), letNames)}, {k.Choice.ParamName})",
                     IsCalculation: false);
             })
             .ToList();
@@ -247,113 +252,137 @@ public static class LetToLambdaBuilder
     }
 
     /// <summary>
-    ///     Replaces identifier occurrences of each rename key with its value,
-    ///     skipping string literals. Case-insensitive, word-boundary matched.
+    ///     Replaces each name in <paramref name="text" /> that is a rename key, matched
+    ///     case-insensitively on whole tokens. A token is a whole reference, so strings, array
+    ///     constants, errors, <c>$B$2</c>, <c>Sheet1!B2</c>, <c>t[b]</c> and <c>'b'!A1</c> are never
+    ///     hit. <c>b:b</c> is renamed, because in real Excel a LET name wins over the column.
+    ///     Text the lexer can't read comes back unchanged.
     /// </summary>
     internal static string ApplyRenames(string text, IReadOnlyDictionary<string, string> renames)
     {
         if (renames.Count == 0) return text;
 
-        // Lookbehind/lookahead include '?' so a rename of 'Help?' isn't
-        // accidentally matched inside a longer name like 'Help??' or
-        // 'foo?Help?'. Mirrors the identifier rule in LetParser /
-        // ExcelNameValidator: '?' is part of the name body.
-        //
-        // Wrap the alternation in a non-capturing group so the word-boundary
-        // lookarounds apply to every alternative. Without the group, `|` would
-        // split the regex into "(?<!…)key1" and "key2(?!…)", letting a key
-        // match the first letter of a longer identifier (e.g. `a` in `ABS`).
-        var pattern = string.Join("|", renames.Keys.Select(Regex.Escape));
-        var regex = new Regex($@"(?<![A-Za-z0-9_.?])(?:{pattern})(?![A-Za-z0-9_.?])",
-            RegexOptions.IgnoreCase);
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, newName) in renames) byName[name] = newName;
 
-        var result = new StringBuilder();
-        var i = 0;
-        while (i < text.Length)
+        return RewriteNames(text, (token, isCall) =>
         {
-            if (text[i] == '"')
-            {
-                var end = SkipString(text, i);
-                result.Append(text, i, end - i);
-                i = end;
-                continue;
-            }
+            if (!byName.TryGetValue(token, out var newName)) return token;
 
-            var nextQuote = text.IndexOf('"', i);
-            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
-            var segment = text[i..segEnd];
-            var rewritten = regex.Replace(segment, m =>
-            {
-                // Find the rename key case-insensitively.
-                var key = renames.Keys.First(k =>
-                    string.Equals(k, m.Value, StringComparison.OrdinalIgnoreCase));
-                return renames[key];
-            });
-            result.Append(rewritten);
-            i = segEnd;
-        }
-        return result.ToString();
+            // A binding can hold a LAMBDA, so a call can be a rename. But a built-in wins over a
+            // LET name of the same spelling (LET(max, 5, MAX(max, 1)) is 5). Excel shows a
+            // built-in in capitals and a binding's call in the binding's case, so the exact case
+            // tells them apart.
+            return !isCall || renames.Keys.Contains(token, StringComparer.Ordinal) ? newName : token;
+        });
     }
 
     /// <summary>
     ///     Forces any A1-style cell reference in <paramref name="text" /> to
     ///     fully absolute form (e.g. <c>A1</c>, <c>$A1</c>, <c>A$1</c> all
     ///     become <c>$A$1</c>). Ranges like <c>A1:B5</c> and sheet-qualified
-    ///     refs like <c>Sheet1!A1</c> are handled; tokens inside string
-    ///     literals are left alone. Used so baked-in expressions in a
-    ///     registered LAMBDA (optional-param defaults and excluded-input
-    ///     RHS values) don't shift when the Name is invoked from a cell
-    ///     other than the one it was registered against.
+    ///     refs like <c>Sheet1!A1</c> are handled, and it works on whole tokens, so
+    ///     strings, function names (<c>LOG10(</c>), table columns and sheet names are left
+    ///     alone. Used so baked-in expressions in a registered LAMBDA (optional-param
+    ///     defaults and excluded-input RHS values) don't shift when the Name is invoked
+    ///     from a cell other than the one it was registered against.
     /// </summary>
-    internal static string AbsolutizeCellRefs(string text)
+    /// <param name="text">The expression. Text the lexer can't read comes back unchanged.</param>
+    /// <param name="letNames">
+    ///     Names bound around the expression. Excel lets a LET name shadow a cell
+    ///     (<c>LET(x1, 5, x1)</c> is 5), so these are left alone.
+    /// </param>
+    internal static string AbsolutizeCellRefs(string text, IReadOnlyCollection<string>? letNames = null)
     {
-        // Lookbehind includes '?' so a name fragment like 'Help?A1' isn't
-        // accidentally absolutized as the cell ref 'A1'. The lookahead
-        // already guards the cell-ref tail; '?' is added there too in
-        // case a defined name happens to start with what looks like a
-        // cell address followed by '?'.
-        var regex = new Regex(
-            @"(?<![A-Za-z0-9_.?])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_.!?])");
-
-        var result = new StringBuilder();
-        var i = 0;
-        while (i < text.Length)
-        {
-            if (text[i] == '"')
-            {
-                var end = SkipString(text, i);
-                result.Append(text, i, end - i);
-                i = end;
-                continue;
-            }
-
-            var nextQuote = text.IndexOf('"', i);
-            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
-            var segment = text[i..segEnd];
-            var rewritten = regex.Replace(segment,
-                m => "$" + m.Groups[2].Value + "$" + m.Groups[4].Value);
-            result.Append(rewritten);
-            i = segEnd;
-        }
-        return result.ToString();
+        var shadowed = new HashSet<string>(letNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        return RewriteNames(text, (token, isCall) =>
+            isCall || shadowed.Contains(token) ? token : AbsolutizeReference(token));
     }
 
-    private static int SkipString(string text, int openQuoteIndex)
+    /// <summary>
+    ///     Makes the cell address in one reference token absolute: <c>H1</c>, <c>'Q1 data'!H1</c>
+    ///     or the two-sheet range <c>Sheet1!A1:Sheet1!B2</c>, which lexes as one token. In a
+    ///     3-D reference, only the address after the <c>!</c> is one.
+    /// </summary>
+    internal static string AbsolutizeReference(string token)
     {
-        var i = openQuoteIndex + 1;
-        while (i < text.Length)
+        var sb = new StringBuilder();
+        var copied = 0;
+        var qualified = false;
+        var i = 0;
+        while (i < token.Length)
         {
-            if (text[i] == '"')
+            switch (token[i])
             {
-                if (i + 1 < text.Length && text[i + 1] == '"')
-                {
-                    i += 2;
-                    continue;
-                }
-                return i + 1;
+                case '\'':
+                    i = FormulaParser.SkipSingleQuoted(token, i);
+                    break;
+                case '[':
+                    i = FormulaParser.SkipBrackets(token, i);
+                    break;
+                case '!':
+                    var end = token.IndexOf(':', i);
+                    if (end < 0) end = token.Length;
+                    sb.Append(token, copied, i + 1 - copied);
+                    sb.Append(AbsoluteAddress(token[(i + 1)..end]));
+                    copied = i = end;
+                    qualified = true;
+                    break;
+                default:
+                    i++;
+                    break;
             }
-            i++;
         }
-        return text.Length;
+
+        return qualified ? sb.Append(token, copied, token.Length - copied).ToString() : AbsoluteAddress(token);
+    }
+
+    private static string AbsoluteAddress(string text)
+    {
+        var match = CellAddress.Match(text);
+        return match.Success && IsOnGrid(match.Groups[1].Value, match.Groups[2].Value)
+            ? "$" + match.Groups[1].Value + "$" + match.Groups[2].Value
+            : text;
+    }
+
+    // Past the grid it's a name: A0, XFE1 and A1048577 are all valid names.
+    private static bool IsOnGrid(string column, string row)
+    {
+        var columnNumber = column.Aggregate(0, (n, c) => n * 26 + char.ToUpperInvariant(c) - 'A' + 1);
+        var digits = row.TrimStart('0');
+        return columnNumber <= 16384
+            && digits.Length is > 0 and <= 7
+            && int.Parse(digits, CultureInfo.InvariantCulture) <= 1048576;
+    }
+
+    /// <summary>
+    ///     Copies <paramref name="text" /> with each name token passed through
+    ///     <paramref name="rewrite" /> (the token, and whether it's a call).
+    /// </summary>
+    private static string RewriteNames(string text, Func<string, bool, string> rewrite)
+    {
+        IReadOnlyList<FormulaToken> tokens;
+        try
+        {
+            tokens = FormulaParser.Tokenize(text);
+        }
+        catch (FormatException)
+        {
+            return text;
+        }
+
+        var result = new StringBuilder();
+        var copied = 0;
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var token = tokens[i];
+            if (token.Type != FormulaTokenType.Name) continue;
+
+            result.Append(text, copied, token.Start - copied);
+            result.Append(rewrite(token.Text, tokens[i + 1].Type == FormulaTokenType.LParen));
+            copied = token.End;
+        }
+
+        return result.Append(text, copied, text.Length - copied).ToString();
     }
 }
