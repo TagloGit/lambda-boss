@@ -132,7 +132,23 @@ public static class LetParser
                     continue;
                 }
 
+                // An array constant is one operand: its commas and semicolons separate elements.
+                if (ch == '{')
+                {
+                    while (i < len && s[i] != '}')
+                        i = s[i] == '"' ? SkipString(s, i) : i + 1;
+                    if (i < len) i++;
+                    continue;
+                }
+
                 i++;
+            }
+
+            // A comma or ')' at the top level ends nothing here; step past it rather than spin.
+            if (i == start)
+            {
+                i++;
+                continue;
             }
 
             var token = s[start..i];
