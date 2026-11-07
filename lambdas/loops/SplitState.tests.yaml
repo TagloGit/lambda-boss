@@ -60,6 +60,11 @@ tests:
     args: ['=SetVars("cur", 1, "best", 5)', "=FALSE"]
     expected: [[1, 5]]
 
+  # #407: a 1x1 array state from the step's own IF keeps every variable
+  - name: 1x1 array state keeps later variables
+    args: ['=REDUCE(SetVars("p", {1;2}, "q", 3), {1;2;3}, LAMBDA(a, v, IF({TRUE}, SetVar(a, "q", GetVar(a, "q") + v))))', "=TRUE"]
+    expected: [["p", "q"], ["[1, 2]", 9]]
+
   - name: help text
     args: []
     expected_type: array
