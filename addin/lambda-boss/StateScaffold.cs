@@ -35,7 +35,8 @@ public static class StateScaffold
 
     private static readonly string[] RequiredNames = { "SetVars", "SetVar", "GetVar" };
     private static readonly Regex Pair = new(@"^([^\s=]+)\s*=?\s*(.*)$", RegexOptions.Singleline);
-    private static readonly Regex UsableKey = new(@"^[\p{L}\p{N}_.?\\]+$");
+    private static readonly Regex UsableKey = new(@"^[\p{L}\p{N}_.?]+$");
+    private static readonly Regex RowColumnForm = new(@"^R[0-9]*C[0-9]*$", RegexOptions.IgnoreCase);
 
     /// <summary>
     ///     Reads <c>p 0, b 4</c> or <c>p=0, b=4</c>. Values are formula text, so a comma inside a
@@ -87,13 +88,18 @@ public static class StateScaffold
     {
         if (pairs is null) throw new ArgumentNullException(nameof(pairs));
 
-        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { StateBinding, InputBinding };
+        // A binding named after a library call would hide it from the lines below.
+        var taken = new HashSet<string>(RequiredNames, StringComparer.OrdinalIgnoreCase)
+        {
+            StateBinding,
+            InputBinding
+        };
 
         var bindings = new List<(StatePair Pair, string Base, string Binding)>();
         foreach (var pair in pairs)
         {
             var nameBase = BaseName(pair.Key);
-            var binding = ExcelNameValidator.Validate(nameBase).IsValid ? nameBase : nameBase + "_";
+            var binding = IsUsableBinding(nameBase) ? nameBase : nameBase + "_";
             while (!taken.Add(binding)) binding += "_";
             bindings.Add((pair, nameBase, binding));
         }
@@ -122,7 +128,7 @@ public static class StateScaffold
         if (state.Error != null) return new ScaffoldResult(null, state.Error);
         if (state.Pairs.Count == 0) return new ScaffoldResult(null, "Type the state: p 0, b 4");
 
-        var input = inputText.Trim();
+        var input = inputText.Trim().TrimStart('=').TrimStart();
         if (input.Length == 0) input = "\"\"";
         else if (!Reads(input)) return new ScaffoldResult(null, $"Can't read the input: {input}");
 
@@ -194,6 +200,9 @@ public static class StateScaffold
     public static string NormalAddress(string address) =>
         address.Trim().Replace("$", "").ToUpperInvariant();
 
+    private static bool IsUsableBinding(string name) =>
+        ExcelNameValidator.Validate(name).IsValid && !RowColumnForm.IsMatch(name);
+
     /// <summary>
     ///     The name a key's lines are built from. <c>c</c>, <c>b4</c> and <c>RC</c> only read as
     ///     references, which a suffix cures, so they stay. Anything else Excel wouldn't take goes
@@ -216,18 +225,28 @@ public static class StateScaffold
 
     private static string Quoted(string key) => $"\"{key}\"";
 
+    /// <summary>
+    ///     True when <paramref name="expression" /> can be a value. A literal beside something
+    ///     with only a space between them is a missing comma (<c>p 0 b 4</c>), though it parses
+    ///     as an intersection.
+    /// </summary>
     private static bool Reads(string expression)
     {
         try
         {
-            FormulaParser.Parse(expression);
-            return true;
+            var ast = FormulaParser.Parse(expression);
+            return ast.EqualsToken == null
+                && !StateStepParser.Walk(ast.Root).OfType<BinaryNode>().Any(n =>
+                    n.Operator == " " && (IsLiteral(n.Left) || IsLiteral(n.Right)));
         }
         catch (FormatException)
         {
             return false;
         }
     }
+
+    private static bool IsLiteral(FormulaNode node) =>
+        node is LeafNode { TokenType: FormulaTokenType.Number or FormulaTokenType.String };
 
     private static IEnumerable<string> SplitAtTopLevelCommas(string text, IReadOnlyList<FormulaToken> tokens)
     {

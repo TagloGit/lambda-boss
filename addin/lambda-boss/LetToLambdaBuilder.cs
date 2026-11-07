@@ -360,12 +360,17 @@ public static class LetToLambdaBuilder
         return qualified ? sb.Append(token, copied, token.Length - copied).ToString() : AbsoluteAddress(token);
     }
 
+    /// <summary>True for a cell on Excel's grid, written with or without <c>$</c>.</summary>
+    internal static bool IsGridCell(string address)
+    {
+        var match = CellAddress.Match(address);
+        return match.Success && IsOnGrid(match.Groups[1].Value, match.Groups[2].Value);
+    }
+
     private static string AbsoluteAddress(string text)
     {
         var match = CellAddress.Match(text);
-        return match.Success && IsOnGrid(match.Groups[1].Value, match.Groups[2].Value)
-            ? "$" + match.Groups[1].Value + "$" + match.Groups[2].Value
-            : text;
+        return IsGridCell(text) ? "$" + match.Groups[1].Value + "$" + match.Groups[2].Value : text;
     }
 
     // Past the grid it's a name: A0, XFE1 and A1048577 are all valid names.

@@ -152,7 +152,7 @@ until a different target is typed).
 
 - *Binding names Excel rejects.* `c`, `r`, `C`, `R`, A1-style references (`b4`, `x1`, `ab12`) and
   R1C1-style ones (`R1C1`, `RC`, `R1C`, `RC1`) are invalid LET names. `ExcelNameValidator` is the
-  source of truth; it covers A1 and `RnCn` today and gains the `RC`/`RnC`/`RCn` forms in this work.
+  source of truth for A1 and `RnCn`; the scaffold adds the `RC`/`RnC`/`RCn` forms.
   The binding is suffixed with `_` (`c_`, `b4_`); the state key stays as typed (`GetVar(a, "c")`).
   The preview shows it.
 - *Clashes.* A name typed twice → error in the dialog. A `nextX` that equals another state name →
@@ -525,8 +525,15 @@ Taken while building Part 1 (Labs switch `state-scaffold`, "/State: new state st
 - The dialog can't ask Excel about a typed target, because Excel's thread is waiting on it. Save checks
   the cell, and if it's filled the dialog re-opens with what was typed and Save disabled for that cell.
 - The first empty cell below a block is searched for within 1,000 rows.
-- `ExcelNameValidator` now refuses `RC`, `RnC` and `RCn` everywhere it's used, as the spec says. Excel
-  takes `RC` and `R1C` as LET names in this build, but the suffix does no harm.
+- `RC`, `RnC` and `RCn` are suffixed by the scaffold alone, not in `ExcelNameValidator` as this spec
+  first said: Excel takes `rc` and `R1C` as LET names, so changing the validator would have refused them
+  in Refactor, Unnest and Gather for everyone. `RC1` itself is refused by LET in this build.
+- A variable named like a library call (`SetVars`, `SetVar`, `GetVar`) is suffixed too, so it can't hide
+  the call.
+- An Input may start with `=`. A value with a literal, a space and more (`p 0 b 4`) is an error, not an
+  intersection: it's a missing comma.
+- While the library loads Excel is free, so Save checks the workbook and the target again before
+  changing anything, and refuses with a message if either moved on.
 
 Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
 in `taglo-win` settled these:

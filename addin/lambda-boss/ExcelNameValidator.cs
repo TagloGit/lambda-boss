@@ -9,7 +9,7 @@ namespace LambdaBoss;
 public static class ExcelNameValidator
 {
     private static readonly Regex CellRefPattern = new(
-        @"^[A-Za-z]{1,3}[0-9]+$|^R[0-9]*C[0-9]*$",
+        @"^[A-Za-z]{1,3}[0-9]+$|^R[0-9]+C[0-9]+$",
         RegexOptions.IgnoreCase);
 
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)

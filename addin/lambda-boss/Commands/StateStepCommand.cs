@@ -31,7 +31,8 @@ internal static class StateStepCommand
                 return;
 
             dynamic sheet = app.ActiveCell.Worksheet;
-            var prefix = StateScaffold.FindPrefix(ConvertLetToLambdaCommand.GetExistingNames(workbook));
+            // Typed, because a dynamic here would make the dialog call below dynamic too.
+            string? prefix = StateScaffold.FindPrefix(ConvertLetToLambdaCommand.GetExistingNames(workbook));
             StateStepDraft draft = InitialDraft(app);
 
             var filled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -45,7 +46,8 @@ internal static class StateStepCommand
                 string? message = null;
                 while (true)
                 {
-                    var saved = ShowDialog(dispatcher, excelHwnd, draft, prefix, filled, message);
+                    (StateStepDraft? Draft, string? Formula) saved =
+                        ShowDialog(dispatcher, excelHwnd, draft, prefix, filled, message);
                     if (saved.Draft == null) return;
 
                     draft = saved.Draft;
@@ -164,8 +166,18 @@ internal static class StateStepCommand
         {
             dynamic target = sheet.Range[address];
             target.Formula2 = formula;
-            target.Select();
             Logger.Info($"StateStep: Written to {address}");
+
+            try
+            {
+                target.Select();
+            }
+            catch (Exception ex)
+            {
+                // Written either way. Select fails when Tim has moved to another sheet.
+                Logger.Error("StateStep/Select", ex);
+            }
+
             return null;
         }
         catch (Exception ex)
@@ -177,7 +189,8 @@ internal static class StateStepCommand
 
     /// <summary>
     ///     Fetches the Loops names, then adds them to the workbook and writes the step on Excel's
-    ///     thread. If the library can't be loaded, nothing is written.
+    ///     thread. If the library can't be loaded, nothing is written. Excel is free during the
+    ///     fetch, so the workbook and target are checked again before anything changes.
     /// </summary>
     private static void LoadLibraryThenWrite(dynamic sheet, StateStepDraft draft)
     {
@@ -213,6 +226,19 @@ internal static class StateStepCommand
                 {
                     try
                     {
+                        dynamic app = ExcelDnaUtil.Application;
+                        if ((string)app.ActiveWorkbook.Name != (string)sheet.Parent.Name)
+                        {
+                            ShowError("The workbook changed while the Loops library loaded, so nothing was written.");
+                            return;
+                        }
+
+                        if (!IsEmpty(sheet.Range[draft.Target]))
+                        {
+                            ShowError($"{draft.Target} filled up while the Loops library loaded, so nothing was written.");
+                            return;
+                        }
+
                         foreach (var (name, lambda) in needed)
                             LambdaLoader.InjectLambda(name, lambda, comment);
 

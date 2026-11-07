@@ -37,7 +37,9 @@ public partial class StateStepWindow
         // After a prefill the input is the only thing left to type.
         Loaded += (_, _) =>
         {
-            var first = draft.State.Length > 0 ? InputBox : StateBox;
+            var first = TargetIsFilled() ? TargetBox
+                : draft.State.Length > 0 ? InputBox
+                : StateBox;
             first.Focus();
             first.SelectAll();
         };
@@ -68,13 +70,13 @@ public partial class StateStepWindow
     private string? TargetError()
     {
         var target = TargetBox.Text.Trim();
-        if (!StateFold.IsCellAddress(target))
+        if (!LetToLambdaBuilder.IsGridCell(target))
             return "Write to needs one cell on this sheet, like H270.";
 
-        return _filledCells.Contains(StateScaffold.NormalAddress(target))
-            ? $"{target} isn't empty. Type another cell."
-            : null;
+        return TargetIsFilled() ? $"{target} isn't empty. Type another cell." : null;
     }
+
+    private bool TargetIsFilled() => _filledCells.Contains(StateScaffold.NormalAddress(TargetBox.Text));
 
     private void Field_TextChanged(object sender, RoutedEventArgs e)
     {
@@ -90,7 +92,7 @@ public partial class StateStepWindow
             CancelButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
-        else if (e.Key == Key.Enter && SaveButton.IsEnabled)
+        else if (e.Key == Key.Enter && SaveButton.IsEnabled && !CancelButton.IsKeyboardFocused)
         {
             SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;

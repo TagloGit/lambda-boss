@@ -181,12 +181,30 @@ public class StateScaffoldTests
     [InlineData("\"p\" 0", "can't be a state name")]
     [InlineData("p \"open", "Can't read the state")]
     [InlineData("p (1", "Can't read the value of p")]
+    [InlineData("p ==1", "Can't read the value of p")]
+    [InlineData("p 0 b 4", "Can't read the value of p")]
+    [InlineData("\\ 0", "can't be a state name")]
     public void Build_SaysWhatIsWrong(string state, string message)
     {
         var result = StateScaffold.Build(state, "H270", "");
 
         Assert.Null(result.Formula);
         Assert.Contains(message, result.Error);
+    }
+
+    [Theory]
+    [InlineData("SetVars")]
+    [InlineData("setvar")]
+    [InlineData("GetVar")]
+    public void Build_AVariableCantHideALibraryCall(string key)
+    {
+        Assert.Contains($"    {key}_, GetVar(a, \"{key}\"),\n", Formula($"{key} 0"));
+    }
+
+    [Fact]
+    public void Build_AnInputMayStartWithEquals()
+    {
+        Assert.Contains("    v, H270,\n", Formula("p 0", "=H270"));
     }
 
     [Fact]
