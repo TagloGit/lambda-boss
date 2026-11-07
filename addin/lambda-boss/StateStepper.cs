@@ -39,6 +39,9 @@ public static class StateStepper
     private const string StateSlot = "\u0001state";
     private const string InputSlot = "\u0001input";
 
+    // Marks a LET name bound a second time around the fold.
+    private const string Rebound = "\u0002";
+
     /// <summary>
     ///     The prototype for the fold in <paramref name="formula" />, a refusal, or null when
     ///     the formula holds no fold with a named two-parameter LAMBDA step.
@@ -143,6 +146,8 @@ public static class StateStepper
     /// <summary>What the LETs around the fold have bound by the time it's reached; inner ones win.</summary>
     private static Dictionary<string, string> BindingsAround(List<FunctionCallNode> path)
     {
+        // One flat map: a name bound twice (an inner LET rebinding an outer one) can't be
+        // written in place correctly, so it's listed as rebound and the fold is refused.
         var bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i + 1 < path.Count; i++)
         {
@@ -152,7 +157,8 @@ public static class StateStepper
             var reached = IndexOfChild(call, path[i + 1]);
             for (var a = 0; a + 1 < reached; a += 2)
                 if (call.Arguments[a] is LeafNode { TokenType: FormulaTokenType.Name } name)
-                    bindings[name.Text] = call.Arguments[a + 1].ToFormula().Trim();
+                    bindings[bindings.ContainsKey(name.Text) ? Rebound + name.Text : name.Text] =
+                        call.Arguments[a + 1].ToFormula().Trim();
         }
         return bindings;
     }
@@ -183,6 +189,11 @@ public static class StateStepper
     {
         if (fold.Call.Arguments[0] is EmptyArgNode || fold.Call.Arguments[1] is EmptyArgNode)
             return Refused(NoSeedMessage);
+
+        var rebound = fold.Bindings.Keys.FirstOrDefault(k => k.StartsWith(Rebound, StringComparison.Ordinal));
+        if (rebound != null)
+            return Refused($"Edit Lambda can't step this fold: the LETs around it bind {rebound[1..]} twice. "
+                + "Give the inner one another name.");
 
         // Whole expressions, so a SetVar chain past ten variables comes through in one piece.
         var seed = StateFold.Inline(fold.Call.Arguments[0].ToFormula().Trim(), fold.Bindings);

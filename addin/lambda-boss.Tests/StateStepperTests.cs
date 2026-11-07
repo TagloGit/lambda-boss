@@ -252,6 +252,14 @@ public class StateStepperTests
         Assert.Contains("v, INDEX(xs, k),", result);
     }
 
+    [Theory]
+    [InlineData("=LET(n, 5, s, SetVars(\"p\", n), LET(n, 7, REDUCE(s, G1:G9, moveRobot)))")]
+    [InlineData("=LET(x, 1, LET(x, x + 1, REDUCE(SetVars(\"p\", x), G1:G9, moveRobot)))")]
+    public void ANameReboundByAnInnerLet_IsRefused(string formula)
+    {
+        Assert.Contains("bind", Refusal(formula));
+    }
+
     [Fact]
     public void AFoldReadingAnOuterLambdaParameter_IsRefused()
     {
