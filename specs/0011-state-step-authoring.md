@@ -439,7 +439,7 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
       bindings Keep off; builder accepts the state binding though it is a calculation; sampling-only
       bindings dropped; editable fold line with an absolutised seed; Write fold to writes only when
       complete. Non-state LETs unchanged (existing tests pass untouched).
-- [ ] Edit Lambda on a fold cell: one REDUCE/SCAN with a named two-parameter LAMBDA anywhere in the
+- [x] Edit Lambda on a fold cell: one REDUCE/SCAN with a named two-parameter LAMBDA anywhere in the
       formula; SetVars prototype with `k` stepper, array prototype on the seed; target cell rule;
       fold untouched; the new several-folds message; LET to LAMBDA round-trips the prototype back to
       the same LAMBDA text.
@@ -535,6 +535,27 @@ Taken while building Part 1 (Labs switch `state-scaffold`, "/State: new state st
   intersection: it's a missing comma.
 - While the library loads Excel is free, so Save checks the workbook and the target again before
   changing anything, and refuses with a message if either moved on.
+
+Taken while building Part 4 (Labs switch `state-edit-lambda`, "Edit Lambda on a fold"):
+
+- With the switch on, the fold check runs first, so `=GetVar(REDUCE(…, moveRobot), "p")` steps the
+  fold rather than expanding GetVar. A cell with no fold gets today's Edit Lambda.
+- Only a step that's a workbook name counts. A step bound in a LET around the fold, an inline
+  LAMBDA, a sheet-qualified name or a LAMBDA without exactly two parameters is no fold, and the
+  ordinary command runs.
+- The fold's seed and inputs are written in the prototype as typed (`G270`, not `$G$270`): it sits
+  on the same sheet. LET bindings around the fold are written in place. A name bound twice by
+  nested LETs, a parameter of a LAMBDA around the fold, or an empty seed or inputs slot is refused
+  with a message.
+- A step name the fold's expressions also use (a cell like `h1`, a whole column, a defined name)
+  gets a `_` in the prototype, because Excel would let it capture the reference. In build 20527
+  Excel refuses such a name inside a defined LAMBDA anyway, so this only guards other builds.
+  `k` takes a `_` when the step or the fold already uses `k`.
+- A step the parser doesn't recognise (a body that isn't a plain `SetVars` call, such as Airplane's
+  `SINGLE(IF(…))` walk) gets the stepper unless its seed is an `HSTACK`, `VSTACK` or array constant.
+- The target is empty only when it has no formula and isn't in a spill. After writing, the
+  prototype is selected.
+- A prototype over 8,192 characters is refused.
 
 Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
 in `taglo-win` settled these:
