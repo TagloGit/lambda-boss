@@ -123,7 +123,7 @@ internal static class ConvertLetToLambdaCommand
         }
     }
 
-    private static Dictionary<string, string> GetExistingNames(dynamic workbook)
+    internal static Dictionary<string, string> GetExistingNames(dynamic workbook)
     {
         var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         try

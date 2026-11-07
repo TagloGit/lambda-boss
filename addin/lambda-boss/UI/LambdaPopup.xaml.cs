@@ -25,7 +25,7 @@ public partial class LambdaPopup
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
         _allCommands = BuildCommandRegistry();
-        CommandsList.ItemsSource = _allCommands;
+        CommandsList.ItemsSource = SlashCommandFilter.Filter(_allCommands, "");
     }
 
     /// <summary>
@@ -463,6 +463,15 @@ public partial class LambdaPopup
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => UnnestCommand.Run());
             }),
+        new SlashCommand(
+            "State",
+            "New state step: GetVar lines, next lines and SetVars output from names and initial values",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.Run());
+            },
+            () => Labs.IsOn(Labs.StateScaffold)),
         new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",

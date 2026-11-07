@@ -427,7 +427,7 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
       input binding, state variables (key, binding name, GetVar line, next line) and output; unit
       tests include non-canonical lines, a cell-bound state, `v` after the GetVar lines, an extra
       constant binding (`maxB, $K$2`), comments-as-bindings, a nested LET in a next line, and non-steps.
-- [ ] `/State` (scaffold): popup command; dialog with State / Input / Write-to; selection prefill
+- [x] `/State` (scaffold): popup command; dialog with State / Input / Write-to; selection prefill
       from a 2×k label/value block; exact output text as above; `_`-suffixed binding names for
       `c`/`r`/A1/R1C1-like names; `nextX2` on clash; SetVar chaining past 10; prefix detection and
       library auto-load; refuses a non-empty target.
@@ -506,6 +506,27 @@ Taken while building Part 3 (Labs switch `state-let-to-lambda`, "State steps in 
   Ctrl+C copies the fold unless text is selected in a box.
 - The `input` badge moves with a **make input** button on the other rows. The row that loses it goes
   Keep off.
+
+Taken while building Part 1 (Labs switch `state-scaffold`, "/State: new state step"):
+
+- `/State` is hidden from the popup's command list while the switch is off.
+- A variable named `a` or `v` takes the `_` suffix like any rejected name, so the step's own bindings
+  keep their names (`a_, GetVar(a, "a")`).
+- Two keys that land on one binding stay apart with another `_` (`c` gives `c_`, `c_` gives `c__`).
+- A key with a dot keeps its key, but its binding goes through `LetNameSanitizer`, because Excel refuses
+  a dot in a LET name (`a.b` gives `aB`). A key that can't start a name (`1st`) does the same.
+- A name with no value is an error in the dialog (`p needs a value`), not a blank.
+- A selection that isn't a 2×k block with text in every label counts as no prefill, as with a single
+  cell: State is empty and Write to is the active cell.
+- After a prefill the caret starts in Input, the only field left to fill. After Save the target is
+  selected, ready for F2.
+- The library counts as loaded only when `SetVars`, `SetVar` and `GetVar` are all there under one
+  prefix. With several prefixes, the first by ordinal order wins.
+- The dialog can't ask Excel about a typed target, because Excel's thread is waiting on it. Save checks
+  the cell, and if it's filled the dialog re-opens with what was typed and Save disabled for that cell.
+- The first empty cell below a block is searched for within 1,000 rows.
+- `ExcelNameValidator` now refuses `RC`, `RnC` and `RCn` everywhere it's used, as the spec says. Excel
+  takes `RC` and `R1C` as LET names in this build, but the suffix does no harm.
 
 Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
 in `taglo-win` settled these:

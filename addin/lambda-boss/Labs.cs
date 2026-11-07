@@ -23,7 +23,12 @@ public static class Labs
         "State steps in LET to LAMBDA",
         "Turns a SetVars/GetVar or HSTACK state step into LAMBDA(state, input, ...) and offers the REDUCE fold line.");
 
-    public static readonly IReadOnlyList<LabsSwitch> All = new[] { PopupChannelBadge, StateLetToLambda };
+    public static readonly LabsSwitch StateScaffold = new(
+        "state-scaffold",
+        "/State: new state step",
+        "Adds the /State popup command, which writes a SetVars/GetVar state step from names and initial values.");
+
+    public static readonly IReadOnlyList<LabsSwitch> All = new[] { PopupChannelBadge, StateLetToLambda, StateScaffold };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);
