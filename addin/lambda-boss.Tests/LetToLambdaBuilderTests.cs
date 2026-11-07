@@ -522,6 +522,7 @@ public class LetToLambdaBuilderTests
     public void AbsolutizeCellRefs_LeavesALetNameThatShadowsACell()
     {
         Assert.Equal("x1 + $x$2", LetToLambdaBuilder.AbsolutizeCellRefs("x1 + x2", new[] { "X1" }));
+        Assert.Equal("Sheet1!$A$1:$C$2", LetToLambdaBuilder.AbsolutizeCellRefs("Sheet1!A1:C2", new[] { "c2" }));
     }
 
     [Theory]

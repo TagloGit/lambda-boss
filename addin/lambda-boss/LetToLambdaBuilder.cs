@@ -311,7 +311,9 @@ public static class LetToLambdaBuilder
         }
 
         return RewriteNames(text, use =>
-            use.IsCall || shadowed.Contains(use.Text) ? use.Text : AbsolutizeReference(use.Text));
+            use.IsCall || (shadowed.Contains(use.Text) && !use.EndsSheetRange)
+                ? use.Text
+                : AbsolutizeReference(use.Text));
     }
 
     /// <summary>
