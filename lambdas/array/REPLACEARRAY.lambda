@@ -24,7 +24,7 @@ REPLACEARRAY = LAMBDA(
         oPos, IF(ISOMITTED(origin),
                  IF(ISREF(replace), MIN(ROW(replace)) * _mult + MIN(COLUMN(replace)), _mult + 1),
                  MIN(ROW(origin)) * _mult + MIN(COLUMN(origin))),
-        pos, IF(ISOMITTED(at), oPos, TOPOS(at)),
+        pos, IF(ISOMITTED(at), oPos, IF(ISTEXT(at), TOPOS(at), at)),
         atRow, INT(pos / _mult) - INT(oPos / _mult) + 1,
         atCol, MOD(pos, _mult) - MOD(oPos, _mult) + 1,
         mode, IF(ISOMITTED(overflow), 0, overflow),

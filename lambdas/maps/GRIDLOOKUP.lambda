@@ -26,7 +26,6 @@ GRIDLOOKUP = LAMBDA(
         reverse, AND(NOT(ISOMITTED(return_Value)), return_Value),
         mMode, IF(ISOMITTED(match_mode), 0, match_mode),
         invalid, IF(ISOMITTED(if_invalid), NA(), if_invalid),
-    //  Procedure: each grid pass is a copy
         oPos, IF(ISOMITTED(origin),
                  IF(ISREF(grid), MIN(ROW(grid)) * _mult + MIN(COLUMN(grid)), _mult + 1),
                  MIN(ROW(origin)) * _mult + MIN(COLUMN(origin))),
@@ -42,7 +41,7 @@ GRIDLOOKUP = LAMBDA(
                         LET(pos, IF(ISNUMBER(v), v, TOPOS(v)),
                             dR, INT(pos / _mult) - oRow + 1,
                             dC, MOD(pos, _mult) - oCol + 1,
-                            IF(OR(dR < 1, dC < 1), invalid, INDEX(grid, dR, dC))),
+                            IF(OR(dR < 1, dC < 1, IF(dC = INT(dC), FALSE, dC > COLUMNS(grid))), invalid, INDEX(grid, dR, dC))),
                         LET(w, COLUMNS(grid),
                             p, XMATCH(v, TOCOL(grid), mMode),
                             IF(ISNA(p), invalid, ADDRESS(oRow + INT((p - 1) / w), oCol + MOD(p - 1, w), 4)))),

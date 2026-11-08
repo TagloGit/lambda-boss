@@ -140,3 +140,7 @@ tests:
         - { name: "rgrid", refers_to: "C5:E7" }
     args: ["=rgrid", "=0", "=7*_mult+5"]
     expected: [[1, 2, 3], [4, 5, 6], [7, 8, 0]]
+
+  - name: at given as TRUE is an invalid anchor (NA)
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', '=TRUE']
+    expected: -2146826246

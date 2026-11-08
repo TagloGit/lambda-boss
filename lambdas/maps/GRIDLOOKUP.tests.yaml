@@ -189,3 +189,11 @@ tests:
   - name: reverse lift with origin anchors each lookup
     args: ["=SEQUENCE(10,10)", '={"C3";"C7";"A1"}', "=TRUE", "=", "=-1", "=C3"]
     expected: [[1], [41], [-1]]
+
+  - name: reverse with a fractional column just past the right edge returns NA
+    args: ["=SEQUENCE(10,10)", "=10*_mult+10.5", "=TRUE"]
+    expected: -2146826246
+
+  - name: reverse with a fractional column inside the grid truncates
+    args: ["=SEQUENCE(10,10)", "=1*_mult+5.5", "=TRUE"]
+    expected: 5
