@@ -95,25 +95,54 @@ public static class StateScaffold
             InputBinding
         };
 
-        var bindings = new List<(StatePair Pair, string Base, string Binding)>();
-        foreach (var pair in pairs)
-        {
-            var nameBase = BaseName(pair.Key);
-            var binding = IsUsableBinding(nameBase) ? nameBase : nameBase + "_";
-            while (!taken.Add(binding)) binding += "_";
-            bindings.Add((pair, nameBase, binding));
-        }
+        var bindings = pairs.Select(p => (Pair: p, Binding: ChooseBinding(p.Key, taken))).ToList();
+        return bindings
+            .Select(b => new ScaffoldVariable(b.Pair.Key, b.Binding, ChooseNext(b.Pair.Key, taken), b.Pair.Value))
+            .ToList();
+    }
 
-        var variables = new List<ScaffoldVariable>();
-        foreach (var (pair, nameBase, binding) in bindings)
-        {
-            var next = "next" + char.ToUpperInvariant(nameBase[0]) + nameBase[1..];
-            var candidate = next;
-            for (var i = 2; !taken.Add(candidate); i++) candidate = next + i;
-            variables.Add(new ScaffoldVariable(pair.Key, binding, candidate, pair.Value));
-        }
+    /// <summary>Names a step can't use for a variable, because they'd hide a library call.</summary>
+    internal static IReadOnlyList<string> ReservedNames => RequiredNames;
 
-        return variables;
+    internal static bool IsUsableKey(string key) => UsableKey.IsMatch(key);
+
+    /// <summary>The binding a key would like: its base name, suffixed when Excel won't take it.</summary>
+    internal static string BindingName(string key)
+    {
+        var nameBase = BaseName(key);
+        return IsUsableBinding(nameBase) ? nameBase : nameBase + "_";
+    }
+
+    /// <summary>The next line a key would like: <c>next</c> plus the base name, first letter upper-cased.</summary>
+    internal static string NextName(string key)
+    {
+        var nameBase = BaseName(key);
+        return "next" + char.ToUpperInvariant(nameBase[0]) + nameBase[1..];
+    }
+
+    /// <summary>True when <paramref name="name" /> follows the next-line convention for a key (<c>nextB</c>, <c>nextB2</c>).</summary>
+    internal static bool IsNextLineOf(string name, string key)
+    {
+        var stem = NextName(key);
+        return name.StartsWith(stem, StringComparison.OrdinalIgnoreCase)
+            && name[stem.Length..].All(char.IsDigit);
+    }
+
+    /// <summary>Claims a binding for a key in <paramref name="taken" />, adding <c>_</c> until it's free.</summary>
+    internal static string ChooseBinding(string key, ISet<string> taken)
+    {
+        var binding = BindingName(key);
+        while (!taken.Add(binding)) binding += "_";
+        return binding;
+    }
+
+    /// <summary>Claims a next line for a key in <paramref name="taken" />, numbering it until it's free.</summary>
+    internal static string ChooseNext(string key, ISet<string> taken)
+    {
+        var next = NextName(key);
+        var candidate = next;
+        for (var i = 2; !taken.Add(candidate); i++) candidate = next + i;
+        return candidate;
     }
 
     /// <summary>
@@ -213,7 +242,7 @@ public static class StateScaffold
             ? key
             : LetNameSanitizer.Sanitize(key) ?? "_";
 
-    private static string StateCall(string prefix, IReadOnlyList<(string Key, string Value)> pairs)
+    internal static string StateCall(string prefix, IReadOnlyList<(string Key, string Value)> pairs)
     {
         var first = pairs.Take(SetVarsPairLimit).SelectMany(p => new[] { Quoted(p.Key), p.Value });
         var call = $"{prefix}SetVars({string.Join(", ", first)})";
@@ -223,14 +252,14 @@ public static class StateScaffold
             .Aggregate(call, (state, p) => $"{prefix}SetVar({state}, {Quoted(p.Key)}, {p.Value})");
     }
 
-    private static string Quoted(string key) => $"\"{key}\"";
+    internal static string Quoted(string key) => $"\"{key.Replace("\"", "\"\"")}\"";
 
     /// <summary>
     ///     True when <paramref name="expression" /> can be a value. A literal beside something
     ///     with only a space between them is a missing comma (<c>p 0 b 4</c>), though it parses
     ///     as an intersection.
     /// </summary>
-    private static bool Reads(string expression)
+    internal static bool Reads(string expression)
     {
         try
         {

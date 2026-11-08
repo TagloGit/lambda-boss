@@ -31,6 +31,18 @@ internal static class StateStepCommand
                 return;
 
             dynamic sheet = app.ActiveCell.Worksheet;
+
+            if (Labs.IsOn(Labs.StateEdit))
+            {
+                string formula = Convert.ToString(app.ActiveCell.Formula2);
+                StateEditView? view = StateEdit.Read(formula);
+                if (view != null)
+                {
+                    RunEdit(app, sheet, formula, view);
+                    return;
+                }
+            }
+
             // Typed, because a dynamic here would make the dialog call below dynamic too.
             string? prefix = StateScaffold.FindPrefix(ConvertLetToLambdaCommand.GetExistingNames(workbook));
             StateStepDraft draft = InitialDraft(app);
@@ -74,6 +86,51 @@ internal static class StateStepCommand
             Logger.Error("StateStep", ex);
             ShowError($"Unexpected error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    ///     Edit mode (spec 0011, part 2): the active cell is a state step, so the dialog lists its
+    ///     variables and Save rewrites the cell. It re-opens with the edits if Excel refuses.
+    /// </summary>
+    private static void RunEdit(dynamic app, dynamic sheet, string formula, StateEditView view)
+    {
+        if (view.Refusal != null)
+        {
+            ShowError(view.Refusal);
+            return;
+        }
+
+        var address = StateScaffold.Address((int)app.ActiveCell.Row, (int)app.ActiveCell.Column);
+        var excelHwnd = new IntPtr(app.Hwnd);
+
+        ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
+        {
+            var rows = view.Rows;
+            string? message = null;
+            while (true)
+            {
+                string? edited = null;
+                var currentRows = rows;
+                var currentMessage = message;
+                dispatcher.Invoke(() =>
+                {
+                    var window = new StateEditWindow(formula, currentRows, currentMessage);
+                    var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+
+                    if (window.ShowDialog() == true)
+                    {
+                        edited = window.Formula;
+                        currentRows = window.CurrentRows;
+                    }
+                });
+                if (edited == null) return;
+
+                rows = currentRows;
+                message = TryWrite(sheet, address, edited);
+                if (message == null) return;
+            }
+        });
     }
 
     private static (StateStepDraft? Draft, string? Formula) ShowDialog(

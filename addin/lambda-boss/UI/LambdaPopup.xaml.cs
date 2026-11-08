@@ -482,7 +482,16 @@ public partial class LambdaPopup
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.Run());
             },
-            () => Labs.IsOn(Labs.StateScaffold)),
+            () => Labs.IsOn(Labs.StateScaffold) && !Labs.IsOn(Labs.StateEdit)),
+        new SlashCommand(
+            "State",
+            "On a state step: add, remove or rename a variable. Elsewhere: a new state step from names and initial values",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.Run());
+            },
+            () => Labs.IsOn(Labs.StateEdit)),
         new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",

@@ -33,8 +33,13 @@ public static class Labs
         "Edit Lambda on a fold",
         "On a REDUCE or SCAN cell with a named step, Edit Lambda writes the step beside it, with a k stepper.");
 
+    public static readonly LabsSwitch StateEdit = new(
+        "state-edit",
+        "/State: edit a state step",
+        "On a cell holding a SetVars/GetVar state step, /State adds, removes or renames a variable and keeps every line in step.");
+
     public static readonly IReadOnlyList<LabsSwitch> All =
-        new[] { PopupChannelBadge, StateLetToLambda, StateScaffold, StateEditLambda };
+        new[] { PopupChannelBadge, StateLetToLambda, StateScaffold, StateEditLambda, StateEdit };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

@@ -222,6 +222,13 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
+    public void StateEdit_IsListedAndOffByDefault()
+    {
+        Assert.Contains(Labs.StateEdit, Labs.All);
+        Assert.DoesNotContain(Labs.StateEdit.Id, new Settings().LabsSwitchesOn);
+    }
+
+    [Fact]
     public void LabsSwitches_HaveUniqueIds()
     {
         Assert.Equal(Labs.All.Count, Labs.All.Select(s => s.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());

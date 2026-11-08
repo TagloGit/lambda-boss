@@ -432,7 +432,7 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
       from a 2×k label/value block; exact output text as above; `_`-suffixed binding names for
       `c`/`r`/A1/R1C1-like names; `nextX2` on clash; SetVar chaining past 10; prefix detection and
       library auto-load; refuses a non-empty target.
-- [ ] `/State` (edit): add / remove / rename per part 2, including `SetVar` layering on a non-SetVars
+- [x] `/State` (edit): add / remove / rename per part 2, including `SetVar` layering on a non-SetVars
       sample state, chaining past 10, the dangling-reference block on remove, and rename tests near
       references (`$B$2`, `Sheet1!B2`, `t[b]`) and case collisions.
 - [x] LET to LAMBDA: state binding first (badge `state`), input second (badge movable), other value
@@ -556,6 +556,31 @@ Taken while building Part 4 (Labs switch `state-edit-lambda`, "Edit Lambda on a 
 - The target is empty only when it has no formula and isn't in a spill. After writing, the
   prototype is selected.
 - A prototype over 8,192 characters is refused.
+
+Taken while building Part 2 (Labs switch `state-edit`, "/State: edit a state step"):
+
+- `state-edit` shows `/State` by itself. With it on and `state-scaffold` off, a cell that isn't a step
+  still gets the scaffold, since the spec makes that the other half of the command.
+- An array step or a `SetVar` chain on the state is refused with a message, not sent to the scaffold.
+  A `SetVar` chain on a `SetVars` call can be edited, because Part 1 writes it past ten variables.
+- The caret starts in the blank last row: adding is the usual edit. A blank name on an existing row
+  removes it, and the ✕ button does the same. Each row remembers its key, so a new name is a rename.
+- Sample values are shown, not edited, for existing variables; change them in the cell.
+- One Save applies removals, then renames, then additions. A rename onto a name still in use is
+  blocked, so swapping two names takes two edits.
+- Saving rewrites the cell in the one-binding-per-line layout, with each binding's text kept.
+- A rename always renames the GetVar line, but the next line only when it follows the convention
+  (`nextB`, `nextB2`). `np` keeps its name.
+- A rename when `S` holds the state elsewhere carries the value across, so the sample keeps working:
+  `a, SetVar(I266, "bat", GetVar(I266, "b"))`. The spec only covered `S`'s `SetVars`.
+- Remove also blocks on an inline `GetVar(a, "b")` and on a second line reading the same key, which
+  would otherwise give `#N/A` when run. A name an inner `LET` binds counts as a read, so it can block
+  needlessly; it never lets a dangling name through.
+- A next line another key still passes, or the input, stays when its variable goes.
+- A new binding avoids every name already in the step, cells and calls included (`maxB` gives
+  `maxB_`). A rename onto one is blocked, because Tim typed that name on purpose.
+- A cell where `LET` is only part of the formula (`=LET(…)&"x"`) isn't a step here: rewriting from the
+  parts would drop the rest.
 
 Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
 in `taglo-win` settled these:
