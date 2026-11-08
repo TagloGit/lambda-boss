@@ -92,6 +92,7 @@ public static class StateStepParser
         // SetVar layers on a state. A call under them (the stepper's IF(k = 1, …)) doesn't start one.
         static bool BuildsState(FunctionCallNode call) =>
             IsNamed(call.Name, "SetVars") || IsNamed(call.Name, "HSTACK") || IsNamed(call.Name, "VSTACK")
+            || IsNamed(call.Name, "NewState")
             || (IsNamed(call.Name, "SetVar")
                 && call.Arguments.Count > 0
                 && (call.Arguments[0] is not FunctionCallNode inner || BuildsState(inner)));

@@ -440,6 +440,23 @@ public class StateEditTests
     }
 
     [Fact]
+    public void Remove_IgnoresTheKeyInsideTheStepperSample()
+    {
+        const string seed = "SetVar(SetVars(\"p\", 0), \"q\", 1)";
+        var step = $"=LET(k, 1, a, IF(k = 1, {seed}, INDEX(SCAN({seed}, G1:G9, f), k - 1)), v, INDEX(G1:G9, k), p, GetVar(a, \"p\"), q, GetVar(a, \"q\"), nextP, p + v, nextQ, q, SetVars(\"p\", nextP, \"q\", nextQ))";
+
+        Assert.Equal(new[] { "p" }, Rows(Ok(Edit(step, ("q", "")))).Select(r => r.Key));
+    }
+
+    [Fact]
+    public void Seed_FillsForSetVarOnNewState()
+    {
+        var parsed = LetParser.Parse("=LET(a, SetVar(NewState(), \"p\", H1), v, H2, p, GetVar(a, \"p\"), nextP, p + v, SetVars(\"p\", nextP))");
+
+        Assert.Equal("SetVar(NewState(), \"p\", $H$1)", StateFold.Seed(parsed, StateStepParser.TryParse(parsed)!));
+    }
+
+    [Fact]
     public void Preserved_OtherBindingsKeepTextAndOrder()
     {
         var step = Lines(

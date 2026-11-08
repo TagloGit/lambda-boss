@@ -405,7 +405,7 @@ public static class StateEdit
 
             var blockers = new List<string>();
 
-            void Check(string who, string text)
+            void Check(string who, string text, bool isSample = false)
             {
                 var names = StateStepParser.NamesIn(text, deleted).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
                 var inline = Calls(text)
@@ -414,7 +414,7 @@ public static class StateEdit
                     .Select(k => k!.Text);
                 var reads = names.Concat(inline).Distinct().ToList();
                 if (reads.Count > 0) blockers.Add($"{who} reads {string.Join(", ", reads)}");
-                else if (UsesKeyOffState(text, _stateName, keys))
+                else if (!isSample && UsesKeyOffState(text, _stateName, keys))
                     blockers.Add($"{who} uses the key through another name");
             }
 
@@ -428,8 +428,8 @@ public static class StateEdit
             foreach (var pair in keptOutput) Check($"the output's {StateScaffold.Quoted(pair.Key)}", pair.Value);
 
             foreach (var pair in _sample.Pairs.Where(p => !keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase)))
-                Check(_stateName, pair.Value);
-            if (_sample.Base != null) Check(_stateName, _sample.Base);
+                Check(_stateName, pair.Value, isSample: true);
+            if (_sample.Base != null) Check(_stateName, _sample.Base, isSample: true);
 
             if (blockers.Count > 0) return blockers;
 
