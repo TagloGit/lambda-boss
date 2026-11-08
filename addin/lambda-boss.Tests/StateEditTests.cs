@@ -380,6 +380,66 @@ public class StateEditTests
     }
 
     [Fact]
+    public void Rename_ReachesReadsInTheOutputsExpressions()
+    {
+        var step = "=LET(a, SetVars(\"p\", 0, \"b\", 4), v, H1, p, GetVar(a, \"p\"), nextP, p + v, SetVars(\"p\", nextP, \"b\", GetVar(a, \"b\") + 1))";
+        var edited = Ok(Edit(step, ("b", "bat")));
+
+        Assert.Contains("SetVars(\"p\", nextP, \"bat\", GetVar(a, \"bat\") + 1)", edited);
+    }
+
+    [Theory]
+    [InlineData("s2, SetVar(a, \"p\", v), nextP, GetVar(s2, \"b\")")]
+    [InlineData("nextP, GetVar(SetVar(a, \"p\", v), \"b\")")]
+    [InlineData("nextP, REDUCE(a, v, LAMBDA(s, i, SetVar(s, \"b\", i)))")]
+    public void AKeyUsedThroughAnotherName_StopsARenameAndARemove(string lines)
+    {
+        var step = $"=LET(a, SetVars(\"p\", 0, \"b\", 4), v, H1, p, GetVar(a, \"p\"), b, GetVar(a, \"b\"), {lines}, nextB, b, SetVars(\"p\", nextP, \"b\", nextB))";
+
+        Assert.Contains("through another name", Edit(step, ("b", "bat")).Error);
+        Assert.Contains("nextP uses the key through another name", Edit(step, ("b", "")).Blockers);
+    }
+
+    [Fact]
+    public void Add_RefusesAValueThatReadsALineBelowTheSample()
+    {
+        Assert.Contains("can't read v", Add(Robot, "n", "v + 1").Error);
+        Assert.Contains("can't read p", Add(Robot, "n", "p").Error);
+    }
+
+    [Fact]
+    public void Add_TakesAValueThatReadsALineAboveTheSample()
+    {
+        var step = "=LET(k, 1, a, SetVars(\"p\", k), v, H1, p, GetVar(a, \"p\"), nextP, p + v, SetVars(\"p\", nextP))";
+
+        Assert.Contains("a, SetVars(\"p\", k, \"n\", k),", Ok(Add(step, "n", "k")));
+    }
+
+    [Fact]
+    public void Rename_BlocksAKeyOnlyTheSampleHolds()
+    {
+        var step = "=LET(a, SetVars(\"p\", 0, \"z\", 9), v, H1, p, GetVar(a, \"p\"), nextP, p + v, SetVars(\"p\", nextP))";
+
+        Assert.Equal("z is already in the sample state.", Edit(step, ("p", "z")).Error);
+    }
+
+    [Fact]
+    public void Seed_StaysEmptyForAnEditedStepper_AndFillsForALayeredCell()
+    {
+        const string sample = "IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, f), k - 1))";
+        var stepper = Ok(Add(
+            $"=LET(k, 3, a, {sample}, v, INDEX(G1:G9, k), p, GetVar(a, \"p\"), nextP, p + v, SetVars(\"p\", nextP))",
+            "n",
+            "0"));
+        var parsedStepper = LetParser.Parse(stepper);
+        Assert.Equal("", StateFold.Seed(parsedStepper, StateStepParser.TryParse(parsedStepper)!));
+
+        var cell = Ok(Add("=LET(a, I266, v, H270, p, GetVar(a, \"p\"), nextP, p + 1, SetVars(\"p\", nextP))", "c", "0"));
+        var parsedCell = LetParser.Parse(cell);
+        Assert.Equal("SetVar($I$266, \"c\", 0)", StateFold.Seed(parsedCell, StateStepParser.TryParse(parsedCell)!));
+    }
+
+    [Fact]
     public void Preserved_OtherBindingsKeepTextAndOrder()
     {
         var step = Lines(

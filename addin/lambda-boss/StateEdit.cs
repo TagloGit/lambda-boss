@@ -232,6 +232,19 @@ public static class StateEdit
     private static IEnumerable<FunctionCallNode> Calls(string expression) =>
         StateStepParser.Walk(Root(expression)).OfType<FunctionCallNode>();
 
+    /// <summary>
+    ///     True when <paramref name="text" /> reads or sets one of the keys on anything but the
+    ///     bare state: an alias, a nested <c>SetVar</c>, a LAMBDA's parameter. That can't be told
+    ///     from another state by reading the text, so an edit stops rather than guess.
+    /// </summary>
+    private static bool UsesKeyOffState(string text, string stateName, IReadOnlyCollection<string> keys) =>
+        Calls(text).Any(call =>
+            ((StateStepParser.IsNamed(call.Name, "GetVar") && call.Arguments.Count == 2)
+                || (StateStepParser.IsNamed(call.Name, "SetVar") && call.Arguments.Count == 3))
+            && KeyOnState(call, stateName) == null
+            && StringLiteral(call.Arguments[1]) is { } key
+            && keys.Contains(key, StringComparer.OrdinalIgnoreCase));
+
     private static string RewriteKey(string text, string stateName, string oldKey, string newKey)
     {
         var spans = Calls(text)
@@ -274,11 +287,12 @@ public static class StateEdit
 
         public bool Has(string key) => Pairs.Any(p => SameKey(p.Key, key));
 
+        public void RewriteValues(Func<string, string> rewrite) =>
+            Pairs = Pairs.Select(p => p with { Value = rewrite(p.Value) }).ToList();
+
         public void ApplyRenames(Dictionary<string, string> renames)
         {
-            Pairs = Pairs
-                .Select(p => p with { Value = LetToLambdaBuilder.ApplyRenames(p.Value, renames) })
-                .ToList();
+            RewriteValues(value => LetToLambdaBuilder.ApplyRenames(value, renames));
             if (Base != null) Base = LetToLambdaBuilder.ApplyRenames(Base, renames);
         }
 
@@ -400,6 +414,8 @@ public static class StateEdit
                     .Select(k => k!.Text);
                 var reads = names.Concat(inline).Distinct().ToList();
                 if (reads.Count > 0) blockers.Add($"{who} reads {string.Join(", ", reads)}");
+                else if (UsesKeyOffState(text, _stateName, keys))
+                    blockers.Add($"{who} uses the key through another name");
             }
 
             foreach (var line in _lines.Where(l => !deleted.Contains(l.Name)))
@@ -436,6 +452,20 @@ public static class StateEdit
             if (!SameKey(oldKey, newKey) && _variables.Any(v => SameKey(v.Key, newKey)))
                 return $"{newKey} is already a state variable.";
 
+            if (!SameKey(oldKey, newKey) && _sample.Has(newKey))
+                return $"{newKey} is already in the sample state.";
+
+            var oldKeys = new[] { oldKey };
+            var offState = _lines
+                .Where(l => !IsNamed(l.Name, _stateName) && UsesKeyOffState(l.Rhs, _stateName, oldKeys))
+                .Select(l => l.Name)
+                .Concat(_output.Pairs
+                    .Where(p => UsesKeyOffState(p.Value, _stateName, oldKeys))
+                    .Select(p => $"the output's {StateScaffold.Quoted(p.Key)}"))
+                .ToList();
+            if (offState.Count > 0)
+                return $"{string.Join(", ", offState)} uses {StateScaffold.Quoted(oldKey)} through another name. Change it by hand first.";
+
             // The lines being renamed don't clash with themselves (b to B is fine).
             var used = UsedNames();
             used.Remove(variable.Binding ?? "");
@@ -467,6 +497,7 @@ public static class StateEdit
             // Keys first: rewriting needs the state's name, which never changes here.
             foreach (var line in _lines)
                 line.Rhs = RewriteKey(line.Rhs, _stateName, oldKey, newKey);
+            _output.RewriteValues(value => RewriteKey(value, _stateName, oldKey, newKey));
 
             ApplyRenames(renames);
 
@@ -491,6 +522,14 @@ public static class StateEdit
 
         public void Add(string key, string value)
         {
+            // The value goes in the sample state, which can't read itself or anything below it.
+            var stateAt = _lines.FindIndex(l => IsNamed(l.Name, _stateName));
+            var below = _lines.Skip(stateAt).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var readsBelow = StateStepParser.NamesIn(value, below);
+            if (readsBelow.Count > 0)
+                throw new InvalidOperationException(
+                    $"The value of {key} can't read {string.Join(", ", readsBelow)}: it goes in {_stateName}, above that line.");
+
             var taken = UsedNames();
             taken.UnionWith(StateScaffold.ReservedNames);
             taken.Add(_stateName);

@@ -581,6 +581,13 @@ Taken while building Part 2 (Labs switch `state-edit`, "/State: edit a state ste
   `maxB_`). A rename onto one is blocked, because Tim typed that name on purpose.
 - A cell where `LET` is only part of the formula (`=LET(…)&"x"`) isn't a step here: rewriting from the
   parts would drop the rest.
+- A key used on anything but the bare state (`GetVar(s2, "b")`, a nested `SetVar`, a LAMBDA's own
+  parameter) stops a rename or remove with a message, because the text can't show whether it's this
+  state. A `GetVar` on a truly different state with the same key stops it too.
+- A new row's value can read lines above `S` only: `S` can't read anything below it.
+- A rename onto a key only the sample holds is blocked.
+- A `SetVar` over a call (the stepper's `IF(k = 1, …)`) no longer counts as building a state, so the
+  fold's seed slot stays empty as it does for the stepper itself. A `SetVar` over a cell still fills it.
 
 Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
 in `taglo-win` settled these:

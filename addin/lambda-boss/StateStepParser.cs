@@ -82,14 +82,19 @@ public static class StateStepParser
     {
         try
         {
-            return FormulaParser.Parse(rhs).Root is FunctionCallNode call
-                && (IsNamed(call.Name, "SetVars") || IsNamed(call.Name, "SetVar")
-                    || IsNamed(call.Name, "HSTACK") || IsNamed(call.Name, "VSTACK"));
+            return FormulaParser.Parse(rhs).Root is FunctionCallNode call && BuildsState(call);
         }
         catch (FormatException)
         {
             return false;
         }
+
+        // SetVar layers on a state. A call under them (the stepper's IF(k = 1, …)) doesn't start one.
+        static bool BuildsState(FunctionCallNode call) =>
+            IsNamed(call.Name, "SetVars") || IsNamed(call.Name, "HSTACK") || IsNamed(call.Name, "VSTACK")
+            || (IsNamed(call.Name, "SetVar")
+                && call.Arguments.Count > 0
+                && (call.Arguments[0] is not FunctionCallNode inner || BuildsState(inner)));
     }
 
     /// <summary>
