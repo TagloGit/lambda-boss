@@ -197,3 +197,20 @@ tests:
   - name: reverse with a fractional column inside the grid truncates
     args: ["=SEQUENCE(10,10)", "=1*_mult+5.5", "=TRUE"]
     expected: 5
+
+  - name: reverse lift over a worksheet range, one address off it
+    setup:
+      cells:
+        - address: "C5:E7"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "glgrid", refers_to: "C5:E7" }
+    args: ["=glgrid", '={"C5","E7";"D6","B5"}', "=TRUE", "=", "=0"]
+    expected: [[1, 9], [5, 0]]
+
+  - name: forward lift over a 2-D array of values with a miss
+    args: ["=SEQUENCE(10,10)", "={1,100;57,999}", "=", "=", '="none"']
+    expected: [["A1", "J10"], ["G6", "none"]]

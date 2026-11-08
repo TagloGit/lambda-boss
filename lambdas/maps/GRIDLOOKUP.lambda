@@ -10,7 +10,7 @@
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory grid can be anchored to a worksheet position — matches SUBGRID/REPLACEARRAY convention
                         2026-07-01  Claude      Swap parameter order to grid-first (grid, value, ...) — grid reads more naturally as the primary argument
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
-                        2026-11-08  Claude      Hot-loop speed: one value takes no helper LAMBDA, fewer grid passes (#412)
+                        2026-11-08  Claude      Hot-loop speed: no helper LAMBDA or MAP (INDEX/XMATCH lift), fewer grid passes (#412)
 */
 GRIDLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -31,21 +31,19 @@ GRIDLOOKUP = LAMBDA(
                  MIN(ROW(origin)) * _mult + MIN(COLUMN(origin))),
         oRow, INT(oPos / _mult),
         oCol, MOD(oPos, _mult),
-        result, IF(IFERROR(ROWS(value) * COLUMNS(value) > 1, FALSE),
-                IF(ISOMITTED(origin),
-                   MAP(value, LAMBDA(v, GRIDLOOKUP(grid, v, reverse, mMode, invalid))),
-                   MAP(value, LAMBDA(v, GRIDLOOKUP(grid, v, reverse, mMode, invalid, origin)))),
-                LET(v, @value,
-                IFERROR(
-                    IF(reverse,
-                        LET(pos, IF(ISNUMBER(v), v, TOPOS(v)),
-                            dR, INT(pos / _mult) - oRow + 1,
-                            dC, MOD(pos, _mult) - oCol + 1,
-                            IF(OR(dR < 1, dC < 1, IF(dC = INT(dC), FALSE, dC > COLUMNS(grid))), invalid, INDEX(grid, dR, dC))),
-                        LET(w, COLUMNS(grid),
-                            p, XMATCH(v, TOCOL(grid), mMode),
-                            IF(ISNA(p), invalid, ADDRESS(oRow + INT((p - 1) / w), oCol + MOD(p - 1, w), 4)))),
-                    invalid))),
+    //  One body for one value or many: INDEX, XMATCH and ADDRESS lift, so the grid is passed once a call
+    //  (no MAP or helper LAMBDA: a LAMBDA that captures the grid copies it). Scalar AND keeps IFs lazy
+        result, IFERROR(
+            IF(reverse,
+                LET(pos, IF(AND(ISNUMBER(value)), value, IF(ISNUMBER(value), value, TOPOS(value))),
+                    dR, INT(pos / _mult) - oRow + 1,
+                    dC, MOD(pos, _mult) - oCol + 1,
+                    over, IF(AND(IFERROR(dC = INT(dC), TRUE)), 0, dC > COLUMNS(grid)),
+                    IF((dR < 1) + (dC < 1) + over, invalid, INDEX(grid, dR, dC))),
+                LET(w, COLUMNS(grid),
+                    p, XMATCH(value, TOCOL(grid), mMode),
+                    IF(ISNA(p), invalid, ADDRESS(oRow + INT((p - 1) / w), oCol + MOD(p - 1, w), 4)))),
+            invalid),
     //  Help
         IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →GRIDLOOKUP(grid, value, [return_Value], [match_mode], [if_invalid], [origin])¶" &
