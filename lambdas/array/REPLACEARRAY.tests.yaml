@@ -86,3 +86,57 @@ tests:
   - name: help text
     args: []
     expected_type: array
+
+  # Edge cases for the hot-loop rewrite (#412)
+  - name: scalar at the bottom-right corner
+    args: ['={1,2,3;4,5,6;7,8,9}', '="x"', "C3"]
+    expected: [[1, 2, 3], [4, 5, 6], [7, 8, "x"]]
+
+  - name: scalar off the grid clips to no change
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "D4"]
+    expected: [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+
+  - name: scalar off the grid in error mode returns NA
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "D4", "=1"]
+    expected: -2146826246
+
+  - name: scalar off the grid in wrap mode wraps to the top-left
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "D4", "=3"]
+    expected: [[99, 2, 3], [4, 5, 6], [7, 8, 9]]
+
+  - name: scalar off the grid in expand mode grows the host
+    args: ['={1,2;3,4}', '=99', "C3", "=2"]
+    expected: [[1, 2, ""], [3, 4, ""], ["", "", 99]]
+
+  - name: scalar into a text grid by an absolute address
+    args: ['=IF(SEQUENCE(3,3),"W")', '="B"', "$C$2"]
+    expected: [["W", "W", "W"], ["W", "W", "B"], ["W", "W", "W"]]
+
+  - name: 1x1 array with writes one cell
+    args: ['={1,2,3;4,5,6;7,8,9}', '={5}', "A1"]
+    expected: [[5, 2, 3], [4, 5, 6], [7, 8, 9]]
+
+  - name: packed position past column Z
+    args: ['=SEQUENCE(2,30)', '="x"', '=2*_mult+30']
+    expected: [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30], [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, "x"]]
+
+  - name: column vector clips at the bottom edge
+    args: ['={1,2,3;4,5,6;7,8,9}', '={7;8;9}', "C2"]
+    expected: [[1, 2, 3], [4, 5, 7], [7, 8, 8]]
+
+  - name: unknown overflow mode clips
+    args: ['={1,2,3;4,5,6;7,8,9}', '=99', "B2", "=9"]
+    expected: [[1, 2, 3], [4, 99, 6], [7, 8, 9]]
+
+  - name: packed position into a worksheet range is a sheet position
+    setup:
+      cells:
+        - address: "C5:E7"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "rgrid", refers_to: "C5:E7" }
+    args: ["=rgrid", "=0", "=7*_mult+5"]
+    expected: [[1, 2, 3], [4, 5, 6], [7, 8, 0]]

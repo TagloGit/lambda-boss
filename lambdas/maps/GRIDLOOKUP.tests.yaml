@@ -126,3 +126,66 @@ tests:
   - name: packed integer built from _mult (#380)
     args: ["=SEQUENCE(10,10)", "=5*_mult+1", "=TRUE"]
     expected: 41
+
+  # Edge cases for the hot-loop rewrite (#412)
+  - name: reverse on a text grid by address
+    args: ['=IF(SEQUENCE(5,5),"W")', '="E5"', "=TRUE"]
+    expected: "W"
+
+  - name: reverse at the bottom-right corner by packed position
+    args: ["=SEQUENCE(10,10)", "=10*_mult+10", "=TRUE"]
+    expected: 100
+
+  - name: reverse off the bottom edge returns NA
+    args: ["=SEQUENCE(10,10)", '="A11"', "=TRUE"]
+    expected: -2146826246
+
+  - name: reverse off the right edge returns if_invalid
+    args: ["=SEQUENCE(10,10)", "=1*_mult+11", "=TRUE", "=0", "=-1"]
+    expected: -1
+
+  - name: reverse at column 0 returns NA, not a whole row
+    args: ["=SEQUENCE(10,10)", "=5*_mult", "=TRUE"]
+    expected: -2146826246
+
+  - name: reverse with a 1x1 array value
+    args: ["=SEQUENCE(10,10)", '={"A5"}', "=TRUE"]
+    expected: 41
+
+  - name: reverse lift over packed positions, off the bottom uses if_invalid
+    args: ["=SEQUENCE(10,10)", "={1000001;11000001}", "=TRUE", "=0", "=-1"]
+    expected: [[1], [-1]]
+
+  - name: reverse on a worksheet range uses sheet addresses
+    setup:
+      cells:
+        - address: "C5:E7"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "glgrid", refers_to: "C5:E7" }
+    args: ["=glgrid", '="D6"', "=TRUE"]
+    expected: 5
+
+  - name: forward on a worksheet range returns the sheet address
+    setup:
+      cells:
+        - address: "C5:E7"
+          values:
+            - [1, 2, 3]
+            - [4, 5, 6]
+            - [7, 8, 9]
+      names:
+        - { name: "glgrid", refers_to: "C5:E7" }
+    args: ["=glgrid", "=9"]
+    expected: "E7"
+
+  - name: forward lift with origin anchors each result
+    args: ["=SEQUENCE(10,10)", "={1;41}", "=", "=", "=", "=C3"]
+    expected: [["C3"], ["C7"]]
+
+  - name: reverse lift with origin anchors each lookup
+    args: ["=SEQUENCE(10,10)", '={"C3";"C7";"A1"}', "=TRUE", "=", "=-1", "=C3"]
+    expected: [[1], [41], [-1]]

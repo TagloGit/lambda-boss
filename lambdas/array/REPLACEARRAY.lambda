@@ -4,6 +4,7 @@
                         2026-06-13  Claude      Initial version
                         2026-06-16  Claude      Single-scalar anchor: at accepts an A1 address or an encoded pos (drop the col param); add explicit origin per the position convention
                         2026-06-16  Claude      origin is a workbook reference only (single cell or range; top-left used) — no text-address form, and no ISTEXT test that lifted on a 2-D range
+                        2026-11-08  Claude      Hot-loop speed: build only the chosen mode, a native IF mask for one cell, one TOPOS for at, result not bound to a name (#412)
 */
 REPLACEARRAY = LAMBDA(
 //  Parameter Declarations
@@ -20,58 +21,23 @@ REPLACEARRAY = LAMBDA(
         nCols, COLUMNS(replace),
         wRows, ROWS(with),
         wCols, COLUMNS(with),
-        baseRow, IFERROR(MIN(ROW(replace)), 1),
-        baseCol, IFERROR(MIN(COLUMN(replace)), 1),
-        originRow, IF(ISOMITTED(origin), baseRow, MIN(ROW(origin))),
-        originCol, IF(ISOMITTED(origin), baseCol, MIN(COLUMN(origin))),
-        absRow, IF(ISOMITTED(at), originRow, IF(ISTEXT(at), ROWNUM(at), ROWOF(at))),
-        absCol, IF(ISOMITTED(at), originCol, IF(ISTEXT(at), COLNUM(at), COLOF(at))),
-        atRow, absRow - originRow + 1,
-        atCol, absCol - originCol + 1,
+        oPos, IF(ISOMITTED(origin),
+                 IF(ISREF(replace), MIN(ROW(replace)) * _mult + MIN(COLUMN(replace)), _mult + 1),
+                 MIN(ROW(origin)) * _mult + MIN(COLUMN(origin))),
+        pos, IF(ISOMITTED(at), oPos, TOPOS(at)),
+        atRow, INT(pos / _mult) - INT(oPos / _mult) + 1,
+        atCol, MOD(pos, _mult) - MOD(oPos, _mult) + 1,
         mode, IF(ISOMITTED(overflow), 0, overflow),
         validAnchor, AND(atRow >= 1, atCol >= 1, atRow = INT(atRow), atCol = INT(atCol)),
-    //  Host-sized sequences (clip / error / wrap)
         rseq, SEQUENCE(nRows),
         cseq, SEQUENCE(, nCols),
-    //  Clip: drop block cells that fall outside the host
-        clipMask, (rseq >= atRow) * (rseq <= atRow + wRows - 1) * (cseq >= atCol) * (cseq <= atCol + wCols - 1),
-        srcRow, rseq - atRow + 1,
-        srcCol, cseq - atCol + 1,
-        clampRow, IF(srcRow < 1, 1, IF(srcRow > wRows, wRows, srcRow)),
-        clampCol, IF(srcCol < 1, 1, IF(srcCol > wCols, wCols, srcCol)),
-        clipResult, IF(clipMask, INDEX(with, clampRow, clampCol), replace),
-    //  Error: surface #N/A unless the block fits entirely
         fits, AND(atRow + wRows - 1 <= nRows, atCol + wCols - 1 <= nCols),
-        errResult, IF(fits, clipResult, NA()),
-    //  Wrap: indices wrap modulo host dimensions (toroidal)
-        drow, MOD(rseq - 1 - (atRow - 1), nRows),
-        dcol, MOD(cseq - 1 - (atCol - 1), nCols),
-        wrapMask, (drow < wRows) * (dcol < wCols),
-        wrapResult, IF(wrapMask, INDEX(with, IF(drow < wRows, drow + 1, 1), IF(dcol < wCols, dcol + 1, 1)), replace),
-    //  Expand: grow the output so the whole block fits; new host cells are blank
-        outRows, MAX(nRows, atRow + wRows - 1),
-        outCols, MAX(nCols, atCol + wCols - 1),
-        rseqE, SEQUENCE(outRows),
-        cseqE, SEQUENCE(, outCols),
-        eMask, (rseqE >= atRow) * (rseqE <= atRow + wRows - 1) * (cseqE >= atCol) * (cseqE <= atCol + wCols - 1),
-        bsrcRow, IF(rseqE - atRow + 1 < 1, 1, IF(rseqE - atRow + 1 > wRows, wRows, rseqE - atRow + 1)),
-        bsrcCol, IF(cseqE - atCol + 1 < 1, 1, IF(cseqE - atCol + 1 > wCols, wCols, cseqE - atCol + 1)),
-        hMask, (rseqE <= nRows) * (cseqE <= nCols),
-        hsrcRow, IF(rseqE > nRows, nRows, rseqE),
-        hsrcCol, IF(cseqE > nCols, nCols, cseqE),
-        hostVal, IF(hMask, INDEX(replace, hsrcRow, hsrcCol), ""),
-        expandResult, IF(eMask, INDEX(with, bsrcRow, bsrcCol), hostVal),
-    //  Dispatch on overflow mode
-        result, IF(NOT(validAnchor), NA(),
-                  IFS(mode = 1, errResult,
-                      mode = 2, expandResult,
-                      mode = 3, wrapResult,
-                      TRUE, clipResult)),
-    //  Help
+    //  Help, or the result. Only the chosen mode is built: a LET binding is evaluated on every call, an
+    //  IF branch only when taken. The result is not bound to a name: binding a grid costs a copy
         IF(Help?, TEXTSPLIT(
                 "FUNCTION:      →REPLACEARRAY(replace, with, [at], [overflow], [origin])¶" &
                 "DESCRIPTION:   →Stamps a scalar, vector, or 2-D block into a host array at an anchor, preserving the host's shape (or growing it in expand mode).¶" &
-                "VERSION:       →Jun 16 2026¶" &
+                "VERSION:       →Nov 08 2026¶" &
                 "PARAMETERS:    →¶" &
                 "   replace        →(Required) Host array to write into.¶" &
                 "   with           →(Required) Scalar, vector, or 2-D block to stamp in. Blank cells read as 0 (INDEX quirk).¶" &
@@ -82,6 +48,32 @@ REPLACEARRAY = LAMBDA(
                 "Formula        →=REPLACEARRAY({1,2,3;4,5,6;7,8,9}, {0,0;0,0}, ""B2"")¶" &
                 "Result         →{1,2,3;4,0,0;7,0,0}",
                 "→", "¶"
-                ), result)
+                ),
+            IF(NOT(validAnchor), NA(),
+                IF(mode = 2,
+                //  Expand: grow the output so the whole block fits; new host cells are blank
+                    LET(
+                        rE, SEQUENCE(MAX(nRows, atRow + wRows - 1)),
+                        cE, SEQUENCE(, MAX(nCols, atCol + wCols - 1)),
+                        bRow, rE - atRow + 1,
+                        bCol, cE - atCol + 1,
+                        IF((bRow >= 1) * (bRow <= wRows) * (bCol >= 1) * (bCol <= wCols),
+                           INDEX(with, IF(bRow < 1, 1, IF(bRow > wRows, wRows, bRow)), IF(bCol < 1, 1, IF(bCol > wCols, wCols, bCol))),
+                           IF((rE <= nRows) * (cE <= nCols), INDEX(replace, IF(rE > nRows, nRows, rE), IF(cE > nCols, nCols, cE)), ""))),
+                IF(mode = 3,
+                //  Wrap: indices wrap modulo host dimensions (toroidal)
+                    LET(
+                        dRow, MOD(rseq - atRow, nRows),
+                        dCol, MOD(cseq - atCol, nCols),
+                        IF((dRow < wRows) * (dCol < wCols), INDEX(with, IF(dRow < wRows, dRow + 1, 1), IF(dCol < wCols, dCol + 1, 1)), replace)),
+                IF((mode = 1) * NOT(fits), NA(),
+                //  Clip (and error mode when the block fits). One cell is a native IF mask
+                IF(wRows * wCols = 1, IF((rseq = atRow) * (cseq = atCol), with, replace),
+                    LET(
+                        sRow, rseq - atRow + 1,
+                        sCol, cseq - atCol + 1,
+                        IF((sRow >= 1) * (sRow <= wRows) * (sCol >= 1) * (sCol <= wCols),
+                           INDEX(with, IF(sRow < 1, 1, IF(sRow > wRows, wRows, sRow)), IF(sCol < 1, 1, IF(sCol > wCols, wCols, sCol))),
+                           replace))))))))
 )
 );
