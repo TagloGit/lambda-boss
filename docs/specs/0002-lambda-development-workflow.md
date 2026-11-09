@@ -137,7 +137,7 @@ tests:
 
   - name: help text
     args: []
-    expected_type: array  # Just check it returns a 2D array (the Help table)
+    expected_type: array  # Just check it returns a 2D array (the Help table; help cases removed by spec 0013)
 
   - name: single delimiter
     args: ["no-delim", ","]

@@ -139,6 +139,7 @@ tests:
     args: ['=CHOOSEROWS({"BY85";"C2"},1)']
     expected: 85000077
 
+  # --- #380: past XFD / row 1048576, the _mult default, clear errors ---
   - name: first column past XFD (XFE1) (#380)
     args: ["XFE1"]
     expected: 1016385

@@ -137,8 +137,8 @@ Tim's direction (6 Nov), done after the hints were proven:
 - **Parser and Edit Lambda.** The add-in has no Help-specific code: `TransformHelpPattern` was
   removed under docs spec 0002, and Edit Lambda shows whatever the formula holds, so removing
   the block from the files is what clears Edit Lambda. The parsers keep accepting `?` in names,
-  because library and user LETs use names like `keyDropped?`; only comments that cite `Help?`
-  as the example change.
+  because library and user LETs use names like `keyDropped?`. Code comments that cite `Help?`
+  as an example of such a name stay: it's still a valid user name.
 
 ## Defaults Tim can reverse
 
