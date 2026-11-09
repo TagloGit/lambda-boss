@@ -1,5 +1,5 @@
 /*  FUNCTION NAME:      DEFAULTARROWS
-    DESCRIPTION:*//**Returns the 8 default compass arrow characters as a vertical array, in canonical clockwise order from north, matching DEFAULTMOVEDELTAS.*/
+    DESCRIPTION:*//**Returns the 8 default compass arrow characters as a vertical array, in canonical clockwise order from north, matching _dirAll.*/
 /*  RETURNS:            8x1 array of arrow glyphs (text), clockwise from north
     PARAMETERS:
     EXAMPLE:            =DEFAULTARROWS() -> {↑;↗;→;↘;↓;↙;←;↖}

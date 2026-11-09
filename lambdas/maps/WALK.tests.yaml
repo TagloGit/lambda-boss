@@ -63,3 +63,10 @@ tests:
   - name: origin anchors in-memory Costs at G3
     args: ['="G3"', "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=", "=", "=G3"]
     expected: [[0, "", ""], [1, "", ""], [2, 5, 6]]
+
+  # #425: one delta form. _dirKnight passed straight as Dirs (ordered priority: NNE, ENE, ESE, SSE, SSW, WSW, WNW, NNW).
+  # 3x3: A1 -ESE-> C2 -WSW-> A3 -NNE-> B1 -SSE-> C3 -WNW-> A2 -ENE-> C1 -SSW-> B3 -NNE-> C1 (revisit) -SSW-> B3 same move seen: halts.
+  # Step numbers, last visit wins: C1 = 8, B3 = 9; the centre is never visited.
+  - name: _dirKnight passed as Dirs with no conversion - knight tour in priority order
+    args: ['="A1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=_dirKnight", "=TRUE"]
+    expected: [[0, 3, 8], [5, "", 1], [2, 9, 4]]

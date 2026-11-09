@@ -100,15 +100,15 @@ tests:
     expected: [["B1", "C1", "D1"], ["C2", "D2", "E2"]]
 
   - name: knight NNE from D4 via custom moves
-    args: ["D4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    args: ["D4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},_dirKnight)']
     expected: "E2"
 
   - name: knight SSE from D4 via custom moves
-    args: ["D4", '="SSE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    args: ["D4", '="SSE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},_dirKnight)']
     expected: "E6"
 
   - name: knight NNE two steps from D10
-    args: ["D10", '="NNE"', "=2", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    args: ["D10", '="NNE"', "=2", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},_dirKnight)']
     expected: "F6"
 
   - name: address from cell containing string
@@ -207,7 +207,7 @@ tests:
     expected: "E2"
 
   - name: knight move refused by stick bounds
-    args: ["B4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())', '="A3:E7"', "=2"]
+    args: ["B4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},_dirKnight)', '="A3:E7"', "=2"]
     expected: "B4"
 
   - name: steps array traces wrapping path
@@ -247,11 +247,11 @@ tests:
     expected: "E2"
 
   - name: custom moves glyph wins over token fallback
-    args: ["D4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    args: ["D4", '="NNE"', "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},_dirKnight)']
     expected: "E2"
 
   - name: token falls back through custom moves table to compass
-    args: ["D4", "NE", "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},KNIGHTDELTAS())']
+    args: ["D4", "NE", "=1", '=HSTACK({"NNE";"ENE";"ESE";"SSE";"SSW";"WSW";"WNW";"NNW"},_dirKnight)']
     expected: "E3"
 
   - name: unrecognised dir text returns NA
@@ -305,3 +305,23 @@ tests:
   - name: overflow without bounds still clips at the sheet edge (#380 review)
     args: ["XFC5", '="→"', "=5", "=", "=", "=0"]
     expected: "XFD5"
+
+  - name: 2-column moves HSTACK(glyphs, _dirKnight) - letter d is SSE from D4
+    args: ["D4", '="d"', "=1", '=HSTACK({"a";"b";"c";"d";"e";"f";"g";"h"},_dirKnight)']
+    expected: "E6"
+
+  - name: 2-column moves HSTACK(glyphs, _dirKnight) - letter h is NNW from D4
+    args: ["D4", '="h"', "=1", '=HSTACK({"a";"b";"c";"d";"e";"f";"g";"h"},_dirKnight)']
+    expected: "C2"
+
+  - name: old 3-column moves table {glyph, dRow, dCol} still works
+    args: ["D4", '="x"', "=1", '={"x",-2,1;"y",1,2}']
+    expected: "E2"
+
+  - name: old 3-column moves table - second row, two steps
+    args: ["D4", '="y"', "=2", '={"x",-2,1;"y",1,2}']
+    expected: "H6"
+
+  - name: default ARROWMOVES table moves a glyph right
+    args: ["B2", '="→"', "=3"]
+    expected: "E2"

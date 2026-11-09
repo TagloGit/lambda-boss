@@ -1,0 +1,6 @@
+/*  CONSTANT NAME:      _dirKnight
+    DESCRIPTION:*//**The 8 scalar position-deltas for a chess knight's L-shaped moves, as a vertical array in clockwise order from NNE (NNE, ENE, ESE, SSE, SSW, WSW, WNW, NNW). Each is a single integer to add to a TOPOS position (derived from _mult, so it follows the one multiplier). Pass it straight to WALK or MAZE as the direction list, or pair it with glyphs for MOVECELL: HSTACK(glyphs, _dirKnight).*/
+/*  REVISIONS:          Date        Developer   Description
+                        2026-11-09  Claude      Initial version (#425)
+*/
+_dirKnight = _mult * {-2;-1;1;2;2;1;-1;-2} + {1;2;2;1;-1;-2;-2;-1};

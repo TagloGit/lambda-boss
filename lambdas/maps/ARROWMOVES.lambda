@@ -1,17 +1,18 @@
 /*  FUNCTION NAME:      ARROWMOVES
-    DESCRIPTION:*//**Returns an 8x3 moves table combining DEFAULTARROWS and DEFAULTMOVEDELTAS: {arrow, dRow, dCol}.*/
-/*  RETURNS:            3-column array {arrow glyph, dRow, dCol}, 8 rows clockwise from north
+    DESCRIPTION:*//**Returns an 8x2 moves table combining DEFAULTARROWS and _dirAll: {arrow, packed delta}.*/
+/*  RETURNS:            2-column array {arrow glyph, packed delta (row*_mult+col)}, 8 rows clockwise from north
     PARAMETERS:
-    EXAMPLE:            =ARROWMOVES() -> 8x3 array: col 1 is arrow char, cols 2-3 are dRow/dCol
+    EXAMPLE:            =ARROWMOVES() -> 8x2 array: col 1 is the arrow char, col 2 its packed delta (↑ = -1000000, → = 1)
     REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-08-20  Claude      Row order now follows the canonical clockwise-from-north order (inherited from DEFAULTARROWS / DEFAULTMOVEDELTAS)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-09  Claude      Now an 8x2 {glyph, packed delta} table (HSTACK of DEFAULTARROWS and _dirAll), was 8x3 {glyph, dRow, dCol}; DEFAULTMOVEDELTAS retired (#425)
 */
 ARROWMOVES = LAMBDA(
     LET(
     //  Procedure
-        result, HSTACK(DEFAULTARROWS(), DEFAULTMOVEDELTAS()),
+        result, HSTACK(DEFAULTARROWS(), _dirAll),
         result
 )
 );

@@ -189,3 +189,9 @@ tests:
   - name: Cus_Dir accepts arrow glyphs - mixed with numeric deltas
     args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=", '={"↑","↓",-1,1}']
     expected: [[0, 1, 2], [1, 2, 3], [2, 3, 4]]
+
+  # #425: one delta form. _dirKnight passed straight as Cus_Dir. Knight graph of a 3x3 from A1:
+  # B3 = 1, C1 = 2, A2 = 3, C3 = 4 (the centre is unreachable).
+  - name: Cus_Dir accepts _dirKnight with no conversion - knight distances on a 3x3
+    args: ['="A1"', "={1,1,1;1,1,1;1,1,1}", "=", '={"B3";"C1";"A2";"C3"}', "=", "=", "=_dirKnight"]
+    expected: [[1], [2], [3], [4]]

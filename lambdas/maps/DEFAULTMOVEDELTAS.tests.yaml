@@ -1,4 +1,0 @@
-tests:
-  - name: returns 8x2 compass delta grid clockwise from north
-    args: []
-    expected: [[-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1]]
