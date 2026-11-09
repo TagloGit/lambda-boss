@@ -71,7 +71,8 @@ The hints are on by default (out of Labs on 9 Nov, #422: "Argument hints look aw
   a new prefix. The file is written and `Refresh()` queued as a macro, never on the typing path.
 - **The file stays on disk** between sessions, so a server started by another add-in before
   Lambda Boss's `AutoOpen` still finds it. It's deleted when the hints are turned off. If the
-  XLL's folder isn't writable, the hints stay off and the log says why.
+  XLL's folder isn't writable, the hints stay off and the log says why (see *Offline and
+  competition use*).
 - **First session beside another IntelliSense add-in.** If another add-in's server starts first, it
   looks for the file when Lambda Boss's XLL loads, before `AutoOpen` has written it, so the very
   first session shows no hints. From the second session on the file is already there.
@@ -111,6 +112,29 @@ none of it.
 - `LambdaDocParser` reads it; `LambdaInfo.Doc` carries it for the popup and the hints.
 - The first pass (with the hints) generated the header metadata from each file's Help table,
   and wrote `RETURNS` by hand per function. The second pass removes the Help tables.
+
+## Offline and competition use
+
+At a competition Tim copies the XLL and an offline library folder to the machine and points
+Lambda Boss at the folder (settings window → local source), as at the European Open. Proven in
+the VM on 9 Nov (#422) with the PR's build, the network adapter disabled, no Lambda Boss
+settings or library cache, the library source a local folder, and the default GitHub repo
+still enabled:
+
+- **The hints work offline, on by default.** The GitHub fetch fails at once (no DNS) and is
+  logged; the local folder loads (8 libraries, 144 LAMBDAs) and the hints file is written about a
+  second after the add-in starts. Typing `=MOVECELL("C3",` shows the hint with `dir` in bold.
+- **Check Formula's library names resolve offline** from the same catalogue: on
+  `=MOVECELL("C3","→")` in a workbook without it, it says "MOVECELL is a library LAMBDA that
+  isn't loaded in this workbook", not "unknown name".
+- **The XLL's folder must be writable.** ExcelDna.IntelliSense reads an add-in's hints only from
+  `<xll>.intellisense.xml` beside the XLL (`ExcelDnaIntelliSenseProvider.GetXmlPath`); it has no
+  setting for another folder, and its other source (a sheet or custom XML part in an open
+  workbook) would mean writing into the user's workbooks. So there's no fallback folder. With
+  the XLL in a read-only folder (proven: the user had read and execute only) the hints stay off,
+  the log says `LambdaHints: can't write …; hints stay off`, and everything else, Check Formula
+  included, works. Put the XLL in `%APPDATA%\Microsoft\AddIns` (the recommended load path; always
+  writable by the user) or any folder the user can write to.
 
 ## Performance
 
