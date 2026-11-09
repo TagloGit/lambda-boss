@@ -168,7 +168,16 @@ public static class ShowLambdaPopupCommand
             action(_windowDispatcher);
     }
 
+    private static readonly object WindowThreadGate = new();
+
     private static void EnsureWindowThread()
+    {
+        // Check Formula can call this from the thread pool while Excel's thread calls it too.
+        lock (WindowThreadGate)
+            EnsureWindowThreadLocked();
+    }
+
+    private static void EnsureWindowThreadLocked()
     {
         if (_windowThread != null && _windowThread.IsAlive)
         {
