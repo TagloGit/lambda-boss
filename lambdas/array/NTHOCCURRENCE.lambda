@@ -12,7 +12,14 @@ NTHOCCURRENCE = LAMBDA(
     //  Procedure
         col, TOCOL(arr),
         n, ROWS(col),
-        running, MAP(SEQUENCE(n), LAMBDA(i, SUMPRODUCT((INDEX(col, SEQUENCE(i)) = INDEX(col, i)) * 1))),
+        idx, SEQUENCE(n),
+    //  Each value's key is the position of its first occurrence. Sorting the positions by
+    //  (key, position) puts each value's occurrences together in order; a row's count is its
+    //  place in that sorted list less the place where its group starts, sorted back.
+        key, XMATCH(col, col),
+        order, SORTBY(idx, key, 1, idx, 1),
+        sortedKey, INDEX(key, order),
+        running, SORTBY(idx - XMATCH(sortedKey, sortedKey) + 1, order, 1),
         result, IF(COLUMNS(arr) > 1, TRANSPOSE(running), running),
     //  Help
         IF(Help?, TEXTSPLIT(
