@@ -54,7 +54,7 @@ UNTILE = LAMBDA(
         headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Section", "Item", "Value")),
         table, IF(header?, VSTACK(headerRow, body), body),
     //  Size errors name the sizes; each message is built only when its check fails
-        bufTxt, IF(hBuf + vBuf, " with h_buffer " & hBuf & ", v_buffer " & vBuf, ""),
+        bufTxt, IF(OR(hBuf <> 0, vBuf <> 0), " with h_buffer " & hBuf & ", v_buffer " & vBuf, ""),
         result, IF(NOT(geomOK),
                     "UNTILE: map is " & mapRows & "x" & mapCols & ", which doesn't split into " & keyRows & "x" & keyCols & " key sections" & bufTxt & " (" & ROUND(gridRows, 2) & " x " & ROUND(gridCols, 2) & " sections)",
                 IF(nSec > allSec,

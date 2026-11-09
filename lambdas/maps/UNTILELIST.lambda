@@ -69,7 +69,7 @@ UNTILELIST = LAMBDA(
         headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Label", "Col" & SEQUENCE(1, listW))),
         table, IF(header?, VSTACK(headerRow, kept), kept),
     //  Size errors name the sizes; each message is built only when its check fails
-        bufTxt, IF(hBuf + vBuf, " with h_buffer " & hBuf & ", v_buffer " & vBuf, ""),
+        bufTxt, IF(OR(hBuf <> 0, vBuf <> 0), " with h_buffer " & hBuf & ", v_buffer " & vBuf, ""),
         result, IF(NOT(listOK),
                     "UNTILELIST: list must be a range inside tile (e.g. 'Recipe'!B9:D24), not an array",
                 IF(NOT(geomOK),
