@@ -22,6 +22,8 @@ MAZE = LAMBDA(
     [No_Diag],
     [Show_Steps],
     [Cus_Dir],
+//  Mazelam is called once per BFS layer: each argument is a column with one row per candidate edge,
+//  and it must return one cost per row. Use * / + for AND / OR; aggregators collapse the layer (#383).
     [Mazelam],
     [origin],
 //  Help — full help table lives in MAZEHELP (the combined formula exceeded Excel's 8192-character limit)

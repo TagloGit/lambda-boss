@@ -77,6 +77,20 @@ tests:
     args: ['="C3"', "=", "=walkRng", '="E5"', "=FALSE", "=", "=", "=LAMBDA(costFrom,costTo,cellFrom,cellTo,distFrom,dirDelta,prevDir,IF((ROWNUM(cellFrom)<>ROWNUM(cellTo))*(COLNUM(cellFrom)<>COLNUM(cellTo))=1,costTo*1.5,costTo))"]
     expected: 3
 
+  # #383: Mazelam gets one row per candidate edge. An element-wise rule (* for AND) bans the
+  # 1-cell moves from C3 only, so C3 -> D3 must go C3 -> E3 -> D3 (cost 2). An AND-based rule
+  # would collapse the layer to FALSE and let the banned move through (cost 1).
+  - name: Mazelam receives arrays of edges - element-wise rule bans only the matching edges
+    setup:
+      cells:
+        - address: "C3:G3"
+          values:
+            - [1, 1, 1, 1, 1]
+      names:
+        - { name: "lineRng", refers_to: "C3:G3" }
+    args: ['="C3"', "=", "=lineRng", '="D3"', "=", "=", "={1,-1,2,-2}", '=LAMBDA(costFrom,costTo,cellFrom,cellTo,distFrom,dirDelta,prevDir,IF((cellFrom="C3")*(ABS(dirDelta)=1),NA(),1))']
+    expected: 2
+
   - name: stock MAZELAM_DIAG passed by name gives same result as the inline LAMBDA
     setup:
       cells:

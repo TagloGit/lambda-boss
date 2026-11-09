@@ -3,6 +3,7 @@
 /*  REVISIONS:          Date        Developer   Description
                         2026-07-18  Claude      Initial version — MAZE help table extracted verbatim from MAZE so the MAZE formula fits Excel's 8192-character limit
                         2026-08-20  Claude      Cus_Dir help updated: entries may be any DIRDELTA spelling as well as numeric deltas
+                        2026-11-09  Claude      Mazelam help states the array contract: called once per layer with one row per candidate edge; use * and + rather than AND/OR or other aggregators (#383)
 */
 MAZEHELP = LAMBDA(
 //  Parameter Declarations
@@ -23,7 +24,7 @@ MAZEHELP = LAMBDA(
                 "   No_Diag       →(Optional) TRUE restricts to 4-way movement; default (FALSE) is 8-way including diagonals.¶" &
                 "   Show_Steps    →(Optional) Output mode: (0) cumulative cost [default], (1) step counter (TRUE also accepted), (2) path - the traversed cells as an Nx1 column of A1 addresses from st to the target. Mode 2 requires exactly one Targets cell; returns #N/A when Targets is omitted, multi-cell, or unreachable.¶" &
                 "   Cus_Dir       →(Optional) Custom move set: a list of encoded row*_mult+col deltas (e.g. KNIGHTDELTAS()) and/or any DIRDELTA spelling (arrows, ""NE"", ""UL"", ""down"", ...).¶" &
-                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning per-step cost. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or TOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() to drop an edge.¶" &
+                "   Mazelam       →(Optional) LAMBDA(costFrom, costTo, cellFrom, cellTo, distFrom, dirDelta, prevDir) returning step costs. Called once per search layer, not once per edge: every argument is a column array with one row per candidate edge, and it must return a column of the same height (one cost per edge). Write tests element-wise: * for AND, + for OR. AND, OR, SUM, MAX, COUNTIF and other aggregators collapse the whole layer to one value and apply it to every edge. cellFrom/cellTo are A1 address strings (e.g. ""Q15""); use ROWNUM/COLNUM or TOPOS to decode. Only invoked on in-bounds (cellFrom, cellTo) pairs — off-grid neighbor candidates are filtered before the call, so implementations need not guard against them. Return NA() in a row to drop that edge.¶" &
                 "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Overrides the anchor inferred from Costs/AllowMp, so st/Targets addresses and the returned grid are read in that frame. Defaults to the first of Costs, AllowMp that is a reference; (1,1) when both are in-memory arrays.¶" &
                 "EXAMPLE:       →¶" &
                 "Formula        →=MAZE(""C3"", , walkMask, , TRUE)¶" &
