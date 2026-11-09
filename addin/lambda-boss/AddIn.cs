@@ -59,6 +59,13 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         // TLS 1.2+, so every fetch failed with "Could not create SSL/TLS secure channel" (#372).
         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 
+        // The same 4.0-era quirks leave WPF's DoNotScaleForDpiChanges on, so WPF ignores the
+        // per-monitor DPI the window thread asks for and lays windows out at the system DPI
+        // the Excel process started with. After a Remote Desktop session (or on a monitor
+        // with other scaling) dialogs opened tiny until Excel restarted (#379). Must run
+        // before any WPF type loads: WPF reads the switch once.
+        AppContext.SetSwitch("Switch.System.Windows.DoNotScaleForDpiChanges", false);
+
         try
         {
             ExcelComAddInHelper.LoadComAddIn(new ShutdownMonitor());
