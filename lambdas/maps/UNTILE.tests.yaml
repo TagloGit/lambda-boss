@@ -27,13 +27,17 @@ tests:
     args: ['={5,6}', '={"x","y"}', "x"]
     expected: [[1, "x", 5]]
 
-  - name: geometry misfit returns VALUE error
+  - name: geometry misfit returns a message naming the sizes
     args: ['={1,2,3,4,5}', '={"x","y"}', '={"x","y"}']
-    expected: -2146826273
+    expected: "UNTILE: map is 1x5, which doesn't split into 1x2 key sections (1 x 2.5 sections)"
 
-  - name: more names than sections returns VALUE error
+  - name: geometry misfit with a buffer names the buffers
+    args: ['={1,2,0,3,4,0,5}', '={"x","y"}', '={"x","y"}', '=', '=1']
+    expected: "UNTILE: map is 1x7, which doesn't split into 1x2 key sections with h_buffer 1, v_buffer 0 (1 x 2.67 sections)"
+
+  - name: more names than sections returns a message naming both counts
     args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', '={"A","B","C"}']
-    expected: -2146826273
+    expected: "UNTILE: 3 section names, but the map has 2 sections (map 1x4 = 1 x 2 sections of 1x2)"
 
   - name: item missing from key defaults to NA in value cells
     args: ['={1,2,3,4}', '={"x","y"}', '={"x","z"}']

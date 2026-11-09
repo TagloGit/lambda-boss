@@ -51,25 +51,25 @@ tests:
     args: ['={"a",1,"x",9;"b",2,"c",3}', '=SEQUENCE(2,2)', "=", '={"One"}']
     expected: [["One", "a", 1], ["One", "b", 2]]
 
-  - name: more labels than tiles returns VALUE error
+  - name: more labels than tiles returns a message naming both counts
     args: ['={"a",1,"x",9;"b",2,"c",3}', '=SEQUENCE(2,2)', "=", '={"A","B","C"}']
-    expected: -2146826273
+    expected: "UNTILELIST: 3 labels, but the map has 2 tiles (map 2x4 = 1 x 2 tiles of 2x2)"
 
-  - name: geometry misfit returns VALUE error
+  - name: geometry misfit returns a message naming the sizes
     args: ['={1,2,3;4,5,6}', '=SEQUENCE(2,2)']
-    expected: -2146826273
+    expected: "UNTILELIST: map is 2x3, which doesn't split into 2x2 tiles (1 x 1.5 tiles)"
 
-  - name: list as array constant instead of reference returns VALUE error
+  - name: list as array constant instead of reference returns a message
     args: ['={1,2;3,4}', '=SEQUENCE(2,2)', '={1,1,2,2}']
-    expected: -2146826273
+    expected: "UNTILELIST: list must be a range inside tile (e.g. 'Recipe'!B9:D24), not an array"
 
-  - name: list range outside tile rectangle returns VALUE error
+  - name: list range outside tile rectangle returns a message naming the window
     setup:
       names:
         - { name: "tileRng", refers_to: "F3:G5" }
         - { name: "listRng", refers_to: "F5:G6" }
     args: ['={1,2;3,4;5,6}', "=tileRng", "=listRng"]
-    expected: -2146826273
+    expected: "UNTILELIST: list covers rows 3-4, cols 1-2 of the tile, outside the 3x2 tile"
 
   - name: all rows blank returns NA
     args: ['={"",0;"",""}', '=SEQUENCE(2,2)']
