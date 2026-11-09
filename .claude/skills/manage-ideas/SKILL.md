@@ -92,9 +92,8 @@ For each added/modified `.lambda` file in the delta, read it and extract:
 - **Name** — the function name from the `FUNCTION NAME:` header.
 - **Description** — the one-line blurb inside the `/**...*/` JavaDoc comment on line 2.
 - **Calculation** — the meaningful formula logic from the `//  Procedure` section, **excluding**:
-  - the `Help` TEXTSPLIT block,
-  - the `//  Check inputs` bindings (`Help?`, `ISOMITTED(...)` guards, default-value normalisers like `IF(ISOMITTED(x), default, x)`),
-  - the final `IF(Help?, TEXTSPLIT(...), result)` return.
+  - the `//  Check inputs` bindings (`ISOMITTED(...)` guards, default-value normalisers like `IF(ISOMITTED(x), default, x)`),
+  - the final `result` return.
 
   Collapse to a compact inline formula. Intermediate LET bindings can be inlined or described in prose (e.g. "… where `_count = CEILING(LEN(text)/_size, 1)`"). Aim for a single backticked expression per row; prose only when inlining would hurt readability. Prefer fidelity over prettiness — the reader is checking for duplicate *logic*, so the formula must be recognisable, not necessarily runnable.
 

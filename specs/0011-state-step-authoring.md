@@ -367,7 +367,7 @@ steps. That's fine for one fold of a few thousand steps and costly for a fold pe
 inputs. What costs:
 
 1. **The inline Help block: ~2.3×.** Every library LAMBDA bound `Help, TEXTSPLIT(...)` in its LET
-   (until #387), and Excel evaluates a binding on every call. Moving the TEXTSPLIT into the `IF(Help?, …)` branch brings
+   (until #387; the Help block was removed entirely by spec 0013), and Excel evaluates a binding on every call. Moving the TEXTSPLIT into the `IF(Help?, …)` branch brings
    the cost down to the Help-deleted level, within noise (measured). Library-wide: filed as #387.
 2. **GetVar's parse and SetVars' rebuild together: ~1.7×** (Help-free current code 187 ms → Help-free
    fast form 110 ms, 2 values). GetVar does `TEXTSPLIT` of the whole state then `FILTER` with `LEFT`

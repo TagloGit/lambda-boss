@@ -6,7 +6,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, AskUserQuestion
 
 # Create LAMBDA — lambda-boss
 
-Guide LAMBDA authoring with the correct self-documenting format, generate Help sections, and create companion `.tests.yaml` files.
+Guide LAMBDA authoring with the correct self-documenting format, write the header metadata, and create companion `.tests.yaml` files.
 
 ## Arguments
 
@@ -42,7 +42,7 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 - No tab characters — use spaces only
 - File must end with `);` followed by a single newline
 - All parameters must be wrapped in `[]` (optional syntax)
-- `Help?` must be a LET variable, not bare pseudo-syntax
+- No Help block: the formula carries no `Help?` and no help `TEXTSPLIT`. Documentation lives in the header (spec 0013)
 
 ### Template
 
@@ -62,28 +62,14 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
     [<param1>],
     [<param2>],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(<first_required_param>),
     //  Procedure
         result, <formula>,
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →<Name>(<param1>, <param2>)¶" &
-                "DESCRIPTION:   →<One-line description.>¶" &
-                "VERSION:       →<Mon DD YYYY>¶" &
-                "PARAMETERS:    →¶" &
-                "   <param1>          →(<Required/Optional>) <Description.>¶" &
-                "   <param2>          →(<Required/Optional>) <Description.>¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=<Name>(<example_args>)¶" &
-                "Result         →<example_result>",
-                "→", "¶"
-                ), result)
+        result
 )
 );
 ```
 
-**Why Help sits in the IF (#387):** Excel evaluates every LET binding on every call, so a `Help` binding costs its TEXTSPLIT each time, about 2.3× the per-call cost of a cheap helper in a REDUCE or SCAN loop. IF's untaken branch isn't evaluated. Never bind Help in the LET.
+The header is the only documentation. The argument hints (Labs switch `lambda-intellisense`) show RETURNS and the current PARAMETERS line while the user types. There is no `=FN()` or `FN(TRUE)` help call.
 
 ### Format Details
 
@@ -101,24 +87,17 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 - Preceded by `//  Parameter Declarations` comment
 - Last parameter followed by a comma before the `LET(`
 
-**Check inputs:**
-- `//  Check inputs` comment
-- `Help?, ISOMITTED(<first_required_param>),` — uses the first parameter that is logically required
-- Additional input checks can follow (e.g. `Delimit?, NOT(ISOMITTED(Delimiter)),`)
+**Input checks (only if the logic needs them):**
+- Put any `ISOMITTED` defaults or flags (e.g. `Delimit?, NOT(ISOMITTED(Delimiter)),`) under a `//  Check inputs` comment before `//  Procedure`
+- Never bind `Help?`
 
 **Procedure:**
 - `//  Procedure` comment
 - `result, <formula>,` — the computation
 
-**Help block (the last thing in the LET):**
-- `//  Help` comment
-- `IF(Help?, TEXTSPLIT(` — opens the Help table, in the IF's TRUE branch
-- Each row is `"<label>→<value>¶" &` — the `→` separates columns, `¶` separates rows
-- The last row has NO `¶` and NO `&` — just the closing `",`
-- Column alignment: pad labels to 15 chars, parameter names to 14 chars
-- VERSION date format: `Mon DD YYYY` (e.g. `Apr 12 2026`)
-- Closes with `"→", "¶"` on its own line, then `), result)`
-- Parameter descriptions: `(Required)` or `(Optional)` prefix followed by description
+**Return:**
+- The LET ends with the bare `result` on its own line
+- Zero-arg getters take no parameters at all: `DEFAULTARROWS = LAMBDA(LET(..., result))`, called `=DEFAULTARROWS()`
 
 **Closing:**
 - `)` closes the LET
@@ -128,12 +107,9 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 
 - Parameter declarations: 4 spaces indent
 - `LET(`: 4 spaces indent
-- `//  Check inputs`, `//  Procedure`, `//  Help`: 4 spaces indent
-- LET variables (`Help?,`, `result,`): 8 spaces indent
-- `IF(Help?, TEXTSPLIT(`: 8 spaces indent
-- Help string lines: 16 spaces indent
-- `"→", "¶"`: 16 spaces indent
-- `), result)`: 16 spaces indent
+- `//  Check inputs` (if any), `//  Procedure`: 4 spaces indent
+- LET variables (`result,`): 8 spaces indent
+- Final `result`: 8 spaces indent
 - Closing `)`: 0 spaces
 - `);`: 0 spaces
 
@@ -164,15 +140,14 @@ Keep the scalar body inside an inline `scalar` LAMBDA within the `LET`, then bra
     result, IF(OR(ROWS(<liftParam>) > 1, COLUMNS(<liftParam>) > 1),
                 MAP(<liftParam>, scalar),
                 scalar(@<liftParam>)),
-//  Help
-    IF(Help?, TEXTSPLIT(...), result)
+    result
 ```
 
 The `@` is load-bearing (#318). Without it, a 1×1 *array* — produced by `CHOOSEROWS`, `TAKE`, a single-row `FILTER`, or an array-lifted `XLOOKUP` — passes the `ROWS>1` check and reaches the scalar body still array-shaped, where shape-sensitive functions (`SEQUENCE(n)`, `REGEXEXTRACT(..., 1)`, `TEXTSPLIT`) lift element-wise over the 1×1 array and collapse to a single element. The result is silently wrong values, not an error (CELLTOPOS parsed `"BY85"` as column AZ because `SEQUENCE({2})` is `{1}`). `@` collapses a 1×1 array to its value and is a no-op on true scalars.
 
 **Do not "simplify" to an unconditional `MAP(<liftParam>, scalar)`.** MAP never returns a true scalar — even for plain scalar input its result is a 1×1 array, which re-poisons any *downstream* consumer that feeds the result into a shape-sensitive slot. This is not hypothetical: making CELLTOPOS MAP-only broke MAZE path mode, because `SEQUENCE(nSteps)` collapsed when `nSteps` derived from a now-1×1 `ROWNUM(...)*M + COLNUM(...)`. The branch-plus-`@` form is the only shape-transparent dispatch: scalar or 1×1 in → true scalar out; multi-cell in → array out.
 
-The dispatcher MUST sit **after** the `Help?, ISOMITTED(...)` line so `=YourLambda()` still returns help text. Scalar callers see no behavioural change.
+Scalar callers see no behavioural change.
 
 ### Picking the lift parameter
 
@@ -181,14 +156,14 @@ When multiple parameters could lift, default to lifting the **primary** scalar a
 - **Cartesian product** — more powerful, more complex; needs justification.
 - **Equal-shape zip** — when two arrays of the same shape should be paired element-wise.
 
-Most LAMBDAs just lift the primary arg. Document the choice in the help text.
+Most LAMBDAs just lift the primary arg. Document the choice in the header's PARAMETERS line.
 
-### Help text
+### Header text
 
-Add an "Also accepts an array of <param>" note to the lifted parameter's description, e.g.:
+Write the lifted parameter's PARAMETERS line with an "Also accepts an array of <param>" note, e.g.:
 
 ```
-"   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.¶" &
+        n               (Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.
 ```
 
 ### Tests
@@ -234,10 +209,6 @@ tests:
   - name: <another test>
     args: [<arg1>, <arg2>]
     expected: <expected_result>
-
-  - name: help text
-    args: []
-    expected_type: array
 ```
 
 ### Test Case Guidelines
@@ -246,9 +217,9 @@ tests:
   - Normal/happy path
   - Edge cases (zero, empty, boundary values)
   - Negative or error-prone inputs where applicable
-- Always include a `help text` test case with `args: []` and `expected_type: array`
+- `args: []` is a normal call (a zero-arg getter, or all parameters omitted). There is no help test case
 - Use `expected` for exact value matching (scalars, strings, booleans)
-- Use `expected_type: array` when exact matching isn't practical (e.g. Help output)
+- Use `expected_type: array` when exact matching isn't practical
 - Floating-point results: the harness uses `1e-10` tolerance, so provide precise expected values
 - String args must be quoted: `args: ["hello", " "]`
 - For 2D array results: `expected: [["row1col1", "row1col2"], ["row2col1"]]`
@@ -302,13 +273,13 @@ gh issue edit <number> -R TagloGit/lambda-boss --remove-label "status: backlog" 
 ### Step 4 — Create the Lambda File
 
 1. Check if `lambdas/<category>/` exists; if not, create it with `_library.yaml`
-2. Write the `.lambda` file following the template exactly
+2. Write the `.lambda` file following the template exactly, with RETURNS and a PARAMETERS line per parameter
 3. Use `\n` line endings — write with the Write tool (it preserves line endings)
 
 ### Step 5 — Create the Tests File
 
 1. Write the `.tests.yaml` file with test cases
-2. Include the help text test case
+2. Test normal, edge and error cases (no help text case)
 
 ### Step 6 — Validate Format
 
@@ -380,10 +351,7 @@ Tell the user:
 ## Common Mistakes to Avoid
 
 - **Carriage returns:** The Write tool on Windows may produce `\r\n`. After writing, verify with format tests. If CR errors occur, re-write the file content ensuring `\n`-only line endings.
-- **Missing trailing comma:** Every LET variable line (including `Help?` and `result`) must end with a comma.
-- **Binding Help in the LET:** It runs the TEXTSPLIT on every call (#387). The table goes in the `IF(Help?, ...)` branch.
-- **Help string alignment:** Keep the `→` and `¶` delimiters consistent. The last Help string line must NOT end with `¶" &` — it ends with just `",`.
-- **Never let the `→` (or `¶`) delimiter appear inside Help *content*.** `TEXTSPLIT(..., "→", "¶")` builds a 2-column grid, so any row carrying a stray `→` in its prose (e.g. `array → type-preserved`, `(row,col)→address`) splits into extra columns and `TEXTSPLIT` pads *every other row* with `#N/A` — the whole help table renders broken. In prose, write the arrow as `->` (ASCII) instead of `→`. If the content genuinely needs the `→` glyph (e.g. a lambda that outputs compass arrows), switch that one file's column delimiter to a character absent from all its content — `¦` works well — updating both the label separators and the `TEXTSPLIT` delimiter arg. Grep new help blocks with `→[^¶"]*→` before committing; any hit is a broken row.
+- **Missing trailing comma:** Every LET variable line (including `result`) must end with a comma.
 - **Parameter brackets:** ALL parameters must be `[param]`, not `param`.
 - **Tab characters:** Never use tabs. Use spaces for all indentation.
 
@@ -398,14 +366,13 @@ Tell the user:
 - **Test YAML: boolean args need `=` prefix too.** YAML `True`/`False` are deserialized as strings and `FormatArg` wraps them in quotes (e.g. `"True"`), which Excel treats as text, not a boolean. Use `"=TRUE"` / `"=FALSE"` so the harness strips the `=` and passes the raw Excel boolean. Note: this applies to *args* only — *expected* values should use capitalized `True`/`False` without `=` prefix.
 - **Test YAML: omit a *middle* optional arg with a bare `"="`.** The harness joins args with commas into `=NAME(arg1,arg2,...)` and `FormatArg` maps a leading-`=` string to `s[1..]` — so `"="` becomes the empty string, producing a bare comma (an omitted positional arg) rather than a value. To test e.g. `=SEARCHALL("aaaa","aa",,FALSE)` (skip `case_insensitive`, set `overlapping`), write `args: ["aaaa", "aa", "=", "=FALSE"]`. Excel sees the gap as `ISOMITTED` and applies the default. This is the only way to reach a later optional param while defaulting an earlier one.
 - **SCAN/REDUCE defaults: pass built-in functions by name, not wrapped in a LAMBDA.** Excel's higher-order functions (`SCAN`, `REDUCE`, `MAP`, etc.) accept a built-in function by name as the reducer — e.g. `SCAN(0, arr, SUM)` works because `SUM(acc, current)` is a valid 2-arg call. Don't wrap it as `LAMBDA(a, b, a + b)`; just pass `SUM` (or `PRODUCT`, `MAX`, `MIN`, etc.). Keeps default-function patterns like `IF(ISOMITTED(function), SUM, function)` concise.
-- **Escape quotes in Help strings with `""`, not `\"`.** Excel string literals escape an embedded quote by doubling it. Using backslash-escape (JSON/C style) like `"=MOVECELL(E5, \"↖\")"` makes the formula fail to inject at runtime with the opaque "There's a problem with this formula" error. Use `"=MOVECELL(E5, ""↖"")"` instead.
+- **Escape quotes in formula string literals with `""`, not `\"`.** Excel string literals escape an embedded quote by doubling it. Using backslash-escape (JSON/C style) like `"=MOVECELL(E5, \"↖\")"` makes the formula fail to inject at runtime with the opaque "There's a problem with this formula" error. Use `"=MOVECELL(E5, ""↖"")"` instead.
 - **Lambdas can reference each other; the harness pre-injects in dependency order.** A lambda can call any other lambda in the library (e.g. `MOVECELL` calls `ARROWMOVES`). The AddIn test harness now bulk-injects all `.lambda` files with retries until dependencies resolve, so ordering across files doesn't matter *for tests*.
 - **A lambda must live in the SAME library as every lambda it calls — there is no cross-library dependency resolution at load time.** Libraries load as independent units in the real product, so a lambda in library A that references a helper in library B resolves to `#NAME?` when a user loads only A. **The test harness hides this** — it injects every `.lambda` across all libraries, so cross-library references pass all tests; green tests do NOT prove correct placement. Before choosing a category, list the lambda-to-lambda dependencies and place the new lambda where they live, or drop the dependency by inlining a trivial helper (e.g. PLAYERTURNS inlined `CIRCPOS`'s +1 step as `MOD(cur, nP) + 1` and moved into `loops/` beside `SCANLEAD`). Built-in Excel functions are always available — only *other lambdas* are a colocation concern.
 - **Test harness wraps each test in `=LAMBDA_NAME(args)` — you cannot wrap the call in another function via args.** Args are passed as comma-separated params inside the lambda call, not as outer expressions. Test `=INDEX(DEFAULTMOVEDELTAS(), 1, 1)` style DOES NOT WORK — the harness would produce `=DEFAULTMOVEDELTAS(INDEX(DEFAULTMOVEDELTAS(), 1, 1))`. For array-returning lambdas, assert the full spill with `expected: [[...], [...]]` (list-of-lists for 2D) or use `expected_type: array` for loose checks.
-- **Zero-arg data-getter lambdas: invert the Help IF with `IF(Help?, result, TEXTSPLIT(...))`.** For lambdas where the natural call takes no arguments (e.g. returning a constant table), keep the standard `Help?, ISOMITTED(ShowHelp)` LET variable but swap the branches at the end: `IF(Help?, result, TEXTSPLIT(...))`. This makes bare calls like `=DEFAULTARROWS()` return the data, and explicit `=DEFAULTARROWS(TRUE)` returns help. Tests should pass `args: []` for the data case and `args: ["=TRUE"]` for the help case.
 - **`ROW()`/`COLUMN()` on array constants error; wrap with `IFERROR`.** If a lambda takes a range and computes `MIN(ROW(grid))`/`MIN(COLUMN(grid))` to find its base cell, passing an array constant like `SEQUENCE(10,10)` (common in tests, since the harness can't pass real ranges) makes `ROW`/`COLUMN` return `#VALUE!`, which propagates through the whole formula. Wrap as `IFERROR(MIN(ROW(grid)), 1)` / `IFERROR(MIN(COLUMN(grid)), 1)` so array-constant inputs fall back to base (1,1) — i.e. addresses relative to A1. Real-range inputs still get their true base.
 - **`TRUE = 1` is FALSE in Excel — coerce with `N()` when a numeric enum branch might receive a boolean.** Excel's `=` never equates booleans with numbers, so a `mode` decoded as `IF(ISOMITTED(mode), 0, mode)` and branched with `IFS(md = 1, ...)` silently falls through to `#N/A` if a caller passes `TRUE` (e.g. a param that used to be a boolean flag, or a caller guessing the old-style signature). Decode with `N(mode)` instead — `N(TRUE)` = 1, numbers pass through — so boolean spellings keep working across a flag→enum migration. The same trap applies in reverse: internal calls that passed `TRUE` to a now-numeric param must switch to `1`.
-- **`INDEX` with vector row/col indices dereferences to a value array — only all-scalar `INDEX` returns a reference.** A lambda that slices with `INDEX(grid, rowsVec, colsVec)` (the element-wise zip used for diagonals) hands its `fn` a computed array of values, never a range, even when `grid` is a real range — so `ROW(b)`/`COLUMN(b)` inside `fn` hit the array-constant `#VALUE!` failure. For *rectangular* slices this is fixable with the BYRECTANGLE pattern (`IF(ISREF(grid), OFFSET-slice, INDEX-slice)`), but a non-rectangular shape (a diagonal) has **no possible range representation** — Excel formulas cannot build discontiguous unions dynamically. Don't try; instead convert geometry to values *before* slicing: pass `ADDRESSES(range)` as the grid and each slice arrives as its cells' address text (verified: `BYDIAGONALS(ADDRESSES(rng), LAMBDA(d, TEXTJOIN(",",,d)))` returns per-diagonal address lists). Document the limitation in the lambda's grid-param help.
+- **`INDEX` with vector row/col indices dereferences to a value array — only all-scalar `INDEX` returns a reference.** A lambda that slices with `INDEX(grid, rowsVec, colsVec)` (the element-wise zip used for diagonals) hands its `fn` a computed array of values, never a range, even when `grid` is a real range — so `ROW(b)`/`COLUMN(b)` inside `fn` hit the array-constant `#VALUE!` failure. For *rectangular* slices this is fixable with the BYRECTANGLE pattern (`IF(ISREF(grid), OFFSET-slice, INDEX-slice)`), but a non-rectangular shape (a diagonal) has **no possible range representation** — Excel formulas cannot build discontiguous unions dynamically. Don't try; instead convert geometry to values *before* slicing: pass `ADDRESSES(range)` as the grid and each slice arrives as its cells' address text (verified: `BYDIAGONALS(ADDRESSES(rng), LAMBDA(d, TEXTJOIN(",",,d)))` returns per-diagonal address lists). Document the limitation in the header's PARAMETERS line.
 - **XMATCH is case-insensitive by default.** `XMATCH("e", {"N";"n";"E";"e"})` returns 3 (matches "E"), not 4. Use distinct lookup keys in move/direction tables, or use `EXACT`-based lookup if case sensitivity is required.
 - **REGEXEXTRACT with return_mode 1 returns a horizontal (1xN) array, and collapses to a scalar on single match.** Wrap with `TRANSPOSE(...)` for a vertical spill. When only one match is possible (e.g. `CHARRUNS("ZZZZZ")`), Excel returns a scalar — `TRANSPOSE` of a scalar is still a scalar. In tests, assert single-match cases with `expected: "value"` (not list-of-lists), because the harness's array path (`cell.SpillingToRange`) returns null on scalars and throws NullReferenceException at `Marshal.ReleaseComObject`.
 - **GROUPBY needs a column-vector `row_fields`; normalise row-array inputs with `IF(ROWS(arr)=1, TRANSPOSE(arr), arr)`.** A row array like `{"A","B","B"}` passed straight into GROUPBY silently misgroups (e.g. sorts by label rather than count). Transpose to a column first so the function groups one value per row as intended.
@@ -414,9 +381,9 @@ Tell the user:
 - **`INDEX(2D_array, , col_vector)` collapses to one row — supply explicit row indices to broadcast.** Omitting `row_num` against a 2D array triggers Excel's implicit-intersection legacy behaviour and INDEX returns just the first row, even with a horizontal SEQUENCE for `col_num`. To produce a full n×m result, pass both index vectors explicitly: `INDEX(array, SEQUENCE(n), SEQUENCE(1,m,m,-1))` — INDEX then broadcasts (column-vector × row-vector) into the full grid. Same applies in reverse for omitted `column_num`. Always test 2D inputs separately from 1D inputs in the `.tests.yaml`; a passing 1D case doesn't prove the 2D path works.
 - **Native broadcasting can replace a `MAP` dispatcher — and lifts on *two* params for free.** The Array-lifting section's dispatcher (`IF(OR(ROWS>1,COLUMNS>1), MAP(...), scalar(...))`) is only needed when the scalar body contains an *aggregating* function that would collapse an array (e.g. `SUMPRODUCT`, `TEXTJOIN`). If the body is built purely from functions that already lift element-wise — arithmetic, `INT`, `MOD`, `ADDRESS`, `IF`, and lambdas that themselves lift (like `CELLTOPOS`) — drop the dispatcher and let Excel broadcast. The payoff: when one param is `m×1` and another is `1×n`, Excel's `+`/`*` broadcast them to an `m×n` grid automatically, so the lambda lifts on both inputs at once with zero extra code. MOVECELL uses this — `ADDRESS(curRow + dR*steps, curCol + dC*steps, 4)` lifts on cell (column) and steps (row) simultaneously, yielding a cell×steps grid; a scalar cell + `SEQUENCE(n)` traces a path. Verify `ADDRESS` and friends lift in the harness (they do) before relying on it.
 - **Avoid LET variable names that look like R1C1 references.** Names ending in `R1`/`C1` (e.g. `gR1`, `gC1`), or short forms like `cR`, `cC`, `topR`, `botR`, `leftC`, `rightC` are rejected by Excel when injecting the lambda via Names.Add — the harness reports "Could not resolve lambda dependencies". Single-letter names `r` / `c` are also risky because they resemble R1C1 row/column references. **Letter-then-digit names like `s1`, `n1`, `v1`, `r1`, `c1` (and the LAMBDA *parameter* equivalents) collide with cell references too** — Excel rejects the formula. For numbered series, use underscores: `s_1`, `n_1`, `v_1`. Use descriptive names like `baseRow`, `endCol`, `ctrRow`, `topRow`, `leftCol`, `winR`, `winC` when meaning is clearer than position. **The collision extends to ANY 1-3 letter prefix + digits — columns run A..XFD, so `arg1` = cell ARG1 and Excel rejects it** (all SELFCALL tests failed injection with the generic "problem with this formula" COMException until renamed `arg_1`/`arg_2`). Four-letter prefixes (`make1`, `state1`) are safe, but the underscore convention is the reliable default.
-- **Enum / mode / option arguments must be numeric, never text.** A parameter that selects one of a fixed set of behaviours (a `mode`, `overflow`, `axis`, `direction`, etc.) takes a small integer — `0`, `1`, `2`, … — with `0` as the default, *not* a text token like `"pad"`/`"wrap"`. Document the full enum inline in the parameter's help, mirroring REPLACEARRAY's `overflow`: `(0) clip [default], (1) error, (2) expand, (3) wrap`. Numeric enums avoid case/spelling fragility (no `LOWER()` normalisation, no `"WRAP"` vs `"wrap"` mismatch), keep test args terse (`'=1'` rather than a quoted string), and read consistently across the library. Decode with `IF(ISOMITTED(mode), 0, mode)` then branch on the integer (`= 1`, `IFS(...)`). Reserve text inputs for genuinely free-form values (labels, delimiters, formats), never for a closed choice set.
+- **Enum / mode / option arguments must be numeric, never text.** A parameter that selects one of a fixed set of behaviours (a `mode`, `overflow`, `axis`, `direction`, etc.) takes a small integer — `0`, `1`, `2`, … — with `0` as the default, *not* a text token like `"pad"`/`"wrap"`. Document the full enum in the header's PARAMETERS line, mirroring REPLACEARRAY's `overflow`: `(0) clip [default], (1) error, (2) expand, (3) wrap`. Numeric enums avoid case/spelling fragility (no `LOWER()` normalisation, no `"WRAP"` vs `"wrap"` mismatch), keep test args terse (`'=1'` rather than a quoted string), and read consistently across the library. Decode with `IF(ISOMITTED(mode), 0, mode)` then branch on the integer (`= 1`, `IFS(...)`). Reserve text inputs for genuinely free-form values (labels, delimiters, formats), never for a closed choice set.
 - **Case-sensitivity is a library-wide convention: default case-SENSITIVE, opt out via a numeric `case_insensitive` arg (0 = case-sensitive [default], 1 = case-insensitive).** Adopted 2026-08-16 across the string library (CHARQ, CHARRUNS, SEARCHALL); any new lambda whose matching could plausibly be case-blind should take the same arg with the same name, values, and default — never a boolean `match_case`. Implementation notes: (1) Excel's `REGEXEXTRACT`/`REGEXTEST`/`REGEXREPLACE` take a `case_sensitivity` arg whose values happen to map 1:1 (`0` = sensitive default, `1` = insensitive), so `_ci` passes straight through — and the insensitivity applies to backreferences too (verified: `(.)\1*` with `_ci=1` groups `"Aa"` as one run, returning the original casing). (2) For `SUBSTITUTE`-based counting, normalise both haystack and needle with `UPPER()` when `_ci=1`. (3) Remember `=` text comparison and `XMATCH`/`SEARCH` are natively case-INsensitive — the case-sensitive default branch needs `EXACT` (or `SUBSTITUTE`, which is natively sensitive), not `=`.
-- **Some plain-English function names are reserved by Excel and can't be a defined name — prefix with `_` to escape.** A lambda named `NEXT` fails to inject: setting `=NEXT(...)` (even the bare `=NEXT()` help call) throws COMException `0x800A03EC`, the same generic "problem with this formula" Excel raises for a syntactically rejected name. The body is fine — an identical lambda renamed `NEXTITEM` passes every case — it's purely the token. Confirmed reserved so far: `NEXT` (legacy FOR…NEXT keyword). The fix Tim prefers is a **leading underscore** (`_NEXT`): underscore-prefixed names are legal defined names, inject cleanly, and still surface in Excel's IntelliSense, so the function stays discoverable. Keep the filename, the `FUNCTION NAME:` header, the `<Name> = LAMBDA(` assignment, and every help-string self-reference all on the underscore form (`_NEXT = LAMBDA(`, `=_NEXT(...)`). If a new lambda's natural name is a bare English keyword and all tests fail with `0x800A03EC` regardless of body, suspect a reserved name and try the `_`-prefix before renaming.
+- **Some plain-English function names are reserved by Excel and can't be a defined name — prefix with `_` to escape.** A lambda named `NEXT` fails to inject: setting `=NEXT(...)` (even a bare `=NEXT()`) throws COMException `0x800A03EC`, the same generic "problem with this formula" Excel raises for a syntactically rejected name. The body is fine — an identical lambda renamed `NEXTITEM` passes every case — it's purely the token. Confirmed reserved so far: `NEXT` (legacy FOR…NEXT keyword). The fix Tim prefers is a **leading underscore** (`_NEXT`): underscore-prefixed names are legal defined names, inject cleanly, and still surface in Excel's IntelliSense, so the function stays discoverable. Keep the filename, the `FUNCTION NAME:` header, the `<Name> = LAMBDA(` assignment, and the header EXAMPLE all on the underscore form (`_NEXT = LAMBDA(`, `=_NEXT(...)`). If a new lambda's natural name is a bare English keyword and all tests fail with `0x800A03EC` regardless of body, suspect a reserved name and try the `_`-prefix before renaming.
 - **`INDEX(arr, SEQUENCE(...), SEQUENCE(...))` and `OFFSET` are both testable; pick based on required semantics.** Historically the harness could only pass array constants (e.g. `SEQUENCE(10,10)`), which made `OFFSET` untestable — so lambdas were pushed toward `INDEX` with SEQUENCE index arrays. As of issue #85 the harness supports a `setup:` block that pre-populates cells and/or named ranges before the formula runs, so `OFFSET`-based lambdas (and any lambda that must return or consume a *range reference* rather than a spilled array) can now be exercised in tests. Choose `OFFSET` when the caller needs a true range (for data validation sources, conditional-formatting ranges, `SUBTOTAL`, further `OFFSET`, etc.); choose `INDEX` with SEQUENCE when a spilled 2D array is sufficient. Either way, keep the `IFERROR(MIN(ROW(grid)),1)` base-cell fallback so positional math stays correct for both real-range and array-constant inputs.
 - **Test YAML: `setup:` block pre-populates the sheet before the formula runs.** Each test runs on a fresh worksheet. An optional `setup:` block can populate cells and/or define worksheet-scoped names used by the formula args. Shape:
     ```yaml
@@ -453,4 +420,5 @@ Tell the user:
 - **`INDEX(computedArray, k)` with a scalar k returns a 1×1 array, not a true scalar — `@`-deref it before any shape-sensitive use (#318 family).** Inside a helper lambda, `runLen, INDEX(lengths, k)` followed by `SEQUENCE(runLen)` silently produces `{1}` regardless of the actual length, because INDEX over a LET-computed (non-range) array yields a 1×1 array and `SEQUENCE({n})` collapses to `{1}`. The trap is invisible in tests that assert the INDEX result directly — a 1×1 array *asserts equal* to the scalar (the cell shows the right value); only the downstream `SEQUENCE`/`TEXTSPLIT`/`REGEXEXTRACT` consumer breaks, and it breaks by returning the *first element* of the intended slice (plausible wrong values, no error). Symptom signature: an aggregate-per-group lambda where every group returns its first element's value. Fix: `startI, @INDEX(startPositions, k)` / `runLen, @INDEX(lengths, k)`. Note the failure is NOT caused by the enclosing MAP vs REDUCE, by TAKE/DROP vs INDEX+SEQUENCE slicing, or by routing the called fn through `IF(ISOMITTED(fn), SUM, fn)` — all three variants fail identically until the `@` lands (verified empirically while building RUNGROUPBY). When debugging shape bugs like this, write a throwaway `DBG*.lambda` with a `which` arg returning each intermediate and assert the shapes via the harness — it pinpoints the collapse in one run.
 - **Empty cells materialise as numeric 0, not "", once a range becomes an array.** A 3D collation like `HSTACK('First:Last'!B2:D24)` (or any INDEX/GRIDLOOKUP read of an empty range cell) yields `0` for blanks — only a direct reference comparison (`A1=""`) coerces empty to `""`. Any "is blank" logic in a lambda that accepts collated/array input must test `((v = "") + (v = 0)) > 0`, not just `v = ""` (UNTILELIST's `blank_rows` filter does this). Note booleans are safe: `FALSE = 0` is FALSE in Excel, so FALSE cells don't false-positive as blank.
 - **Excel text functions count Unicode *code points*, not grapheme clusters — character-indexing lambdas silently split multi-codepoint emoji; `\X` is the only grapheme-aware primitive.** Verified empirically via COM (2026-08-17, current M365 build): `LEN`/`MID`/`SEARCH`/`FIND` are code-point aware — a non-BMP emoji like 😀 (U+1F600) has `LEN` 1 and `MID` returns it whole, so surrogate pairs are NOT the problem. The breakage is *grapheme clusters* — user-perceived characters built from several code points: skin-tone emoji 👍🏽 (base+modifier), VS16 forms ❤️, flags 🇺🇸 (two regional indicators), combining accents (`"e"&UNICHAR(769)`), ZWJ families. Each has `LEN` ≥ 2, and `MID(t, i, 1)` returns bare components (`MID(👍🏽,2,1)` = the skin-tone modifier alone) — output looks plausible, never errors. Regex `.` also matches one code point; only `\X` matches a full cluster. Consequences: (1) any lambda that indexes/chunks/reverses "characters" via `MID`+`SEQUENCE(LEN(...))` corrupts clusters — the grapheme-safe idiom is `g, REGEXEXTRACT(text, "\X", 1)` (horizontal array; grapheme length = `COLUMNS(g)`, beware single-grapheme scalar collapse), then e.g. reverse = `CONCAT(CHOOSECOLS(g, SEQUENCE(1,n,n,-1)))`, chunk = `BYROW(WRAPROWS(g, size, ""), LAMBDA(r_, CONCAT(r_)))` — all verified; (2) run-grouping by character: `(\X)\1*` works (backreference on a `\X` group is legal PCRE2, verified) where `(.)\1*` splits clusters into separate runs; (3) substring-ratio counting (`(LEN(t)-LEN(SUBSTITUTE(t,s,"")))/LEN(s)`) is self-consistent in any unit and counts clusters correctly — no fix needed; (4) position-returning lambdas built on `MID`/`SEQUENCE(LEN)` report code-point offsets — identical to native `SEARCH`/`FIND` and valid to feed back into `MID`, but not equal to counted graphemes; document the unit rather than "fixing" it. To build cluster test strings in ASCII-only probe scripts or YAML, compose them with `UNICHAR()` (e.g. `UNICHAR(128077)&UNICHAR(127997)`).
-- **Excel enforces an 8192-character limit on saved formulas — split oversized help into a companion `<NAME>HELP` lambda.** `Names.Add` accepts longer formulas at runtime, but the workbook then fails to save, so a big lambda that tests green can still be unusable. The loader minifies (comments stripped, lines trimmed and joined with single spaces) and prefix-rewrites (`maps.` etc. added to each cross-lambda call) before injection — budget against that minified+prefixed length, but keep real headroom since users may also paste the *formatted* body into the Name Manager or AFE. The help block is usually the biggest single chunk (~3k for a 9-param lambda). When a lambda outgrows the limit, move the entire Help `TEXTSPLIT` into a zero-arg companion `<NAME>HELP` lambda in the **same library** (colocation rule): the companion follows the zero-arg data-getter convention — bare call returns the parent's help table, `TRUE` returns its own small help — and the parent ends with `IF(Help?, <NAME>HELP(), result)` with no inline help block. `LambdaFormatTests.ContainsHelpTextsplitPattern` recognises the `IF(Help?, \w+HELP()` delegation and skips the inline-TEXTSPLIT requirement for that file. MAZE/MAZEHELP is the worked example.- **Directions have a library-wide canonical order and a normaliser — don't invent either.** The canonical listing order for the 8 compass directions is **clockwise from north** (N, NE, E, SE, S, SW, W, NW) — verified empirically (2026-08-20) as exactly what `SORT(_arrowsAll)` returns: Windows collation orders the arrow glyphs ↑ ↗ → ↘ ↓ ↙ ← ↖ by direction angle, NOT by code point. Every constant (`_arrowsAll`/`_dirAll` and subsets, which stay clockwise: orthog ↑→↓←, diag ↗↘↙↖), getter (`DEFAULTARROWS`/`DEFAULTMOVEDELTAS`/`ARROWMOVES`), and default stencil follows it; so must any new lambda that enumerates directions. Exception: an *ordered priority rule* (WALK's Dirs) keeps whatever order its semantics demand. For direction *arguments*, route through `maps.DIRDELTA` instead of hand-rolling token parsing — it normalises arrow glyphs, compass codes (`NE`, `north-east`), screen forms (`UL`, `DR`, `down`, reversed `RU`/`LD`), and numeric packed deltas (passthrough, so knight moves survive) into a packed delta / arrow / compass code, case-insensitively with hyphens/spaces stripped, and lifts natively over arrays. Pattern for a moves-table lambda (MOVECELL): table glyph lookup first (custom tables win), `DIRDELTA` fallback for unmatched text. Singular constants `_arrowN`..`_arrowNW` / `_dirN`..`_dirNW` exist for one-direction formulas.
+- **Excel enforces an 8192-character limit on saved formulas.** `Names.Add` accepts longer formulas at runtime, but the workbook then fails to save, so a big lambda that tests green can still be unusable. The loader minifies (comments stripped, lines trimmed and joined with single spaces) and prefix-rewrites (`maps.` etc. added to each cross-lambda call) before injection — budget against that minified+prefixed length, but keep real headroom since users may also paste the *formatted* body into the Name Manager or AFE. The formula no longer carries help, so the risk is the logic itself: if it nears the limit, split it into helper lambdas in the **same library** (colocation rule).
+- **Directions have a library-wide canonical order and a normaliser — don't invent either.** The canonical listing order for the 8 compass directions is **clockwise from north** (N, NE, E, SE, S, SW, W, NW) — verified empirically (2026-08-20) as exactly what `SORT(_arrowsAll)` returns: Windows collation orders the arrow glyphs ↑ ↗ → ↘ ↓ ↙ ← ↖ by direction angle, NOT by code point. Every constant (`_arrowsAll`/`_dirAll` and subsets, which stay clockwise: orthog ↑→↓←, diag ↗↘↙↖), getter (`DEFAULTARROWS`/`DEFAULTMOVEDELTAS`/`ARROWMOVES`), and default stencil follows it; so must any new lambda that enumerates directions. Exception: an *ordered priority rule* (WALK's Dirs) keeps whatever order its semantics demand. For direction *arguments*, route through `maps.DIRDELTA` instead of hand-rolling token parsing — it normalises arrow glyphs, compass codes (`NE`, `north-east`), screen forms (`UL`, `DR`, `down`, reversed `RU`/`LD`), and numeric packed deltas (passthrough, so knight moves survive) into a packed delta / arrow / compass code, case-insensitively with hyphens/spaces stripped, and lifts natively over arrays. Pattern for a moves-table lambda (MOVECELL): table glyph lookup first (custom tables win), `DIRDELTA` fallback for unmatched text. Singular constants `_arrowN`..`_arrowNW` / `_dirN`..`_dirNW` exist for one-direction formulas.
