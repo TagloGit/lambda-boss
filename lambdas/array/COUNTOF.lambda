@@ -8,30 +8,17 @@
     REVISIONS:          Date        Developer   Description
                         2026-05-28  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 COUNTOF = LAMBDA(
 //  Parameter Declarations
     [items],
     [predicate],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(items),
     //  Procedure
         pred, IF(ISOMITTED(predicate), LAMBDA(val, val), predicate),
         mapped, MAP(items, LAMBDA(x_, pred(x_))),
         result, SUM(--mapped),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →COUNTOF(items, [predicate])¶" &
-                "DESCRIPTION:   →Counts items for which the predicate is TRUE (or truthy items when predicate is omitted).¶" &
-                "VERSION:       →Aug 24 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   items          →(Required) Array or range of values to test.¶" &
-                "   predicate      →(Optional) LAMBDA(v) returning TRUE/FALSE or 0/1. If omitted, items are assumed to already be boolean or 0/1 values.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=COUNTOF({1,2,3,4,5}, LAMBDA(n, n>=3))¶" &
-                "Result         →3",
-                "→", "¶"
-                ), result)
+        result
 )
 );

@@ -54,7 +54,3 @@ tests:
   - name: sliding single element passes through
     args: ['={5}', '=LAMBDA(a,b,a-b)', '=FALSE', '=TRUE']
     expected: 5
-
-  - name: help text
-    args: []
-    expected_type: array

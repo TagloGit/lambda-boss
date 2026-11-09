@@ -11,6 +11,7 @@
     REVISIONS:          Date        Developer   Description
                         2026-06-26  Claude      Initial version
                         2026-06-28  Claude      Support row expansion (fnc returns k x n)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 MAPROWS = LAMBDA(
 //  Parameter Declarations
@@ -20,8 +21,6 @@ MAPROWS = LAMBDA(
     [placement],
     [keep_source],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(array),
     //  Procedure
         place, IF(ISOMITTED(placement), 0, placement),
         keepSrc, IF(ISOMITTED(keep_source), TRUE, keep_source),
@@ -34,21 +33,6 @@ MAPROWS = LAMBDA(
                         keepSrc
                     )
                 ),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →MAPROWS(array, rows, fnc, [placement], [keep_source])¶" &
-                "DESCRIPTION:   →Applies a function to selected rows of an array, placing results in-place, appended at bottom, or prepended at top. fnc may widen a row into multiple rows.¶" &
-                "VERSION:       →Jun 28 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   array          →(Required) A 2D array.¶" &
-                "   rows           →(Required) Index list of rows to transform; negative counts from the end (-1 = last). Order is preserved when results land in a new position.¶" &
-                "   fnc            →(Required) A LAMBDA taking one row (width n) and returning an n-column block of one or more rows. Selected rows may expand by different heights; each expands independently and blocks are concatenated.¶" &
-                "   placement      →(Optional) Where results land: (0) in place [default], (1) append at bottom, (-1) prepend at top.¶" &
-                "   keep_source    →(Optional) When placement is non-zero, keep the source rows (TRUE [default]) or drop them (FALSE). Ignored when in place.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MAPROWS({1,2,3;4,5,6}, 2, LAMBDA(r, VSTACK(r, r*10)))¶" &
-                "Result         →{1,2,3;4,5,6;40,50,60}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

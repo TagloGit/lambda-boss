@@ -56,7 +56,3 @@ tests:
   - name: window larger than grid returns NA
     args: ['={1,2;3,4}', '=3', '=3']
     expected: -2146826246
-
-  - name: help text
-    args: []
-    expected_type: array

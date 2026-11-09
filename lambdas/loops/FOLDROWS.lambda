@@ -9,6 +9,7 @@
     REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
                         2026-07-22  Claude      Single-column items now pass fn a true scalar (matching REDUCE) instead of a 1x1 array; 1x1 arrays poison shape-sensitive functions like SEQUENCE inside fn (#318)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 FOLDROWS = LAMBDA(
 //  Parameter Declarations
@@ -16,8 +17,6 @@ FOLDROWS = LAMBDA(
     [fn],
     [seed],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(items),
     //  Procedure
         hasSeed, NOT(ISOMITTED(seed)),
         n, ROWS(items),
@@ -30,19 +29,6 @@ FOLDROWS = LAMBDA(
                     empty?, AND(ROWS(acc) = 1, COLUMNS(acc) = 1, @acc = ""),
                     IF(skip?, acc, IF(empty?, ret, VSTACK(acc, ret)))
                   ))),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →FOLDROWS(items, fn, [seed])¶" &
-                "DESCRIPTION:   →A REDUCE that grows a table for you. fn receives the table accumulated so far, the current item row, and the 1-based index, and returns the new row(s) to append. FOLDROWS owns the empty-state, column-shape and VSTACK bookkeeping — the return is the full accumulated table with no shape-fixing seed row to strip.¶" &
-                "VERSION:       →Jul 01 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   items          →(Required) The rows to fold over, one logical item per row. A 1-D column or a 2-D table. A single horizontal row is treated as one item — transpose a horizontal list first.¶" &
-                "   fn             →(Required) LAMBDA(accSoFar, currentRow, i). accSoFar is the table built so far, or """" before the first row is appended; currentRow is the current item — a true scalar when items is a single column (exactly as REDUCE would pass it), otherwise the current row as a 1-row array; i is the 1-based item index. Return the new row(s) to append, or """" to append nothing (skip). Keep the appended width constant across steps.¶" &
-                "   seed           →(Optional) Initial accumulator rows — kept in the output and used to pin the column count. Default: empty (accSoFar starts as """").¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=FOLDROWS({10;20;30}, LAMBDA(acc, r, i, HSTACK(INDEX(r,1,1), IF(i=1, INDEX(r,1,1), INDEX(acc, ROWS(acc), 2) + INDEX(r,1,1)))))¶" &
-                "Result         →3x2 table: value in col 1, running total in col 2 ({10,10; 20,30; 30,60})",
-                "→", "¶"
-                ), result)
+        result
 )
 );

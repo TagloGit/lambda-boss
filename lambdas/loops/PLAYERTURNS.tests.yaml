@@ -58,7 +58,3 @@ tests:
   - name: text start not among players errors rather than silently defaulting
     args: ['={TRUE}', '={"R";"B"}', 'Z']
     expected: -2146826246
-
-  - name: help text
-    args: []
-    expected_type: array

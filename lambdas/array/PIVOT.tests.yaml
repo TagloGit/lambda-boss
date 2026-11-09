@@ -54,7 +54,3 @@ tests:
   - name: single key single label
     args: ['={"k"}', '={"c"}', '={"v"}']
     expected: [["", "c"], ["k", "v"]]
-
-  - name: help text
-    args: []
-    expected_type: array

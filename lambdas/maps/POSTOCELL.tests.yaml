@@ -31,10 +31,6 @@ tests:
     args: ['={5000005,3000003}']
     expected: [["E5", "C3"]]
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: first column past XFD (#380)
     args: ["=5016385"]
     expected: "XFE5"

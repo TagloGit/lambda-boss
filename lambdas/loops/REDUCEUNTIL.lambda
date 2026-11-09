@@ -14,6 +14,7 @@
                         2026-05-04  Claude      User accumulator preserved by type — scalar/array seeds wrapped in private slot, text seeds passed through. BREAK/INDEX live in a separate Meta state, FS-separated from the user portion. fn / stop see the unwrapped accumulator directly.
                         2026-07-20  Claude      stop now receives the current element: LAMBDA(acc, current, i), matching fn's signature.
                         2026-07-20  Claude      stop is now a pre-check: evaluated before fn with the pre-step accumulator and the incoming element; the triggering element is never consumed.
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 REDUCEUNTIL = LAMBDA(
 //  Parameter Declarations
@@ -22,8 +23,6 @@ REDUCEUNTIL = LAMBDA(
     [fn],
     [stop],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(seed),
     //  Procedure
         us, CHAR(31),
         rs, CHAR(30),
@@ -59,21 +58,6 @@ REDUCEUNTIL = LAMBDA(
                 )),
         finalUser, MID(final, FIND(fs, final) + 1, LEN(final)),
         result, IF(wrap?, GetVar(finalUser, "v"), finalUser),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →REDUCEUNTIL(seed, cases, fn, [stop])¶" &
-                "DESCRIPTION:   →REDUCE that halts when stop returns TRUE. Stop is checked before each fn call — the element that triggers it is never consumed. Returns whatever the user passed in (scalar / array / state-string).¶" &
-                "VERSION:       →Jul 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
-                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
-                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
-                "   stop           →(Optional) LAMBDA(acc, current, i) returning TRUE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when stop returns TRUE. Default never stops (= REDUCEI).¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=REDUCEUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v > 9))¶" &
-                "Result         →18 (number — sums up to but not including 10, the first element > 9)¶" &
-                "NOTE:          →Excel REDUCE has no real short-circuit; all cases are visited. Once stop fires, BREAK is set internally and subsequent iterations pass the accumulator through unchanged. If stop is TRUE for the seed on iteration 1, the seed is returned untouched. If you seed with a non-text value, fn must keep returning the same kind of value — to switch into state-building, seed with """" or NewState().",
-                "→", "¶"
-                ), result)
+        result
 )
 );

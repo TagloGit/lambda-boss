@@ -63,11 +63,3 @@ tests:
   - name: origin anchors in-memory Costs at G3
     args: ['="G3"', "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=", "=", "=G3"]
     expected: [[0, "", ""], [1, "", ""], [2, 5, 6]]
-
-  - name: st supplied but neither Costs nor AllowMp returns help text
-    args: ['="C3"']
-    expected_type: array
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -9,6 +9,7 @@
     REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS) (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 CELLDIST = LAMBDA(
 //  Parameter Declarations
@@ -16,8 +17,6 @@ CELLDIST = LAMBDA(
     [cell2],
     [metric],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(cell1),
     //  Procedure
         safeMult, _mult,
         met, IF(ISOMITTED(metric), 0, metric),
@@ -32,19 +31,6 @@ CELLDIST = LAMBDA(
         dist, IF(met = 2, SQRT((rowA - rowB)^2 + (colA - colB)^2),
                 IF(met = 1, IF(dR > dC, dR, dC), dR + dC)),
         result, IF(ISTEXT(posA), posA, IF(ISTEXT(posB), posB, dist)),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →CELLDIST(cell1, cell2, [metric])¶" &
-                "DESCRIPTION:   →Returns the grid distance between two A1-style cell addresses (Manhattan, Chebyshev, or Euclidean).¶" &
-                "VERSION:       →May 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   cell1          →(Required) First cell address as text (e.g. ""F28""). Also accepts an array of addresses.¶" &
-                "   cell2          →(Required) Second cell address as text (e.g. ""G26""). Also accepts an array of addresses. When both are arrays, Excel broadcasts naturally: same-shape inputs pair element-wise, column × row produces a 2D distance grid.¶" &
-                "   metric         →(Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line).¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=CELLDIST(""F28"", ""G26"")¶" &
-                "Result         →3",
-                "→", "¶"
-                ), result)
+        result
 )
 );

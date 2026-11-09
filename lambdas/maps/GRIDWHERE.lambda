@@ -11,6 +11,7 @@
                         2026-08-22  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 GRIDWHERE = LAMBDA(
 //  Parameter Declarations
@@ -20,7 +21,6 @@ GRIDWHERE = LAMBDA(
     [origin],
     LET(
     //  Check inputs
-        Help?, ISOMITTED(grid),
         mode, IF(ISOMITTED(return_mode), 0, return_mode),
     //  Procedure
         theMult, _mult,
@@ -43,20 +43,6 @@ GRIDWHERE = LAMBDA(
                 IF(mode = 2, HSTACK(addrs, hitVals),
                 IF(mode = 3, hitRows * theMult + hitCols,
                    addrs)))),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →GRIDWHERE(grid, predicate, [return_mode], [origin])¶" &
-                "DESCRIPTION:   →Returns the cells of a grid that satisfy a predicate, as a single column in reading order (row by row, left to right). Replaces the mask-spill + FILTER(TOCOL(ADDRESSES(mask)), TOCOL(mask)) pattern that precedes most Maps-library calls; the output feeds LABELCLUSTERS, DISTFROM, MAZE targets etc. directly. Returns #N/A when no cell matches.¶" &
-                "VERSION:       →Aug 24 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
-                "   predicate      →(Required) LAMBDA(v, ...) returning TRUE/FALSE for each cell value, e.g. LAMBDA(v, NOT(ISNUMBER(v))).¶" &
-                "   return_mode    →(Optional) What to return per matching cell: (0) A1 address text [default], (1) the cell value, (2) a two-column {address, value} table, (3) encoded position row*_mult+col (the TOPOS convention).¶" &
-                "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position so addresses/positions map to that frame, matching GRIDLOOKUP / MAZE / SUBGRID. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=GRIDWHERE(mp, LAMBDA(v, NOT(ISNUMBER(v))))¶" &
-                "Result         →Column of addresses of the non-numeric cells of mp, e.g. {""X24"";""Z24"";""AB24""}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

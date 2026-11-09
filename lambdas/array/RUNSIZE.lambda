@@ -7,6 +7,7 @@
     EXAMPLE:            =RUNSIZE({0;1;1;1;0;1;1}, 1) -> {0;3;3;3;0;2;2}
     REVISIONS:          Date        Developer   Description
                         2026-07-28  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 RUNSIZE = LAMBDA(
 //  Parameter Declarations
@@ -14,7 +15,6 @@ RUNSIZE = LAMBDA(
     [match],
     LET(
     //  Check inputs
-        Help?, ISOMITTED(vector),
         useMatch, NOT(ISOMITTED(match)),
     //  Procedure
         col, TOCOL(vector),
@@ -28,18 +28,6 @@ RUNSIZE = LAMBDA(
         sizes, INDEX(lengths, runId),
         masked, IF(useMatch, IF(col = match, sizes, 0), sizes),
         result, IF(COLUMNS(vector) > 1, TRANSPOSE(masked), masked),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →RUNSIZE(vector, match)¶" &
-                "DESCRIPTION:   →Returns, for each element of a 1D array, the total length of the consecutive run it sits in. Sibling of RUNPOS (position within run), RUNGROUPS (one row per run) and RUNGROUPBY (aggregate per run).¶" &
-                "VERSION:       →Jul 28 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   vector         →(Required) A 1D array (row or column) of numbers or text.¶" &
-                "   match          →(Optional) If supplied, only runs of elements equal to match are measured; all other elements return 0. E.g. with 0/1 win flags, RUNSIZE(wins, 1) = MAX(RUNSIZE(wins, 1)) masks the longest win streak directly.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=RUNSIZE({0;1;1;1;0;1;1}, 1)¶" &
-                "Result         →{0;3;3;3;0;2;2}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

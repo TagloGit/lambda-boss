@@ -10,14 +10,13 @@
                         2026-05-14  Claude      Default mult bumped from 1000 to 100000 to match CELLTOPOS
                         2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged
                         2026-11-06  Claude      Default mult is the _mult constant (1000000); positions past XFD / row 1048576 decode via CELLAT (ADDRESS kept as the fast path inside the sheet) (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 POSTOCELL = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(pos),
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
         scalar, LAMBDA(p, LET(rowN, INT(p / m), colN, MOD(p, m),
@@ -25,18 +24,6 @@ POSTOCELL = LAMBDA(
         result, IF(OR(ROWS(pos) > 1, COLUMNS(pos) > 1),
                     MAP(pos, scalar),
                     scalar(pos)),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →POSTOCELL(pos, [mult])¶" &
-                "DESCRIPTION:   →Decodes an integer position (from TOPOS) back to an A1-style cell address string.¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   pos            →(Required) Integer position to decode (row*mult+col). Columns past XFD and rows past 1048576 decode too (e.g. XFE5). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=POSTOCELL(5000005)¶" &
-                "Result         →E5",
-                "→", "¶"
-                ), result)
+        result
 )
 );

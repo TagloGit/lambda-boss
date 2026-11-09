@@ -258,10 +258,6 @@ tests:
     args: ["E5", "XX"]
     expected: -2146826246
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: right from XFD goes past the sheet edge (#380)
     args: ["XFD5", '="→"']
     expected: "XFE5"

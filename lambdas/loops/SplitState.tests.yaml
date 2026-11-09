@@ -120,7 +120,3 @@ tests:
       - [1]
       - ["one"]
       - [True]
-
-  - name: help text
-    args: []
-    expected_type: array

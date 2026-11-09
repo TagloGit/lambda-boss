@@ -8,14 +8,13 @@
     REVISIONS:          Date        Developer   Description
                         2026-04-21  Claude      Initial version
                         2026-05-14  Claude      Array-lift on n via dispatcher: MAP over multi-index input, otherwise scalar body unchanged
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 NTH = LAMBDA(
 //  Parameter Declarations
     [arr],
     [n],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(arr),
     //  Procedure
         flat, TOCOL(arr),
         scalar, LAMBDA(ni,
@@ -24,18 +23,6 @@ NTH = LAMBDA(
         result, IF(OR(ROWS(n) > 1, COLUMNS(n) > 1),
                     MAP(n, scalar),
                     scalar(n)),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →NTH(arr, n)¶" &
-                "DESCRIPTION:   →Returns the Nth element of an array (flattened), with negative N counting from the end.¶" &
-                "VERSION:       →May 14 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   arr            →(Required) Any array or range — 1D, 2D, vertical, or horizontal.¶" &
-                "   n              →(Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=NTH({""a"",""b"",""c""}, -1)¶" &
-                "Result         →""c""",
-                "→", "¶"
-                ), result)
+        result
 )
 );

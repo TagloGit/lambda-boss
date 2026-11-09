@@ -24,6 +24,7 @@
                         2026-07-18  Claude      Help table extracted to MAZEHELP — the combined formula exceeded Excel's 8192-character limit on saved formulas; the Help? branch now delegates via IF(Help?, MAZEHELP(), output)
                         2026-08-20  Claude      Default direction order aligned to the library canonical clockwise-from-north order (changes tie-breaks between equal-cost paths, not distances); Cus_Dir entries may now be any DIRDELTA spelling (arrows, NE, UL, down, ...) as well as numeric deltas
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000; default moves are _dirOrthog / _dirAll (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 MAZE = LAMBDA(
 //  Parameter Declarations
@@ -38,10 +39,7 @@ MAZE = LAMBDA(
 //  and it must return one cost per row. Use * / + for AND / OR; aggregators collapse the layer (#383).
     [Mazelam],
     [origin],
-//  Help — full help table lives in MAZEHELP (the combined formula exceeded Excel's 8192-character limit)
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(st) + ISOMITTED(Costs) * ISOMITTED(AllowMp),
     //  Procedure
         M, _mult,
         defaultDirs, IF(8 - 4 * No_Diag = 4, TOROW(_dirOrthog), TOROW(_dirAll)),
@@ -174,6 +172,6 @@ MAZE = LAMBDA(
                 )
             )
         ),
-        IF(Help?, MAZEHELP(), output)
+        output
 )
 );

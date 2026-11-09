@@ -66,7 +66,3 @@ tests:
         - { name: "keyRng", refers_to: "L3:M4" }
     args: ["=mapRng", "=keyRng", '={"name","score"}', '={"NW","NE","SW","SE"}', "=1", "=1"]
     expected: [["NW", "name", "A1s"], ["NW", "score", 10], ["NE", "name", "A2s"], ["NE", "score", 20], ["SW", "name", "B1s"], ["SW", "score", 30], ["SE", "name", "B2s"], ["SE", "score", 40]]
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -8,30 +8,17 @@
     REVISIONS:          Date        Developer   Description
                         2026-08-28  Claude      Initial version
                         2026-11-06  Claude      Default mult is the _mult constant (1000000); letters via CELLAT, so columns past XFD work (was ADDRESS) (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 COLSTROF = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(pos),
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
         rowOne, CELLAT(1, MOD(pos, m)),
         result, LEFT(rowOne, LEN(rowOne) - 1),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →COLSTROF(pos, [mult])¶" &
-                "DESCRIPTION:   →Extracts the column letters (e.g. ""AB"") from an encoded position integer (as produced by TOPOS). The letters twin of COLOF.¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos. Columns past XFD work (16385 gives XFE).¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=COLSTROF(12000028)¶" &
-                "Result         →AB",
-                "→", "¶"
-                ), result)
+        result
 )
 );

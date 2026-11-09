@@ -20,6 +20,7 @@
                         2026-07-01  Claude      Swap parameter order to grid-first (grid, value, ...) — grid reads more naturally as the primary argument
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
                         2026-11-08  Claude      Hot-loop speed: no helper LAMBDA or MAP (INDEX/XMATCH lift), fewer grid passes (#412)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 GRIDLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -31,7 +32,6 @@ GRIDLOOKUP = LAMBDA(
     [origin],
     LET(
     //  Check inputs
-        Help?, ISOMITTED(grid),
         reverse, AND(NOT(ISOMITTED(return_Value)), return_Value),
         mMode, IF(ISOMITTED(match_mode), 0, match_mode),
         invalid, IF(ISOMITTED(if_invalid), NA(), if_invalid),
@@ -53,22 +53,6 @@ GRIDLOOKUP = LAMBDA(
                     p, XMATCH(value, TOCOL(grid), mMode),
                     IF(ISNA(p), invalid, ADDRESS(oRow + INT((p - 1) / w), oCol + MOD(p - 1, w), 4)))),
             invalid),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →GRIDLOOKUP(grid, value, [return_Value], [match_mode], [if_invalid], [origin])¶" &
-                "DESCRIPTION:   →Bidirectional grid lookup: returns a cell address for a value, or the value at a given cell address.¶" &
-                "VERSION:       →Nov 08 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   grid          →(Required) The grid range to search (e.g. M!C3:L12).¶" &
-                "   value         →(Required) Value to find in grid. When return_Value is TRUE, a cell address text (e.g. ""E5"") OR an encoded position integer (ROW*_mult+COL, from TOPOS) to look up directly. Also accepts an array/range of values, addresses or positions — result lifts element-wise.¶" &
-                "   return_Value  →(Optional) FALSE (default) returns a cell address for the value. TRUE treats value as an address/position and returns the cell's value.¶" &
-                "   match_mode    →(Optional) Forwarded to XMATCH: 0 exact (default), -1 exact or next smaller, 1 exact or next larger, 2 wildcard. Ignored when return_Value is TRUE.¶" &
-                "   if_invalid    →(Optional) Value returned when the input is an error, falls outside the grid, or is not found. Omitted defaults to NA().¶" &
-                "   origin        →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position, so addresses map to/from that frame. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=GRIDLOOKUP(mp, 41)¶" &
-                "Result         →E5",
-                "→", "¶"
-                ), result)
+        result
 )
 );

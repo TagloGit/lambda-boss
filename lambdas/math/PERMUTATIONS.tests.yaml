@@ -42,7 +42,3 @@ tests:
   - name: repetition with delim joins each row
     args: ['={"A";"B"}', "=2", "|", "=TRUE"]
     expected: [["A|A"], ["A|B"], ["B|A"], ["B|B"]]
-
-  - name: help text
-    args: []
-    expected_type: array

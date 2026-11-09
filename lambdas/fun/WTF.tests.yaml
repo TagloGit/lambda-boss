@@ -21,7 +21,3 @@ tests:
       - ["Tried to run a calc and it filled me with anger"]
       - ["So tell me one thing"]
       - ["What the f*** is a LAMBDA? \U0001D160\U0001D160"]
-
-  - name: help text
-    args: ["=TRUE"]
-    expected_type: array

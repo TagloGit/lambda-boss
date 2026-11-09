@@ -93,7 +93,3 @@ tests:
       - ["X", "P", "Mon", 10]
       - ["Y", "Q", "Mon", 30]
       - ["Y", "Q", "Tue", 40]
-
-  - name: help text
-    args: []
-    expected_type: array

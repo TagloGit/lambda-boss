@@ -83,7 +83,3 @@ tests:
       - [1, 1, 2]
       - [1, 2, 2]
       - [2, 2, 2]
-
-  - name: help text
-    args: []
-    expected_type: array

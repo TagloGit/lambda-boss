@@ -11,6 +11,7 @@
                         2026-04-27  Claude      Initial version
                         2026-04-29  Claude      Add per-entry type tag (n/b/t)
                         2026-11-01  Claude      Deref 1x1-array state/name/value with @: a 1x1 array (e.g. MOVECELL output) made the result array-shaped, and the next TEXTSPLIT kept only its first entry, silently dropping the rest (#376)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 SetVar = LAMBDA(
 //  Parameter Declarations
@@ -18,8 +19,6 @@ SetVar = LAMBDA(
     [name],
     [value],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(state),
     //  Procedure
         us, CHAR(31),
         rs, CHAR(30),
@@ -39,20 +38,6 @@ SetVar = LAMBDA(
                     )
                 ),
         result, IF(cleaned = "", newPair, cleaned & us & newPair),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →SetVar(state, name, value)¶" &
-                "DESCRIPTION:   →Sets or replaces a named variable (scalar or 1-D array) in a state string. Records the element type so GetVar returns native types.¶" &
-                "VERSION:       →Nov 01 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   state          →(Required) Current state string. Use NewState() to start fresh.¶" &
-                "   name           →(Required) Variable name. Cannot contain CHAR(30).¶" &
-                "   value          →(Required) Scalar or 1-D array. Element type (number, boolean, or text) is recorded in the entry's tag.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetVar(NewState(), ""best"", 5)¶" &
-                "Result         →state string holding best=5 (tagged as number)¶" &
-                "NOTE:          →All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element.",
-                "→", "¶"
-                ), result)
+        result
 )
 );

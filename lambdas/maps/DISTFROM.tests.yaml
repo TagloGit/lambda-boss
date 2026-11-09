@@ -22,7 +22,3 @@ tests:
   - name: no match returns NA grid
     args: ['={0,0;0,0}', '=9']
     expected: [[-2146826246, -2146826246], [-2146826246, -2146826246]]
-
-  - name: help text
-    args: []
-    expected_type: array

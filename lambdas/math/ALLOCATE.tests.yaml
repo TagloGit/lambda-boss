@@ -62,7 +62,3 @@ tests:
   - name: single container partial fill
     args: ["=2", "={5}"]
     expected: 2
-
-  - name: help text
-    args: []
-    expected_type: array

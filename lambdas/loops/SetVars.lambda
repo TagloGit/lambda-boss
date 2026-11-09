@@ -28,6 +28,7 @@
                         2026-04-27  Claude      Initial version
                         2026-05-02  Claude      Extend pair capacity from 5 to 10
                         2026-11-06  Claude      Join all pairs in one TEXTJOIN; only a repeated name takes the SetVar chain (spec 0011 part 6)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 SetVars = LAMBDA(
 //  Parameter Declarations
@@ -52,8 +53,6 @@ SetVars = LAMBDA(
     [n_10],
     [v_10],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(n_1),
     //  Procedure
         us, CHAR(31),
         rs, CHAR(30),
@@ -108,19 +107,6 @@ SetVars = LAMBDA(
                     IF(ISOMITTED(n_10), s_9, SetVar(s_9, n_10, v_10))
                 )
             ),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], ..., [n_10], [v_10])¶" &
-                "DESCRIPTION:   →Builds a fresh state holding up to 10 named variables. Alternating positional pairs.¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   n_1, v_1       →(Required) First name and value pair.¶" &
-                "   n_2..v_10      →(Optional) Up to nine more name/value pairs.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetVars(""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
-                "Result         →state holding cur=1, best=1, ends=1¶" &
-                "NOTE:          →To partially update an existing state by name, use SetVar.",
-                "→", "¶"
-                ), result)
+        result
 )
 );

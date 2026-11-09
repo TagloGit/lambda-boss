@@ -9,6 +9,7 @@
     EXAMPLE:            =FIXPOINT(40, LAMBDA(x, IF(x>5, x/2, x))) -> 5
     REVISIONS:          Date        Developer   Description
                         2026-07-22  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 FIXPOINT = LAMBDA(
 //  Parameter Declarations
@@ -17,8 +18,6 @@ FIXPOINT = LAMBDA(
     [same],
     [max_iter],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(init),
     //  Procedure
         eq, IF(ISOMITTED(same),
                 LAMBDA(a, b, IFERROR(AND(ROWS(a) = ROWS(b), COLUMNS(a) = COLUMNS(b), AND(a = b)), FALSE)),
@@ -30,20 +29,6 @@ FIXPOINT = LAMBDA(
                        IF(n <= 0, NA(),
                           self(self, nextState, n - 1))))),
         result, rec(rec, init, iterCap),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →FIXPOINT(init, fn, [same], [max_iter])¶" &
-                "DESCRIPTION:   →Applies fn repeatedly until the value stops changing, then returns the converged state.¶" &
-                "VERSION:       →Jul 22 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   init           →(Required) Starting value - scalar or array.¶" &
-                "   fn             →(Required) LAMBDA(state) returning the next state.¶" &
-                "   same           →(Optional) LAMBDA(a, b) returning TRUE when converged. Default: exact shape plus element-wise equality, so growing arrays are handled.¶" &
-                "   max_iter       →(Optional) Iteration cap, default 1000. Returns #N/A instead of hanging when convergence never fires.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=FIXPOINT(40, LAMBDA(x, IF(x>5, x/2, x)))¶" &
-                "Result         →5",
-                "→", "¶"
-                ), result)
+        result
 )
 );

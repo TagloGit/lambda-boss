@@ -7,28 +7,15 @@
     EXAMPLE:            =CONTAINS("Podcast", A1:A10) -> TRUE or FALSE
     REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 CONTAINS = LAMBDA(
 //  Parameter Declarations
     [value],
     [list],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(value),
     //  Procedure
         result, ISNUMBER(XMATCH(value, list)),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →CONTAINS(value, list)¶" &
-                "DESCRIPTION:   →Checks whether a value exists in a list or range.¶" &
-                "VERSION:       →Apr 13 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   value          →(Required) The value to search for.¶" &
-                "   list           →(Required) A single row or column range to search within.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=CONTAINS(""Podcast"", A1:A10)¶" &
-                "Result         →TRUE or FALSE",
-                "→", "¶"
-                ), result)
+        result
 )
 );

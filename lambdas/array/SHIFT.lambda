@@ -10,6 +10,7 @@
     EXAMPLE:            =SHIFT({6,3,6,1,2}, 0, 1) -> {"",6,3,6,1}
     REVISIONS:          Date        Developer   Description
                         2026-06-20  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 SHIFT = LAMBDA(
 //  Parameter Declarations
@@ -19,8 +20,6 @@ SHIFT = LAMBDA(
     [mode],
     [fill],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(array),
     //  Procedure
         n, ROWS(array),
         m, COLUMNS(array),
@@ -43,21 +42,6 @@ SHIFT = LAMBDA(
         clampCol, IF(srcCol < 1, 1, IF(srcCol > m, m, srcCol)),
         padResult, IF(inRange, INDEX(array, clampRow, clampCol), fillVal),
         result, IF(wrapMode, wrapResult, padResult),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →SHIFT(array, dRows, dCols, [mode], [fill])¶" &
-                "DESCRIPTION:   →Displaces a 1-D or 2-D array by dRows down and dCols right, returning an array of the same shape; exposed edges are padded with fill or wrapped toroidally.¶" &
-                "VERSION:       →Jun 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   array          →(Required) A 1-D or 2-D array/range to displace.¶" &
-                "   dRows          →(Required) Vertical displacement. Positive = data moves down (each cell pulls from the row above). Default 0.¶" &
-                "   dCols          →(Required) Horizontal displacement. Positive = data moves right (each cell pulls from the column to its left). Default 0.¶" &
-                "   mode           →(Optional) Edge handling: (0) pad [default] fills exposed edges with fill; (1) wrap rolls values off one edge back in at the opposite edge (toroidal).¶" &
-                "   fill           →(Optional) Value for exposed edge cells in pad mode. Default blank """".¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SHIFT({6,3,6,1,2}, 0, 1)¶" &
-                "Result         →{"""",6,3,6,1}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

@@ -12,14 +12,13 @@
                         2026-04-29  Claude      Broadcast over a column of states via MAP
                         2026-11-01  Claude      Deref a single state with @: a 1x1-array state (e.g. INDEX of a SCAN inside a LAMBDA) made TEXTSPLIT keep only its first entry (#376)
                         2026-11-06  Claude      Find the entry with TEXTAFTER/TEXTBEFORE instead of splitting the whole state (spec 0011 part 6)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 GetVar = LAMBDA(
 //  Parameter Declarations
     [state],
     [name],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(state),
     //  Procedure
         us, CHAR(31),
         rs, CHAR(30),
@@ -40,19 +39,6 @@ GetVar = LAMBDA(
                 ),
                 MAP(state, LAMBDA(s, GetVar(s, name)))
             ),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →GetVar(state, name)¶" &
-                "DESCRIPTION:   →Reads a named variable from a state string. Returns a native-typed scalar or vertical array based on the entry's type tag. Broadcasts over a column of states (scalar variables only).¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   state          →(Required) Single state string, or a vertical column of states (e.g. a SCAN result).¶" &
-                "   name           →(Required) Variable name to read.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=GetVar(SetVar(NewState(), ""x"", 5), ""x"")¶" &
-                "Result         →5 (number — element type recovered from the tag)¶" &
-                "NOTE:          →Tag values: n=number, b=boolean, t=text. When state is a column, the variable must be scalar — array values collapse to their first element under broadcast.",
-                "→", "¶"
-                ), result)
+        result
 )
 );

@@ -7,14 +7,13 @@
     EXAMPLE:            =BIMAP({1,2}, LAMBDA(x, x*{1;10})) -> {1,2;10,20}
     REVISIONS:          Date        Developer   Description
                         2026-06-27  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 BIMAP = LAMBDA(
 //  Parameter Declarations
     [array],
     [function],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(array),
     //  Procedure
         th, MAP(array, LAMBDA(a, LAMBDA(function(a)))),
         colWidth, IF(SEQUENCE(ROWS(array)), BYCOL(MAP(th, LAMBDA(t, IFERROR(COLUMNS((@t)()), 1))), MAX)),
@@ -36,18 +35,6 @@ BIMAP = LAMBDA(
                   )
                ),
         result, build(build, tw),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →BIMAP(array, function)¶" &
-                "DESCRIPTION:   →Applies a LAMBDA to each element of an array and tiles each element's array result into a block grid, padding ragged blocks with blanks.¶" &
-                "VERSION:       →Jun 27 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   array          →(Required) A 2D array.¶" &
-                "   function       →(Required) A LAMBDA applied to each single element; may return a multi-cell array of any shape. Each result is laid into its own block, so an m-by-n input whose cells each return p-by-q yields an (m*p)-by-(n*q) grid. Ragged widths are padded to the per-column maximum and ragged heights to the per-row maximum, with blanks as filler.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=BIMAP({1,2}, LAMBDA(x, x*{1;10}))¶" &
-                "Result         →{1,2;10,20}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

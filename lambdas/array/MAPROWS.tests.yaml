@@ -26,7 +26,3 @@ tests:
   - name: append expansion keeps source and stacks taller block
     args: ['={1,2,3;4,5,6}', '=1', '=LAMBDA(vec, VSTACK(vec, vec*10))', '=1']
     expected: [[1, 2, 3], [4, 5, 6], [1, 2, 3], [10, 20, 30]]
-
-  - name: help text
-    args: []
-    expected_type: array

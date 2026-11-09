@@ -54,7 +54,3 @@ tests:
   - name: 1D row becomes column (clockwise)
     args: ["={1,2,3}"]
     expected: [[1], [2], [3]]
-
-  - name: help text
-    args: []
-    expected_type: array

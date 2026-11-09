@@ -28,7 +28,3 @@ tests:
   - name: max_depth exceeded returns NA
     args: ["A", '=LAMBDA(node, FILTER({"B";"C";"D";"A";"A"}, {"A";"A";"C";"B";"E"}=node, ""))', "=", "=1"]
     expected: -2146826246
-
-  - name: help text
-    args: []
-    expected_type: array

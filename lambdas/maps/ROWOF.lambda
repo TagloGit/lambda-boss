@@ -8,29 +8,16 @@
     REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Default mult is the _mult constant (1000000), was a literal 100000 (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 ROWOF = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(pos),
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
         result, INT(pos / m),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →ROWOF(pos, [mult])¶" &
-                "DESCRIPTION:   →Extracts the row number from an encoded position integer (as produced by TOPOS).¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=ROWOF(17000017)¶" &
-                "Result         →17",
-                "→", "¶"
-                ), result)
+        result
 )
 );

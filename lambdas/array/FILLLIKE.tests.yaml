@@ -18,7 +18,3 @@ tests:
   - name: scalar input returns scalar fill
     args: ["solo"]
     expected: 1
-
-  - name: help text
-    args: []
-    expected_type: array

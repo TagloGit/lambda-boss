@@ -10,6 +10,7 @@
     REVISIONS:          Date        Developer   Description
                         2026-08-20  Claude      Initial version
                         2026-08-20  Claude      Split type into shape + rotation; triangle is now a right-angled half-area triangle oriented by rotation
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 MASK = LAMBDA(
 //  Parameter Declarations
@@ -18,8 +19,6 @@ MASK = LAMBDA(
     [rotation],
     [invert],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(grid),
     //  Procedure
         maskShape, IF(ISOMITTED(shape), 0, shape),
         rot, MOD(IF(ISOMITTED(rotation), 0, rotation), 4),
@@ -62,20 +61,6 @@ MASK = LAMBDA(
                     TRUE, NA()),
         bits, --(chosen),
         result, IF(inv = 1, 1 - bits, bits),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →MASK(grid, [shape], [rotation], [invert])¶" &
-                "DESCRIPTION:   →Builds a 2d mask of 1s and 0s sized to grid: cross, diagonals, star, circle, half-area triangle, border, diamond or checkerboard. Shapes are centred and scale to the grid's dimensions.¶" &
-                "VERSION:       →Aug 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   grid           →(Required) Grid whose dimensions size the mask; its values are ignored.¶" &
-                "   shape          →(Optional) Shape: (0) cross [default], (1) diagonals (X), (2) star (cross + X), (3) circle (ellipse on non-square grids), (4) triangle (right-angled, covers half the area, diagonal included), (5) border, (6) diamond, (7) checkerboard. Any other value returns #N/A.¶" &
-                "   rotation       →(Optional) Quarter-turns clockwise from the shape's default orientation; wraps mod 4, so -1 is one turn anticlockwise. Only triangle is orientation-sensitive - right angle at: (0) bottom-left [default], (1) top-left, (2) top-right, (3) bottom-right. The other shapes are rotation-symmetric and ignore it.¶" &
-                "   invert         →(Optional) (0) as-is [default], (1) swap the 1s and 0s. TRUE is also accepted.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MASK(SEQUENCE(3,3), 0)¶" &
-                "Result         →{0,1,0;1,1,1;0,1,0}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

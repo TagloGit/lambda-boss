@@ -33,7 +33,3 @@ tests:
         - { name: "testRng", refers_to: "AA1" }
     args: ["=testRng"]
     expected: "AA1"
-
-  - name: help text
-    args: []
-    expected_type: array

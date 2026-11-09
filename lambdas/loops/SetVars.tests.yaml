@@ -56,7 +56,3 @@ tests:
   - name: tags for text and boolean values
     args: ["t", "hi", "f", "=FALSE"]
     expected: "t\x1Et\x1Ehi\x1Ff\x1Eb\x1EFALSE"
-
-  - name: help text
-    args: []
-    expected_type: array

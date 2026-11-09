@@ -80,42 +80,14 @@ public class LambdaFormatTests
 
     [Theory]
     [MemberData(nameof(LambdaFiles))]
-    public void ContainsHelpTextsplitPattern(string relativePath)
+    public void FormulaHasNoHelpBlock(string relativePath)
     {
-        var content = ReadFile(relativePath);
+        // Help lives in the header metadata, which the argument hints read (spec 0013).
+        // The formula carries no Help? flag and no help table.
+        var (_, formula) = LambdaParser.Parse(ReadFile(relativePath));
 
-        // A lambda may delegate its help table to a companion *HELP lambda when the
-        // combined formula would exceed Excel's 8192-character limit on saved formulas
-        // (e.g. MAZE -> MAZEHELP). The companion itself carries the inline TEXTSPLIT.
-        if (Regex.IsMatch(content, @"IF\(Help\?,\s*\w+HELP\(\)"))
-            return;
-
-        // Must contain the TEXTSPLIT with → and ¶ delimiters. ¦ is the sanctioned
-        // alternate column delimiter for files whose help content needs the → glyph
-        // in prose (e.g. DIRDELTA, GRIDSTRINGS).
-        Assert.Matches(@"TEXTSPLIT\(", content);
-        Assert.Matches("\"(→|¦)\",\\s*\"¶\"", content);
-    }
-
-    [Theory]
-    [MemberData(nameof(LambdaFiles))]
-    public void HelpIsLetVariable(string relativePath)
-    {
-        var content = ReadFile(relativePath);
-
-        // Help? must be defined as a LET variable (e.g. "Help?, ISOMITTED(")
-        Assert.Matches(@"Help\?,\s*ISOMITTED\(", content);
-    }
-
-    [Theory]
-    [MemberData(nameof(LambdaFiles))]
-    public void HelpIsNotBoundInLet(string relativePath)
-    {
-        var content = ReadFile(relativePath);
-
-        // Excel evaluates every LET binding on every call, so the Help table belongs in the
-        // IF(Help?, ...) branch, which isn't evaluated unless taken (#387).
-        Assert.DoesNotMatch(@"\bHelp,\s*TEXTSPLIT\(", content);
+        Assert.DoesNotContain("Help?", formula);
+        Assert.DoesNotMatch(@"TEXTSPLIT\(\s*""FUNCTION:", formula);
     }
 
     [Theory]

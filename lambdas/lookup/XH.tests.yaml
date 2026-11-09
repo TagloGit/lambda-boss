@@ -63,7 +63,3 @@ tests:
         - { name: "hTbl", refers_to: "G3:J5" }
     args: ["zzz", "=hTbl", "=2", "=1", "missing"]
     expected: "missing"
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -8,6 +8,7 @@
     EXAMPLE:            =ALLOCATE(10, {3;4;5;6}) -> {3;4;3;0}
     REVISIONS:          Date        Developer   Description
                         2026-07-18  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 ALLOCATE = LAMBDA(
 //  Parameter Declarations
@@ -15,8 +16,6 @@ ALLOCATE = LAMBDA(
     [containers],
     [overflow],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(value),
     //  Procedure
         Ovf, IF(ISOMITTED(overflow), 0, overflow),
         total, SUM(containers),
@@ -31,19 +30,6 @@ ALLOCATE = LAMBDA(
                 IF(AND(Ovf = 1, OR(value > total, value < 0)), SQRT(-1),
                 IF(Ovf = 2, filled + IF(posGrid = nRows * nCols, excess, 0),
                 filled))),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →ALLOCATE(value, containers, [overflow])¶" &
-                "DESCRIPTION:   →Sequentially fill container capacities with a value; returns per-container allocations in the same shape.¶" &
-                "VERSION:       →Jul 18 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   value         →(Required) Total amount to allocate across the containers. Zero or negative allocates nothing.¶" &
-                "   containers    →(Required) Capacities filled in reading order (vertical, horizontal, or 2D grid). Result keeps this shape. Any negative capacity returns #NUM!.¶" &
-                "   overflow      →(Optional) When value exceeds total capacity: (0) clip - fill all, drop the remainder [default], (1) error - return #NUM! (also errors when value < 0), (2) absorb - add the excess to the last container.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=ALLOCATE(10, {3;4;5;6})¶" &
-                "Result         →{3;4;3;0}",
-                "→", "¶"
-                ), result)
+        result
 )
 );

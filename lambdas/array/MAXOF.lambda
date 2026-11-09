@@ -8,6 +8,7 @@
     EXAMPLE:            =MAXOF({33,6,21,12}, {"Harry","Evie","Hugh","James"}) -> Harry
     REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 MAXOF = LAMBDA(
 //  Parameter Declarations
@@ -16,23 +17,9 @@ MAXOF = LAMBDA(
     [sentinel],
     LET(
     //  Check inputs
-        Help?, ISOMITTED(values),
         _sentinel, IF(ISOMITTED(sentinel), 10^10, sentinel),
     //  Procedure
         result, XLOOKUP(_sentinel, values, labels, , -1),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →MAXOF(values, labels, sentinel)¶" &
-                "DESCRIPTION:   →Returns the label corresponding to the largest value in a range.¶" &
-                "VERSION:       →Apr 13 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   values         →(Required) A 1D range of numeric values.¶" &
-                "   labels         →(Required) A 1D range of labels, same size as values.¶" &
-                "   sentinel       →(Optional) Lookup value for approximate match. Default: 10^10.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MAXOF({33,6,21,12}, {""Harry"",""Evie"",""Hugh"",""James""})¶" &
-                "Result         →Harry",
-                "→", "¶"
-                ), result)
+        result
 )
 );

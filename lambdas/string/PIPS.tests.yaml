@@ -30,7 +30,3 @@ tests:
   - name: mixed array guards per element
     args: ['={"⚀","X","⚅"}']
     expected: [[1, -2146826246, 6]]
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -105,7 +105,3 @@ tests:
         - { name: "listRng", refers_to: "F4:G5" }
     args: ["=mapRng", "=tileRng", "=listRng", '={"East","West"}']
     expected: [["East", "a", 1], ["East", "b", 2], ["West", "c", 3], ["West", "d", 4]]
-
-  - name: help text
-    args: []
-    expected_type: array

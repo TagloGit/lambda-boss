@@ -13,6 +13,7 @@
                         2026-05-04  Claude      Adopt new "user accumulator preserved by type" contract — output column is the unwrapped user value at each iteration, no helper meta.
                         2026-07-20  Claude      stop now receives the current element: LAMBDA(acc, current, i), matching fn's signature.
                         2026-07-20  Claude      stop is now a pre-check: evaluated before fn with the pre-step accumulator and the incoming element; the triggering element is never consumed.
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 SCANUNTIL = LAMBDA(
 //  Parameter Declarations
@@ -21,8 +22,6 @@ SCANUNTIL = LAMBDA(
     [fn],
     [stop],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(seed),
     //  Procedure
         us, CHAR(31),
         rs, CHAR(30),
@@ -63,21 +62,6 @@ SCANUNTIL = LAMBDA(
                         IF(wrap?, GetVar(userPart, "v"), userPart)
                     )),
         result, MAP(rawScan, extract),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →SCANUNTIL(seed, cases, fn, [stop])¶" &
-                "DESCRIPTION:   →SCAN counterpart to REDUCEUNTIL. Returns a column of intermediate accumulators (one per iteration). Same signature as REDUCEUNTIL — swap the name to switch views.¶" &
-                "VERSION:       →Jul 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   seed           →(Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including """" / NewState() / a state-string) -> free-form text/state accumulation.¶" &
-                "   cases          →(Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.¶" &
-                "   fn             →(Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.¶" &
-                "   stop           →(Optional) LAMBDA(acc, current, i) returning TRUE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when stop returns TRUE. Default never stops.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SCANUNTIL(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v > 9))¶" &
-                "Result         →column {1; 4; 9; 18; 18} — running sums; halts before consuming 10, so the final row repeats¶" &
-                "NOTE:          →Stop is a pre-check: once it fires, BREAK is set and that iteration onwards passes the accumulator through unchanged — rows from the halt repeat the last consumed value. If stop is TRUE for the seed on iteration 1, every row is the seed. For a state-string accumulator, pair with SplitState(_, TRUE) to get a tabular per-iteration view.",
-                "→", "¶"
-                ), result)
+        result
 )
 );

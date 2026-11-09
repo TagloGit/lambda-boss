@@ -1,33 +1,17 @@
 /*  FUNCTION NAME:      NewState
     DESCRIPTION:*//**Returns an empty state for use as a REDUCE accumulator with SetVar/GetVar.*/
-/*  RETURNS:            state array: an empty state (help text when ShowHelp is TRUE)
+/*  RETURNS:            state array: an empty state
     PARAMETERS:
-        ShowHelp        (Optional) Pass TRUE to show this help text instead of the empty state.
     EXAMPLE:            =SetVar(NewState(), "x", 5) -> state string holding x=5
     NOTE:               Reads from an empty state return #N/A. For REDUCE, seed with SetState(...) populating the slots iteration 1 will read.
     REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 NewState = LAMBDA(
-//  Parameter Declarations
-    [ShowHelp],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
     //  Procedure
         result, "",
-    //  Help
-        IF(Help?, result, TEXTSPLIT(
-                "FUNCTION:      →NewState()¶" &
-                "DESCRIPTION:   →Returns an empty state for use as a REDUCE accumulator with SetVar/GetVar.¶" &
-                "VERSION:       →Apr 27 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the empty state.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetVar(NewState(), ""x"", 5)¶" &
-                "Result         →state string holding x=5¶" &
-                "NOTE:          →Reads from an empty state return #N/A. For REDUCE, seed with SetState(...) populating the slots iteration 1 will read.",
-                "→", "¶"
-                ))
+        result
 )
 );

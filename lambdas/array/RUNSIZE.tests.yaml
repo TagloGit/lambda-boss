@@ -26,7 +26,3 @@ tests:
   - name: single element returns 1
     args: ['={"Z"}']
     expected: 1
-
-  - name: help text
-    args: []
-    expected_type: array

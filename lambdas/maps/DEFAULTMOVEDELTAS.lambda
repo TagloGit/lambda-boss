@@ -2,31 +2,16 @@
     DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in canonical clockwise order from north, matching DEFAULTARROWS.*/
 /*  RETURNS:            2-column array {dRow, dCol}, 8 rows clockwise from north
     PARAMETERS:
-        ShowHelp        (Optional) Pass TRUE to show this help text instead of the delta grid.
     EXAMPLE:            =DEFAULTMOVEDELTAS() -> 8x2 array: up, up-right, right, down-right, down, down-left, left, up-left
     REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of DEFAULTARROWS)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 DEFAULTMOVEDELTAS = LAMBDA(
-//  Parameter Declarations
-    [ShowHelp],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
     //  Procedure
         result, {-1,0;-1,1;0,1;1,1;1,0;1,-1;0,-1;-1,-1},
-    //  Help
-        IF(Help?, result, TEXTSPLIT(
-                "FUNCTION:      →DEFAULTMOVEDELTAS()¶" &
-                "DESCRIPTION:   →Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in canonical clockwise order from north, matching DEFAULTARROWS.¶" &
-                "VERSION:       →Aug 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the delta grid.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=DEFAULTMOVEDELTAS()¶" &
-                "Result         →8x2 array: up, up-right, right, down-right, down, down-left, left, up-left",
-                "→", "¶"
-                ))
+        result
 )
 );

@@ -1,18 +1,14 @@
 /*  FUNCTION NAME:      WTF
     DESCRIPTION:*//**Spills the lyrics of the LAMBDA lament, one line per row. A joke function.*/
-/*  RETURNS:            array: column of the lyrics, one line per row (help text when ShowHelp is TRUE)
+/*  RETURNS:            array: column of the lyrics, one line per row
     PARAMETERS:
-        ShowHelp        (Optional) Pass TRUE to show this help text instead of the lyrics.
     EXAMPLE:            =WTF() -> 17-row spill of lyrics, one line per row
     REVISIONS:          Date        Developer   Description
                         2026-08-15  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 WTF = LAMBDA(
-//  Parameter Declarations
-    [ShowHelp],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(ShowHelp),
     //  Procedure
         result, {"What the f*** is a LAMBDA?";
                  "-----------------------------------------------------------------------";
@@ -33,17 +29,6 @@ WTF = LAMBDA(
                  "Tried to run a calc and it filled me with anger";
                  "So tell me one thing";
                  "What the f*** is a LAMBDA? 𝅘𝅥𝅮𝅘𝅥𝅮"},
-    //  Help
-        IF(Help?, result, TEXTSPLIT(
-                "FUNCTION:      →WTF()¶" &
-                "DESCRIPTION:   →Spills the lyrics of the LAMBDA lament, one line per row. A joke function.¶" &
-                "VERSION:       →Aug 15 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   ShowHelp       →(Optional) Pass TRUE to show this help text instead of the lyrics.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=WTF()¶" &
-                "Result         →17-row spill of lyrics, one line per row",
-                "→", "¶"
-                ))
+        result
 )
 );

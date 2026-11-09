@@ -7,27 +7,15 @@
     REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Decode at the _mult constant via TOPOS (was a hard-coded 100000); any number of column letters, rows past 1048576; TOPOS's "can't read" message passes through instead of #N/A (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 ROWNUM = LAMBDA(
 //  Parameter Declarations
     [address],
     LET(
-    //  Check inputs
-        Help?, ISOMITTED(address),
     //  Procedure
         pos, TOPOS(address),
         result, IF(ISNUMBER(pos), INT(pos / _mult), pos),
-    //  Help
-        IF(Help?, TEXTSPLIT(
-                "FUNCTION:      →ROWNUM(address)¶" &
-                "DESCRIPTION:   →Returns the row number of an A1-style cell address passed as text. Like ROW() but accepts strings.¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   address        →(Required) A1 address text (e.g. ""Q17""), or an array/range of such. Any number of column letters (""XFE1"", ""ABCD9"") and rows past 1048576. Sheet prefixes and $ anchors are ignored; for a range only its first cell is used. Text that is not an address returns TOPOS's ""can't read"" message. Result lifts element-wise.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=ROWNUM(""Q17"")¶" &
-                "Result         →17",
-                "→", "¶"
-                ), result)
+        result
 )
 );
