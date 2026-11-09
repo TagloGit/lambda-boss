@@ -50,7 +50,9 @@ TLOOKUP = LAMBDA(
     [Fact]
     public void Parse_UndocumentedParameter_IsOptionalWithNoText()
     {
-        var content = Tlookup.Replace("        Item            (Optional) Value to find in LookupCol.\n", "");
+        // Line endings follow the checkout (CRLF on Windows), so drop the line by pattern.
+        var content = System.Text.RegularExpressions.Regex.Replace(
+            Tlookup, @"[ ]+Item[ ]+\(Optional\) Value to find in LookupCol\.\r?\n", "");
         var doc = LambdaDocParser.Parse(content);
 
         Assert.Equal(new[] { "Table", "Item", "HeaderName" }, doc.Parameters.Select(p => p.Name));
