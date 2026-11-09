@@ -114,7 +114,7 @@ internal sealed class CheckFormulaWindow : Window
         }
 
         var errors = result.Problems.Count(p => !p.IsNote);
-        var notes = result.Problems.Count - errors;
+        var notes = result.Problems.Count(p => p.Kind == FormulaProblemKind.UnusedName);
         var headline = errors == 0
             ? "No bracket or name problems found."
             : $"{errors} problem{(errors == 1 ? "" : "s")} found.";
@@ -161,6 +161,12 @@ internal sealed class CheckFormulaWindow : Window
         var n = 0;
         foreach (var p in result.Problems)
         {
+            if (p.Kind == FormulaProblemKind.More)
+            {
+                list.Children.Add(new TextBlock { Text = p.Message, Foreground = Brushes.Gray });
+                continue;
+            }
+
             n++;
             var item = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
             item.Children.Add(new TextBlock

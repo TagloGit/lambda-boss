@@ -237,7 +237,7 @@ internal static class FormulaParser
         throw new FormatException("Unterminated string literal in formula.");
     }
 
-    private static int SkipArray(string s, int i)
+    internal static int SkipArray(string s, int i)
     {
         // i points at the opening brace. Excel array constants don't nest, but we
         // balance braces defensively and skip string literals inside.
@@ -276,7 +276,8 @@ internal static class FormulaParser
     {
         foreach (var lit in ErrorLiterals)
             if (i + lit.Length <= s.Length &&
-                string.CompareOrdinal(s, i, lit, 0, lit.Length) == 0)
+                // Case-insensitive: Excel accepts #n/a as typed (Formula2 always reads upper case).
+                string.Compare(s, i, lit, 0, lit.Length, StringComparison.OrdinalIgnoreCase) == 0)
                 return lit.Length;
 
         return 0;

@@ -55,6 +55,11 @@ public class FormulaCheckerTests
     [InlineData("=LET(keyDropped?,TRUE,keyDropped?)")]
     [InlineData("=LOG10(100)+ATAN2(1,1)")]
     [InlineData("=[Book2.xlsx]Sheet1!A1+[@Fare]")]
+    [InlineData("=LAMBDA([x],IF(ISOMITTED(x),0,x))(1)")]
+    [InlineData("=LAMBDA(a,[b],a+IF(ISOMITTED(b),0,b))(1)")]
+    [InlineData("=IFERROR(A1,#n/a)")]
+    [InlineData("=SUM({1,2,3})+LEN(\"}\")")]
+    [InlineData("=LET(a,1,LET(b,2,a+b))")]
     public void Clean_formulas_have_no_errors(string formula)
     {
         Assert.Empty(Errors(formula));
@@ -267,6 +272,68 @@ public class FormulaCheckerTests
         Assert.Contains(Errors(f), p => p.Kind == FormulaProblemKind.BadShape && At(f, p) == "SUM");
     }
 
+    [Fact]
+    public void LET_name_used_in_its_own_value_is_reported()
+    {
+        const string f = "=LET(x,x+1,x)";
+        var p = Assert.Single(Errors(f));
+        Assert.Equal(7, p.Start);
+        Assert.Contains("own definition", p.Message);
+    }
+
+    [Theory]
+    [InlineData("=LET(r,1,r)")]
+    [InlineData("=LET(C,1,C)")]
+    public void R_and_C_are_not_valid_LET_names(string f)
+    {
+        Assert.Contains(Errors(f), p => p.Kind == FormulaProblemKind.BadShape && p.Start == 5);
+    }
+
+    [Theory]
+    [InlineData("=tblFares[ Faer]", "Faer")]
+    [InlineData("=tblFares[Odd '[x'] coll]", "Odd '[x'] coll")]
+    [InlineData("=tblFares[@Faer]", "Faer")]
+    public void Column_spans_cover_the_column_as_written(string f, string expected)
+    {
+        var p = Assert.Single(Errors(f));
+        Assert.Equal(expected, At(f, p));
+    }
+
+    [Fact]
+    public void Unterminated_array_with_a_brace_in_a_string_is_reported()
+    {
+        const string f = "=SUM({1,2,3)+LEN(\"}\")";
+        var p = Errors(f).First();
+        Assert.Equal(FormulaProblemKind.Unterminated, p.Kind);
+        Assert.Equal("{", At(f, p));
+    }
+
+    [Fact]
+    public void Unterminated_string_does_not_also_report_the_bracket()
+    {
+        var p = Assert.Single(Errors("=IF(A1=\"x,1,2)"));
+        Assert.Equal(FormulaProblemKind.Unterminated, p.Kind);
+    }
+
+    [Fact]
+    public void Before_names_are_read_unknown_names_say_so()
+    {
+        var ctx = new FormulaNameContext { NamesRead = false };
+        var p = Assert.Single(Errors("=fares*2", ctx));
+        Assert.Contains("haven't been read", p.Message);
+    }
+
+    [Fact]
+    public void Clone_is_independent()
+    {
+        var ctx = Workbook();
+        var copy = ctx.Clone();
+        ctx.DefinedNames.Add("later");
+        Assert.DoesNotContain("later", copy.DefinedNames);
+        Assert.Contains("fares", copy.DefinedNames);
+        Assert.Contains("Fare", copy.Tables["tblFares"]);
+    }
+
     // ------------------------------------------------------------ helpers & limits
 
     [Theory]
@@ -311,5 +378,6 @@ public class FormulaCheckerTests
         var f = "=" + string.Join("+", Enumerable.Range(0, 100).Select(i => $"zz{i}q"));
         var result = FormulaChecker.Check(f, Workbook());
         Assert.Equal(FormulaChecker.MaxProblems, result.Problems.Count);
+        Assert.Equal(FormulaProblemKind.More, result.Problems[^1].Kind);
     }
 }

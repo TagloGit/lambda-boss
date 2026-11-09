@@ -30,7 +30,10 @@ internal enum FormulaProblemKind
     UnknownReference,
 
     /// <summary>Not an error: a LET name that is never used (often the other half of a typo).</summary>
-    UnusedName
+    UnusedName,
+
+    /// <summary>Not a finding: the line that says how many more were left out.</summary>
+    More
 }
 
 /// <summary>
@@ -47,7 +50,7 @@ internal sealed record FormulaProblem(
     int RelatedStart = -1,
     int RelatedLength = 0)
 {
-    public bool IsNote => Kind == FormulaProblemKind.UnusedName;
+    public bool IsNote => Kind is FormulaProblemKind.UnusedName or FormulaProblemKind.More;
 }
 
 /// <summary>
@@ -76,6 +79,25 @@ internal sealed class FormulaNameContext
 
     /// <summary>When the snapshot was taken (UTC), or null for a context built by hand.</summary>
     public DateTime? TakenUtc { get; set; }
+
+    /// <summary>
+    ///     False until the workbook's names have been read at least once: unknown names are then
+    ///     reported with a warning that they may be defined names.
+    /// </summary>
+    public bool NamesRead { get; set; } = true;
+
+    /// <summary>A copy for another thread to read while this one changes.</summary>
+    public FormulaNameContext Clone()
+    {
+        var c = new FormulaNameContext { TakenUtc = TakenUtc, NamesRead = NamesRead };
+        c.DefinedNames.UnionWith(DefinedNames);
+        c.Sheets.UnionWith(Sheets);
+        c.LibraryNames.UnionWith(LibraryNames);
+        c.OtherKnownNames.UnionWith(OtherKnownNames);
+        foreach (var (k, v) in Tables)
+            c.Tables[k] = new HashSet<string>(v, StringComparer.OrdinalIgnoreCase);
+        return c;
+    }
 }
 
 internal sealed class FormulaCheckResult
@@ -114,7 +136,7 @@ internal static class FormulaChecker
 
     private static readonly char[] RefChars = { '!', '[', '\'' };
 
-    private static readonly string[] HiddenPrefixes = { "_xlfn.", "_xlws.", "_xlpm.", "_xludf." };
+    private static readonly string[] HiddenPrefixes = { "_xlfn.", "_xlws.", "_xlpm.", "_xludf.", "_xleta." };
 
     private static readonly HashSet<string> TableSpecials = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -144,12 +166,14 @@ internal static class FormulaChecker
         {
             tokens = FormulaParser.Tokenize(text);
         }
-        catch (FormatException)
+        catch (FormatException ex)
         {
+            problems.Add(new FormulaProblem(FormulaProblemKind.Unterminated, 0, 0,
+                $"Lambda Boss couldn't read this formula: {ex.Message}"));
             return new FormulaCheckResult(formula, problems);
         }
 
-        new Pass(tokens, names, problems).Run();
+        new Pass(tokens, names, problems, reportUnclosed: unterminated is null).Run();
 
         // Brackets first (they are usually the cause), then shape, names, and notes last.
         problems = problems.OrderBy(p => Priority(p.Kind)).ThenBy(p => p.Start).ToList();
@@ -157,7 +181,7 @@ internal static class FormulaChecker
         {
             var more = problems.Count - MaxProblems + 1;
             problems = problems.Take(MaxProblems - 1).ToList();
-            problems.Add(new FormulaProblem(FormulaProblemKind.UnusedName, formula.Length, 0,
+            problems.Add(new FormulaProblem(FormulaProblemKind.More, formula.Length, 0,
                 $"…and {more} more."));
         }
 
@@ -172,6 +196,7 @@ internal static class FormulaChecker
         FormulaProblemKind.UnclosedBracket => 1,
         FormulaProblemKind.BadShape => 2,
         FormulaProblemKind.UnusedName => 9,
+        FormulaProblemKind.More => 10,
         _ => 5
     };
 
@@ -223,12 +248,16 @@ internal static class FormulaChecker
                     return (new FormulaProblem(FormulaProblemKind.Unterminated, start, 1,
                         "This ] has no [ to close."), start);
                 case '{':
-                    var close = s.IndexOf('}', i);
-                    if (close < 0)
+                    try
+                    {
+                        i = FormulaParser.SkipArray(s, i);
+                    }
+                    catch (FormatException)
+                    {
                         return (new FormulaProblem(FormulaProblemKind.Unterminated, start, 1,
                             "This { starts an array constant that is never closed: a } is missing."), start);
-                    // Strings inside an array constant can hold '}' — let the quote case handle them.
-                    i++;
+                    }
+
                     continue;
                 default:
                     i++;
@@ -243,18 +272,26 @@ internal static class FormulaChecker
 
     private sealed class Declaration
     {
-        public Declaration(FormulaToken token, bool isParameter, string owner)
+        public Declaration(FormulaToken token, string name, bool isParameter, string owner, Frame frame, int visibleFrom)
         {
             Token = token;
+            Name = name;
             IsParameter = isParameter;
             Owner = owner;
+            Frame = frame;
+            VisibleFromArg = visibleFrom;
         }
+
+        public Frame Frame { get; }
+
+        /// <summary>The first argument of its LET or LAMBDA that can see it.</summary>
+        public int VisibleFromArg { get; }
 
         /// <summary>LET or LAMBDA.</summary>
         public string Owner { get; }
 
         public FormulaToken Token { get; }
-        public string Name => Strip(Token.Text);
+        public string Name { get; }
         public bool IsParameter { get; }
         public bool Used { get; set; }
     }
@@ -301,11 +338,15 @@ internal static class FormulaChecker
         private Frame? _lastClosed;
         private FormulaToken? _lastCloser;
 
-        public Pass(IReadOnlyList<FormulaToken> tokens, FormulaNameContext names, List<FormulaProblem> problems)
+        private readonly bool _reportUnclosed;
+
+        public Pass(IReadOnlyList<FormulaToken> tokens, FormulaNameContext names, List<FormulaProblem> problems,
+            bool reportUnclosed)
         {
             _t = tokens;
             _names = names;
             _problems = problems;
+            _reportUnclosed = reportUnclosed;
         }
 
         private Frame? Top => _stack.Count == 0 ? null : _stack[^1];
@@ -342,8 +383,8 @@ internal static class FormulaChecker
                 Add(new FormulaProblem(FormulaProblemKind.UnusedName, d.Token.Start, d.Token.Text.Length,
                     $"{d.Token.Text} is defined but never used."));
 
-            // Brackets never closed, outermost first.
-            foreach (var f in _stack)
+            // Brackets never closed, outermost first. (After an unterminated string they're noise.)
+            foreach (var f in _reportUnclosed ? _stack : new List<Frame>())
             {
                 Add(new FormulaProblem(FormulaProblemKind.UnclosedBracket, f.Start, f.Open.End - f.Start,
                     $"{f.Label} is never closed: a ) is missing, at the end or somewhere inside it."));
@@ -464,13 +505,23 @@ internal static class FormulaChecker
         private void Declare(Frame f, FormulaToken n, bool isParameter)
         {
             var bare = Strip(n.Text);
+
+            // An optional LAMBDA parameter: LAMBDA([x], …).
+            if (isParameter && bare.Length > 2 && bare[0] == '[' && bare[^1] == ']')
+                bare = bare[1..^1];
+
             if (IsCellReference(bare) || bare.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
                                       || bare.Equals("FALSE", StringComparison.OrdinalIgnoreCase)
+                                      || bare.Equals("R", StringComparison.OrdinalIgnoreCase)
+                                      || bare.Equals("C", StringComparison.OrdinalIgnoreCase)
                                       || bare.IndexOfAny(RefChars) >= 0)
                 Add(new FormulaProblem(FormulaProblemKind.BadShape, n.Start, n.Text.Length,
                     $"{n.Text} can't be a {(isParameter ? "LAMBDA parameter" : "LET name")}: " +
                     "Excel reads it as a cell reference or value."));
-            var decl = new Declaration(n, isParameter, isParameter ? "LAMBDA" : "LET");
+
+            // A LET name is visible from the argument after its value; a parameter from the next argument.
+            var decl = new Declaration(n, bare, isParameter, isParameter ? "LAMBDA" : "LET", f,
+                isParameter ? f.ArgIndex + 1 : f.ArgIndex + 2);
             f.Declarations.Add(decl);
             _all.Add(decl);
         }
@@ -524,9 +575,11 @@ internal static class FormulaChecker
         {
             for (var s = _stack.Count - 1; s >= 0; s--)
             {
-                var decls = _stack[s].Declarations;
+                var frame = _stack[s];
+                var decls = frame.Declarations;
                 for (var d = decls.Count - 1; d >= 0; d--)
-                    if (decls[d].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    if (frame.ArgIndex >= decls[d].VisibleFromArg
+                        && decls[d].Name.Equals(name, StringComparison.OrdinalIgnoreCase))
                         return decls[d];
             }
 
@@ -602,9 +655,11 @@ internal static class FormulaChecker
             if (stranded is not null)
             {
                 stranded.Used = true;
+                var why = _stack.Contains(stranded.Frame)
+                    ? $"it's used in its own definition or before it: it's defined at character {stranded.Token.Start + 1}."
+                    : $"it's defined at character {stranded.Token.Start + 1}, inside a {stranded.Owner} that has already closed.";
                 Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start, tok.Text.Length,
-                    $"{tok.Text} is out of scope here: it's defined at character {stranded.Token.Start + 1}, " +
-                    $"inside a {stranded.Owner} that has already closed.",
+                    $"{tok.Text} is out of scope here: {why}",
                     RelatedStart: stranded.Token.Start, RelatedLength: stranded.Token.Text.Length));
                 return;
             }
@@ -641,6 +696,9 @@ internal static class FormulaChecker
                     ? $"{tok.Text} isn't a function, a LAMBDA in this workbook, or a LET name."
                     : $"{tok.Text} isn't a LET or LAMBDA name in scope, a defined name, a table or a cell.";
             }
+
+            if (!_names.NamesRead)
+                message += " (The workbook's names haven't been read yet, so it may be a defined name: check a cell once to read them.)";
 
             Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start, tok.Text.Length, message, nearest));
         }
@@ -731,12 +789,12 @@ internal static class FormulaChecker
                 return;
             }
 
-            foreach (var (col, offset) in ColumnSpecifiers(raw, open))
+            foreach (var (col, offset, rawLength) in ColumnSpecifiers(raw, open))
             {
                 if (TableSpecials.Contains(col) || columns.Contains(col))
                     continue;
                 var near = Nearest(col, columns);
-                Add(new FormulaProblem(FormulaProblemKind.UnknownReference, tok.Start + offset, col.Length,
+                Add(new FormulaProblem(FormulaProblemKind.UnknownReference, tok.Start + offset, rawLength,
                     $"Table {tableText} has no column called {col}." + (near is null ? "" : $" Did you mean {near}?"),
                     near));
             }
@@ -750,9 +808,9 @@ internal static class FormulaChecker
     ///     the token: <c>t[[#Data],[Fare]]</c> gives <c>#Data</c> and <c>Fare</c>; <c>t[@Fare]</c>
     ///     gives <c>Fare</c>.
     /// </summary>
-    internal static IEnumerable<(string Column, int Offset)> ColumnSpecifiers(string raw, int open)
+    internal static IEnumerable<(string Column, int Offset, int RawLength)> ColumnSpecifiers(string raw, int open)
     {
-        var results = new List<(string, int)>();
+        var results = new List<(string, int, int)>();
         var i = open;
         while (i < raw.Length)
         {
@@ -791,17 +849,22 @@ internal static class FormulaChecker
                 continue;
             }
 
-            var item = sb.ToString();
-            var offset = i + 1;
-            if (item.StartsWith("@", StringComparison.Ordinal) && item.Length > 1)
-            {
-                item = item[1..];
-                offset++;
-            }
+            // Span in the raw text: after '[' (and '@' and spaces), before trailing spaces and ']'.
+            var rawStart = i + 1;
+            if (rawStart < j && raw[rawStart] == '@')
+                rawStart++;
+            while (rawStart < j && raw[rawStart] == ' ')
+                rawStart++;
+            var rawEnd = j;
+            while (rawEnd > rawStart && raw[rawEnd - 1] == ' ')
+                rawEnd--;
 
+            var item = sb.ToString();
+            if (item.StartsWith("@", StringComparison.Ordinal) && item.Length > 1)
+                item = item[1..];
             item = item.Trim();
             if (item.Length > 0)
-                results.Add((item, offset));
+                results.Add((item, rawStart, rawEnd - rawStart));
             i = j + 1;
         }
 

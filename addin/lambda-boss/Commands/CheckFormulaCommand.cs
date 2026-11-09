@@ -85,6 +85,9 @@ public static class CheckFormulaCommand
             _started = true;
             Logger.Info("CheckFormula: started");
 
+            // Read the workbook's names once now, so a check made mid-edit has them.
+            ExcelAsyncUtil.QueueAsMacro(WorkbookNames.RefreshIfChanged);
+
             // Library names for "not loaded" messages, the way the popup loads them.
             Task.Run(async () =>
             {
@@ -145,8 +148,11 @@ public static class CheckFormulaCommand
     /// </summary>
     private static void OnEditedFormula(string text, IntPtr excelHwnd)
     {
-        var names = WorkbookNames.Last;
-        ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
+        // A copy: the main thread keeps adding to the snapshot while the window thread reads it.
+        var names = WorkbookNames.Last.Clone();
+
+        // Off Excel's thread at once: starting the window thread the first time takes a moment.
+        Task.Run(() => ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             dispatcher.BeginInvoke(new Action(() =>
             {
                 try
@@ -158,7 +164,7 @@ public static class CheckFormulaCommand
                 {
                     Logger.Error("CheckFormula/edit", ex);
                 }
-            })));
+            }))));
     }
 
     private static readonly Regex PlainName = new(@"^[A-Za-z_\\][A-Za-z0-9_.?\\]*$", RegexOptions.CultureInvariant);
@@ -230,7 +236,7 @@ public static class CheckFormulaCommand
 /// </summary>
 internal static class WorkbookNames
 {
-    private static FormulaNameContext _last = new();
+    private static FormulaNameContext _last = new() { NamesRead = false };
     private static string? _lastKey;
 
     public static FormulaNameContext Last
@@ -406,7 +412,9 @@ internal static class FormulaEditHook
             return false;
 
         text = Marshal.PtrToStringUni(info.lpch, info.cch) ?? "";
-        return text.Length > 0;
+
+        // Only formulas: in a cell holding text, Ctrl+Shift+K goes through untouched.
+        return text.Length > 0 && text[0] is '=' or '+' or '-';
     }
 
     private static bool IsDown(int vk) => (GetKeyState(vk) & 0x8000) != 0;
