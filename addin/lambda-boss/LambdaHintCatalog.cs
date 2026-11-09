@@ -72,6 +72,13 @@ internal sealed class LambdaHintCatalog
         return changed;
     }
 
+    /// <summary>Every name the catalogue knows, bare and prefixed (Check Formula's "not loaded" list).</summary>
+    public IReadOnlyList<string> Names()
+    {
+        lock (_gate)
+            return _aliases.Keys.ToList();
+    }
+
     public int Count
     {
         get

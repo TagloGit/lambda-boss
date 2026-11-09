@@ -38,6 +38,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             }
         }
 
+        CheckFormulaCommand.Stop(excelShuttingDown: _isExcelShutdown);
         ShowLambdaPopupCommand.Cleanup();
 
         _disposed = true;
@@ -76,6 +77,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             LambdaHints.StartIfEnabled();
             ShowLambdaPopupCommand.SettingsSaved += LambdaHints.ApplySwitch;
 
+            // Check Formula (Labs, spec 0014): shortcut, edit-mode hook, name snapshot.
+            CheckFormulaCommand.StartIfEnabled();
+            ShowLambdaPopupCommand.SettingsSaved += CheckFormulaCommand.ApplySwitch;
+
             var assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
                                   ?? new Version(0, 0, 0);
             UpdateChecker.Initialize(
@@ -102,6 +107,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         // crashes. Its file stays for the next session.
         ShowLambdaPopupCommand.SettingsSaved -= LambdaHints.ApplySwitch;
         LambdaHints.Stop(removeFile: false);
+        ShowLambdaPopupCommand.SettingsSaved -= CheckFormulaCommand.ApplySwitch;
+        CheckFormulaCommand.Stop();
         Dispose();
     }
 

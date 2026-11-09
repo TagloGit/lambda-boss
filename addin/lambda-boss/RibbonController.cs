@@ -41,6 +41,15 @@ public class RibbonController : ExcelRibbon
                   onAction='OnEditLambda'
                   screentip='Expand the active cell&apos;s LAMBDA call back into an equivalent =LET(...) for editing' />
         </group>
+        <group id='CheckGroup' label='Check'>
+          <button id='CheckFormulaButton'
+                  label='Check Formula'
+                  size='large'
+                  imageMso='FormulaEvaluate'
+                  onAction='OnCheckFormula'
+                  getVisible='GetCheckFormulaVisible'
+                  screentip='Point at unmatched brackets and unknown names in the active cell&apos;s formula (Ctrl+Shift+K; also works while editing)' />
+        </group>
         <group id='ManageGroup' label='Manage'>
           <button id='SettingsButton'
                   label='Settings'
@@ -92,7 +101,11 @@ public class RibbonController : ExcelRibbon
 
         ShowLambdaPopupCommand.SettingsSaved += () => ExcelAsyncUtil.QueueAsMacro(() =>
         {
-            try { _ribbon?.InvalidateControl("ChannelButton"); }
+            try
+            {
+                _ribbon?.InvalidateControl("ChannelButton");
+                _ribbon?.InvalidateControl("CheckFormulaButton");
+            }
             catch { /* ribbon may be disposed */ }
         });
     }
@@ -123,6 +136,13 @@ public class RibbonController : ExcelRibbon
     {
         EditLambdaCommand.Run();
     }
+
+    public void OnCheckFormula(IRibbonControl control)
+    {
+        CheckFormulaCommand.CheckFormula();
+    }
+
+    public bool GetCheckFormulaVisible(IRibbonControl control) => Labs.IsOn(Labs.CheckFormula);
 
     public void OnAbout(IRibbonControl control)
     {
