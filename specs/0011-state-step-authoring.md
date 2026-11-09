@@ -443,9 +443,9 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
       formula; SetVars prototype with `k` stepper, array prototype on the seed; target cell rule;
       fold untouched; the new several-folds message; LET to LAMBDA round-trips the prototype back to
       the same LAMBDA text.
-- [ ] `SplitState` reads by key from the first state's keys; harness tests add a SetVar-reordered
+- [x] `SplitState` reads by key from the first state's keys; harness tests add a SetVar-reordered
       column and a missing key; existing tests unchanged.
-- [ ] Faster `GetVar`/`SetVars` pass the existing harness tests unchanged, keep unique keys (test:
+- [x] Faster `GetVar`/`SetVars` pass the existing harness tests unchanged, keep unique keys (test:
       `SetVars("x", 1, "x", 2)` gives the same text as today); the appendix benchmark re-run shows
       the new numbers.
 
