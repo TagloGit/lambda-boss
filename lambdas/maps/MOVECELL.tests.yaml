@@ -325,3 +325,7 @@ tests:
   - name: default ARROWMOVES table moves a glyph right
     args: ["B2", '="→"', "=3"]
     expected: "E2"
+
+  - name: 2-column table holding an old 100000-packed delta gives a readable message
+    args: ["D4", '="v"', "=1", '={"v",100000}']
+    expected: "MOVECELL: dir v has a column step of 100000; numeric dirs and 2-column moves tables are packed rowDelta*_mult+colDelta (_mult = 1000000), e.g. _dirS"

@@ -87,7 +87,7 @@ MOVECELL = LAMBDA(
         addr, IF(pastSheet?, CELLAT(outRow, outCol), ADDRESS(outRow, outCol, 4)),
         moved, IF(bounded? * (mode = 1) * NOT(inArea), NA(), addr),
     //  Readable failures: TOPOS's message passes through; a numeric dir whose column part is beyond one sheet width is almost certainly an old 100000-packed delta
-        result, IF(numDir? * (ABS(dC) > 16384), "MOVECELL: dir " & dir & " has a column step of " & dC & "; numeric dirs are packed rowDelta*_mult+colDelta (_mult = " & _mult & "), e.g. _dirS",
+        result, IF((numDir? + tbl? * packed?) * (ABS(dC) > 16384), "MOVECELL: dir " & dir & " has a column step of " & dC & "; numeric dirs and 2-column moves tables are packed rowDelta*_mult+colDelta (_mult = " & _mult & "), e.g. _dirS",
                 IF(ISTEXT(pos), pos, moved)),
         result
 )

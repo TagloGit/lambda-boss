@@ -1,9 +1,9 @@
 /*  FUNCTION NAME:      RELPOS
     DESCRIPTION:*//**Reads a move set drawn on the sheet: returns a column of packed deltas (row*_mult+col, as _dirAll and _dirKnight) from an origin cell to every cell in a range that holds a non-zero number, ordered by that number (ties in reading order). Number the stencil cells 1..n to set the order, or mark them all 1 for reading order.*/
-/*  RETURNS:            column of packed position-deltas (number), one per marked cell, ordered by the marker number then reading order; #CALC! when no cell is marked
+/*  RETURNS:            column of packed position-deltas (number), one per marked cell, ordered by the marker number then reading order; #CALC! when no cell is marked; a message when Cells or Origin isn't a reference
     PARAMETERS:
         Cells           (Required) A sheet range drawing the stencil (a reference, not an array, since cell positions are read). A cell holding a number other than 0 is a move; text, blanks, 0 and errors are ignored, so the origin cell may hold a label such as "K" or sit empty. The number orders the result: 1 first, 2 next, and so on; equal numbers keep reading order (row by row, left to right).
-        Origin          (Required) The cell the deltas are measured from, as a single-cell reference. It may sit inside Cells (typically the centre of the drawn stencil) or outside it.
+        Origin          (Required) The cell the deltas are measured from, as a single-cell reference (a larger range uses its top-left cell). It may sit inside Cells (typically the centre of the drawn stencil) or outside it.
     EXAMPLE:            =RELPOS(B2:D4, C3) -> {-1000000;1;1000000;-1} when C2, D3, C4, B3 hold 1 (N), 2 (E), 3 (S), 4 (W) around the origin C3; equals _dirOrthog
     REVISIONS:          Date        Developer   Description
                         2026-11-09  Claude      Initial version (#425)
@@ -14,14 +14,16 @@ RELPOS = LAMBDA(
     [Origin],
     LET(
     //  Procedure
-        pos, TOPOS(ADDRESSES(Cells)),
-        originPos, INDEX(TOPOS(ADDRESSES(Origin)), 1, 1),
+        refs?, AND(ISREF(Cells), ISREF(Origin)),
+        pos, ROW(Cells) * _mult + COLUMN(Cells),
+        originPos, MIN(ROW(Origin)) * _mult + MIN(COLUMN(Origin)),
         keep, ISNUMBER(Cells) * (Cells <> 0),
         readIdx, SEQUENCE(ROWS(Cells), COLUMNS(Cells)),
         deltas, TOCOL(IF(keep, pos - originPos, NA()), 3),
         order, TOCOL(IF(keep, Cells, NA()), 3),
         tie, TOCOL(IF(keep, readIdx, NA()), 3),
-        result, SORTBY(deltas, order, 1, tie, 1),
+        result, IF(refs?, SORTBY(deltas, order, 1, tie, 1),
+                "RELPOS: Cells and Origin must be references (a range drawn on the sheet, and one cell)"),
         result
 )
 );
