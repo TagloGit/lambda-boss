@@ -108,6 +108,19 @@ tests:
       - [1, 0]
       - [2, "xbx"]
 
+  - name: empty first state leaves later rows without keys
+    args: ['=VSTACK(NewState(), SetVars("a", 1))']
+    expected:
+      - ["(empty)"]
+      - [-2146826246]
+
+  - name: a value that changes type between rows keeps each row's type
+    args: ['=VSTACK(SetVars("x", 1), SetVars("x", "one"), SetVars("x", TRUE))']
+    expected:
+      - [1]
+      - ["one"]
+      - [True]
+
   - name: help text
     args: []
     expected_type: array
