@@ -68,7 +68,7 @@ public class RibbonController : ExcelRibbon
                   size='normal'
                   imageMso='ControlProperties'
                   onAction='OnSettings'
-                  screentip='Library channel: Stable reads main, Labs reads develop. Click for channel and Labs switches.' />
+                  screentip='Library channel: Stable reads main, Labs reads develop. Click for channel, argument hints and Labs switches.' />
         </group>
         <group id='InfoGroup' label='Info'>
           <button id='AboutButton'

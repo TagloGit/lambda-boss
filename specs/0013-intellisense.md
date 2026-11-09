@@ -18,7 +18,7 @@ file's header, and the hints read it from there (Tim, 6 Nov).
 
 ## What Tim sees
 
-The hints are on by default (out of Labs on 9 Nov, #422: "Argument hints look awesome!!! That can come out of Labs." — Tim). The settings window (the ribbon's channel button) has a checkbox, **Argument hints for library LAMBDAs**, to turn them off. With them on:
+The hints are on by default (out of Labs on 9 Nov, #422: "Argument hints look awesome!!! That can come out of Labs." — Tim). The settings window (the ribbon's Settings or channel button) has a checkbox, **Argument hints for library LAMBDAs**, to turn them off. With them on:
 
 - **Choosing the name.** In Excel's autocomplete list, when a library LAMBDA is highlighted, a
   tooltip beside the list shows what it returns and what it does.

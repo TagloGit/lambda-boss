@@ -23,7 +23,7 @@ internal static class LambdaHints
     private static bool Enabled => Settings.Current.ArgumentHints;
 
     /// <summary>
-    ///     Starts the hints if the switch is on. Must run in a macro context (AutoOpen or QueueAsMacro).
+    ///     Starts the hints if Settings.ArgumentHints is on. Must run in a macro context (AutoOpen or QueueAsMacro).
     /// </summary>
     public static void StartIfEnabled()
     {
@@ -64,7 +64,7 @@ internal static class LambdaHints
 
     /// <summary>
     ///     Stops the hints. Must run in a macro context. With <paramref name="removeFile"/>
-    ///     the XML file goes too (switch turned off); on AutoClose it stays for the next session.
+    ///     the XML file goes too (hints turned off); on AutoClose it stays for the next session.
     /// </summary>
     public static void Stop(bool removeFile)
     {
@@ -93,7 +93,7 @@ internal static class LambdaHints
     }
 
     /// <summary>
-    ///     Applies the switch after the settings window saves. Safe from any thread.
+    ///     Applies Settings.ArgumentHints after the settings window saves. Safe from any thread.
     /// </summary>
     public static void ApplySwitch()
     {

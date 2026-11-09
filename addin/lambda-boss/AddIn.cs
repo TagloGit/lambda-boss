@@ -73,7 +73,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
             ExcelAsyncUtil.QueueAsMacro(DeferredInit);
 
-            // Argument hints (Labs, spec 0013). AutoOpen is a macro context, which Install needs.
+            // Argument hints (on by default, Settings.ArgumentHints; spec 0013). AutoOpen is a macro context, which Install needs.
             LambdaHints.StartIfEnabled();
             ShowLambdaPopupCommand.SettingsSaved += LambdaHints.ApplySwitch;
 
