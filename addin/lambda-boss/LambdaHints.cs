@@ -81,6 +81,9 @@ internal static class LambdaHints
             {
                 File.Delete(XmlPath);
                 _lastWritten = null;
+
+                // Another add-in's IntelliSense server may still hold our names: let it reload.
+                IntelliSenseServer.Refresh();
             }
         }
         catch (Exception ex)

@@ -49,7 +49,12 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 ```
 /*  FUNCTION NAME:      <Name>
     DESCRIPTION:*//**<One-line description.>*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            <type first: address (text) / number / value / array ...; then what it holds and its shape>
+    PARAMETERS:
+        <param1>        (Required) <Description.>
+        <param2>        (Optional) <Description.>
+    EXAMPLE:            =<Name>(<example_args>) -> <example_result>
+    REVISIONS:          Date        Developer   Description
                         <YYYY-MM-DD>  <Developer>   Initial version
 */
 <Name> = LAMBDA(
@@ -85,7 +90,11 @@ The `.lambda` file MUST use this exact format. Pay close attention to spacing, l
 **Header block:**
 - `FUNCTION NAME:` — matches the filename (without `.lambda`)
 - `DESCRIPTION:*//**..*/` — the `*//**` and `*/` are comment delimiters that allow the description to be extracted as a doc comment
+- `RETURNS:` — one line, the output type first, then what it holds. The argument hints show it (spec 0013).
+- `PARAMETERS:` — one line per LAMBDA parameter, same names and order: name, `(Required)` or `(Optional)`, description (one line, however long). The hints show the current argument's line. Never write `*/` in it.
+- `EXAMPLE:` (and optional `NOTE:` lines) — kept for readers; not shown in hints.
 - `REVISIONS:` — date in `YYYY-MM-DD` format, developer name, description
+- `LambdaFormatTests` checks RETURNS is filled and PARAMETERS matches the LAMBDA.
 
 **Parameter declarations:**
 - One parameter per line, each wrapped in `[]`
