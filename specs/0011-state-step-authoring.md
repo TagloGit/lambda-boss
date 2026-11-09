@@ -589,6 +589,16 @@ Taken while building Part 2 (Labs switch `state-edit`, "/State: edit a state ste
 - A `SetVar` over a call (the stepper's `IF(k = 1, …)`) no longer counts as building a state, so the
   fold's seed slot stays empty as it does for the stepper itself. A `SetVar` over a cell still fills it.
 
+Taken while making `SplitState` read by key (Part 5; library only, so no Labs switch: it reaches the
+Labs channel on merge to `develop`):
+
+- The columns are the first state's keys, in its order. A key that only later rows hold isn't shown;
+  `SplitState` doesn't widen the table as the run goes.
+- Keys match ignoring case and take the first entry, the same read as `GetVar` (TEXTAFTER/TEXTBEFORE
+  on the separators), so the table shows what `GetVar` would return.
+- An empty first state (`NewState()`) shows `(empty)` as before. Later rows then have no keys to read
+  and show `#N/A`; the old positional read showed their first value.
+
 Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
 in `taglo-win` settled these:
 
