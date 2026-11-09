@@ -13,7 +13,7 @@ NTHOCCURRENCE = LAMBDA(
     //  Procedure
         raw, TOCOL(arr),
     //  Numbers to 15 significant digits, as = compares them (0.1+0.2 = 0.3); XMATCH alone wouldn't
-        col, IF(ISNUMBER(raw), --(raw & ""), raw),
+        col, IF(ISNUMBER(raw), IFERROR(--(raw & ""), raw), raw),
         n, ROWS(col),
         idx, SEQUENCE(n),
     //  Each value's key is the position of its first occurrence. Sorting the positions by
