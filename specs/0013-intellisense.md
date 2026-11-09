@@ -18,7 +18,7 @@ file's header, and the hints read it from there (Tim, 6 Nov).
 
 ## What Tim sees
 
-With the Labs switch **Argument hints for library LAMBDAs** (`lambda-intellisense`) on:
+The hints are on by default (out of Labs on 9 Nov, #422: "Argument hints look awesome!!! That can come out of Labs." — Tim). The settings window (the ribbon's channel button) has a checkbox, **Argument hints for library LAMBDAs**, to turn them off. With them on:
 
 - **Choosing the name.** In Excel's autocomplete list, when a library LAMBDA is highlighted, a
   tooltip beside the list shows what it returns and what it does.
@@ -35,7 +35,7 @@ With the Labs switch **Argument hints for library LAMBDAs** (`lambda-intellisens
   brackets, as Excel shows them for native functions.
 - **Excel already shows a LAMBDA's parameter names** (found in the VM, 9 Nov): typing
   `=TLOOKUP(` shows Excel's own one-line tip, `TLOOKUP([Table], [Item], …)`, with the current
-  argument in bold, and it shows it with or without the switch. The hint's own signature line
+  argument in bold, and it shows it with or without the hints. The hint's own signature line
   sits just under it and is mostly hidden by it. What the hints add is everything under that
   line: what the function returns, what it does, and what the current argument means.
   Excel's tip shows every parameter in brackets, because the Help pattern made them all
@@ -43,7 +43,7 @@ With the Labs switch **Argument hints for library LAMBDAs** (`lambda-intellisens
 - The hints work for bare names (`TLOOKUP`) and prefixed ones (`lookup.TLOOKUP`). Proven in
   the cell; ExcelDna.IntelliSense also follows the formula bar, not yet driven in the VM.
 - Native functions are untouched: their hints are Excel's own.
-- With the switch off nothing changes and nothing is installed.
+- With the checkbox off nothing changes and nothing is installed.
 
 ## How it's built
 
@@ -70,16 +70,16 @@ With the Labs switch **Argument hints for library LAMBDAs** (`lambda-intellisens
   popup would), each time the popup's library list refreshes, and when a library is loaded with
   a new prefix. The file is written and `Refresh()` queued as a macro, never on the typing path.
 - **The file stays on disk** between sessions, so a server started by another add-in before
-  Lambda Boss's `AutoOpen` still finds it. It's deleted when the switch is turned off. If the
+  Lambda Boss's `AutoOpen` still finds it. It's deleted when the hints are turned off. If the
   XLL's folder isn't writable, the hints stay off and the log says why.
 - **First session beside another IntelliSense add-in.** If another add-in's server starts first, it
   looks for the file when Lambda Boss's XLL loads, before `AutoOpen` has written it, so the very
   first session shows no hints. From the second session on the file is already there.
 - **Custom prefixes are per session.** A prefix chosen at load is in the file until the next
   session's first write; loading the library again brings it back.
-- **Lifecycle.** `IntelliSenseServer.Install()` runs in `AutoOpen` when the switch is on, or
-  when the switch is turned on in the settings window; `Uninstall()` runs in `AutoClose` and
-  when the switch is turned off.
+- **Lifecycle.** `IntelliSenseServer.Install()` runs in `AutoOpen` when the hints are on, or
+  when they are turned on in the settings window; `Uninstall()` runs in `AutoClose` and
+  when they are turned off.
 
 ## Where the metadata lives
 
@@ -153,7 +153,7 @@ Tim's direction (6 Nov), done after the hints were proven:
   shows it), under `Returns:`.
 - **Examples aren't shown in hints.**
 - **`FN(TRUE)` help is gone** rather than kept beside the hints.
-- **The switch takes effect at once** in the settings window; no restart.
+- **The checkbox takes effect at once** in the settings window; no restart.
 
 ## Not in scope
 

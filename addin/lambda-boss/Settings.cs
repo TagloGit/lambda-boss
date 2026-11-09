@@ -89,6 +89,13 @@ public sealed class Settings
     public HashSet<string> LabsSwitchesOn { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    ///     Argument hints for library LAMBDAs (spec 0013). On by default; the settings window
+    ///     turns them off. A settings file written before the hints left Labs has no value here,
+    ///     so it reads as on.
+    /// </summary>
+    public bool ArgumentHints { get; set; } = true;
+
+    /// <summary>
     ///     Returns the current settings instance, loading from disk on first access.
     /// </summary>
     public static Settings Current => _current ??= Load();

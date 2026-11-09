@@ -38,18 +38,13 @@ public static class Labs
         "/State: edit a state step",
         "On a cell holding a SetVars/GetVar state step, /State adds, removes or renames a variable and keeps every line in step.");
 
-    public static readonly LabsSwitch LambdaIntelliSense = new(
-        "lambda-intellisense",
-        "Argument hints for library LAMBDAs",
-        "While you type a library LAMBDA, shows its arguments (the current one in bold), what each means and what it returns, like Excel does for its own functions.");
-
     public static readonly LabsSwitch CheckFormula = new(
         "check-formula",
         "Check Formula (Ctrl+Shift+K)",
         "Points at unmatched or misplaced brackets and unknown names in the active cell's formula, or in the formula being edited. Also a ribbon button.");
 
     public static readonly IReadOnlyList<LabsSwitch> All =
-        new[] { PopupChannelBadge, StateLetToLambda, StateScaffold, StateEditLambda, StateEdit, LambdaIntelliSense, CheckFormula };
+        new[] { PopupChannelBadge, StateLetToLambda, StateScaffold, StateEditLambda, StateEdit, CheckFormula };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

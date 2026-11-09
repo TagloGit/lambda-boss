@@ -229,6 +229,31 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
+    public void ArgumentHints_AreOnByDefault_AndNoLongerALabsSwitch()
+    {
+        Assert.True(new Settings().ArgumentHints);
+        Assert.DoesNotContain(Labs.All, s => s.Id == "lambda-intellisense");
+    }
+
+    [Fact]
+    public void ArgumentHints_OldSettingsFileWithoutTheValue_ReadsAsOn()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lb-settings-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{ \"LabsSwitchesOn\": [\"lambda-intellisense\"] }");
+            Assert.True(Settings.Load(path).ArgumentHints);
+
+            File.WriteAllText(path, "{ \"ArgumentHints\": false }");
+            Assert.False(Settings.Load(path).ArgumentHints);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void LabsSwitches_HaveUniqueIds()
     {
         Assert.Equal(Labs.All.Count, Labs.All.Select(s => s.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());

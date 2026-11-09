@@ -7,8 +7,8 @@ using LambdaBoss.Common;
 namespace LambdaBoss;
 
 /// <summary>
-///     Argument hints for library LAMBDAs (spec 0013), behind the <see cref="Labs.LambdaIntelliSense"/>
-///     switch. ExcelDna.IntelliSense draws the tooltips; it reads <c>&lt;xll&gt;.intellisense.xml</c>
+///     Argument hints for library LAMBDAs (spec 0013), on unless <see cref="Settings.ArgumentHints"/>
+///     is turned off. ExcelDna.IntelliSense draws the tooltips; it reads <c>&lt;xll&gt;.intellisense.xml</c>
 ///     beside every loaded Excel-DNA add-in, so this class keeps that file in step with
 ///     <see cref="Catalog"/> and asks the server to refresh. Nothing here runs while the user types.
 /// </summary>
@@ -20,7 +20,7 @@ internal static class LambdaHints
 
     internal static LambdaHintCatalog Catalog { get; } = new();
 
-    private static bool Enabled => Labs.IsOn(Labs.LambdaIntelliSense);
+    private static bool Enabled => Settings.Current.ArgumentHints;
 
     /// <summary>
     ///     Starts the hints if the switch is on. Must run in a macro context (AutoOpen or QueueAsMacro).
