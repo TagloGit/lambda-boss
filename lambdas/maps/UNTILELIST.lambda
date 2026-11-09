@@ -1,6 +1,17 @@
 /*  FUNCTION NAME:      UNTILELIST
     DESCRIPTION:*//**Splits a tiled map into equal tiles, extracts a list block from each, and stacks them into one long labelled table.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: label in column 1 then the list-block cells, one row per list row per tile
+    PARAMETERS:
+        map             (Required) The tiled grid: identical tiles repeated left-to-right, top-to-bottom (range or array), e.g. HSTACK('First:Last'!B2:D24).
+        tile            (Required) A range covering exactly one tile, e.g. 'Recipe'!B2:D24. Only its size is used; contents are ignored. An in-memory array also works when list is omitted.
+        list            (Optional) A sub-range of tile locating the list block, e.g. 'Recipe'!B9:D24. Must be a reference inside tile's rectangle; the window is taken from its position relative to tile. Omitted -> the whole tile.
+        labels          (Optional) One label per tile, left-to-right then top-to-bottom (row or column). Fewer labels than tiles reads only the first N tiles; more labels than tiles returns a message naming both counts. Omitted -> tiles numbered 1..N.
+        h_buffer        (Optional) Blank columns between horizontally adjacent tiles. Default 0.
+        v_buffer        (Optional) Blank rows between vertically adjacent tiles. Default 0.
+        blank_rows      (Optional) (0) drop rows where every list cell is blank [default], (1) keep all rows, (2) drop rows whose first list cell is blank. Blank means empty text or numeric 0 (3D collation like HSTACK('First:Last'!range) returns 0 for empty cells).
+        headers         (Optional) TRUE prepends the default header row {Label, Col1..ColW}; or pass a (width+1)-element array of custom column names. Default FALSE.
+    EXAMPLE:            =UNTILELIST({"a",1,"x",9;"b",2,"",0}, SEQUENCE(2,2)) -> 3x3 table: rows (1,a,1) (1,b,2) (2,x,9)
+    REVISIONS:          Date        Developer   Description
                         2026-08-13  Claude      Initial version
                         2026-08-13  Claude      tile/list become ranges: tile size read from the tile range, list window from its position within the tile (replaces {rows,cols} + {r1,c1,r2,c2} numeric args)
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)

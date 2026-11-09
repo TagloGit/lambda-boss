@@ -1,6 +1,14 @@
 /*  FUNCTION NAME:      REDUCEWHILE
     DESCRIPTION:*//**REDUCE that halts when continue returns FALSE. Continue is a pre-check: evaluated before each fn call with the pre-step accumulator and the incoming element, so the element that fails it is never consumed. fn and continue share one signature: LAMBDA(acc, current, i). Mechanically equivalent to REDUCEUNTIL with the predicate negated — pick whichever reads better for your condition.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the final accumulator, halting before the element on which continue returns FALSE
+    PARAMETERS:
+        seed            (Required) Initial accumulator. Number/boolean/array -> type-preserved scalar accumulation. Text (including "" / NewState() / a state-string) -> free-form text/state accumulation.
+        cases           (Required) Array to iterate over. Vertical or horizontal — flattened with TOCOL.
+        fn              (Required) LAMBDA(acc, current, i) returning the new accumulator. i is 1-based.
+        continue        (Required) LAMBDA(acc, current, i) returning TRUE to keep going, FALSE to halt — same signature as fn. Pre-check: acc is the accumulator so far; current is the incoming element, which is NOT consumed when continue returns FALSE.
+    EXAMPLE:            =REDUCEWHILE(0, {1,3,5,9,10}, LAMBDA(a, v, i, a + v), LAMBDA(a, v, i, v <= 9)) -> 18 (number — sums while elements stay ≤ 9; halts before consuming 10)
+    NOTE:               Mechanically equivalent to REDUCEUNTIL with the predicate negated. Use whichever phrasing reads more naturally.
+    REVISIONS:          Date        Developer   Description
                         2026-05-02  Claude      Initial version
                         2026-05-03  Claude      Accept horizontal or vertical cases (inherits from REDUCEUNTIL)
                         2026-05-04  Claude      Inherits new "user accumulator preserved by type" contract from REDUCEUNTIL.

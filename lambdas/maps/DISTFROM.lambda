@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      DISTFROM
     DESCRIPTION:*//**For every cell in a grid, returns the grid distance to the nearest cell whose value matches the target.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array of numbers, same shape as the grid: distance to the nearest matching cell
+    PARAMETERS:
+        grid            (Required) The 2-D range or array to scan.
+        target          (Required) Value to match by equality. Also accepts an array of values — a cell matches if it equals ANY of them (e.g. nearest wall OR door). Matching is case-insensitive (via XMATCH). When test is supplied, target is passed to it as the second argument instead.
+        metric          (Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line). Mirrors CELLDIST.
+        test            (Optional) A predicate LAMBDA(value, target) returning TRUE for a matching cell, e.g. LAMBDA(v,t, v>=t) for a threshold or LAMBDA(v,t, ISNUMBER(v)). Overrides the default equality / membership match.
+    EXAMPLE:            =DISTFROM({0,1,0;0,0,0}, 1) -> {1,0,1;2,1,2} (Manhattan distance to the nearest 1)
+    REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
 */
 DISTFROM = LAMBDA(

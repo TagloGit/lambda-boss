@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      SNAQUENCE
     DESCRIPTION:*//**Generates a 2D array filled with a sequence in a snake (boustrophedon) pattern, alternating direction each row.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: rows x columns grid of the sequence in snake order, alternate rows reversed
+    PARAMETERS:
+        rows            (Required) Number of rows in the output array.
+        columns         (Optional) Number of columns. Default 1.
+        start           (Optional) First number in the sequence. Default 1.
+        step            (Optional) Increment between successive numbers. Default 1.
+    EXAMPLE:            =SNAQUENCE(3, 4) -> {1,2,3,4;8,7,6,5;9,10,11,12}
+    REVISIONS:          Date        Developer   Description
                         2026-04-30  Tim Jacks   Initial version
 */
 SNAQUENCE = LAMBDA(

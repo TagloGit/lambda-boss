@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      ANY
     DESCRIPTION:*//**Returns TRUE if at least one item satisfies the predicate, else FALSE.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            TRUE/FALSE: whether any item passes the test
+    PARAMETERS:
+        items           (Required) Array or range of values to test.
+        predicate       (Optional) LAMBDA(v) returning TRUE/FALSE or 0/1. If omitted, items are assumed to already be boolean or 0/1 values.
+    EXAMPLE:            =ANY({"A","B","C"}, LAMBDA(c, c="B")) -> TRUE
+    REVISIONS:          Date        Developer   Description
                         2026-05-28  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */

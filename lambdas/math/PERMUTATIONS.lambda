@@ -1,6 +1,14 @@
 /*  FUNCTION NAME:      PERMUTATIONS
     DESCRIPTION:*//**Returns all ordered k-permutations of items, lexicographic order. With delim, joins each row into a single string.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: all ordered k-permutations of items, one per row (or one joined text each with delim)
+    PARAMETERS:
+        items           (Required) 1-D array of items (row or column).
+        k               (Optional) Permutation length. Without repetition, 1 ≤ k ≤ count(items); default = count(items). With repetition, any k ≥ 1.
+        delim           (Optional) If provided, TEXTJOIN each permutation row into a single string.
+        repetition      (Optional) FALSE (default) = distinct items. TRUE = allow repeats, giving the full n^k cartesian product.
+    EXAMPLE:            =PERMUTATIONS({"A";"B";"C"}, 2, "|") -> 6x1: {"A|B"; "A|C"; "B|A"; "B|C"; "C|A"; "C|B"}
+    NOTE:               Thin wrapper over PERMUTEINDICES — splits the unranking math from value lookup so callers can reuse indices.
+    REVISIONS:          Date        Developer   Description
                         2026-06-16  Claude      Initial version
                         2026-06-27  Claude      Add optional repetition flag (forwarded to PERMUTEINDICES)
 */

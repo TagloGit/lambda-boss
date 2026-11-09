@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      DIRDELTA
     DESCRIPTION:*//**Normalises any direction spelling - arrow glyph, compass code (NE, North-East), screen direction (UL, up, DownRight), or numeric packed delta - into the library convention: a packed position-delta (default), an arrow glyph, or a compass code.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            direction as packed delta (number), arrow glyph or compass code (text), per output; lifts
+    PARAMETERS:
+        dir             (Required) A direction in any spelling: an arrow glyph (↑ ↗ → ↘ ↓ ↙ ← ↖), a compass code (N, NE ... or North, NorthEast, North-East ...), a screen direction (U, D, L, R, UR, UL, DR, DL, reversed forms like RU, LD, or Up, Down, UpRight, Down-Left ...), or a numeric packed delta. Case-insensitive; hyphens and spaces are ignored. Unrecognised text returns #N/A. Also accepts an array of directions - result lifts element-wise.
+        output          (Optional) Output representation: (0) packed position-delta [default], (1) arrow glyph, (2) compass code (N, NE, ...). Numeric dir passes through unchanged in mode 0 (so non-compass deltas such as knight moves survive); modes 1-2 require one of the 8 compass directions.
+    EXAMPLE:            =DIRDELTA("north-east") -> -999999 (and =DIRDELTA("NE", 1) returns ↗)
+    REVISIONS:          Date        Developer   Description
                         2026-08-20  Claude      Initial version
                         2026-11-06  Claude      Deltas read from _dirAll, so they follow the _mult constant (1000000) instead of a literal 100000 packing (#380)
 */

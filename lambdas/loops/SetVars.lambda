@@ -1,6 +1,30 @@
 /*  FUNCTION NAME:      SetVars
     DESCRIPTION:*//**Builds a fresh state holding up to 10 named variables. Alternating positional pairs.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            state array: a new state holding the given name/value pairs
+    PARAMETERS:
+        n_1             (Required) First name and value pair.
+        v_1             (Required) First name and value pair.
+        n_2             (Optional) Up to nine more name/value pairs.
+        v_2             (Optional) Up to nine more name/value pairs.
+        n_3             (Optional) Up to nine more name/value pairs.
+        v_3             (Optional) Up to nine more name/value pairs.
+        n_4             (Optional) Up to nine more name/value pairs.
+        v_4             (Optional) Up to nine more name/value pairs.
+        n_5             (Optional) Up to nine more name/value pairs.
+        v_5             (Optional) Up to nine more name/value pairs.
+        n_6             (Optional) Up to nine more name/value pairs.
+        v_6             (Optional) Up to nine more name/value pairs.
+        n_7             (Optional) Up to nine more name/value pairs.
+        v_7             (Optional) Up to nine more name/value pairs.
+        n_8             (Optional) Up to nine more name/value pairs.
+        v_8             (Optional) Up to nine more name/value pairs.
+        n_9             (Optional) Up to nine more name/value pairs.
+        v_9             (Optional) Up to nine more name/value pairs.
+        n_10            (Optional) Up to nine more name/value pairs.
+        v_10            (Optional) Up to nine more name/value pairs.
+    EXAMPLE:            =SetVars("cur", 1, "best", 1, "ends", 1) -> state holding cur=1, best=1, ends=1
+    NOTE:               To partially update an existing state by name, use SetVar.
+    REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
                         2026-05-02  Claude      Extend pair capacity from 5 to 10
                         2026-11-06  Claude      Join all pairs in one TEXTJOIN; only a repeated name takes the SetVar chain (spec 0011 part 6)

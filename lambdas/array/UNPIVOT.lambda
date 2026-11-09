@@ -1,6 +1,14 @@
 /*  FUNCTION NAME:      UNPIVOT
     DESCRIPTION:*//**Reshapes a 2D crosstab into a tidy [keys..., Column, Value] table; supports multiple key columns and separately-supplied keys/labels.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: tidy table with one row per cell: key column(s), Column label, Value; optional header row
+    PARAMETERS:
+        valueGrid       (Required) The value matrix. When keyCols and/or colLabels are omitted, the embedded first column and/or first row carry the keys/labels (corner cell is ignored).
+        keyCols         (Optional) H x K identifier column(s), repeated against each value. Omitted -> keys come from valueGrid's first column.
+        colLabels       (Optional) 1 x W labels for the value columns; become the "Column" output values. Omitted -> labels come from valueGrid's first row.
+        dropBlanks      (Optional) If TRUE, omit rows whose value cell is blank/empty (sparse crosstabs). Default FALSE.
+        resultHeaders   (Optional) TRUE prepends a default header row (Key1..KeyK, Column, Value); or pass a (K+2)-element array of custom column names. Default FALSE.
+    EXAMPLE:            =UNPIVOT(D5:S26, B5:C26, D4:S4, , {"Jersey","Position","Team","Name"}) -> (H*W) x 4 tidy table with two key columns plus team-code label and player-name value
+    REVISIONS:          Date        Developer   Description
                         2026-06-02  Claude      Initial version
                         2026-06-17  Claude      Add keyCols/colLabels for multi-key + separately-supplied headings
 */

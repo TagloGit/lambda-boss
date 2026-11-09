@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      TFILTER
     DESCRIPTION:*//**Filters a table by a predicate mask and returns a table-object closure; call it with a header name to read that whole column across all kept rows.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            A closure: call result(Header) for the whole column under that header. Pass an array of headers (e.g. HSTACK("Person","City")) to project several columns at once.
+    PARAMETERS:
+        Table           (Required) Full table including its header row (e.g. tblData[#All]).
+        Keep            (Required) Boolean mask, one value per data row, selecting which rows to keep (e.g. tblData[Age] > 30).
+    EXAMPLE:            =LET(t, TFILTER(tblData[#All], tblData[Age] > 30), HSTACK(t("Person"), t("City"))) -> (Person and City columns for every row where Age > 30)
+    REVISIONS:          Date        Developer   Description
                         2026-06-08  Claude      Initial version
 */
 TFILTER = LAMBDA(

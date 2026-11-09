@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      WTF
     DESCRIPTION:*//**Spills the lyrics of the LAMBDA lament, one line per row. A joke function.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: column of the lyrics, one line per row (help text when ShowHelp is TRUE)
+    PARAMETERS:
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the lyrics.
+    EXAMPLE:            =WTF() -> 17-row spill of lyrics, one line per row
+    REVISIONS:          Date        Developer   Description
                         2026-08-15  Claude      Initial version
 */
 WTF = LAMBDA(

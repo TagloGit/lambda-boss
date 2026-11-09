@@ -1,6 +1,14 @@
 /*  FUNCTION NAME:      REPLACEARRAY
     DESCRIPTION:*//**Stamps a scalar, vector, or 2-D block into a host array at an anchor, preserving the host's shape (or growing it in expand mode).*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the host array with the block stamped in at the anchor (grown in expand mode)
+    PARAMETERS:
+        replace         (Required) Host array to write into.
+        with            (Required) Scalar, vector, or 2-D block to stamp in. Blank cells read as 0 (INDEX quirk).
+        at              (Optional) Anchor (top-left) as a single scalar: an A1 text address like "B2" or an encoded pos (row*_mult+col, e.g. from POSAT). Default = origin (top-left).
+        overflow        (Optional) Edge handling when the block runs past the host: (0) clip [default], (1) error, (2) expand, (3) wrap.
+        origin          (Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Defaults to the host's own top-left — inferred for a reference, (1,1) for an array.
+    EXAMPLE:            =REPLACEARRAY({1,2,3;4,5,6;7,8,9}, {0,0;0,0}, "B2") -> {1,2,3;4,0,0;7,0,0}
+    REVISIONS:          Date        Developer   Description
                         2026-06-13  Claude      Initial version
                         2026-06-16  Claude      Single-scalar anchor: at accepts an A1 address or an encoded pos (drop the col param); add explicit origin per the position convention
                         2026-06-16  Claude      origin is a workbook reference only (single cell or range; top-left used) — no text-address form, and no ISTEXT test that lifted on a 2-D range

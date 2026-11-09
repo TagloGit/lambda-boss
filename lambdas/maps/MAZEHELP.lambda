@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      MAZEHELP
     DESCRIPTION:*//**Returns the help table for MAZE. Split out of MAZE because the combined formula exceeded Excel's 8192-character limit on saved formulas.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: MAZE's help table (FUNCTION/DESCRIPTION/PARAMETERS/EXAMPLE rows)
+    PARAMETERS:
+        ShowHelp        (Optional) TRUE returns this help table instead of the MAZE help table.
+    EXAMPLE:            =MAZEHELP() -> The MAZE help table
+    REVISIONS:          Date        Developer   Description
                         2026-07-18  Claude      Initial version — MAZE help table extracted verbatim from MAZE so the MAZE formula fits Excel's 8192-character limit
                         2026-08-20  Claude      Cus_Dir help updated: entries may be any DIRDELTA spelling as well as numeric deltas
                         2026-11-09  Claude      Mazelam help states the array contract: called once per layer with one row per candidate edge; use * and + rather than AND/OR or other aggregators (#383)

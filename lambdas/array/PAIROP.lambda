@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      PAIROP
     DESCRIPTION:*//**Applies a binary op to consecutive pairs, collapsing each pair to one value. Disjoint (odd vs even) by default, or sliding (overlapping) pairs.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the op applied to each pair of neighbours, one value per pair (disjoint or sliding)
+    PARAMETERS:
+        array           (Required) Values to pair. A vector pairs along its length (either orientation); a 2D array pairs adjacent columns by default.
+        op              (Optional) LAMBDA(a, b) applied to each pair — a is the earlier element, b the later. Default LAMBDA(a, b, a - b).
+        byRow           (Optional) For 2D arrays, TRUE pairs adjacent rows instead of columns. Ignored for vectors. Default FALSE.
+        sliding         (Optional) TRUE pairs every overlapping neighbour (1,2),(2,3),(3,4)… instead of disjoint (1,2),(3,4)… Default FALSE.
+    EXAMPLE:            =PAIROP({10,3,8,5},,,TRUE) -> {7, -5, 3} (10-3, 3-8, 8-5)
+    REVISIONS:          Date        Developer   Description
                         2026-06-09  Claude      Initial version
                         2026-06-25  Claude      Add sliding (overlapping) pair mode
 */

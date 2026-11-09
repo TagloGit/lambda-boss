@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      MOSTOF
     DESCRIPTION:*//**Returns a value/tally table for an array, sorted largest tally first.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: two-column table of value and tally, largest tally first
+    PARAMETERS:
+        values          (Required) A 1D array of values to group and tally.
+        weights         (Optional) A 1D array, same length as values, aggregated per group. Omit to tally a simple count of occurrences.
+        function        (Optional) Aggregation applied per group. Defaults to ROWS (a count) when weights is omitted, or SUM when weights is supplied. Pass a built-in by name (SUM, AVERAGE, MAX, ...) to override.
+    EXAMPLE:            =MOSTOF({"A","A","B","B","B","C"}) -> B 3 / A 2 / C 1
+    REVISIONS:          Date        Developer   Description
                         2026-06-23  Claude      Initial version
                         2026-06-24  Claude      Pass explicit field_headers (0) to GROUPBY; blank arg threw #VALUE! on single-value input
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)

@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      MAXOCCUR
     DESCRIPTION:*//**Returns the value that occurs most often in an array.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the value that occurs most often in the array
+    PARAMETERS:
+        array           (Required) A 1D array of values to tally.
+    EXAMPLE:            =MAXOCCUR({"A","A","B","B","B","C"}) -> B
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
 */
 MAXOCCUR = LAMBDA(

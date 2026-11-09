@@ -1,6 +1,16 @@
 /*  FUNCTION NAME:      MAZELAM_DIAG
     DESCRIPTION:*//**Stock Mazelam for MAZE: diagonal steps cost 1.5x the destination cell's Cost; cardinal steps cost 1x. Produces realistic Euclidean-ish distance over a uniform map.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array of step costs (numbers): 1.5x destination cost on diagonals, 1x on cardinals
+    PARAMETERS:
+        costFrom        (Required) Cost at the source cell. (Unused by this Mazelam.)
+        costTo          (Required) Cost at the destination cell. Multiplied by 1.5 on diagonals.
+        cellFrom        (Required) A1 address of source cell (e.g. "C3"). Use ROWNUM/COLNUM to decode.
+        cellTo          (Required) A1 address of destination cell (e.g. "D4").
+        distFrom        (Required) Cumulative cost to reach source. (Unused by this Mazelam.)
+        dirDelta        (Required) This step's direction, encoded row*_mult+col. (Unused.)
+        prevDir         (Required) Previous direction. (Unused.)
+    EXAMPLE:            =MAZE("A1", myCosts, , , , , , MAZELAM_DIAG) -> Distance grid where diagonal moves cost 1.5x and cardinals cost 1x
+    REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-05-27  Claude      Signature changed: cellFrom/cellTo (A1 strings) replace rowFrom/colFrom/rowTo/colTo
 */

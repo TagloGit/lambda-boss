@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      ARROWMOVES
     DESCRIPTION:*//**Returns an 8x3 moves table combining DEFAULTARROWS and DEFAULTMOVEDELTAS: {arrow, dRow, dCol}.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            3-column array {arrow glyph, dRow, dCol}, 8 rows clockwise from north
+    PARAMETERS:
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the moves table.
+    EXAMPLE:            =ARROWMOVES() -> 8x3 array: col 1 is arrow char, cols 2-3 are dRow/dCol
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-08-20  Claude      Row order now follows the canonical clockwise-from-north order (inherited from DEFAULTARROWS / DEFAULTMOVEDELTAS)
 */

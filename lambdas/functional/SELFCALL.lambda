@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      SELFCALL
     DESCRIPTION:*//**Runs a recursive LAMBDA inline without name-manager setup: fn receives a clean self to call for recursion.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the result of running fn recursively, with fn given a self to call
+    PARAMETERS:
+        fn              (Required) LAMBDA(self, state, ...) whose body calls self(newState) to recurse - no double-self plumbing needed.
+        arg_1           (Required) Initial state.
+        arg_2           (Optional) Second state slot (e.g. visited + frontier). For more state, pack values with the Loops library's SetState/GetVarAt.
+    EXAMPLE:            =SELFCALL(LAMBDA(self, n, IF(n<=1, 1, n*self(n-1))), 5) -> 120
+    REVISIONS:          Date        Developer   Description
                         2026-07-22  Claude      Initial version
 */
 SELFCALL = LAMBDA(

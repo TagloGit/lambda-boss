@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      CHARRUNS
     DESCRIPTION:*//**Decomposes a string into an array of consecutive-character run groups. Grapheme-aware: a repeated multi-codepoint emoji forms one run.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: column of consecutive-character runs, in order
+    PARAMETERS:
+        input           (Required) A string to decompose into consecutive groups.
+        case_insensitive (Optional) (0) case-sensitive [default], (1) case-insensitive: runs group across case, e.g. "Aa" is one run (original casing preserved in output).
+    EXAMPLE:            =CHARRUNS("AABBBCA") -> {"AA";"BBB";"C";"A"}
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Tim Jacks   Initial version (as CONSECGROUPS)
                         2026-07-28  Claude      Renamed CONSECGROUPS -> CHARRUNS (run-family naming consolidation, #322)
                         2026-08-16  Claude      Add case_insensitive argument (0 = case-sensitive [default], 1 = case-insensitive), library convention

@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      SORT1D
     DESCRIPTION:*//**Sorts a 1D array, auto-orienting: a row stays a row, a column stays a column, a 2D grid flattens to one sorted column.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the values sorted; a row stays a row, a column or 2D grid gives one column
+    PARAMETERS:
+        array           (Required) A 1D row, 1D column, or 2D array. No by_col flag needed - orientation is detected from the shape, so one formula serves both row and column slices.
+        descending      (Optional) FALSE/omitted = ascending; TRUE = descending.
+    EXAMPLE:            =CONCAT(SORT1D({"C","A","B"})) -> ABC (a row in returns a row out)
+    REVISIONS:          Date        Developer   Description
                         2026-08-24  Claude      Initial version
 */
 SORT1D = LAMBDA(

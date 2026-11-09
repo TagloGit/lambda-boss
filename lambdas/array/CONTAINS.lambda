@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      CONTAINS
     DESCRIPTION:*//**Checks whether a value exists in a list or range.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            TRUE/FALSE: whether the value is in the list (lifts over an array of values)
+    PARAMETERS:
+        value           (Required) The value to search for.
+        list            (Required) A single row or column range to search within.
+    EXAMPLE:            =CONTAINS("Podcast", A1:A10) -> TRUE or FALSE
+    REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
 */
 CONTAINS = LAMBDA(

@@ -366,6 +366,7 @@ public static class ShowLambdaPopupCommand
                         }
 
                         Logger.Info($"Loaded {lambdas.Count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
+                        LambdaHints.OnLibraryLoaded(request.Prefix, lambdas.Select(l => l.Name));
 
                         // Build summary
                         var parts = new List<string>();

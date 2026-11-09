@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      BIMAP
     DESCRIPTION:*//**Applies a LAMBDA to each element of an array and tiles each element's array result into a block grid, padding ragged blocks with blanks.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: each element's array result tiled into a block grid, ragged blocks padded with blanks
+    PARAMETERS:
+        array           (Required) A 2D array.
+        function        (Required) A LAMBDA applied to each single element; may return a multi-cell array of any shape. Each result is laid into its own block, so an m-by-n input whose cells each return p-by-q yields an (m*p)-by-(n*q) grid. Ragged widths are padded to the per-column maximum and ragged heights to the per-row maximum, with blanks as filler.
+    EXAMPLE:            =BIMAP({1,2}, LAMBDA(x, x*{1;10})) -> {1,2;10,20}
+    REVISIONS:          Date        Developer   Description
                         2026-06-27  Claude      Initial version
 */
 BIMAP = LAMBDA(

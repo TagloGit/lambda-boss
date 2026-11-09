@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      PERMUTEINDICES
     DESCRIPTION:*//**Returns a P(n,k) by k matrix of ordered k-permutation indices in 1..n, lexicographic order.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: matrix of ordered k-permutation indices in 1..n, one per row, lexicographic
+    PARAMETERS:
+        n               (Required) Population size. Positive integer.
+        k               (Optional) Permutation length. Without repetition, 1 ≤ k ≤ n; default = n (full permutations). With repetition, any k ≥ 1.
+        repetition      (Optional) FALSE (default) = distinct indices. TRUE = allow repeats, giving the full n^k cartesian product.
+    EXAMPLE:            =PERMUTEINDICES(3) -> 6x3 matrix: {1,2,3; 1,3,2; 2,1,3; 2,3,1; 3,1,2; 3,2,1}
+    NOTE:               Pair with PERMUTATIONS for value lookup. Returns NA() when n<1, k<1, k>n (without repetition), or either argument is non-integer.
+    REVISIONS:          Date        Developer   Description
                         2026-06-16  Claude      Initial version
                         2026-06-27  Claude      Add optional repetition flag (full n^k cartesian product)
 */

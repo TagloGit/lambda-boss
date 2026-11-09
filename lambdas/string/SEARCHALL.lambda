@@ -1,6 +1,15 @@
 /*  FUNCTION NAME:      SEARCHALL
     DESCRIPTION:*//**Returns a spilled column of the 1-based start positions of every occurrence of a substring within a string.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: column of the 1-based start positions of every match (or if_not_found)
+    PARAMETERS:
+        inText          (Required) Text to search within.
+        searchFor       (Required) Substring to locate.
+        case_insensitive (Optional) (0) case-sensitive [default], (1) case-insensitive.
+        overlapping     (Optional) TRUE (default) counts overlapping matches; FALSE consumes searchFor after each hit (non-overlapping).
+        if_not_found    (Optional) Value returned when no match is found. Default #N/A.
+        position_unit   (Optional) (0) code points [default, matches SEARCH/FIND and is safe to feed into MID/REPLACE], (1) grapheme clusters - positions as characters are counted visually, where a multi-codepoint emoji counts as one.
+    EXAMPLE:            =SEARCHALL("KTTKBPK", "K") -> {1;4;7}
+    REVISIONS:          Date        Developer   Description
                         2026-07-09  Claude      Initial version
                         2026-08-16  Claude      Replace match_case (boolean, insensitive by default) with case_insensitive (0 = case-sensitive [default], 1 = case-insensitive), library convention
                         2026-08-17  Claude      Add position_unit argument (0 = code points [default, matches SEARCH/FIND], 1 = grapheme clusters)

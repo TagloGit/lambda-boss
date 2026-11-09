@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      ROWOF
     DESCRIPTION:*//**Extracts the row number from an encoded position integer (as produced by TOPOS).*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            number: the row number; lifts over arrays
+    PARAMETERS:
+        pos             (Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.
+        mult            (Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.
+    EXAMPLE:            =ROWOF(17000017) -> 17
+    REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Default mult is the _mult constant (1000000), was a literal 100000 (#380)
 */

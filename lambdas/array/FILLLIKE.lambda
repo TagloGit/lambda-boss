@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      FILLLIKE
     DESCRIPTION:*//**Constant array with the same shape as an existing array.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the value repeated in an array of the same shape as the input
+    PARAMETERS:
+        array           (Required) The array whose shape to copy. Contents are ignored; only ROWS x COLUMNS matter.
+        value           (Optional) The fill value - number, text, or boolean. Default 1.
+    EXAMPLE:            =FILLLIKE({1,2;3,4}) -> 2-row x 2-col array of 1s
+    REVISIONS:          Date        Developer   Description
                         2026-07-16  Claude      Initial version
 */
 FILLLIKE = LAMBDA(

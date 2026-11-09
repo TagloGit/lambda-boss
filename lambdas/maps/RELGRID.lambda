@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      RELGRID
     DESCRIPTION:*//**Returns an array the same shape as grid where each cell holds a chosen geometric measure relative to an anchor cell (row/col deltas, diagonals, distances, quadrants).*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array of numbers, same shape as the grid: the chosen measure relative to the anchor
+    PARAMETERS:
+        grid            (Required) Range or array defining the shape; values are ignored. Sign convention: +drow is down, +dcol is right.
+        anchor          (Required) Cell address as a string (e.g. "E5"), or a cell containing one. The cell all measures are relative to; anchor cell = 0 for measures 0-6.
+        measure         (Optional) (0) drow [default], (1) dcol, (2) drow+dcol - constant along up-right anti-diagonals, (3) drow-dcol - constant along down-right diagonals, (4) Manhattan distance, (5) Chebyshev distance, (6) Euclidean distance, (7) quadrant id from the row/col axes through anchor - clockwise from north: 1 NE, 2 SE, 3 SW, 4 NW, 0 on an axis, (8) quadrant id from the diagonal axes through anchor - clockwise from north: 1 N, 2 E, 3 S, 4 W, 0 on a diagonal.
+        origin          (Optional) Top-left anchor frame as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position, so anchor is read in that frame. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.
+    EXAMPLE:            =SUM(FILTER(TOCOL(mp), TOCOL(RELGRID(mp, "E5", 4)) <= 3)) -> Sum of mp values within Manhattan distance 3 of E5 (a diamond)
+    REVISIONS:          Date        Developer   Description
                         2026-08-24  Claude      Initial version (#350)
                         2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS) (#380)
 */

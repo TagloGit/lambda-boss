@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      INSERTAT
     DESCRIPTION:*//**Inserts a scalar value into a 1-D array at the given 1-based position, lengthening the array by 1. Orientation auto-detected from the array shape.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the 1-D array with the value inserted at pos, one longer, same orientation
+    PARAMETERS:
+        array           (Required) 1-D array. Treated as a row when ROWS(array)=1 and COLUMNS(array)>1; otherwise as a column.
+        value           (Required) Scalar to insert at pos.
+        pos             (Required) 1-based position. pos=1 prepends; pos=n+1 appends.
+    EXAMPLE:            =INSERTAT({"a";"b";"c"}, "X", 2) -> {"a";"X";"b";"c"}
+    REVISIONS:          Date        Developer   Description
                         2026-05-04  Claude      Initial version
 */
 INSERTAT = LAMBDA(

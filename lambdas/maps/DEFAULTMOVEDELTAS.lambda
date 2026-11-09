@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      DEFAULTMOVEDELTAS
     DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for the 8 compass directions, in canonical clockwise order from north, matching DEFAULTARROWS.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            2-column array {dRow, dCol}, 8 rows clockwise from north
+    PARAMETERS:
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the delta grid.
+    EXAMPLE:            =DEFAULTMOVEDELTAS() -> 8x2 array: up, up-right, right, down-right, down, down-left, left, up-left
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of DEFAULTARROWS)
 */

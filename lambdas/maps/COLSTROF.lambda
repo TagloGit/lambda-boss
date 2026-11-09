@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      COLSTROF
     DESCRIPTION:*//**Extracts the column letters (e.g. "AB") from an encoded position integer (as produced by TOPOS).*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            text: the column letters (e.g. AB); lifts over arrays
+    PARAMETERS:
+        pos             (Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.
+        mult            (Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos. Columns past XFD work (16385 gives XFE).
+    EXAMPLE:            =COLSTROF(12000028) -> AB
+    REVISIONS:          Date        Developer   Description
                         2026-08-28  Claude      Initial version
                         2026-11-06  Claude      Default mult is the _mult constant (1000000); letters via CELLAT, so columns past XFD work (was ADDRESS) (#380)
 */

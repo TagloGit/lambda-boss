@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      SCAN1
     DESCRIPTION:*//**Seedless inclusive scan: uses the first element as the seed, so out[1] equals the first element. No identity value to invent.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: running accumulator seeded by the first element, same orientation as the input
+    PARAMETERS:
+        array           (Required) 1-D values; the first element is the seed. Vertical or horizontal; the result matches the orientation.
+        fn              (Required) LAMBDA(acc, current) returning the new accumulator.
+    EXAMPLE:            =SCAN1({3;7;2;9}, MAX) -> {3;7;7;9} (running maximum)
+    REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */

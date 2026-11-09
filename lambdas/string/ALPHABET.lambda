@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      ALPHABET
     DESCRIPTION:*//**Returns a spilled array of letters: all 26, just vowels, or just consonants, in upper or lower case.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: column of the letters: all 26, vowels or consonants, upper or lower case
+    PARAMETERS:
+        Case            (Optional) 0 = uppercase [default], 1 = lowercase.
+        Subset          (Optional) 0 = all 26 letters [default], 1 = vowels (5), 2 = consonants (21).
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the letters.
+    EXAMPLE:            =ALPHABET(1, 1) -> {a;e;i;o;u}
+    REVISIONS:          Date        Developer   Description
                         2026-06-28  Claude      Initial version
 */
 ALPHABET = LAMBDA(

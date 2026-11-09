@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      DEFAULTARROWS
     DESCRIPTION:*//**Returns the 8 default compass arrow characters as a vertical array, in canonical clockwise order from north, matching DEFAULTMOVEDELTAS.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            8x1 array of arrow glyphs (text), clockwise from north
+    PARAMETERS:
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the arrow list.
+    EXAMPLE:            =DEFAULTARROWS() -> {↑;↗;→;↘;↓;↙;←;↖}
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-08-20  Claude      Canonical order is now clockwise from north (= SORT order of the glyphs)
 */

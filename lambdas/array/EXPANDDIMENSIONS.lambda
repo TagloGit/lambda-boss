@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      EXPANDDIMENSIONS
     DESCRIPTION:*//**Constructs all possible combinations (Cartesian product) of supplied dimensions.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: every combination of the dimensions, one row each (or one delimited text column)
+    PARAMETERS:
+        Dimensions      (Required) A 2D array where each column is one dimension (combined via HSTACK).
+        CycleFromLeft   (Optional) If TRUE, the leftmost dimension cycles every row. Default FALSE.
+        Delimiter       (Optional) Text separator to combine results into a single delimited column.
+    EXAMPLE:            =EXPANDDIMENSIONS(HSTACK({"Apples";"Oranges"},{"Small";"Medium";"Large"})) -> 6-row x 2-col array of all combinations
+    REVISIONS:          Date        Developer   Description
                         2026-04-14  Tim Jacks   Initial version
                         2026-04-29  Claude      Vectorize index math (REDUCE+HSTACK over per-cell MAKEARRAY)
 */

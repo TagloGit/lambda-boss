@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      UNQ
     DESCRIPTION:*//**Returns the unique values of an array, auto-orienting: a row stays a row, a column stays a column, a 2D grid flattens to one column.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the distinct values; a row stays a row, a column or 2D grid gives one column
+    PARAMETERS:
+        array           (Required) A 1D row, 1D column, or 2D array. A row returns a row of distinct values, a column returns a column, and a 2D grid flattens (row by row) into a single column of distinct values.
+    EXAMPLE:            =UNQ({1,2,2,3}) -> {1,2,3}
+    REVISIONS:          Date        Developer   Description
                         2026-06-26  Claude      Initial version
 */
 UNQ = LAMBDA(

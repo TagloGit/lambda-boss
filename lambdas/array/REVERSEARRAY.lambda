@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      REVERSEARRAY
     DESCRIPTION:*//**Reverses elements of a 1D or 2D array along the specified axis.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the input reversed along the chosen axis (both by default), same shape
+    PARAMETERS:
+        array           (Required) A 1D or 2D array to reverse.
+        axis            (Optional) 0 = both axes (default), 1 = horizontal (reverse columns), 2 = vertical (reverse rows).
+    EXAMPLE:            =REVERSEARRAY({1,2;3,4}) -> {4,3;2,1}
+    REVISIONS:          Date        Developer   Description
                         2026-04-16  Claude      Initial version
                         2026-05-10  Claude      Fix 2D arrays + add axis parameter
 */

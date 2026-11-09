@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      MINOF
     DESCRIPTION:*//**Returns the label corresponding to the smallest value in a range.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the label paired with the smallest value
+    PARAMETERS:
+        values          (Required) A 1D range of numeric values.
+        labels          (Required) A 1D range of labels, same size as values.
+    EXAMPLE:            =MINOF({33,6,21,12}, {"Harry","Evie","Hugh","James"}) -> Evie
+    REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
 */
 MINOF = LAMBDA(

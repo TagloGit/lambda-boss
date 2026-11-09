@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      SCANLEAD
     DESCRIPTION:*//**Exclusive (lead) scan: emits the accumulator entering each step. out[1] is seed; out[i] is fn folded over the first i-1 elements. The clean replacement for the PREV(x, FALSE) + SCAN offset trick.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: accumulator entering each step, starting with seed, same orientation as the input
+    PARAMETERS:
+        seed            (Required) Starting accumulator — becomes the first emitted value.
+        array           (Required) 1-D values to fold over. Vertical or horizontal; the result matches the orientation.
+        fn              (Required) LAMBDA(acc, current) returning the new accumulator.
+    EXAMPLE:            =SCANLEAD(0, {10;20;30}, LAMBDA(a, v, a + v)) -> {0;10;30} (running total BEFORE each element)
+    REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */

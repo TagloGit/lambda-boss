@@ -6,6 +6,7 @@
     referenced assemblies automatically. List each runtime dependency
     explicitly so it gets embedded into the packed XLL.
   -->
+  <Reference Path="ExcelDna.IntelliSense.dll" Pack="true" />
   <Reference Path="GongSolutions.WPF.DragDrop.dll" Pack="true" />
   <Reference Path="Microsoft.Bcl.AsyncInterfaces.dll" Pack="true" />
   <Reference Path="Microsoft.Bcl.HashCode.dll" Pack="true" />

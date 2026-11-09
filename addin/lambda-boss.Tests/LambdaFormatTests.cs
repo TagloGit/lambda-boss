@@ -120,6 +120,44 @@ public class LambdaFormatTests
 
     [Theory]
     [MemberData(nameof(LambdaFiles))]
+    public void HeaderSaysWhatItReturns(string relativePath)
+    {
+        // The argument hints show RETURNS under the signature (spec 0013).
+        var doc = LambdaDocParser.Parse(ReadFile(relativePath));
+
+        Assert.False(string.IsNullOrWhiteSpace(doc.Returns), $"{relativePath}: RETURNS is empty");
+        Assert.NotEqual("TODO", doc.Returns);
+    }
+
+    [Theory]
+    [MemberData(nameof(LambdaFiles))]
+    public void HeaderDocumentsEveryParameterInOrder(string relativePath)
+    {
+        // One PARAMETERS line per LAMBDA parameter, same names, same order, each marked
+        // (Required) or (Optional): the hints read them (spec 0013).
+        var content = ReadFile(relativePath);
+        var (_, formula) = LambdaParser.Parse(content);
+        var parameters = LambdaSignatureParser.Parse(formula).Parameters;
+
+        Assert.Equal(parameters, LambdaDocParser.DocumentedParameterNames(content));
+    }
+
+    [Theory]
+    [MemberData(nameof(LambdaFiles))]
+    public void HeaderMetadataStaysInsideItsComment(string relativePath)
+    {
+        // A "*/" inside the metadata would end the comment early and leak text into the formula.
+        var content = ReadFile(relativePath);
+        var returnsAt = content.IndexOf("RETURNS:", StringComparison.Ordinal);
+        var revisionsAt = content.IndexOf("REVISIONS:", StringComparison.Ordinal);
+
+        Assert.True(returnsAt >= 0 && revisionsAt > returnsAt,
+            $"{relativePath}: RETURNS must come before REVISIONS in the header");
+        Assert.DoesNotContain("*/", content[returnsAt..revisionsAt]);
+    }
+
+    [Theory]
+    [MemberData(nameof(LambdaFiles))]
     public void NoTabCharacters(string relativePath)
     {
         var content = ReadFile(relativePath);

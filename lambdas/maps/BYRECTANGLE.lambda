@@ -1,6 +1,14 @@
 /*  FUNCTION NAME:      BYRECTANGLE
     DESCRIPTION:*//**Applies an operation (default SUM) to every rows x cols sub-rectangle of grid, as sliding windows or non-overlapping tiles.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array of fn results, one per window (sliding: (R-rows+1)x(C-cols+1); tiles: ROUNDUP blocks)
+    PARAMETERS:
+        grid            (Required) Grid to window over - an array or a real range. When a real range is passed, operation receives true sub-range references, so reference-only functions like SUBTOTAL work.
+        rows            (Optional) Window height. Default 1.
+        cols            (Optional) Window width. Default 1.
+        operation       (Optional) LAMBDA(area) returning a scalar, applied to each sub-rectangle. Built-ins can be passed by name (e.g. MAX). Default SUM.
+        mode            (Optional) (0) sliding [default] - every overlapping window, output is (R-rows+1) x (C-cols+1); (1) tiles - non-overlapping blocks from the top-left, output is ROUNDUP(R/rows) x ROUNDUP(C/cols) with partial edge tiles included.
+    EXAMPLE:            =BYRECTANGLE(SEQUENCE(3,3), 2, 2) -> {12,16;24,28}
+    REVISIONS:          Date        Developer   Description
                         2026-08-20  Claude      Initial version
 */
 BYRECTANGLE = LAMBDA(

@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      BIROW
     DESCRIPTION:*//**Applies a LAMBDA to each row of an array, preserving the full array shape.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the input with the function applied to each row, same shape as the input
+    PARAMETERS:
+        array           (Required) A 2D array.
+        function        (Required) A LAMBDA that takes a single row and returns an array of the same size.
+    EXAMPLE:            =BIROW({1,2,3;4,5,6}, LAMBDA(r, r*2)) -> {2,4,6;8,10,12}
+    REVISIONS:          Date        Developer   Description
                         2026-04-13  Tim Jacks   Initial version
 */
 BIROW = LAMBDA(

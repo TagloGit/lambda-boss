@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      THUNK
     DESCRIPTION:*//**Wraps a value in a zero-argument lambda (a "thunk") so it is returned only when the result is called with ().*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            LAMBDA: a zero-argument function that returns x when called with ()
+    PARAMETERS:
+        x               (Required) The value to defer. Captured by closure and returned when the thunk is called.
+    EXAMPLE:            =THUNK(42)() -> 42 (call the thunk with () to retrieve the value; =THUNK(42) on its own returns a function, shown as #CALC!)
+    REVISIONS:          Date        Developer   Description
                         2026-06-17  Claude      Initial version
 */
 THUNK = LAMBDA(

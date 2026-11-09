@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      CIRCPOS
     DESCRIPTION:*//**Position on a circular track of n items after advancing moves steps from start.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            number: position on a circular track of n after advancing moves steps; lifts over arrays
+    PARAMETERS:
+        moves           (Required) Number of steps to advance. Negative = backward. Scalar or array.
+        n               (Required) Size of the circular track (number of positions).
+        start           (Optional) Starting position. Default 1 (or 0 if zero_based=TRUE). Scalar or array.
+        zero_based      (Optional) If TRUE, uses 0-based indexing (0 to n-1). Default FALSE.
+    EXAMPLE:            =CIRCPOS(35, 19) -> 17
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
 */
 CIRCPOS = LAMBDA(

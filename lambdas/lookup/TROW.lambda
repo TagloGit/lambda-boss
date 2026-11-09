@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      TROW
     DESCRIPTION:*//**Looks up one row in a table (first match) and returns a row-object closure; call it with a header name to read that column's value.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            A closure: call result(Header) to read the scalar value under that header for the matched row.
+    PARAMETERS:
+        Table           (Required) Full table including its header row (e.g. tblData[#All]).
+        Item            (Required) Value to find in LookupCol to identify the row. First match wins; duplicates are silently ignored.
+        LookupCol       (Required) Column to search for Item (e.g. tblData[Person]), excluding headers.
+    EXAMPLE:            =LET(tim, TROW(tblData[#All], "Tim", tblData[Person]), tim("Age")) -> 42
+    REVISIONS:          Date        Developer   Description
                         2026-06-08  Claude      Initial version
 */
 TROW = LAMBDA(

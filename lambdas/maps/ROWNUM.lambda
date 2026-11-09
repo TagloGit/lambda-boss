@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      ROWNUM
     DESCRIPTION:*//**Returns the row number of an A1-style cell address passed as text. Like ROW() but accepts strings.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            number: the row number of the address; lifts over arrays
+    PARAMETERS:
+        address         (Required) A1 address text (e.g. "Q17"), or an array/range of such. Any number of column letters ("XFE1", "ABCD9") and rows past 1048576. Sheet prefixes and $ anchors are ignored; for a range only its first cell is used. Text that is not an address returns TOPOS's "can't read" message. Result lifts element-wise.
+    EXAMPLE:            =ROWNUM("Q17") -> 17
+    REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Decode at the _mult constant via TOPOS (was a hard-coded 100000); any number of column letters, rows past 1048576; TOPOS's "can't read" message passes through instead of #N/A (#380)
 */

@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      NewState
     DESCRIPTION:*//**Returns an empty state for use as a REDUCE accumulator with SetVar/GetVar.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            state array: an empty state (help text when ShowHelp is TRUE)
+    PARAMETERS:
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the empty state.
+    EXAMPLE:            =SetVar(NewState(), "x", 5) -> state string holding x=5
+    NOTE:               Reads from an empty state return #N/A. For REDUCE, seed with SetState(...) populating the slots iteration 1 will read.
+    REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
 */
 NewState = LAMBDA(

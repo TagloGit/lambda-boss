@@ -1,6 +1,10 @@
 /*  FUNCTION NAME:      KNIGHTDELTAS
     DESCRIPTION:*//**Returns the 8x2 {dRow, dCol} delta grid for a chess knight's L-shaped moves, ordered clockwise from NNE.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            2-column array {dRow, dCol}, 8 knight moves clockwise from NNE
+    PARAMETERS:
+        ShowHelp        (Optional) Pass TRUE to show this help text instead of the delta grid.
+    EXAMPLE:            =KNIGHTDELTAS() -> 8x2 array: NNE, ENE, ESE, SSE, SSW, WSW, WNW, NNW knight moves
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
 */
 KNIGHTDELTAS = LAMBDA(

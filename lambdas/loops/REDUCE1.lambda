@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      REDUCE1
     DESCRIPTION:*//**Seedless reduce: folds fn over the list starting from its first element. The identity-less reduction (gcd, max, merge, join) with no seed to invent.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: fn folded over the array starting from its first element
+    PARAMETERS:
+        array           (Required) 1-D values; the first element is the seed. Vertical or horizontal.
+        fn              (Required) LAMBDA(acc, current) returning the new accumulator.
+    EXAMPLE:            =REDUCE1({12;18;30}, GCD) -> 6 (gcd of the whole list)
+    REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
 */

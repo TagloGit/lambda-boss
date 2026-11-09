@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      MAXOF
     DESCRIPTION:*//**Returns the label corresponding to the largest value in a range.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the label paired with the largest value
+    PARAMETERS:
+        values          (Required) A 1D range of numeric values.
+        labels          (Required) A 1D range of labels, same size as values.
+        sentinel        (Optional) Lookup value for approximate match. Default: 10^10.
+    EXAMPLE:            =MAXOF({33,6,21,12}, {"Harry","Evie","Hugh","James"}) -> Harry
+    REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
 */
 MAXOF = LAMBDA(

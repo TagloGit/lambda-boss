@@ -145,6 +145,7 @@ internal static class ImportAllLambdasCommand
                     LambdaLoader.InjectLambda(name, formula, comment);
                 }
                 librariesImported++;
+                LambdaHints.OnLibraryLoaded(prefix, lambdas.Select(l => l.Name));
             }
             catch (Exception ex)
             {

@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      NTH
     DESCRIPTION:*//**Returns the Nth element of an array (flattened), with negative N counting from the end.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the Nth element of the flattened array, negative N from the end; an array of N lifts
+    PARAMETERS:
+        arr             (Required) Any array or range — 1D, 2D, vertical, or horizontal.
+        n               (Required) 1-based position into the flattened array; negative counts from the end (-1 = last). Also accepts an array of indices — result lifts element-wise.
+    EXAMPLE:            =NTH({"a","b","c"}, -1) -> "c"
+    REVISIONS:          Date        Developer   Description
                         2026-04-21  Claude      Initial version
                         2026-05-14  Claude      Array-lift on n via dispatcher: MAP over multi-index input, otherwise scalar body unchanged
 */

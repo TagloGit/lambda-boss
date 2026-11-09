@@ -72,6 +72,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
 
             ExcelAsyncUtil.QueueAsMacro(DeferredInit);
 
+            // Argument hints (Labs, spec 0013). AutoOpen is a macro context, which Install needs.
+            LambdaHints.StartIfEnabled();
+            ShowLambdaPopupCommand.SettingsSaved += LambdaHints.ApplySwitch;
+
             var assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
                                   ?? new Version(0, 0, 0);
             UpdateChecker.Initialize(
@@ -92,7 +96,14 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         }
     }
 
-    public void AutoClose() => Dispose();
+    public void AutoClose()
+    {
+        // The IntelliSense server must be uninstalled before the add-in unloads, or Excel
+        // crashes. Its file stays for the next session.
+        ShowLambdaPopupCommand.SettingsSaved -= LambdaHints.ApplySwitch;
+        LambdaHints.Stop(removeFile: false);
+        Dispose();
+    }
 
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {

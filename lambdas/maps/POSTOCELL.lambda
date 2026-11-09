@@ -1,6 +1,11 @@
 /*  FUNCTION NAME:      POSTOCELL
     DESCRIPTION:*//**Decodes an integer position (from TOPOS) back to an A1-style cell address string.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            address (text) of the cell the position encodes; lifts over arrays
+    PARAMETERS:
+        pos             (Required) Integer position to decode (row*mult+col). Columns past XFD and rows past 1048576 decode too (e.g. XFE5). Also accepts an array/range of positions — result lifts element-wise.
+        mult            (Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.
+    EXAMPLE:            =POSTOCELL(5000005) -> E5
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
                         2026-05-14  Claude      Default mult bumped from 1000 to 100000 to match CELLTOPOS
                         2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-cell input, otherwise scalar body unchanged

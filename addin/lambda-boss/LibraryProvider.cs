@@ -217,6 +217,10 @@ public class LibraryProvider
         _libraries = libraries;
         _lambdas = lambdas;
 
+        // Argument hints (spec 0013) know every LAMBDA the popup does. A no-op unless the
+        // hints are running.
+        LambdaHints.OnLibrariesRefreshed(lambdas);
+
         Logger.Info($"LibraryProvider: Loaded {libraries.Count} libraries, {lambdas.Count} lambdas");
     }
 
@@ -236,6 +240,16 @@ public class LibraryProvider
                     ? ConstParser.Parse(content)
                     : LambdaParser.Parse(content);
                 var description = LambdaParser.ExtractDescription(content) ?? "";
+                LambdaDoc? doc = null;
+                if (!isConstant)
+                {
+                    try { doc = LambdaDocParser.Parse(content); }
+                    catch (Exception docEx)
+                    {
+                        Logger.Error($"LibraryProvider: No hint metadata for '{fileName}' in {libLabel}", docEx);
+                    }
+                }
+
                 lambdas.Add(new LambdaInfo
                 {
                     Name = name,
@@ -243,7 +257,8 @@ public class LibraryProvider
                     LibraryInfo = info,
                     FileName = fileName,
                     Description = description,
-                    IsConstant = isConstant
+                    IsConstant = isConstant,
+                    Doc = doc
                 });
             }
             catch (Exception ex)
@@ -294,5 +309,11 @@ public sealed class LambdaInfo
     ///     Whether this entry is a named-range constant (.const) rather than a LAMBDA.
     /// </summary>
     public bool IsConstant { get; init; }
+
+    /// <summary>
+    ///     The header metadata the argument hints show (spec 0013). Null for constants and
+    ///     for files whose header can't be read.
+    /// </summary>
+    public LambdaDoc? Doc { get; init; }
 }
 

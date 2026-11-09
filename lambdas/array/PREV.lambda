@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      PREV
     DESCRIPTION:*//**For each element of a 1-D array, returns its previous neighbour as a same-size, same-orientation array; the leading n slots are padded. Pad-only sugar over SHIFT.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: each element's previous neighbour, same shape; leading slots filled
+    PARAMETERS:
+        array           (Required) A 1-D array/range. Treated as a row when ROWS(array)=1 and COLUMNS(array)>1; otherwise as a column.
+        fill            (Optional) Boundary fill value for the exposed leading slots. Default blank "".
+        n               (Optional) Shift distance. Default 1 = immediate neighbour.
+    EXAMPLE:            =PREV({6,3,6,1,2}) -> {"",6,3,6,1}
+    REVISIONS:          Date        Developer   Description
                         2026-06-20  Claude      Initial version
 */
 PREV = LAMBDA(

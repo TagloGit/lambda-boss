@@ -1,6 +1,12 @@
 /*  FUNCTION NAME:      GRIDSTRINGS
     DESCRIPTION:*//**Returns every scan line through a grid as a string - rows, columns, diagonals, anti-diagonals, in any of the 8 reading directions - stacked as one column.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            column of text, one string per scan line through the grid
+    PARAMETERS:
+        grid            (Required) 2D array or range of single characters (or short strings). A 100x100 grid with all 8 directions yields ~1200 strings - cheap for Excel, but sizeable.
+        directions      (Optional) Which reading directions to include - scalar or array, in any DIRDELTA spelling (arrow glyphs, compass codes, screen directions, packed deltas). Each token is a reading direction: → = rows left-to-right, ← = rows right-to-left, ↓ = columns top-down, ↑ = columns bottom-up, ↘ / ↖ = diagonals, ↙ / ↗ = anti-diagonals. Default: the four forward families → ↓ ↘ ↙. Pass _dirAll for all 8. Output blocks are stacked in canonical clockwise order (↑ ↗ → ↘ ↓ ↙ ← ↖) filtered to the selection.
+        include_reverse (Optional) TRUE = also include the opposite of each selected direction (duplicates removed), so the default selection covers all 8 readings. Default FALSE.
+    EXAMPLE:            =GRIDSTRINGS({"A","B";"C","D"}) -> {"AB";"CD";"C";"AD";"B";"AC";"BD";"A";"BC";"D"}
+    REVISIONS:          Date        Developer   Description
                         2026-08-24  Claude      Initial version
                         2026-11-06  Claude      Deltas read from _mult / _dirAll instead of literal 100000-packed values (#380)
 */

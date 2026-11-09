@@ -1,6 +1,14 @@
 /*  FUNCTION NAME:      SHIFT
     DESCRIPTION:*//**Displaces a 1-D or 2-D array by dRows down and dCols right, returning an array of the same shape; exposed edges are padded with fill or wrapped toroidally.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the input displaced by dRows/dCols, same shape; exposed edges padded or wrapped
+    PARAMETERS:
+        array           (Required) A 1-D or 2-D array/range to displace.
+        dRows           (Required) Vertical displacement. Positive = data moves down (each cell pulls from the row above). Default 0.
+        dCols           (Required) Horizontal displacement. Positive = data moves right (each cell pulls from the column to its left). Default 0.
+        mode            (Optional) Edge handling: (0) pad [default] fills exposed edges with fill; (1) wrap rolls values off one edge back in at the opposite edge (toroidal).
+        fill            (Optional) Value for exposed edge cells in pad mode. Default blank "".
+    EXAMPLE:            =SHIFT({6,3,6,1,2}, 0, 1) -> {"",6,3,6,1}
+    REVISIONS:          Date        Developer   Description
                         2026-06-20  Claude      Initial version
 */
 SHIFT = LAMBDA(

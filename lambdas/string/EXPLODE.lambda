@@ -1,6 +1,13 @@
 /*  FUNCTION NAME:      EXPLODE
     DESCRIPTION:*//**Splits a string into an array of character chunks of a given size, optionally as sliding windows. Grapheme-aware: a multi-codepoint emoji counts as one character and is never split.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: column (or row) of character chunks, optionally sliding windows
+    PARAMETERS:
+        text            (Required) The string to split.
+        chunk_size      (Optional) Number of characters per chunk. Default: 1.
+        horizontal      (Optional) If TRUE, returns a horizontal row array. Default: FALSE.
+        sliding         (Optional) If TRUE, the window start shifts by 1 each time instead of by chunk_size, returning only full windows. Text shorter than chunk_size returns the whole string. Default: FALSE.
+    EXAMPLE:            =EXPLODE("abcdef", 3, , TRUE) -> {"abc";"bcd";"cde";"def"}
+    REVISIONS:          Date        Developer   Description
                         2026-04-12  Tim Jacks   Initial version
                         2026-08-16  Claude      Add sliding window option
                         2026-08-17  Claude      Grapheme-aware: chunk by \X clusters so multi-codepoint emoji (skin tones, ZWJ, flags, combining marks) are never split
