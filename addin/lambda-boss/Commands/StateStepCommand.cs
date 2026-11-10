@@ -167,6 +167,7 @@ internal static class StateStepCommand
             {
                 // The cell stays as it was, so the name goes back too.
                 if (previous != null) LambdaLoader.InjectLambda(result.DefinitionName!, previous);
+                else if (result.DefinitionName != null) sheet.Parent.Names.Item(result.DefinitionName).Delete();
                 throw;
             }
 

@@ -179,6 +179,9 @@ public static class StateEngines
     public const string SeedSlot = "_seed";
     public const string InputsSlot = "_inputs";
 
+    // Names the fold's other arguments take while the edit engine works on them.
+    private const string OtherLine = "_arg_";
+
     private const int MaxFormulaLength = 8192;
     private const string NotAStep =
         "The active cell holds a formula that isn't a state step, so /State can't edit it. Pick an empty cell for a new one.";
@@ -417,10 +420,21 @@ public static class StateEngines
             refusal = ArrayRefusal;
             return null;
         }
-        if (step.InputBinding == null) return null;
-
         var byName = parsed.Bindings.ToDictionary(b => b.Name, b => b.RhsText, StringComparer.OrdinalIgnoreCase);
-        var drop = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { step.StateBinding.Name, step.InputBinding.Name };
+        var slotted = byName.ContainsKey(SeedSlot) && byName.ContainsKey(InputsSlot);
+
+        // In the form /State writes, the input is the line after the state that indexes _inputs,
+        // whether or not the rules read it yet.
+        var stateIndex = parsed.Bindings.ToList().FindIndex(b => ReferenceEquals(b, step.StateBinding));
+        var inputBinding = slotted
+            ? parsed.Bindings.Skip(stateIndex + 1).FirstOrDefault(b =>
+                StateStepParser.NamesIn(b.RhsText, new HashSet<string>(StringComparer.OrdinalIgnoreCase) { InputsSlot }).Count > 0)
+              ?? step.InputBinding
+            : step.InputBinding;
+        if (inputBinding == null) return null;
+        step = step with { InputBinding = inputBinding };
+
+        var drop = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { step.StateBinding.Name, inputBinding.Name };
 
         var seedText = step.StateBinding.RhsText;
         string? inputsText = null;
@@ -482,7 +496,7 @@ public static class StateEngines
         for (var i = 0; i < stateAt; i++)
         {
             var b = parsed.Bindings[i];
-            if (drop.Contains(b.Name) || !b.Name.StartsWith("_", StringComparison.Ordinal) || b.Name.Length < 2) continue;
+            if (!slotted || drop.Contains(b.Name) || !b.Name.StartsWith("_", StringComparison.Ordinal) || b.Name.Length < 2) continue;
             others.Add((b.Name[1..], b.RhsText));
             drop.Add(b.Name);
         }
@@ -604,13 +618,17 @@ public static class StateEngines
     ///     The step as a 0011 state step: the state parameter bound to the seed, the input and any
     ///     extra parameter bound to a stand-in, then the rules. <see cref="StateEdit" /> works on this.
     /// </summary>
-    internal static string Intermediate(StateEngine engine)
+    internal static string Intermediate(StateEngine engine, bool withOtherArguments = false)
     {
         var lines = new List<(string Name, string Value)>
         {
             (engine.Parameters[0], engine.Seed.Length == 0 ? StateEngine.Placeholder : engine.Seed)
         };
         lines.AddRange(engine.Parameters.Skip(1).Select(p => (p, "0")));
+
+        // A stop or continue reads the state's keys too, so a rename reaches it and a remove sees it.
+        if (withOtherArguments)
+            lines.AddRange(engine.OtherArguments.Select(o => (OtherLine + o.Name, o.Text)));
         lines.AddRange(engine.Bindings);
 
         var sb = new StringBuilder("=");
@@ -627,7 +645,7 @@ public static class StateEngines
                 : r)
             .ToList();
 
-        var result = StateEdit.Apply(Intermediate(engine), rowsWithPlaceholders);
+        var result = StateEdit.Apply(Intermediate(engine, withOtherArguments: true), rowsWithPlaceholders);
         if (result.Formula == null)
         {
             error = result.Error;
@@ -646,7 +664,12 @@ public static class StateEngines
         {
             // A seed that was left out (FOLDROWS) stays out: there is nothing to add keys to.
             Seed = engine.Seed.Length == 0 ? "" : seed,
-            Bindings = parsed.Bindings.Skip(engine.Parameters.Count).Select(b => (b.Name, b.RhsText)).ToList(),
+            OtherArguments = engine.OtherArguments
+                .Select(o => (o.Name, parsed.Bindings.FirstOrDefault(b => b.Name == OtherLine + o.Name)?.RhsText ?? o.Text))
+                .ToList(),
+            Bindings = parsed.Bindings.Skip(engine.Parameters.Count)
+                .Where(b => !b.Name.StartsWith(OtherLine, StringComparison.Ordinal))
+                .Select(b => (b.Name, b.RhsText)).ToList(),
             Output = parsed.Body
         };
     }

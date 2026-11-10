@@ -677,4 +677,49 @@ public class StateEngineTests
         Assert.Null(result.Formula);
         Assert.Contains("_inputs", result.Error);
     }
+
+    [Fact]
+    public void FoldRowsWithoutASeed_UnfoldsAndComesBack()
+    {
+        var book = new Book();
+        var rows = "=FOLDROWS(G1:G5, LAMBDA(acc, r, i, LET(p, GetVar(acc, \"p\"), nextP, p + i, SetVars(\"p\", nextP))))";
+
+        var let = book.Save(rows, null, null);
+        var back = book.Save(let, FoldRows, null);
+
+        Assert.StartsWith("=FOLDROWS(G1:G5, LAMBDA(acc, r, i, LET(", back);
+        Assert.Equal(back, book.Save(book.Save(back, null, null), FoldRows, null));
+    }
+
+    [Fact]
+    public void Rename_ReachesTheStopArgument()
+    {
+        var book = new Book();
+        var until = Robot.Replace("=REDUCE(", "=REDUCEUNTIL(").Replace("LAMBDA(a, v,", "LAMBDA(a, v, i,")
+            .Replace(")))", ")), LAMBDA(a, v, i, GetVar(a, \"b\") = 0))");
+
+        var renamed = book.Save(until, ReduceUntil, null, r => Rename(r, "b", "bat"));
+        Assert.EndsWith("LAMBDA(a, v, i, GetVar(a, \"bat\") = 0))", renamed);
+
+        var let = book.Save(until, null, null);
+        Assert.Contains("_stop, LAMBDA(a, v, i, GetVar(a, \"bat\") = 0)", book.Save(let, null, null, r => Rename(r, "b", "bat")));
+    }
+
+    [Fact]
+    public void AnUnderscoreLine_InAHandWrittenStep_IsARule()
+    {
+        var book = new Book();
+        var step = Lines(
+            "=LET(",
+            "    _n, 5,",
+            "    a, SetVars(\"p\", 0),",
+            "    v, H270,",
+            "    p, GetVar(a, \"p\"),",
+            "    nextP, p + v + _n,",
+            "    SetVars(\"p\", nextP)",
+            ")");
+
+        var folded = book.Save(step, StateFoldKind.Reduce, null);
+        Assert.Contains("    _n, 5,", folded);
+    }
 }
