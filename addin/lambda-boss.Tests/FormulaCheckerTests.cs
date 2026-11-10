@@ -581,4 +581,84 @@ public class FormulaCheckerTests
             Assert.True(sw.ElapsedMilliseconds < 1000, $"{sw.ElapsedMilliseconds} ms");
         }
     }
+    // ------------------------------------------------------------ fixes (#426)
+
+    [Fact]
+    public void Tims_example_has_one_bracket_fix_and_no_fix_all()
+    {
+        const string f = "=LET(start, A1,\n moves, B1:B10,\n step, LAMBDA(acc, m, acc + m),\n" +
+                         " final, REDUCE(start, TAKE(moves, 5)), step),\n final)";
+        var fixes = FormulaFixes.For(Check(f));
+        var fix = Assert.IsType<FormulaFix>(fixes.Bracket);
+        Assert.Equal(f.Remove(f.IndexOf("5)),", StringComparison.Ordinal) + 2, 1), fix.After);
+        Assert.Equal(f.IndexOf("5)),", StringComparison.Ordinal) + 2, fix.Caret);
+        Assert.Null(fixes.All); // one fix only
+        Assert.Empty(fixes.ByProblem);
+
+        var (start, end) = fix.PreviewLine;
+        Assert.Equal(" final, REDUCE(start, TAKE(moves, 5), step),", fix.After[start..end]);
+    }
+
+    [Fact]
+    public void Several_bracket_edits_get_no_button()
+    {
+        const string f = "=LET(start,K9,pos,MOVECELL(start,$E$3,SEQUENCE(30)),nonIce,GRIDLOOKUP(mp,pos,1)<>\"I\"),nonIce)";
+        Assert.Null(FormulaFixes.For(Check(f)).Bracket);
+    }
+
+    [Fact]
+    public void A_name_typo_gets_one_button_per_candidate()
+    {
+        const string f = "=PAIROP(TEXTSPLIT(G248,,\"-\"),LAMBDA(a,b,XLOOKUP(a&\"-\"&b,fareIds,fare)))";
+        var r = Check(f);
+        var fixes = FormulaFixes.For(r);
+        var p = r.Problems.Single(p => p.Kind == FormulaProblemKind.UnknownName);
+        var fix = Assert.Single(fixes.ByProblem[p]);
+        Assert.Equal("fare → fares", fix.Label);
+        Assert.Equal(f.Replace(",fare)", ",fares)"), fix.After);
+        Assert.Equal(f.IndexOf(",fare)", StringComparison.Ordinal) + 6, fix.Caret);
+    }
+
+    [Fact]
+    public void Two_candidates_mean_two_buttons_and_no_fix_all()
+    {
+        var ctx = Workbook();
+        ctx.DefinedNames.Add("rate");
+        ctx.DefinedNames.Add("rats");
+        var r = Check("=rat+1", ctx);
+        var p = Assert.Single(r.Problems.Where(p => !p.IsNote));
+        Assert.Equal(new[] { "rate", "rats" }, p.Replacements.OrderBy(x => x));
+        var fixes = FormulaFixes.For(r);
+        Assert.Equal(2, fixes.ByProblem[p].Count);
+        Assert.Null(fixes.All);
+    }
+
+    [Fact]
+    public void Fix_all_applies_the_bracket_and_every_name()
+    {
+        // A stray ) and a typo, each with exactly one fix.
+        const string f = "=XLOOKUP(\"a\",fareIds,fare))";
+        var r = Check(f);
+        var fixes = FormulaFixes.For(r);
+        var all = Assert.IsType<FormulaFix>(fixes.All);
+        Assert.Equal("=XLOOKUP(\"a\",fareIds,fares)", all.After);
+        Assert.Empty(FormulaChecker.Check(all.After, Workbook()).Problems.Where(p => !p.IsNote));
+    }
+
+    [Fact]
+    public void Run_together_names_get_no_button()
+    {
+        const string f = "=LET(guess,G113,cells,TOCOPOSTOCELL(TOPOS(guess)),cells)";
+        var r = Check(f);
+        Assert.Empty(FormulaFixes.For(r).ByProblem);
+    }
+
+    [Fact]
+    public void Table_column_fix_is_escaped()
+    {
+        var r = Check("=tblFares[Odd '[x'] coll]");
+        var p = Assert.Single(r.Problems.Where(p => !p.IsNote));
+        Assert.Equal("Odd '[x'] col", Assert.Single(p.Replacements));
+        Assert.Equal("=tblFares[Odd '[x'] col]", FormulaFixes.For(r).ByProblem[p][0].After);
+    }
 }

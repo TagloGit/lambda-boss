@@ -58,6 +58,12 @@ internal sealed record FormulaProblem(
     /// <summary>The bracket repair (issue #426) clears it: it is a consequence of the bracket, not a problem of its own.</summary>
     public bool IsConsequence { get; init; }
 
+    /// <summary>
+    ///     Text that could replace this problem's span (a mistyped name's nearest valid names, as
+    ///     they'd be written), nearest first; at most 3. Empty when there's no safe one-span fix.
+    /// </summary>
+    public IReadOnlyList<string> Replacements { get; init; } = Array.Empty<string>();
+
     /// <summary>A bracket, comma, shape or argument-count fault: the kind one misplaced <c>)</c> can cause.</summary>
     public bool IsStructural => Kind is FormulaProblemKind.ExtraCloseBracket or FormulaProblemKind.UnclosedBracket
                                     or FormulaProblemKind.CommaOutsideFunction or FormulaProblemKind.BadShape
@@ -1042,7 +1048,9 @@ internal static class FormulaChecker
                 ? candidates.Concat(ExcelFunctions.All)
                 : candidates.Concat(_names.Tables.Keys);
 
-            var nearest = Nearest(name, candidates);
+            var candidateList = candidates.ToList();
+            var nearest = Nearest(name, candidateList);
+            var replacements = nearest is null ? Array.Empty<string>() : NearestAll(name, candidateList);
             string message;
             if (nearest is not null)
             {
@@ -1063,7 +1071,8 @@ internal static class FormulaChecker
             if (!_names.NamesRead)
                 message += " (The workbook's names haven't been read yet, so it may be a defined name: check a cell once to read them.)";
 
-            Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start, tok.Text.Length, message, nearest));
+            Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start, tok.Text.Length, message, nearest)
+                { Replacements = replacements });
         }
 
         /// <summary>
@@ -1123,10 +1132,12 @@ internal static class FormulaChecker
                                      || _names.DefinedNames.Contains($"{sheet}!{rest}"))
                 return;
 
-            var nearest = Nearest(rest, _names.DefinedNames.Select(n => n[(n.LastIndexOf('!') + 1)..]));
+            var pool = _names.DefinedNames.Select(n => n[(n.LastIndexOf('!') + 1)..]).ToList();
+            var nearest = Nearest(rest, pool);
             Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start + bang + 1, rest.Length,
                 $"{rest} isn't a cell or a defined name on {sheetPart}." +
-                (nearest is null ? "" : $" Did you mean {nearest}?"), nearest));
+                (nearest is null ? "" : $" Did you mean {nearest}?"), nearest)
+                { Replacements = nearest is null ? Array.Empty<string>() : NearestAll(rest, pool) });
         }
 
         private void ResolveStructured(FormulaToken tok)
@@ -1148,7 +1159,8 @@ internal static class FormulaChecker
                     return;
                 var near = Nearest(tableText, _names.Tables.Keys);
                 Add(new FormulaProblem(FormulaProblemKind.UnknownReference, tok.Start + (bang + 1), tableText.Length,
-                    $"There's no table called {tableText}." + (near is null ? "" : $" Did you mean {near}?"), near));
+                    $"There's no table called {tableText}." + (near is null ? "" : $" Did you mean {near}?"), near)
+                    { Replacements = near is null ? Array.Empty<string>() : NearestAll(tableText, _names.Tables.Keys) });
                 return;
             }
 
@@ -1159,7 +1171,12 @@ internal static class FormulaChecker
                 var near = Nearest(col, columns);
                 Add(new FormulaProblem(FormulaProblemKind.UnknownReference, tok.Start + offset, rawLength,
                     $"Table {tableText} has no column called {col}." + (near is null ? "" : $" Did you mean {near}?"),
-                    near));
+                    near)
+                    {
+                        Replacements = near is null
+                            ? Array.Empty<string>()
+                            : NearestAll(col, columns).Select(EscapeColumn).ToList()
+                    });
             }
         }
     }
@@ -1293,6 +1310,39 @@ internal static class FormulaChecker
         }
 
         return bestDistance <= limit ? best : null;
+    }
+
+    /// <summary>
+    ///     Every candidate close enough to be a typo of <paramref name="name"/> (the limits of
+    ///     <see cref="Nearest"/>), nearest first, distinct, at most <paramref name="max"/>.
+    /// </summary>
+    internal static IReadOnlyList<string> NearestAll(string name, IEnumerable<string> candidates, int max = 3)
+    {
+        var limit = name.Length <= 4 ? 1 : name.Length <= 8 ? 2 : 3;
+        var upper = name.ToUpperInvariant();
+        return candidates
+            .Where(c => Math.Abs(c.Length - name.Length) <= limit && !c.Equals(name, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(c => (Name: c, D: Distance(upper, c.ToUpperInvariant(), limit)))
+            .Where(x => x.D <= limit)
+            .OrderBy(x => x.D)
+            .Take(max)
+            .Select(x => x.Name)
+            .ToList();
+    }
+
+    /// <summary>A table column name as written inside <c>[ ]</c>: <c>' [ ] #</c> escaped with <c>'</c>.</summary>
+    internal static string EscapeColumn(string column)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var ch in column)
+        {
+            if (ch is '\'' or '[' or ']' or '#')
+                sb.Append('\'');
+            sb.Append(ch);
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>Optimal-string-alignment distance; returns more than <paramref name="cap"/> early when it can.</summary>

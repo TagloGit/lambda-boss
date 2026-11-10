@@ -41,32 +41,56 @@ public static class CheckFormulaCommand
             }
 
             dynamic app = ExcelDnaUtil.Application;
-            var excelHwnd = new IntPtr(app.Hwnd);
             var cell = app.ActiveCell;
             if (cell == null)
                 return;
 
-            string? formula = null;
-            if ((bool)cell.HasFormula)
-                formula = (string)cell.Formula2;
-            else if (cell.Value2 is string s && s.StartsWith("=", StringComparison.Ordinal))
-                formula = s; // a formula entered as text ('=...) to get past Excel's refusal
-
-            var address = SafeAddress(cell);
-            if (formula is null)
-            {
-                CheckFormulaWindow.Show(excelHwnd, null, $"{address} has no formula to check.", null);
-                return;
-            }
-
-            var names = WorkbookNames.Capture(app);
-            var result = FormulaChecker.Check(formula, names);
-            result = ConfirmWithExcel(app, result, names);
-            CheckFormulaWindow.Show(excelHwnd, result, address, null);
+            CheckCell(app, cell, null);
         }
         catch (Exception ex)
         {
             Logger.Error("CheckFormula", ex);
+        }
+    }
+
+    /// <summary>
+    ///     Checks one cell and shows the window. Macro context. <paramref name="target"/> is the
+    ///     cell's fix target when known (after a fix), else it's worked out here.
+    /// </summary>
+    internal static void CheckCell(dynamic app, dynamic cell, FixTarget? target)
+    {
+        var excelHwnd = new IntPtr(app.Hwnd);
+        string? formula = null;
+        if ((bool)cell.HasFormula)
+            formula = (string)cell.Formula2;
+        else if (cell.Value2 is string s && s.StartsWith("=", StringComparison.Ordinal))
+            formula = s; // a formula entered as text ('=...) to get past Excel's refusal
+
+        var address = SafeAddress(cell);
+        if (formula is null)
+        {
+            CheckFormulaWindow.Show(excelHwnd, null, $"{address} has no formula to check.", null, null);
+            return;
+        }
+
+        target ??= (FixTarget?)CellTarget(excelHwnd, cell);
+        var names = WorkbookNames.Capture(app);
+        var result = FormulaChecker.Check(formula, names);
+        result = ConfirmWithExcel(app, result, names);
+        CheckFormulaWindow.Show(excelHwnd, result, address, null, target);
+    }
+
+    private static FixTarget? CellTarget(IntPtr excelHwnd, dynamic cell)
+    {
+        try
+        {
+            dynamic ws = cell.Worksheet;
+            return new FixTarget(false, excelHwnd, (string)ws.Parent.Name, (string)ws.Name, (string)cell.Address(false, false));
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("CheckFormula/CellTarget", ex);
+            return null;
         }
     }
 
@@ -158,7 +182,8 @@ public static class CheckFormulaCommand
                 try
                 {
                     var result = FormulaChecker.Check(text, names);
-                    CheckFormulaWindow.ShowOnWindowThread(excelHwnd, result, "Formula being edited", names.TakenUtc);
+                    CheckFormulaWindow.ShowOnWindowThread(excelHwnd, result, "Formula being edited", names.TakenUtc,
+                        new FixTarget(true, excelHwnd, null, null, null));
                 }
                 catch (Exception ex)
                 {
