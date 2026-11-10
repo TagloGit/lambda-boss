@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net462;net6.0-windows</TargetFrameworks>
+		<UseWindowsForms>true</UseWindowsForms>
+		<UseWPF>true</UseWPF>
+
+		<SignAssembly>true</SignAssembly>
+		<AssemblyOriginatorKeyFile>..\assets\exceldna.snk</AssemblyOriginatorKeyFile>
+
+		<AssemblyTitle>Excel-DNA IntelliSense</AssemblyTitle>
+		<Description>IntelliSense service for Microsoft Excel</Description>
+		<Product>ExcelDna.IntelliSense.Tools</Product>
+		<Copyright>Copyright © Excel-DNA Contributors 2013-2024</Copyright>
+	</PropertyGroup>
+
+	<ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
+		<Reference Include="System.Windows.Forms" />
+		<Reference Include="WindowsBase" />
+		<Reference Include="Microsoft.CSharp" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="ExcelDna.Interop" />
+		<PackageReference Include="ExcelDna.Integration" />
+	</ItemGroup>
+
+</Project>
