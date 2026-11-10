@@ -120,3 +120,24 @@ tests:
       - [1]
       - ["one"]
       - [True]
+
+  # #442: an error shows in place: as its text inside a list, as itself alone
+  - name: a list holding an error shows each element, the error as its text
+    args: ['=SetVars("p", "A1", "ns", IF({TRUE;FALSE;TRUE}, {"B1";"";"A2"}, #VALUE!))', "=TRUE"]
+    expected: [["p", "ns"], ["A1", "[B1, #VALUE!, A2]"]]
+
+  - name: a scalar error shows as the error
+    args: ['=SetVars("a", 1, "e", 1/0)', "=TRUE"]
+    expected: [["a", "e"], [1, -2146826281]]
+
+  - name: SCAN rows with an error variable stay readable
+    args: ['=SCAN(SetVars("e", 0), {1;2}, LAMBDA(a, v, SetVars("e", IF(v = 1, NA(), v))))', "=TRUE"]
+    expected: [["e"], [-2146826246], [2]]
+
+  - name: SCAN of Tim's neighbour list keeps the whole table (#442)
+    args: ['=SCAN(SetVars("p", "A1"), {1;2}, LAMBDA(a, v, SetVars("p", "B" & v, "ns", IF({TRUE;FALSE}, {"B1";""}, #VALUE!))))', "=TRUE"]
+    expected: [["p", "ns"], ["B1", "[B1, #VALUE!]"], ["B2", "[B1, #VALUE!]"]]
+
+  - name: REDUCE state with an error array
+    args: ['=REDUCE(SetVars("ns", {1;2}, "n", 0), {1;2;3}, LAMBDA(a, v, SetVars("ns", GetVar(a, "ns")/{1;0}, "n", GetVar(a, "n") + 1)))', "=TRUE"]
+    expected: [["ns", "n"], ["[1, #DIV/0!]", 3]]

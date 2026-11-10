@@ -56,3 +56,12 @@ tests:
   - name: tags for text and boolean values
     args: ["t", "hi", "f", "=FALSE"]
     expected: "t\x1Et\x1Ehi\x1Ff\x1Eb\x1EFALSE"
+
+  # #442: an error is tagged e; each element carries its type, an error is CHAR(28) and its ERROR.TYPE
+  - name: an error in an array stays on the one-TEXTJOIN path
+    args: ["a", "=1", "ns", "={1;2}/{1;0}"]
+    expected: "a\x1En\x1E1\x1Fns\x1Ee\x1En1\x1D\x1C2"
+
+  - name: a scalar error is encoded
+    args: ["e", "=NA()"]
+    expected: "e\x1Ee\x1E\x1C7"
