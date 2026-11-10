@@ -32,7 +32,24 @@ public record StateStep(
     LetBinding StateBinding,
     LetBinding? InputBinding,
     IReadOnlyList<StateVariable> Variables,
-    string Output);
+    string Output)
+{
+    /// <summary>
+    ///     Where the step's SetVars output sits when it isn't the bare body: inside a guard
+    ///     (<c>IF(cond, a, SetVars(…))</c>), or in a binding the body names (<c>out</c>). Null for
+    ///     an array step.
+    /// </summary>
+    internal StepOutput? Site { get; init; }
+}
+
+/// <summary>
+///     The output call of a state step and where it was found (spec 0015, "Step outputs").
+///     <paramref name="Text" /> is the expression <paramref name="Call" />'s positions index: the
+///     LET body, or the RHS of binding <paramref name="BindingIndex" />. <paramref name="Guards" />
+///     are the bare names on the other side of each guard on the way, which must be the state.
+/// </summary>
+internal sealed record StepOutput(
+    FunctionCallNode Call, string Text, int? BindingIndex, IReadOnlyList<string> Guards);
 
 /// <summary>
 ///     Recognises state steps from formula text alone (spec 0011, "Shared engine"). Part 3 reads
@@ -177,7 +194,68 @@ public static class StateStepParser
 
     private static StateStep? Recognise(ParsedLet parsed)
     {
-        if (FormulaParser.Parse(parsed.Body).Root is not FunctionCallNode output) return null;
+        foreach (var candidate in OutputCandidates(parsed))
+            if (Recognise(parsed, candidate) is { } step)
+                return step;
+        return null;
+    }
+
+    private static bool IsOutputCall(FunctionCallNode call) =>
+        IsNamed(call.Name, "SetVars") || IsNamed(call.Name, "SetVar")
+        || IsNamed(call.Name, "HSTACK") || IsNamed(call.Name, "VSTACK");
+
+    /// <summary>
+    ///     The ways the body can hold the step's output, the plain one first: the body is the
+    ///     call; the body is a name bound to it; the body is a guard <c>IF(cond, a, output)</c>
+    ///     (or the branches swapped, nested too) whose other branch is a bare name. Only SetVars
+    ///     outputs are read through a name or a guard.
+    /// </summary>
+    internal static IEnumerable<StepOutput> OutputCandidates(ParsedLet parsed) =>
+        Resolve(parsed, parsed.Body, null, FormulaParser.Parse(parsed.Body).Root, new List<string>(), 0);
+
+    private static IEnumerable<StepOutput> Resolve(
+        ParsedLet parsed, string text, int? bindingIndex, FormulaNode node, List<string> guards, int depth)
+    {
+        if (depth > 4) yield break;
+
+        switch (node)
+        {
+            case FunctionCallNode call when IsOutputCall(call):
+                if (depth == 0 || IsNamed(call.Name, "SetVars") || IsNamed(call.Name, "SetVar"))
+                    yield return new StepOutput(call, text, bindingIndex, guards);
+                break;
+
+            case LeafNode { TokenType: FormulaTokenType.Name } leaf:
+                var at = IndexOfBinding(parsed, leaf.Text);
+                if (at < 0 || (bindingIndex != null && at >= bindingIndex)) break;
+                var rhs = parsed.Bindings[at].RhsText;
+                foreach (var found in Resolve(parsed, rhs, at, FormulaParser.Parse(rhs).Root, guards, depth + 1))
+                    yield return found;
+                break;
+
+            case FunctionCallNode iff when IsNamed(iff.Name, "IF") && iff.Arguments.Count == 3:
+                for (var branch = 1; branch <= 2; branch++)
+                {
+                    if (NameLeaf(iff.Arguments[3 - branch]) is not { } other) continue;
+                    var inner = new List<string>(guards) { other };
+                    foreach (var found in Resolve(parsed, text, bindingIndex, iff.Arguments[branch], inner, depth + 1))
+                        yield return found;
+                }
+                break;
+        }
+    }
+
+    private static int IndexOfBinding(ParsedLet parsed, string name)
+    {
+        for (var i = 0; i < parsed.Bindings.Count; i++)
+            if (string.Equals(parsed.Bindings[i].Name, name, StringComparison.OrdinalIgnoreCase))
+                return i;
+        return -1;
+    }
+
+    private static StateStep? Recognise(ParsedLet parsed, StepOutput site)
+    {
+        var output = site.Call;
 
         StateFamily family;
         if (IsNamed(output.Name, "SetVars") || IsNamed(output.Name, "SetVar"))
@@ -219,6 +297,12 @@ public static class StateStepParser
             .Key;
         var stateReads = reads.Where(r => r.Source == state).ToList();
 
+        // A name or a guard is read only when it's the output, not the state itself, and every
+        // guard's other branch hands back the state.
+        if (site.BindingIndex == state) return null;
+        if (site.Guards.Any(g => !string.Equals(g, bindings[state].Name, StringComparison.OrdinalIgnoreCase)))
+            return null;
+
         var pairs = family == StateFamily.SetVars
             ? ReadOutputPairs(output, bindings[state].Name)
             : output.Arguments
@@ -238,7 +322,7 @@ public static class StateStepParser
         // INDEX plus HSTACK is everyday Excel. Without an input its rules use, it's a lookup.
         if (family == StateFamily.Array && input == null) return null;
 
-        return new StateStep(family, bindings[state], input, variables, parsed.Body);
+        return new StateStep(family, bindings[state], input, variables, parsed.Body) { Site = site };
     }
 
     private static List<StateVariable> BuildVariables(

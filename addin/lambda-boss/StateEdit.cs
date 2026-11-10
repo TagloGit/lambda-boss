@@ -41,7 +41,7 @@ public static class StateEdit
             if (step.Family == StateFamily.Array)
                 return Refused("Edit state works on SetVars steps. This one holds its state in an array.");
 
-            if (ReadChain(Root(parsed.Body)).Base != null)
+            if (step.Site == null || ReadChain(step.Site.Call).Base != null)
                 return Refused("Edit state needs a SetVars output. This step's output is a SetVar chain on the state.");
 
             var sample = ReadChain(Root(step.StateBinding.RhsText)).Pairs;
@@ -344,6 +344,9 @@ public static class StateEdit
     /// <summary>A state step taken apart, so several edits can apply before anything is written.</summary>
     private sealed class EditableStep
     {
+        // Stands for the output call inside the text around it while that text is rewritten.
+        private const string Hole = "_stateoutput_";
+
         private readonly string? _inputName;
         private readonly List<Line> _lines;
         private readonly Chain _output;
@@ -351,6 +354,9 @@ public static class StateEdit
         private readonly Chain _sample;
         private readonly string _stateName;
         private readonly List<Variable> _variables;
+        private readonly Line? _siteLine;
+        private string? _bodyText;
+        private string _template;
         private bool _sampleChanged;
 
         public EditableStep(string formula)
@@ -368,11 +374,17 @@ public static class StateEdit
                 .Select(v => new Variable(v.Key, v.GetVarLine?.Name, v.NextLine?.Name))
                 .ToList();
 
-            var outputCall = Root(parsed.Body);
-            _output = ReadChain(outputCall);
+            // The SetVars call may sit in a guard or in a binding the body names (spec 0015,
+            // "Step outputs"): the text around it is kept as a template and only the call is rewritten.
+            var site = step.Site ?? throw new FormatException("The cell isn't a SetVars step.");
+            _siteLine = site.BindingIndex is { } at ? _lines[at] : null;
+            _bodyText = _siteLine == null ? null : parsed.Body;
+            _template = site.Text[..site.Call.Start] + Hole + site.Text[site.Call.End..];
+
+            _output = ReadChain(site.Call);
             if (_output.Base != null) throw new FormatException("The output is a SetVar chain on the state.");
 
-            var name = ((FunctionCallNode)outputCall).Name;
+            var name = site.Call.Name;
             _prefix = name[..(name.LastIndexOf('.') + 1)];
 
             _sample = ReadChain(Root(step.StateBinding.RhsText));
@@ -421,9 +433,13 @@ public static class StateEdit
             foreach (var line in _lines.Where(l => !deleted.Contains(l.Name)))
             {
                 // The state's own line is checked below, by its pairs: the ones leaving don't count.
-                if (IsNamed(line.Name, _stateName)) continue;
+                // The output's line is too: its pairs are the output's, and its guard is the template.
+                if (IsNamed(line.Name, _stateName) || line == _siteLine) continue;
                 Check(line.Name, line.Rhs);
             }
+
+            if (_template != Hole) Check(_siteLine == null ? "the output" : _siteLine.Name, _template);
+            if (_bodyText != null) Check("the output", _bodyText);
 
             foreach (var pair in keptOutput) Check($"the output's {StateScaffold.Quoted(pair.Key)}", pair.Value);
 
@@ -457,8 +473,9 @@ public static class StateEdit
 
             var oldKeys = new[] { oldKey };
             var offState = _lines
-                .Where(l => !IsNamed(l.Name, _stateName) && UsesKeyOffState(l.Rhs, _stateName, oldKeys))
+                .Where(l => !IsNamed(l.Name, _stateName) && l != _siteLine && UsesKeyOffState(l.Rhs, _stateName, oldKeys))
                 .Select(l => l.Name)
+                .Concat(Wrappers().Where(w => UsesKeyOffState(w, _stateName, oldKeys)).Select(_ => "the output's guard"))
                 .Concat(_output.Pairs
                     .Where(p => UsesKeyOffState(p.Value, _stateName, oldKeys))
                     .Select(p => $"the output's {StateScaffold.Quoted(p.Key)}"))
@@ -498,6 +515,7 @@ public static class StateEdit
             foreach (var line in _lines)
                 line.Rhs = RewriteKey(line.Rhs, _stateName, oldKey, newKey);
             _output.RewriteValues(value => RewriteKey(value, _stateName, oldKey, newKey));
+            RewriteWrappers(w => RewriteKey(w, _stateName, oldKey, newKey));
 
             ApplyRenames(renames);
 
@@ -560,10 +578,23 @@ public static class StateEdit
         {
             if (_sampleChanged) StateLine.Rhs = _sample.Write(_prefix);
 
+            var written = _template.Replace(Hole, _output.Write(_prefix));
+            if (_siteLine != null) _siteLine.Rhs = written;
+
             var sb = new StringBuilder("=");
             FormulaFormatter.AppendLet(
-                sb, 0, _lines.Select(l => (l.Name, l.Rhs)).ToList(), _output.Write(_prefix));
+                sb, 0, _lines.Select(l => (l.Name, l.Rhs)).ToList(), _siteLine == null ? written : _bodyText!);
             return sb.ToString();
+        }
+
+        /// <summary>The text around the output call, and the body when the output is in a binding.</summary>
+        private IEnumerable<string> Wrappers() =>
+            _bodyText == null ? new[] { _template } : new[] { _template, _bodyText };
+
+        private void RewriteWrappers(Func<string, string> rewrite)
+        {
+            _template = rewrite(_template);
+            if (_bodyText != null) _bodyText = rewrite(_bodyText);
         }
 
         private bool IsReserved(string name) =>
@@ -582,6 +613,7 @@ public static class StateEdit
             }
 
             _output.ApplyRenames(renames);
+            RewriteWrappers(w => LetToLambdaBuilder.ApplyRenames(w, renames));
 
             var sampleBefore = string.Join("\n", _sample.Texts());
             _sample.ApplyRenames(renames);
@@ -606,7 +638,7 @@ public static class StateEdit
                 AddNames(line.Rhs);
             }
 
-            foreach (var text in _output.Texts()) AddNames(text);
+            foreach (var text in _output.Texts().Concat(Wrappers())) AddNames(text);
             foreach (var text in _sample.Texts()) AddNames(text);
             return used;
 
