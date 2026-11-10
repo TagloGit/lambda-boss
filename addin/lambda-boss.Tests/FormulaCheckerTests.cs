@@ -634,15 +634,31 @@ public class FormulaCheckerTests
     }
 
     [Fact]
-    public void Fix_all_applies_the_bracket_and_every_name()
+    public void Fix_all_applies_every_name()
     {
-        // A stray ) and a typo, each with exactly one fix.
-        const string f = "=XLOOKUP(\"a\",fareIds,fare))";
-        var r = Check(f);
-        var fixes = FormulaFixes.For(r);
+        const string f = "=XLOOKUP(\"a\",fareIdz,fare)";
+        var fixes = FormulaFixes.For(Check(f));
         var all = Assert.IsType<FormulaFix>(fixes.All);
         Assert.Equal("=XLOOKUP(\"a\",fareIds,fares)", all.After);
         Assert.Empty(FormulaChecker.Check(all.After, Workbook()).Problems.Where(p => !p.IsNote));
+    }
+
+    [Fact]
+    public void No_fix_all_when_a_bracket_fix_changes_the_names_in_scope()
+    {
+        // Review of #434: after the bracket fix, the LET name fare is in scope and also one edit
+        // from fars, so the name's single candidate (fares) would be a silent pick.
+        var r = Check("=LET(fare, 1, y, 2), fars+y)");
+        var fixes = FormulaFixes.For(r);
+        Assert.Null(fixes.All);
+    }
+
+    [Fact]
+    public void A_bracket_that_clears_everything_says_so()
+    {
+        const string f = "=LET(start, A1,\n moves, B1:B10,\n step, LAMBDA(acc, m, acc + m),\n" +
+                         " final, REDUCE(start, TAKE(moves, 5)), step),\n final)";
+        Assert.Equal("Remove the ) — fixes all 4 problems", FormulaFixes.For(Check(f)).Bracket!.Label);
     }
 
     [Fact]

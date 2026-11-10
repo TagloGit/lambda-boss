@@ -41,6 +41,7 @@ internal sealed class CheckFormulaWindow : Window
     private readonly IntPtr _excelHwnd;
     private readonly FixTarget? _target;
     private readonly bool _canRevert;
+    private bool _closing;
 
     private CheckFormulaWindow(IntPtr excelHwnd, FormulaCheckResult? result, string source, DateTime? namesTakenUtc,
         FixTarget? target)
@@ -74,6 +75,14 @@ internal sealed class CheckFormulaWindow : Window
                 Close();
             }
         };
+        // A window left open goes stale while Tim works on: close it when Excel takes focus back,
+        // so a fix is never applied to text that has changed since the check (review of #434).
+        Deactivated += (_, _) =>
+        {
+            if (!_closing)
+                Close();
+        };
+        Closing += (_, _) => _closing = true;
         Closed += (_, _) =>
         {
             if (ReferenceEquals(_current, this))

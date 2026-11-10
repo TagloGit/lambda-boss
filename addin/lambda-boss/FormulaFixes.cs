@@ -3,7 +3,8 @@ namespace LambdaBoss;
 /// <summary>
 ///     One fix Check Formula can apply (issue #426): the whole formula before and after, where the
 ///     cursor goes after it (<see cref="Caret"/>, an index into <see cref="After"/>), and the span
-///     of <see cref="After"/> to highlight in the preview.
+///     of <see cref="After"/> to highlight in the preview. <see cref="EditStart"/> is where the
+///     first edit is in <see cref="Before"/> (Revert puts the cursor back there).
 /// </summary>
 internal sealed record FormulaFix(
     string Label,
@@ -11,7 +12,8 @@ internal sealed record FormulaFix(
     string After,
     int Caret,
     int HighlightStart,
-    int HighlightLength)
+    int HighlightLength,
+    int EditStart)
 {
     /// <summary>The line of <see cref="After"/> holding the highlight, for the preview.</summary>
     public (int Start, int End) PreviewLine
@@ -60,10 +62,14 @@ internal sealed class FormulaFixes
         {
             var r = result.Repairs[0];
             var caret = r.Insert ? r.Position + 1 : r.Position;
-            bracket = new FormulaFix(r.Insert ? "Add the )" : "Remove the )", f, r.Fixed, caret,
+            // When the bracket clears every problem, say so: it's the "fix all".
+            var clearsAll = result.Problems.All(p => p.IsNote || p.IsConsequence);
+            var errors = result.Problems.Count(p => !p.IsNote);
+            var label = (r.Insert ? "Add the )" : "Remove the )") +
+                        (clearsAll && errors > 1 ? $" — fixes all {errors} problems" : "");
+            bracket = new FormulaFix(label, f, r.Fixed, caret,
                 r.CallStart >= 0 ? r.CallStart : Math.Max(0, caret - 1),
-                r.CallStart >= 0 ? r.CallLength : 1);
-            edits.Add(r.Insert ? (r.Position, 0, ")") : (r.Position, 1, ""));
+                r.CallStart >= 0 ? r.CallLength : 1, r.Position);
         }
 
         var byProblem = new Dictionary<FormulaProblem, IReadOnlyList<FormulaFix>>();
@@ -80,7 +86,7 @@ internal sealed class FormulaFixes
             byProblem[p] = p.Replacements
                 .Select(text => new FormulaFix($"{current} → {text}", f,
                     f[..p.Start] + text + f[(p.Start + p.Length)..],
-                    p.Start + text.Length, p.Start, text.Length))
+                    p.Start + text.Length, p.Start, text.Length, p.Start))
                 .ToList();
             if (p.Replacements.Count == 1)
                 edits.Add((p.Start, p.Length, p.Replacements[0]));
@@ -88,15 +94,18 @@ internal sealed class FormulaFixes
                 everyOneHasOne = false;
         }
 
-        // Fix all: every problem has exactly one fix, and there's more than one to apply.
+        // Fix all: several mistyped names, each with exactly one fix. Not with a bracket fix: the
+        // names' candidates come from the broken formula's scope, which the bracket changes. Not
+        // when problems were left out of the list.
         FormulaFix? all = null;
-        if (everyOneHasOne && edits.Count > 1 && Disjoint(edits))
+        if (everyOneHasOne && bracket is null && edits.Count > 1 && Disjoint(edits)
+            && result.Problems.All(p => p.Kind != FormulaProblemKind.More))
         {
             var after = f;
             foreach (var e in edits.OrderByDescending(e => e.Start))
                 after = after[..e.Start] + e.Text + after[(e.Start + e.Length)..];
             var first = edits.OrderBy(e => e.Start).First();
-            all = new FormulaFix($"Fix all {edits.Count}", f, after, first.Start + first.Text.Length, 0, 0);
+            all = new FormulaFix($"Fix all {edits.Count}", f, after, first.Start + first.Text.Length, 0, 0, first.Start);
         }
 
         return new FormulaFixes(bracket, byProblem, all);

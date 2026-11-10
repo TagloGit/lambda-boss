@@ -319,7 +319,7 @@ internal static class FormulaChecker
     public const int MaxRepairLength = 12000;
 
     /// <summary>The repair search stops after this long and says so.</summary>
-    public static TimeSpan RepairBudget { get; set; } = TimeSpan.FromMilliseconds(150);
+    public static TimeSpan RepairBudget { get; set; } = TimeSpan.FromMilliseconds(250);
 
     /// <summary>
     ///     Tries every single <c>)</c> removal, and every <c>)</c> insertion where an argument ends
@@ -394,21 +394,9 @@ internal static class FormulaChecker
                 break;
             tried++;
 
-            var fixedText = insert ? formula.Insert(pos, ")") : formula.Remove(pos, 1);
-            var edited = new List<FormulaToken>(tokens.Count + 1);
-            FormulaToken? inserted = null;
-            for (var i = 0; i < tokens.Count; i++)
-            {
-                if (insert && i == index)
-                {
-                    inserted = new FormulaToken(FormulaTokenType.RParen, "", ")", pos);
-                    edited.Add(inserted);
-                }
-
-                if (!insert && i == index)
-                    continue;
-                edited.Add(tokens[i]);
-            }
+            // A view of the tokens with the one edit, rather than a copy: the re-check is the cost.
+            var inserted = insert ? new FormulaToken(FormulaTokenType.RParen, "", ")", pos) : null;
+            var edited = new EditedTokens(tokens, index, inserted);
 
             var found = new List<FormulaProblem>();
             // Stop reading once it can't beat (or tie) the best edit so far.
@@ -418,6 +406,7 @@ internal static class FormulaChecker
             if (remaining > best)
                 continue;
             best = remaining;
+            var fixedText = insert ? formula.Insert(pos, ")") : formula.Remove(pos, 1);
 
             // The call the edit changes: the one the inserted ) now closes, or the one the
             // removed ) used to close (it now runs further).
@@ -471,6 +460,35 @@ internal static class FormulaChecker
             return (RepairOutcome.Several, valid.Take(5).ToList(), cut);
         var fewest = ranked[0].Remaining;
         return (RepairOutcome.Closest, ranked.Where(r => r.Remaining == fewest).Take(3).ToList(), cut);
+    }
+
+    /// <summary>The token list with one token removed (<c>inserted</c> null) or one inserted before <c>index</c>.</summary>
+    private sealed class EditedTokens : IReadOnlyList<FormulaToken>
+    {
+        private readonly IReadOnlyList<FormulaToken> _tokens;
+        private readonly int _index;
+        private readonly FormulaToken? _inserted;
+
+        public EditedTokens(IReadOnlyList<FormulaToken> tokens, int index, FormulaToken? inserted)
+        {
+            _tokens = tokens;
+            _index = index;
+            _inserted = inserted;
+        }
+
+        public int Count => _tokens.Count + (_inserted is null ? -1 : 1);
+
+        public FormulaToken this[int i] => _inserted is null
+            ? _tokens[i < _index ? i : i + 1]
+            : i < _index ? _tokens[i] : i == _index ? _inserted : _tokens[i - 1];
+
+        public IEnumerator<FormulaToken> GetEnumerator()
+        {
+            for (var i = 0; i < Count; i++)
+                yield return this[i];
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     /// <summary>A call and the <c>)</c> that closed it, in a pass's own token coordinates.</summary>
@@ -1136,8 +1154,7 @@ internal static class FormulaChecker
             var nearest = Nearest(rest, pool);
             Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start + bang + 1, rest.Length,
                 $"{rest} isn't a cell or a defined name on {sheetPart}." +
-                (nearest is null ? "" : $" Did you mean {nearest}?"), nearest)
-                { Replacements = nearest is null ? Array.Empty<string>() : NearestAll(rest, pool) });
+                (nearest is null ? "" : $" Did you mean {nearest}?"), nearest));
         }
 
         private void ResolveStructured(FormulaToken tok)

@@ -22,9 +22,10 @@ internal sealed record FixTarget(bool MidEdit, IntPtr ExcelHwnd, string? Workboo
 ///         </item>
 ///         <item>
 ///             Mid-edit, the add-in can't touch Excel's edit buffer. The fix cancels the edit (Esc),
-///             types the fixed formula back in, switches to Edit mode (F2) and moves the cursor to the
-///             fix. Nothing is entered, so Excel's undo is untouched and Tim presses Enter himself.
-///             Revert types the original back the same way.
+///             re-opens the cell in Edit mode (F2), selects its text and pastes the fixed formula
+///             (typing it lost characters to Formula AutoComplete in the VM), then moves the cursor
+///             to the fix. Nothing is entered, so Excel's undo is untouched and Tim presses Enter
+///             himself. The clipboard's text is put back afterwards. Revert pastes the original back.
 ///         </item>
 ///     </list>
 /// </summary>
@@ -50,13 +51,13 @@ internal static class FormulaFixer
     {
         if (target.MidEdit)
         {
-            _last = new AppliedFix(target, fix.Before, fix.After, fix.Before, Math.Min(fix.HighlightStart, fix.Before.Length));
+            _last = new AppliedFix(target, fix.Before, fix.After, fix.Before, Math.Min(fix.EditStart, fix.Before.Length));
             closeWindow();
-            Task.Run(() => RetypeEdit(target.ExcelHwnd, fix.After, fix.Caret));
+            RunSta(() => PasteIntoEdit(target.ExcelHwnd, fix.After, fix.Caret));
             return;
         }
 
-        ExcelAsyncUtil.QueueAsMacro(() => WriteCell(target, fix.After, isRevert: false));
+        ExcelAsyncUtil.QueueAsMacro(() => WriteCell(target, fix.After, fix.Before, isRevert: false));
     }
 
     /// <summary>On the window thread.</summary>
@@ -69,17 +70,17 @@ internal static class FormulaFixer
         {
             _last = null;
             closeWindow();
-            Task.Run(() => RetypeEdit(target.ExcelHwnd, last.RevertTo, last.RevertCaret));
+            RunSta(() => PasteIntoEdit(target.ExcelHwnd, last.RevertTo, last.RevertCaret));
             return;
         }
 
-        ExcelAsyncUtil.QueueAsMacro(() => WriteCell(target, last.RevertTo, isRevert: true));
+        ExcelAsyncUtil.QueueAsMacro(() => WriteCell(target, last.RevertTo, last.After, isRevert: true));
     }
 
     // ------------------------------------------------------------ cell
 
     /// <summary>Macro context.</summary>
-    private static void WriteCell(FixTarget target, string text, bool isRevert)
+    private static void WriteCell(FixTarget target, string text, string expected, bool isRevert)
     {
         try
         {
@@ -87,7 +88,16 @@ internal static class FormulaFixer
             dynamic cell = app.Workbooks[target.Workbook].Worksheets[target.Sheet].Range[target.Address];
 
             // What the cell holds now: a formula, or text (a formula entered as '=… to get past Excel).
-            string current = (bool)cell.HasFormula ? (string)cell.Formula2 : "'" + Convert.ToString(cell.Value2);
+            var hasFormula = (bool)cell.HasFormula;
+            string shown = hasFormula ? (string)cell.Formula2 : Convert.ToString(cell.Value2) ?? "";
+            string current = hasFormula ? shown : "'" + shown;
+
+            // The window may be older than the cell: never overwrite something newer.
+            if (Normalise(shown) != Normalise(expected.StartsWith("'", StringComparison.Ordinal) ? expected[1..] : expected))
+            {
+                CheckFormulaWindow.ShowMessage("The cell has changed since it was checked, so it wasn't changed. Check it again.");
+                return;
+            }
 
             try
             {
@@ -100,10 +110,13 @@ internal static class FormulaFixer
                 return;
             }
 
+            // Keep the formula as Excel stores it (names and functions in its own case), so the
+            // re-check recognises it and offers Revert.
+            string stored = (bool)cell.HasFormula ? (string)cell.Formula2 : Convert.ToString(cell.Value2) ?? text;
             if (isRevert)
                 _last = null;
             else
-                _last = new AppliedFix(target, current, text, current, 0);
+                _last = new AppliedFix(target, current, stored, current, 0);
 
             // Check the cell again and show the result, with Revert.
             CheckFormulaCommand.CheckCell(app, cell, target);
@@ -116,72 +129,136 @@ internal static class FormulaFixer
 
     // ------------------------------------------------------------ edit buffer
 
-    private const ushort VkReturn = 0x0D;
+    private const ushort VkShift = 0x10;
+    private const ushort VkControl = 0x11;
     private const ushort VkMenu = 0x12;
+    private const ushort VkEnd = 0x23;
+    private const ushort VkHome = 0x24;
+    private const ushort VkV = 0x56;
     private const ushort VkEscape = 0x1B;
     private const ushort VkLeft = 0x25;
     private const ushort VkF2 = 0x71;
     private const uint KeyUp = 0x0002;
-    private const uint Unicode = 0x0004;
+
+    private static void RunSta(Action action)
+    {
+        var t = new Thread(() =>
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("FormulaFixer", ex);
+            }
+        }) { IsBackground = true };
+        t.SetApartmentState(ApartmentState.STA); // the clipboard needs it
+        t.Start();
+    }
 
     /// <summary>
-    ///     Off the window thread: cancel Excel's edit, type <paramref name="text"/> as a new entry,
-    ///     switch to Edit mode and put the cursor at <paramref name="caret"/>.
+    ///     On an STA thread: cancel Excel's edit, re-open the cell in Edit mode, replace its text
+    ///     with <paramref name="text"/> by pasting, and put the cursor at <paramref name="caret"/>.
     /// </summary>
-    internal static void RetypeEdit(IntPtr excelHwnd, string text, int caret)
+    internal static void PasteIntoEdit(IntPtr excelHwnd, string text, int caret)
     {
+        // Keys still held from the click or Ctrl+Z would turn Esc into Ctrl+Esc and so on.
+        for (var i = 0; i < 60 && AnyModifierDown(); i++)
+            Thread.Sleep(50);
+        if (AnyModifierDown())
+        {
+            Logger.Info("FormulaFixer: a modifier key is still down; fix not applied");
+            return;
+        }
+
+        // The window has just closed and handed focus back; make sure Excel has it.
+        for (var i = 0; i < 30 && GetForegroundWindow() != excelHwnd; i++)
+        {
+            SetForegroundWindow(excelHwnd);
+            Thread.Sleep(50);
+        }
+
+        if (GetForegroundWindow() != excelHwnd)
+        {
+            Logger.Info("FormulaFixer: Excel didn't take focus; fix not applied");
+            return;
+        }
+
+        var normalised = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        string? saved = null;
         try
         {
-            // The window has just closed and handed focus back; make sure Excel has it.
-            for (var i = 0; i < 30 && GetForegroundWindow() != excelHwnd; i++)
-            {
-                SetForegroundWindow(excelHwnd);
-                Thread.Sleep(50);
-            }
-
-            if (GetForegroundWindow() != excelHwnd)
-            {
-                Logger.Info("FormulaFixer: Excel didn't take focus; fix not typed");
-                return;
-            }
-
-            var inputs = new List<Input>();
-            Key(inputs, VkEscape);
-            var typed = 0;
-            foreach (var ch in text)
-            {
-                if (ch == '\r')
-                    continue;
-                if (ch == '\n')
-                {
-                    // Alt+Enter: a line break inside the cell.
-                    inputs.Add(Vk(VkMenu, 0));
-                    Key(inputs, VkReturn);
-                    inputs.Add(Vk(VkMenu, KeyUp));
-                }
-                else
-                {
-                    inputs.Add(Char(ch, 0));
-                    inputs.Add(Char(ch, KeyUp));
-                }
-
-                typed++;
-            }
-
-            // F2 turns Enter mode into Edit mode, so the arrows move the cursor rather than
-            // pointing at cells.
-            Key(inputs, VkF2);
-            var lefts = Math.Max(0, typed - Math.Min(caret, typed));
-            for (var i = 0; i < lefts; i++)
-                Key(inputs, VkLeft);
-
-            Send(inputs);
-            Logger.Info($"FormulaFixer: retyped {typed} characters, cursor {lefts} from the end");
+            if (System.Windows.Clipboard.ContainsText())
+                saved = System.Windows.Clipboard.GetText();
         }
         catch (Exception ex)
         {
-            Logger.Error("FormulaFixer.RetypeEdit", ex);
+            Logger.Error("FormulaFixer: read clipboard", ex);
         }
+
+        if (!SetClipboard(normalised))
+            return;
+
+        var inputs = new List<Input>();
+        // Esc twice: the first may only close Formula AutoComplete's list. Then F2 re-opens the
+        // cell in Edit mode, Ctrl+End, Ctrl+Shift+Home selects all of its text, Ctrl+V replaces it.
+        Key(inputs, VkEscape);
+        Key(inputs, VkEscape);
+        Key(inputs, VkF2);
+        Chord(inputs, VkEnd, VkControl);
+        Chord(inputs, VkHome, VkControl, VkShift);
+        Chord(inputs, VkV, VkControl);
+        var lefts = Math.Max(0, normalised.Length - Math.Min(caret, normalised.Length));
+        for (var i = 0; i < lefts; i++)
+            Key(inputs, VkLeft);
+        Send(inputs);
+        Logger.Info($"FormulaFixer: pasted {normalised.Length} characters, cursor {lefts} from the end");
+
+        // Put the clipboard's text back once Excel has pasted (unless something else changed it).
+        Thread.Sleep(2000);
+        try
+        {
+            if (saved is not null && System.Windows.Clipboard.GetText() == normalised)
+                SetClipboard(saved);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("FormulaFixer: restore clipboard", ex);
+        }
+    }
+
+    private static bool SetClipboard(string text)
+    {
+        for (var i = 0; i < 10; i++)
+        {
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(text, true);
+                return true;
+            }
+            catch (COMException)
+            {
+                Thread.Sleep(50); // another program has it open
+            }
+        }
+
+        Logger.Info("FormulaFixer: clipboard busy; fix not applied");
+        return false;
+    }
+
+    private static bool AnyModifierDown() =>
+        (GetAsyncKeyState(VkControl) & 0x8000) != 0 || (GetAsyncKeyState(VkShift) & 0x8000) != 0
+        || (GetAsyncKeyState(VkMenu) & 0x8000) != 0 || (GetAsyncKeyState(0x5B) & 0x8000) != 0
+        || (GetAsyncKeyState(0x5C) & 0x8000) != 0;
+
+    private static void Chord(List<Input> inputs, ushort vk, params ushort[] modifiers)
+    {
+        foreach (var m in modifiers)
+            inputs.Add(Vk(m, 0));
+        Key(inputs, vk);
+        foreach (var m in modifiers.Reverse())
+            inputs.Add(Vk(m, KeyUp));
     }
 
     private static void Key(List<Input> inputs, ushort vk)
@@ -192,9 +269,6 @@ internal static class FormulaFixer
 
     private static Input Vk(ushort vk, uint flags) =>
         new() { Type = 1, U = new InputUnion { Ki = new KeyboardInput { Vk = vk, Flags = flags } } };
-
-    private static Input Char(char ch, uint flags) =>
-        new() { Type = 1, U = new InputUnion { Ki = new KeyboardInput { Scan = ch, Flags = Unicode | flags } } };
 
     private static void Send(List<Input> inputs)
     {
@@ -250,6 +324,9 @@ internal static class FormulaFixer
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
