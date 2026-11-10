@@ -130,11 +130,29 @@ public sealed record StateEngine(
 
     public bool IsWholeFormula => Before.Trim() == "=" && After.Trim().Length == 0;
 
-    /// <summary>The variables, in order.</summary>
-    public IReadOnlyList<StateEditRow> Rows =>
-        IsNew
-            ? Array.Empty<StateEditRow>()
-            : StateEdit.Read(StateEngines.Intermediate(this))?.Rows ?? (IReadOnlyList<StateEditRow>)Array.Empty<StateEditRow>();
+    /// <summary>The variables, in order. Debug-only outputs are not variables and are left out.</summary>
+    public IReadOnlyList<StateEditRow> Rows
+    {
+        get
+        {
+            if (IsNew) return Array.Empty<StateEditRow>();
+
+            var rows = StateEdit.Read(StateEngines.Intermediate(this))?.Rows;
+            if (rows == null) return Array.Empty<StateEditRow>();
+
+            var debug = DebugKeys;
+            return debug.Count == 0
+                ? rows
+                : rows.Where(r => !debug.Contains(r.Key, StringComparer.OrdinalIgnoreCase)).ToList();
+        }
+    }
+
+    /// <summary>Output keys nothing reads back (spec 0015, "Debug toggle"): not state variables.</summary>
+    public IReadOnlyList<string> DebugKeys => StateDebug.DebugKeys(this);
+
+    /// <summary>A SCAN-family fold directly inside <c>SplitState(…, 1)</c>: the debug form.</summary>
+    public bool IsDebug =>
+        StateDebug.IsScan(Fold) && StateDebug.TryUnwrap(Before, After, out _, out _);
 
     /// <summary>A new engine for an empty cell: no variables yet, a REDUCE with placeholders.</summary>
     public static StateEngine New(string prefix) => new(
@@ -148,11 +166,15 @@ public sealed record StateEngine(
 /// <summary>What <see cref="StateEngines.Read" /> found in a cell.</summary>
 public sealed record StateEngineRead(StateEngine? Engine, bool IsEmpty, string? Refusal);
 
-/// <summary>What the dialog asks for: the variables, the form (null = LET step) and the name (null = inline).</summary>
+/// <summary>
+///     What the dialog asks for: the variables, the form (null = LET step), the name (null =
+///     inline) and the debug state (null = leave as it is; spec 0015, "Debug toggle").
+/// </summary>
 public sealed record StateEngineChange(
     IReadOnlyList<StateEditRow> Rows,
     StateFoldKind? Fold,
-    string? StepName);
+    string? StepName,
+    bool? Debug = null);
 
 /// <summary>
 ///     The cell after a change, and the named LAMBDA to store when the step is named. Null
@@ -252,6 +274,17 @@ public static class StateEngines
 
         try
         {
+            // 0. A name can't be a debug output's: it would be set twice in the output.
+            if (!engine.IsNew)
+            {
+                var known = engine.DebugKeys;
+                var clash = change.Rows.FirstOrDefault(r =>
+                    r.Key.Trim().Length > 0 && !string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal)
+                    && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase));
+                if (clash != null)
+                    return Failed($"{clash.Key.Trim()} is already a debug output of this step. Pick another name.", notes);
+            }
+
             // 1. Variables.
             string? editError;
             IReadOnlyList<string> blockers = Array.Empty<string>();
@@ -259,6 +292,24 @@ public static class StateEngines
                 ? Create(engine, change.Rows, out editError)
                 : Edit(engine, change.Rows, out editError, out blockers);
             if (edited == null) return Failed(editError ?? "Can't apply the variables.", notes, blockers);
+
+            // 1b. Debug: in or out. Out drops the outputs only the debug form needed.
+            var debug = change.Debug ?? engine.IsDebug;
+            if (debug && change.Fold == null)
+                return Failed("Debug needs a fold. Pick REDUCE or SCAN (or a library fold) as the form.", notes);
+            if (debug && !StateDebug.IsScan(change.Fold))
+                return Failed($"Debug runs the fold as a SCAN, and {change.Fold!.Name} has no SCAN twin the dialog knows.", notes);
+
+            var debugKeys = edited.DebugKeys;
+            if (engine.IsDebug && !debug && debugKeys.Count > 0)
+            {
+                if (edited.Rows.Count == 0)
+                    return Failed(
+                        $"Nothing in this step reads {string.Join(", ", debugKeys)} back, so leaving debug would drop every output. Read one with GetVar, or add a variable, first.",
+                        notes);
+                edited = Rebuild(edited, StateEdit.DropOutputKeys(Intermediate(edited, withOtherArguments: true), debugKeys));
+                notes.Add($"Debug off: dropped the debug outputs {string.Join(", ", debugKeys)}.");
+            }
 
             // 2. Name.
             var name = string.IsNullOrWhiteSpace(change.StepName) ? null : change.StepName!.Trim();
@@ -293,7 +344,7 @@ public static class StateEngines
 
             var formula = change.Fold == null
                 ? LetStep(shaped)
-                : FoldFormula(shaped, change.Fold, engine, callName, notes);
+                : FoldFormula(shaped, change.Fold, engine, callName, notes, debug);
 
             if (formula.Length > MaxFormulaLength)
                 return Failed($"The cell would be over {MaxFormulaLength:N0} characters, Excel's limit.", notes);
@@ -335,7 +386,7 @@ public static class StateEngines
     {
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (engine.IsNew) return "Empty cell: a new state engine.";
-        var form = engine.Fold == null ? "Unfolded LET step" : $"{engine.FoldCallName} fold";
+        var form = engine.Fold == null ? "Unfolded LET step" : $"{engine.FoldCallName} fold{(engine.IsDebug ? " (debug)" : "")}";
         var step = engine.StepName == null ? "inline step" : $"named step {engine.StepName}";
         return $"{form}, {step}.";
     }
@@ -680,7 +731,13 @@ public static class StateEngines
         }
 
         error = null;
-        var parsed = LetParser.Parse(result.Formula);
+        return Rebuild(engine, result.Formula);
+    }
+
+    /// <summary>The engine with the step's seed, other arguments, rules and output read back from an edited intermediate.</summary>
+    private static StateEngine Rebuild(StateEngine engine, string formula)
+    {
+        var parsed = LetParser.Parse(formula);
         var paramLines = parsed.Bindings.Take(engine.Parameters.Count).ToList();
         if (!paramLines.Select(b => b.Name).SequenceEqual(engine.Parameters, StringComparer.OrdinalIgnoreCase))
             throw new InvalidOperationException("The edit moved the step's parameters; nothing was changed.");
@@ -864,7 +921,8 @@ public static class StateEngines
     }
 
     private static string FoldFormula(
-        StateEngine engine, StateFoldKind fold, StateEngine original, Func<StateFoldKind, string> callName, List<string> notes)
+        StateEngine engine, StateFoldKind fold, StateEngine original, Func<StateFoldKind, string> callName, List<string> notes,
+        bool debug)
     {
         var name = original.Fold != null && SameKind(original.Fold, fold) && original.FoldCallName != null
             ? original.FoldCallName
@@ -917,6 +975,13 @@ public static class StateEngines
         var call = $"{name}({string.Join(", ", args.Take(written))})";
         var before = original.IsNew || original.Fold == null ? "=" : original.Before;
         var after = original.IsNew || original.Fold == null ? "" : original.After;
+
+        // The debug wrapper goes on or comes off; every other wrapper is left as it was.
+        if (original.IsDebug && !debug && StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter))
+            (before, after) = (bare, bareAfter);
+        else if (!original.IsDebug && debug && !StateDebug.TryUnwrap(before, after, out _, out _))
+            (before, after) = StateDebug.Wrap(before, after, engine.Prefix);
+
         return before + call + after;
     }
 

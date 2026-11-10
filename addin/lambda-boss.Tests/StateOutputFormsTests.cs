@@ -128,7 +128,9 @@ public class StateOutputFormsTests
 
         Assert.Equal("=SplitState(", engine.Before);
         Assert.Equal(",1)", engine.After);
-        Assert.Equal(new[] { "visited", "p", "items" }, engine.Rows.Select(r => r.Key));
+        // "items" is set but never read back: a debug-only output (#440), not a variable.
+        Assert.Equal(new[] { "visited", "p" }, engine.Rows.Select(r => r.Key));
+        Assert.Equal(new[] { "items" }, engine.DebugKeys);
     }
 
     [Fact]

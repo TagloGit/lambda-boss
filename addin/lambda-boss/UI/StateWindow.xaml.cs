@@ -18,6 +18,7 @@ public partial class StateWindow
     private readonly Func<string, string?> _refersTo;
     private readonly Func<StateFoldKind, string> _callName;
     private readonly List<RowBox> _rows = new();
+    private readonly List<StateFoldKind> _folds = new();
     private readonly bool _loaded;
 
     public StateWindow(
@@ -49,10 +50,20 @@ public partial class StateWindow
             FormBox.Items.Add(new ComboBoxItem { Content = label, Tag = fold });
         }
 
+        _folds.AddRange(folds);
+
+        var debugKeys = engine.DebugKeys;
+        if (debugKeys.Count > 0)
+        {
+            DebugText.Text = "Debug outputs, not state variables: " + string.Join(", ", debugKeys) + ".";
+            DebugText.Visibility = Visibility.Visible;
+        }
+
         FormBox.SelectedIndex = engine.Fold == null
             ? 0
             : 1 + folds.FindIndex(f => Same(f, engine.Fold));
         NameBox.Text = engine.StepName ?? "";
+        DebugBox.IsChecked = engine.IsDebug;
 
         _loaded = true;
         Refresh();
@@ -72,7 +83,8 @@ public partial class StateWindow
     private StateEngineChange CurrentChange() => new(
         _rows.Select(r => r.ToRow()).ToList(),
         SelectedFold,
-        NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim());
+        NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
+        DebugBox.IsChecked == true);
 
     private static bool Same(StateFoldKind a, StateFoldKind b) =>
         string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
@@ -132,6 +144,10 @@ public partial class StateWindow
         lines.AddRange(result.Blockers);
         lines.AddRange(result.Notes);
 
+        var dropping = _engine.IsDebug && DebugBox.IsChecked != true && _engine.DebugKeys.Count > 0;
+        DebugText.Text = "Debug outputs, not state variables: " + string.Join(", ", _engine.DebugKeys)
+            + (dropping ? ". Save drops them." : ".");
+
         MessageText.Text = string.Join(Environment.NewLine, lines);
         MessageText.Foreground = result.Error != null
             ? new SolidColorBrush(Color.FromRgb(0xe7, 0x48, 0x56))
@@ -147,6 +163,35 @@ public partial class StateWindow
     }
 
     private void Form_SelectionChanged(object sender, SelectionChangedEventArgs e) => Refresh();
+
+    // Turning debug on or off switches the form to its twin (REDUCE and SCAN, REDUCEUNTIL and
+    // SCANUNTIL, ...) so one click does the whole job; the Form box can still be changed after.
+    private void Debug_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_loaded) return;
+
+        // On: the SCAN twin. Off: only when the dialog opened in debug form does the fold go back
+        // to its REDUCE twin; otherwise back to the form it opened with (a plain SCAN stays a SCAN).
+        var on = DebugBox.IsChecked == true;
+        StateFoldKind? target = null;
+        if (SelectedFold is { } current)
+        {
+            if (on || _engine.IsDebug)
+                target = StateDebug.Twin(current, _folds, on);
+            else if (_engine.Fold != null
+                && StateDebug.Twin(_engine.Fold, _folds, toScan: true) is { } scan && Same(current, scan))
+                target = _engine.Fold;
+        }
+
+        var at = target == null ? -1 : _folds.FindIndex(f => Same(f, target));
+        if (at >= 0)
+        {
+            FormBox.SelectedIndex = 1 + at;
+            return;
+        }
+
+        Refresh();
+    }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
