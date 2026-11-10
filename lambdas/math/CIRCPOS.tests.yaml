@@ -30,7 +30,3 @@ tests:
   - name: vertical array of starts lifts
     args: ["=0", "=19", '={1;5;19}']
     expected: [[1], [5], [19]]
-
-  - name: help text
-    args: []
-    expected_type: array

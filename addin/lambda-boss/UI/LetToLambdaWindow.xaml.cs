@@ -6,12 +6,21 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using GongSolutions.Wpf.DragDrop;
 
 namespace LambdaBoss.UI;
 
+/// <summary>The fold to write once the LAMBDA is registered.</summary>
+public record FoldWrite(string Formula, string Target);
+
 public class LetInputRow : INotifyPropertyChanged
 {
+    public const string StateBadge = "state";
+    public const string InputBadge = "input";
+
+    private string _badge = "";
+    private bool _isStateStepRow;
     private bool _isOptional;
     private bool _keep = true;
     private string _paramName = "";
@@ -40,6 +49,41 @@ public class LetInputRow : INotifyPropertyChanged
     ///     optional; when optional, the editable default box takes its place.
     /// </summary>
     public bool ShowRhsPreview => !IsOptional;
+
+    /// <summary>The row's role in a state step: <see cref="StateBadge" />, <see cref="InputBadge" /> or empty.</summary>
+    public string Badge
+    {
+        get => _badge;
+        set
+        {
+            _badge = value;
+            OnChanged();
+            OnChanged(nameof(ShowBadge));
+            OnChanged(nameof(CanTakeInputBadge));
+        }
+    }
+
+    public bool ShowBadge => Badge.Length > 0;
+
+    /// <summary>
+    ///     A state row's RHS is a whole SetVars call, so it's capped to leave room for the
+    ///     parameter box. Ordinary rows stay uncapped.
+    /// </summary>
+    public double RhsPreviewMaxWidth => _isStateStepRow ? 200 : double.PositiveInfinity;
+
+    /// <summary>True on the rows of a state step that the input badge can move to.</summary>
+    public bool CanTakeInputBadge => _isStateStepRow && Badge.Length == 0;
+
+    public bool IsStateStepRow
+    {
+        get => _isStateStepRow;
+        set
+        {
+            _isStateStepRow = value;
+            OnChanged();
+            OnChanged(nameof(CanTakeInputBadge));
+        }
+    }
 
     /// <summary>
     ///     Zero-based position in the original LET source order. Used to keep
@@ -104,6 +148,8 @@ public partial class LetToLambdaWindow
     private readonly Func<string, string?> _resolveExistingRefersTo;
     private readonly ParsedLet _parsed;
     private readonly ObservableCollection<LetInputRow> _rows;
+    private readonly bool _isStateStep;
+    private string _foldName = "";
 
     /// <summary>
     ///     Creates the dialog. <paramref name="resolveExistingRefersTo" />
@@ -111,25 +157,37 @@ public partial class LetToLambdaWindow
     ///     <c>null</c> if the name isn't taken). When the existing name is a
     ///     LAMBDA, Save proceeds as an overwrite so authors can round-trip
     ///     via Edit Lambda and re-register with the same name.
+    ///     <paramref name="stateStep" /> is the recognised state step, or null to
+    ///     treat the LET as an ordinary one.
     /// </summary>
-    public LetToLambdaWindow(ParsedLet parsed, Func<string, string?> resolveExistingRefersTo)
+    public LetToLambdaWindow(
+        ParsedLet parsed,
+        Func<string, string?> resolveExistingRefersTo,
+        StateStep? stateStep = null)
     {
         InitializeComponent();
         _parsed = parsed;
         _resolveExistingRefersTo = resolveExistingRefersTo;
+        _isStateStep = stateStep != null;
 
-        var valueBindings = parsed.Bindings
-            .Where(b => !b.IsCalculation)
-            .ToList();
+        var rowBindings = stateStep != null
+            ? StateStepParser.DialogBindings(parsed, stateStep)
+            : parsed.Bindings.Where(b => !b.IsCalculation).ToList();
 
         _rows = new ObservableCollection<LetInputRow>(
-            valueBindings.Select((b, i) => new LetInputRow
+            rowBindings.Select((b, i) => new LetInputRow
             {
                 BindingName = b.Name,
                 ParamName = b.Name,
                 RhsPreview = b.RhsText,
                 DefaultExpression = b.RhsText,
-                Keep = true,
+                // REDUCE passes exactly two arguments, so only the step's roles start kept.
+                Keep = stateStep == null || b == stateStep.StateBinding || b == stateStep.InputBinding,
+                Badge = stateStep == null ? ""
+                    : b == stateStep.StateBinding ? LetInputRow.StateBadge
+                    : b == stateStep.InputBinding ? LetInputRow.InputBadge
+                    : "",
+                IsStateStepRow = stateStep != null,
                 SourceIndex = i
             }));
 
@@ -143,6 +201,9 @@ public partial class LetToLambdaWindow
         GongSolutions.Wpf.DragDrop.DragDrop.SetDragHandler(InputsList, keepHandler);
         GongSolutions.Wpf.DragDrop.DragDrop.SetDropHandler(InputsList, keepHandler);
 
+        if (stateStep != null)
+            ShowFold(parsed, stateStep);
+
         LambdaNameBox.Focus();
         UpdateSaveEnabled();
     }
@@ -151,6 +212,85 @@ public partial class LetToLambdaWindow
     ///     Populated on successful Save. Null if cancelled.
     /// </summary>
     public LambdaGenerationRequest? Result { get; private set; }
+
+    /// <summary>
+    ///     Populated on Save when the fold is complete and has a target cell.
+    /// </summary>
+    public FoldWrite? FoldToWrite { get; private set; }
+
+    private void ShowFold(ParsedLet parsed, StateStep step)
+    {
+        Height += 110;
+        FoldPanel.Visibility = Visibility.Visible;
+        FoldBox.Text = StateFold.Build(StateFold.Seed(parsed, step), "");
+
+        // Name, fold, target: the path under the clock, ahead of the input rows.
+        LambdaNameBox.TabIndex = 0;
+        FoldBox.TabIndex = 1;
+        FoldTargetBox.TabIndex = 2;
+
+        UpdateAbsolutizeWarningVisibility();
+    }
+
+    private void FoldBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        // Queued, because tabbing into a TextBox selects its text after this event.
+        Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            var caret = StateFold.InputsCaret(FoldBox.Text);
+            if (caret >= 0) FoldBox.CaretIndex = caret;
+        }));
+    }
+
+    private void Fold_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        var target = FoldTargetBox.Text.Trim();
+        var complete = StateFold.IsComplete(FoldBox.Text);
+
+        if (target.Length == 0)
+            FoldHintText.Text = "Blank writes nothing. Ctrl+C copies the fold.";
+        else if (!StateFold.IsCellAddress(target))
+            FoldHintText.Text = "Not a cell on this sheet, so nothing will be written.";
+        else if (!complete)
+            FoldHintText.Text = "Needs a seed and inputs before it can be written.";
+        else
+            FoldHintText.Text = $"Written to {target.ToUpperInvariant()} after Save.";
+    }
+
+    private void MakeInput_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: LetInputRow row }) return;
+
+        var previous = _rows.FirstOrDefault(r => r.Badge == LetInputRow.InputBadge);
+        if (previous != null)
+        {
+            previous.Badge = "";
+            previous.Keep = false;
+        }
+
+        row.Badge = LetInputRow.InputBadge;
+        row.Keep = true;
+
+        var stateIndex = _rows.IndexOf(_rows.First(r => r.Badge == LetInputRow.StateBadge));
+        _rows.Move(_rows.IndexOf(row), stateIndex + 1);
+
+        // The clicked button has just collapsed, so give the keyboard somewhere to be.
+        LambdaNameBox.Focus();
+    }
+
+    private void CopyFold()
+    {
+        try
+        {
+            Clipboard.SetText(FoldBox.Text);
+            FoldHintText.Text = "Fold copied.";
+        }
+        catch (System.Runtime.InteropServices.ExternalException)
+        {
+            // Another app holds the clipboard; say so rather than pretend.
+            FoldHintText.Text = "Clipboard busy: copy again.";
+        }
+    }
 
     private void Row_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -256,6 +396,16 @@ public partial class LetToLambdaWindow
             return;
         }
 
+        if (_isStateStep
+            && e.Key == Key.C
+            && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+            && Keyboard.FocusedElement is not TextBox { SelectionLength: > 0 })
+        {
+            CopyFold();
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Enter
             && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
             && SaveButton.IsEnabled)
@@ -274,7 +424,24 @@ public partial class LetToLambdaWindow
 
     private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e)
     {
+        if (_isStateStep) SyncFoldName();
+
         UpdateSaveEnabled();
+    }
+
+    private void SyncFoldName()
+    {
+        var name = LambdaNameBox.Text.Trim();
+        if (name.Length > 0 && !ExcelNameValidator.Validate(name).IsValid) return;
+
+        // An unreadable fold stays as it is and keeps the old name, so a later change still finds it.
+        var updated = StateFold.WithLambdaName(FoldBox.Text, _foldName, name);
+        if (updated == FoldBox.Text) return;
+
+        var caret = FoldBox.CaretIndex;
+        FoldBox.Text = updated;
+        FoldBox.CaretIndex = caret;
+        _foldName = name;
     }
 
     private void UpdateSaveEnabled()
@@ -339,7 +506,8 @@ public partial class LetToLambdaWindow
         }
 
         var retainedBindingNames = _parsed.Bindings
-            .Where(b => b.IsCalculation || _rows.Any(r => r.BindingName == b.Name && !r.Keep))
+            .Where(b => (b.IsCalculation && keptRows.All(r => r.BindingName != b.Name))
+                || _rows.Any(r => r.BindingName == b.Name && !r.Keep))
             .Select(b => b.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var collidingParam = keptRows
@@ -387,7 +555,19 @@ public partial class LetToLambdaWindow
                 r.IsOptional ? r.DefaultExpression.Trim() : null))
             .ToList();
 
-        Result = new LambdaGenerationRequest(LambdaNameBox.Text.Trim(), _parsed, inputs);
+        StateStepRoles? roles = null;
+        if (_isStateStep)
+        {
+            roles = new StateStepRoles(
+                _rows.First(r => r.Badge == LetInputRow.StateBadge).BindingName,
+                _rows.FirstOrDefault(r => r.Badge == LetInputRow.InputBadge)?.BindingName);
+
+            var target = FoldTargetBox.Text.Trim();
+            if (StateFold.IsCellAddress(target) && StateFold.IsComplete(FoldBox.Text))
+                FoldToWrite = new FoldWrite(FoldBox.Text.Trim(), target);
+        }
+
+        Result = new LambdaGenerationRequest(LambdaNameBox.Text.Trim(), _parsed, inputs, roles);
         DialogResult = true;
         Close();
     }

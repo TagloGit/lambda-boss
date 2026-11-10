@@ -89,6 +89,13 @@ public sealed class Settings
     public HashSet<string> LabsSwitchesOn { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
+    ///     Argument hints for library LAMBDAs (spec 0013). On by default; the settings window
+    ///     turns them off. A settings file written before the hints left Labs has no value here,
+    ///     so it reads as on.
+    /// </summary>
+    public bool ArgumentHints { get; set; } = true;
+
+    /// <summary>
     ///     Returns the current settings instance, loading from disk on first access.
     /// </summary>
     public static Settings Current => _current ??= Load();
@@ -110,6 +117,11 @@ public sealed class Settings
 
             if (settings == null)
                 return new Settings();
+
+            // The four 0011 state switches became one (spec 0015): whoever had any keeps the feature.
+            var legacy = new[] { "state-let-to-lambda", "state-scaffold", "state-edit-lambda", "state-edit" };
+            if (settings.LabsSwitchesOn.RemoveWhere(id => legacy.Contains(id, StringComparer.OrdinalIgnoreCase)) > 0)
+                settings.LabsSwitchesOn.Add("state-any-form");
 
             // Ensure there's always at least the default repo
             if (settings.Repos.Count == 0)

@@ -151,6 +151,7 @@ public partial class SettingsWindow
         var settings = Settings.Current;
         ChannelStableRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Stable;
         ChannelLabsRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Labs;
+        ArgumentHintsCheckbox.IsChecked = settings.ArgumentHints;
 
         LabsSwitchList.ItemsSource = Labs.All
             .Select(s => new LabsSwitchDisplayItem
@@ -174,6 +175,19 @@ public partial class SettingsWindow
         settings.Save();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         StatusText.Text = $"Library channel: {Labs.ChannelLabel(channel)}";
+    }
+
+    private void ArgumentHints_Click(object sender, RoutedEventArgs e)
+    {
+        var on = ArgumentHintsCheckbox.IsChecked == true;
+        var settings = Settings.Current;
+        if (settings.ArgumentHints == on)
+            return;
+
+        settings.ArgumentHints = on;
+        settings.Save();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        StatusText.Text = $"Argument hints: {(on ? "on" : "off")}";
     }
 
     private void LabsSwitch_Click(object sender, RoutedEventArgs e)

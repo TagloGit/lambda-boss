@@ -346,7 +346,3 @@ tests:
         - { name: "tblAll", refers_to: "C3:E6" }
     args: ["=tblAll", '={"Tim";"Jordan"}', "=", "=", "missing"]
     expected: [[42, "Sydney"], ["missing", "missing"]]
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -25,7 +25,7 @@ public partial class LambdaPopup
         InitializeComponent();
         PreviewKeyDown += OnPreviewKeyDown;
         _allCommands = BuildCommandRegistry();
-        CommandsList.ItemsSource = _allCommands;
+        CommandsList.ItemsSource = SlashCommandFilter.Filter(_allCommands, "");
     }
 
     /// <summary>
@@ -438,7 +438,18 @@ public partial class LambdaPopup
             {
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
-            }),
+            },
+            () => !Labs.IsOn(Labs.State)),
+        new SlashCommand(
+            "Edit Lambda",
+            "Expand a LAMBDA call back to =LET(...). On a fold, write its step beside it with a k stepper: "
+            + "states come from the registered step, so re-register with LET to LAMBDA and trace to check a fix",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
+            },
+            () => Labs.IsOn(Labs.State)),
         new SlashCommand(
             "Gather",
             "Roll up the active cell's precedents into a single =LET(...)",
@@ -463,6 +474,15 @@ public partial class LambdaPopup
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => UnnestCommand.Run());
             }),
+        new SlashCommand(
+            "State",
+            "State engine on the active cell: add, rename or remove a variable; fold or unfold; inline or named. An empty cell gets a new one",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.Run());
+            },
+            () => Labs.IsOn(Labs.State)),
         new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",

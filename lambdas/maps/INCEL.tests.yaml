@@ -42,7 +42,3 @@ tests:
           values: 99
     args: ['={"A5","B3"}']
     expected: [[42, 99]]
-
-  - name: help text
-    args: []
-    expected_type: array

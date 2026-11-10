@@ -58,7 +58,3 @@ tests:
   - name: position_unit 1 no match returns sentinel
     args: ["HELLO", "Z", "=", "=", "none", "=1"]
     expected: "none"
-
-  - name: help text
-    args: []
-    expected_type: array

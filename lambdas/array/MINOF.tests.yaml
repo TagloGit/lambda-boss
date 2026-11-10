@@ -14,7 +14,3 @@ tests:
   - name: negative values
     args: ["={-3,-1,-7}", '={"A","B","C"}']
     expected: C
-
-  - name: help text
-    args: []
-    expected_type: array

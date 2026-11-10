@@ -1,8 +1,34 @@
 /*  FUNCTION NAME:      SetVars
     DESCRIPTION:*//**Builds a fresh state holding up to 10 named variables. Alternating positional pairs.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            state array: a new state holding the given name/value pairs
+    PARAMETERS:
+        n_1             (Required) First name and value pair.
+        v_1             (Required) First name and value pair.
+        n_2             (Optional) Up to nine more name/value pairs.
+        v_2             (Optional) Up to nine more name/value pairs.
+        n_3             (Optional) Up to nine more name/value pairs.
+        v_3             (Optional) Up to nine more name/value pairs.
+        n_4             (Optional) Up to nine more name/value pairs.
+        v_4             (Optional) Up to nine more name/value pairs.
+        n_5             (Optional) Up to nine more name/value pairs.
+        v_5             (Optional) Up to nine more name/value pairs.
+        n_6             (Optional) Up to nine more name/value pairs.
+        v_6             (Optional) Up to nine more name/value pairs.
+        n_7             (Optional) Up to nine more name/value pairs.
+        v_7             (Optional) Up to nine more name/value pairs.
+        n_8             (Optional) Up to nine more name/value pairs.
+        v_8             (Optional) Up to nine more name/value pairs.
+        n_9             (Optional) Up to nine more name/value pairs.
+        v_9             (Optional) Up to nine more name/value pairs.
+        n_10            (Optional) Up to nine more name/value pairs.
+        v_10            (Optional) Up to nine more name/value pairs.
+    EXAMPLE:            =SetVars("cur", 1, "best", 1, "ends", 1) -> state holding cur=1, best=1, ends=1
+    NOTE:               To partially update an existing state by name, use SetVar.
+    REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
                         2026-05-02  Claude      Extend pair capacity from 5 to 10
+                        2026-11-06  Claude      Join all pairs in one TEXTJOIN; only a repeated name takes the SetVar chain (spec 0011 part 6)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 SetVars = LAMBDA(
 //  Parameter Declarations
@@ -26,34 +52,61 @@ SetVars = LAMBDA(
     [v_9],
     [n_10],
     [v_10],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SetVars(n_1, v_1, [n_2], [v_2], ..., [n_10], [v_10])¶" &
-                "DESCRIPTION:   →Builds a fresh state holding up to 10 named variables. Alternating positional pairs.¶" &
-                "VERSION:       →May 02 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   n_1, v_1       →(Required) First name and value pair.¶" &
-                "   n_2..v_10      →(Optional) Up to nine more name/value pairs.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetVars(""cur"", 1, ""best"", 1, ""ends"", 1)¶" &
-                "Result         →state holding cur=1, best=1, ends=1¶" &
-                "NOTE:          →To partially update an existing state by name, use SetVar.",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(n_1),
+    LET(
     //  Procedure
-        s_1, SetVar(NewState(), n_1, v_1),
-        s_2, IF(ISOMITTED(n_2), s_1, SetVar(s_1, n_2, v_2)),
-        s_3, IF(ISOMITTED(n_3), s_2, SetVar(s_2, n_3, v_3)),
-        s_4, IF(ISOMITTED(n_4), s_3, SetVar(s_3, n_4, v_4)),
-        s_5, IF(ISOMITTED(n_5), s_4, SetVar(s_4, n_5, v_5)),
-        s_6, IF(ISOMITTED(n_6), s_5, SetVar(s_5, n_6, v_6)),
-        s_7, IF(ISOMITTED(n_7), s_6, SetVar(s_6, n_7, v_7)),
-        s_8, IF(ISOMITTED(n_8), s_7, SetVar(s_7, n_8, v_8)),
-        s_9, IF(ISOMITTED(n_9), s_8, SetVar(s_8, n_9, v_9)),
-        s_10, IF(ISOMITTED(n_10), s_9, SetVar(s_9, n_10, v_10)),
-        result, s_10,
-        IF(Help?, Help, result)
+        us, CHAR(31),
+        rs, CHAR(30),
+        gs, CHAR(29),
+    //  One entry, as SetVar writes it
+        enc, LAMBDA(nm, [value],
+                LET(
+                    firstVal, @INDEX(value, 1, 1),
+                    typeCode, TYPE(firstVal),
+                    @nm & rs & IF(typeCode = 1, "n", IF(typeCode = 4, "b", "t")) & rs &
+                        IF(ROWS(value) * COLUMNS(value) > 1, TEXTJOIN(gs, FALSE, value), firstVal & "")
+                )
+            ),
+    //  Keys stay unique: a repeated name (case-insensitive) takes the SetVar chain, which replaces it.
+    //  So does anything TEXTJOIN can't do: a state over its 32,767 characters, an error value.
+        repeat?, OR(
+                IF(ISOMITTED(n_2), FALSE, OR(n_2 & "" = n_1 & "")),
+                IF(ISOMITTED(n_3), FALSE, OR(n_3 & "" = n_1 & "", n_3 & "" = n_2 & "")),
+                IF(ISOMITTED(n_4), FALSE, OR(n_4 & "" = n_1 & "", n_4 & "" = n_2 & "", n_4 & "" = n_3 & "")),
+                IF(ISOMITTED(n_5), FALSE, OR(n_5 & "" = n_1 & "", n_5 & "" = n_2 & "", n_5 & "" = n_3 & "", n_5 & "" = n_4 & "")),
+                IF(ISOMITTED(n_6), FALSE, OR(n_6 & "" = n_1 & "", n_6 & "" = n_2 & "", n_6 & "" = n_3 & "", n_6 & "" = n_4 & "", n_6 & "" = n_5 & "")),
+                IF(ISOMITTED(n_7), FALSE, OR(n_7 & "" = n_1 & "", n_7 & "" = n_2 & "", n_7 & "" = n_3 & "", n_7 & "" = n_4 & "", n_7 & "" = n_5 & "", n_7 & "" = n_6 & "")),
+                IF(ISOMITTED(n_8), FALSE, OR(n_8 & "" = n_1 & "", n_8 & "" = n_2 & "", n_8 & "" = n_3 & "", n_8 & "" = n_4 & "", n_8 & "" = n_5 & "", n_8 & "" = n_6 & "", n_8 & "" = n_7 & "")),
+                IF(ISOMITTED(n_9), FALSE, OR(n_9 & "" = n_1 & "", n_9 & "" = n_2 & "", n_9 & "" = n_3 & "", n_9 & "" = n_4 & "", n_9 & "" = n_5 & "", n_9 & "" = n_6 & "", n_9 & "" = n_7 & "", n_9 & "" = n_8 & "")),
+                IF(ISOMITTED(n_10), FALSE, OR(n_10 & "" = n_1 & "", n_10 & "" = n_2 & "", n_10 & "" = n_3 & "", n_10 & "" = n_4 & "", n_10 & "" = n_5 & "", n_10 & "" = n_6 & "", n_10 & "" = n_7 & "", n_10 & "" = n_8 & "", n_10 & "" = n_9 & ""))
+            ),
+        result, IFERROR(
+                IF(repeat?, NA(),
+                    TEXTJOIN(us, TRUE,
+                        enc(n_1, v_1),
+                        IF(ISOMITTED(n_2), "", enc(n_2, v_2)),
+                        IF(ISOMITTED(n_3), "", enc(n_3, v_3)),
+                        IF(ISOMITTED(n_4), "", enc(n_4, v_4)),
+                        IF(ISOMITTED(n_5), "", enc(n_5, v_5)),
+                        IF(ISOMITTED(n_6), "", enc(n_6, v_6)),
+                        IF(ISOMITTED(n_7), "", enc(n_7, v_7)),
+                        IF(ISOMITTED(n_8), "", enc(n_8, v_8)),
+                        IF(ISOMITTED(n_9), "", enc(n_9, v_9)),
+                        IF(ISOMITTED(n_10), "", enc(n_10, v_10))
+                    )
+                ),
+                LET(
+                    s_1, SetVar(NewState(), n_1, v_1),
+                    s_2, IF(ISOMITTED(n_2), s_1, SetVar(s_1, n_2, v_2)),
+                    s_3, IF(ISOMITTED(n_3), s_2, SetVar(s_2, n_3, v_3)),
+                    s_4, IF(ISOMITTED(n_4), s_3, SetVar(s_3, n_4, v_4)),
+                    s_5, IF(ISOMITTED(n_5), s_4, SetVar(s_4, n_5, v_5)),
+                    s_6, IF(ISOMITTED(n_6), s_5, SetVar(s_5, n_6, v_6)),
+                    s_7, IF(ISOMITTED(n_7), s_6, SetVar(s_6, n_7, v_7)),
+                    s_8, IF(ISOMITTED(n_8), s_7, SetVar(s_7, n_8, v_8)),
+                    s_9, IF(ISOMITTED(n_9), s_8, SetVar(s_8, n_9, v_9)),
+                    IF(ISOMITTED(n_10), s_9, SetVar(s_9, n_10, v_10))
+                )
+            ),
+        result
 )
 );

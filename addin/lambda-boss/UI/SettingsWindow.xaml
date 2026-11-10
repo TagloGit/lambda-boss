@@ -258,6 +258,18 @@
                              Foreground="#cccccc"
                              Click="ChannelRadio_Click" />
             </StackPanel>
+            <TextBlock Text="Hints"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Foreground="#dcdcaa"
+                       Margin="0,12,0,0" />
+            <CheckBox x:Name="ArgumentHintsCheckbox"
+                      Content="Argument hints for library LAMBDAs"
+                      ToolTip="While you type a library LAMBDA, shows its arguments (the current one in bold), what each means and what it returns, like Excel does for its own functions."
+                      AutomationProperties.AutomationId="argument-hints"
+                      Foreground="#cccccc"
+                      Margin="0,10,0,0"
+                      Click="ArgumentHints_Click" />
         </StackPanel>
 
         <!-- Labs switches -->

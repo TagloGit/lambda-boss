@@ -434,14 +434,13 @@ public class EditLambdaCommandTests
         var refersTo =
             "=LAMBDA([text], [chunk_size], [horizontal], "
             + "LET("
-            + "Help, TEXTSPLIT(\"FUNCTION: EXPLODE(text, chunk_size, horizontal)\", \"->\", \"|\"), "
             + "Help?, ISOMITTED(text), "
             + "_size, IF(ISOMITTED(chunk_size), 1, chunk_size), "
             + "_horiz, IF(ISOMITTED(horizontal), FALSE, horizontal), "
             + "_count, CEILING(LEN(text) / _size, 1), "
             + "_starts, IF(_horiz, SEQUENCE(1, _count, 1, _size), SEQUENCE(_count, 1, 1, _size)), "
             + "result, MID(text, _starts, _size), "
-            + "IF(Help?, Help, result)))";
+            + "IF(Help?, TEXTSPLIT(\"FUNCTION: EXPLODE(text, chunk_size, horizontal)\", \"->\", \"|\"), result)))";
 
         var sig = LambdaSignatureParser.Parse(refersTo);
         var result = EditLambdaCommand.BuildExpandedLet(sig, ["O13"]);

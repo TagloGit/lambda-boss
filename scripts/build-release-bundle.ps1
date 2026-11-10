@@ -1,9 +1,9 @@
 ﻿<#
 .SYNOPSIS
-    Builds the Lambda Boss release zip: packed XLL + README + unblock.cmd.
+    Builds the Lambda Boss release zip: packed XLL + README + unblock.cmd + remove-lambda-boss.cmd.
 
 .DESCRIPTION
-    Stages `lambda-boss64.xll` plus the README and `unblock.cmd` from
+    Stages `lambda-boss64.xll` plus the README, `unblock.cmd` and `remove-lambda-boss.cmd` from
     `release/` into a temporary folder, then zips it as
     `release/output/LambdaBoss-<version>.zip`.
 
@@ -47,12 +47,16 @@ if (-not (Test-Path $XllPath)) {
 
 $readmePath = "$ReleaseDir\README.txt"
 $unblockPath = "$ReleaseDir\unblock.cmd"
+$removePath = "$ReleaseDir\remove-lambda-boss.cmd"
 
 if (-not (Test-Path $readmePath)) {
     Write-Error "README.txt not found at: $readmePath"
 }
 if (-not (Test-Path $unblockPath)) {
     Write-Error "unblock.cmd not found at: $unblockPath"
+}
+if (-not (Test-Path $removePath)) {
+    Write-Error "remove-lambda-boss.cmd not found at: $removePath"
 }
 
 # Prepare a clean staging folder
@@ -61,11 +65,12 @@ if (Test-Path $StagingDir) {
 }
 New-Item -ItemType Directory -Force -Path $StagingDir | Out-Null
 
-# Copy in the three deliverables. Rename the XLL to drop the "-packed" suffix
+# Copy in the four deliverables. Rename the XLL to drop the "-packed" suffix
 # -- end users don't need to see ExcelDNA's internal naming.
 Copy-Item $XllPath "$StagingDir\lambda-boss64.xll"
 Copy-Item $readmePath "$StagingDir\README.txt"
 Copy-Item $unblockPath "$StagingDir\unblock.cmd"
+Copy-Item $removePath "$StagingDir\remove-lambda-boss.cmd"
 
 $zipPath = "$OutputDir\LambdaBoss-$Version.zip"
 if (Test-Path $zipPath) {

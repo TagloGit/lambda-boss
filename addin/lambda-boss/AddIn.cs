@@ -38,6 +38,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             }
         }
 
+        CheckFormulaCommand.Stop(excelShuttingDown: _isExcelShutdown);
         ShowLambdaPopupCommand.Cleanup();
 
         _disposed = true;
@@ -59,11 +60,26 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         // TLS 1.2+, so every fetch failed with "Could not create SSL/TLS secure channel" (#372).
         ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13;
 
+        // The same 4.0-era quirks leave WPF's DoNotScaleForDpiChanges on, so WPF ignores the
+        // per-monitor DPI the window thread asks for and lays windows out at the system DPI
+        // the Excel process started with. After a Remote Desktop session (or on a monitor
+        // with other scaling) dialogs opened tiny until Excel restarted (#379). Must run
+        // before any WPF type loads: WPF reads the switch once.
+        AppContext.SetSwitch("Switch.System.Windows.DoNotScaleForDpiChanges", false);
+
         try
         {
             ExcelComAddInHelper.LoadComAddIn(new ShutdownMonitor());
 
             ExcelAsyncUtil.QueueAsMacro(DeferredInit);
+
+            // Argument hints (on by default, Settings.ArgumentHints; spec 0013). AutoOpen is a macro context, which Install needs.
+            LambdaHints.StartIfEnabled();
+            ShowLambdaPopupCommand.SettingsSaved += LambdaHints.ApplySwitch;
+
+            // Check Formula (Labs, spec 0014): shortcut, edit-mode hook, name snapshot.
+            CheckFormulaCommand.StartIfEnabled();
+            ShowLambdaPopupCommand.SettingsSaved += CheckFormulaCommand.ApplySwitch;
 
             var assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
                                   ?? new Version(0, 0, 0);
@@ -85,7 +101,16 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         }
     }
 
-    public void AutoClose() => Dispose();
+    public void AutoClose()
+    {
+        // The IntelliSense server must be uninstalled before the add-in unloads, or Excel
+        // crashes. Its file stays for the next session.
+        ShowLambdaPopupCommand.SettingsSaved -= LambdaHints.ApplySwitch;
+        LambdaHints.Stop(removeFile: false);
+        ShowLambdaPopupCommand.SettingsSaved -= CheckFormulaCommand.ApplySwitch;
+        CheckFormulaCommand.Stop();
+        Dispose();
+    }
 
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {

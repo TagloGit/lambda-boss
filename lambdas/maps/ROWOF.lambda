@@ -1,31 +1,23 @@
 /*  FUNCTION NAME:      ROWOF
     DESCRIPTION:*//**Extracts the row number from an encoded position integer (as produced by TOPOS).*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            number: the row number; lifts over arrays
+    PARAMETERS:
+        pos             (Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.
+        mult            (Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.
+    EXAMPLE:            =ROWOF(17000017) -> 17
+    REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Default mult is the _mult constant (1000000), was a literal 100000 (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 ROWOF = LAMBDA(
 //  Parameter Declarations
     [pos],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →ROWOF(pos, [mult])¶" &
-                "DESCRIPTION:   →Extracts the row number from an encoded position integer (as produced by TOPOS).¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   pos            →(Required) Encoded position (row*mult+col). Also accepts an array/range of positions — result lifts element-wise.¶" &
-                "   mult           →(Optional) Multiplier used during encoding. Default: the _mult constant (1000000, as TOPOS). Must match the mult used to encode pos.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=ROWOF(17000017)¶" &
-                "Result         →17",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(pos),
+    LET(
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
         result, INT(pos / m),
-        IF(Help?, Help, result)
+        result
 )
 );

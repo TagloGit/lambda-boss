@@ -47,10 +47,6 @@ tests:
     args: ["AA10"]
     expected: [["AA9"], ["Z10"], ["AB10"], ["AA11"]]
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: centre past XFD with no grid (#380)
     args: ["XFE5"]
     expected: [["XFE4"], ["XFD5"], ["XFF5"], ["XFE6"]]

@@ -46,7 +46,3 @@ tests:
   - name: 1D horizontal with explicit axis=1
     args: ['={"A","B","C"}', "=1"]
     expected: [["C", "B", "A"]]
-
-  - name: help text
-    args: []
-    expected_type: array

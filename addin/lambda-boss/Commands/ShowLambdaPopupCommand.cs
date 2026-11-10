@@ -168,7 +168,16 @@ public static class ShowLambdaPopupCommand
             action(_windowDispatcher);
     }
 
+    private static readonly object WindowThreadGate = new();
+
     private static void EnsureWindowThread()
+    {
+        // Check Formula can call this from the thread pool while Excel's thread calls it too.
+        lock (WindowThreadGate)
+            EnsureWindowThreadLocked();
+    }
+
+    private static void EnsureWindowThreadLocked()
     {
         if (_windowThread != null && _windowThread.IsAlive)
         {
@@ -366,6 +375,7 @@ public static class ShowLambdaPopupCommand
                         }
 
                         Logger.Info($"Loaded {lambdas.Count} lambdas from '{request.DisplayName}' with prefix '{request.Prefix}'");
+                        LambdaHints.OnLibraryLoaded(request.Prefix, lambdas.Select(l => l.Name));
 
                         // Build summary
                         var parts = new List<string>();

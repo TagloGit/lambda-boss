@@ -82,7 +82,3 @@ tests:
   - name: unknown shape returns NA
     args: ['=SEQUENCE(3,3)', '=99']
     expected: -2146826246
-
-  - name: help text
-    args: []
-    expected_type: array

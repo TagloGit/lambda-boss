@@ -1,5 +1,9 @@
 # 0011 — State-step authoring (SetVars / GetVar)
 
+> **Superseded in part by [0015](0015-state-from-any-form.md)** (9 Nov 2026): `/State` now works on
+> the active cell in any form, and one Labs switch (`state-any-form`) replaces the four below. The
+> engine here (parser, edit, LET to LAMBDA for steps, the `k` stepper) is what 0015 builds on.
+
 Issue: #386. Related, not absorbed: #384 (engine trace for array states), #385 (Unnest step names),
 #382 (argument hints), #381 (hide Help in Edit Lambda), #387 (Help block cost, filed off this spec).
 
@@ -66,7 +70,8 @@ built on what exists:
 - `FormulaParser` (spec 0009's AST) to recognise calls inside a binding's RHS: `GetVar(S, "k")`,
   the body's `SetVars("k1", e1, …)`, and (round trip) a `REDUCE`/`SCAN` call anywhere in a cell
   formula.
-- `LetToLambdaBuilder.ApplyRenames` for identifier renames (word-boundary, string-skipping).
+- `LetToLambdaBuilder.ApplyRenames` for identifier renames (on whole tokens, so strings and
+  references are skipped; #403).
 - `FormulaFormatter.AppendLet` for output layout (one binding per line, 4-space indent).
 - `ExcelNameValidator` + `LetNameSanitizer` for binding names.
 - `EditLambdaCommand.BuildExpandedLet` for the LAMBDA → LET direction.
@@ -144,14 +149,15 @@ until a different target is typed).
   and Tim replaces each RHS with the rule. No `#NAME?` or `#VALUE!` while the step is half-written.
 - Next-line names are `next` + the variable with its first letter upper-cased (`p` → `nextP`,
   `best` → `nextBest`), matching Tim's own convention.
-- Enter saves, Escape cancels (same keys as the other dialogs). One Excel operation (`Formula2`),
-  native undo.
+- Enter saves, Escape cancels (same keys as the other dialogs). One Excel operation (`Formula2`).
+  It doesn't get native undo: a COM write clears Excel's undo stack, as with every add-in command
+  (checked in the VM: Ctrl+Z left the step in place).
 
 **Edge cases.**
 
 - *Binding names Excel rejects.* `c`, `r`, `C`, `R`, A1-style references (`b4`, `x1`, `ab12`) and
   R1C1-style ones (`R1C1`, `RC`, `R1C`, `RC1`) are invalid LET names. `ExcelNameValidator` is the
-  source of truth; it covers A1 and `RnCn` today and gains the `RC`/`RnC`/`RCn` forms in this work.
+  source of truth for A1 and `RnCn`; the scaffold adds the `RC`/`RnC`/`RCn` forms.
   The binding is suffixed with `_` (`c_`, `b4_`); the state key stays as typed (`GetVar(a, "c")`).
   The preview shows it.
 - *Clashes.* A name typed twice → error in the dialog. A `nextX` that equals another state name →
@@ -203,8 +209,7 @@ tool never leaves a dangling name.
 **Rename** `b` → `bat`: renames the bindings (`b` → `bat`, `nextB` → `nextBat`) through
 `ApplyRenames`, so every expression that reads them follows, and rewrites the key string in every
 `GetVar(S, …)`, the output `SetVars` and `S`'s `SetVars`. Strings elsewhere (`SWITCH(v, "b", …)`)
-are not touched. `ApplyRenames` matches case-insensitively (`LetToLambdaBuilder.cs` regex uses
-`IgnoreCase`), which is right for Excel names (`b` and `B` are the same binding), so a rename that
+are not touched. `ApplyRenames` matches case-insensitively, which is right for Excel names (`b` and `B` are the same binding), so a rename that
 would collide with another binding differing only in case is blocked like any clash. Tests cover
 text near references: `$B$2`, `B2`, `Sheet1!B2`, `t[b]` must not change when `b` is renamed.
 
@@ -365,8 +370,8 @@ Measured in the appendix: at 10,000 steps, `SetVars`/`GetVar` costs **34×** (2 
 steps. That's fine for one fold of a few thousand steps and costly for a fold per row over long
 inputs. What costs:
 
-1. **The inline Help block: ~2.3×.** Every library LAMBDA binds `Help, TEXTSPLIT(...)` in its LET,
-   and Excel evaluates it on every call. Moving the TEXTSPLIT into the `IF(Help?, …)` branch brings
+1. **The inline Help block: ~2.3×.** Every library LAMBDA bound `Help, TEXTSPLIT(...)` in its LET
+   (until #387; the Help block was removed entirely by spec 0013), and Excel evaluates a binding on every call. Moving the TEXTSPLIT into the `IF(Help?, …)` branch brings
    the cost down to the Help-deleted level, within noise (measured). Library-wide: filed as #387.
 2. **GetVar's parse and SetVars' rebuild together: ~1.7×** (Help-free current code 187 ms → Help-free
    fast form 110 ms, 2 values). GetVar does `TEXTSPLIT` of the whole state then `FILTER` with `LEFT`
@@ -375,21 +380,24 @@ inputs. What costs:
    re-joining the growing state; a fresh state needs one `TEXTJOIN`. The benchmark doesn't split
    this 1.7× between the two (its single-fix rows also dropped Help).
 
-**Decision: include the faster form, same API and same state format.** A `GetVar` that finds its
-entry with `TEXTAFTER(us & s, us & name & rs, -1, 1)` then `TEXTBEFORE(… & us, us)` (case-insensitive
-like today's `LEFT(…) = name & rs`; a miss gives `#N/A` as today), and a `SetVars` that encodes all
-pairs in one `TEXTJOIN`, both with Help in the IF branch. The **unique-key invariant stays**: when a
-name repeats in one `SetVars` call, the fast form drops the earlier pair before joining (a 10-slot
-comparison), so the state text is what today's `SetVars` produces, and the positional readers
-(`SplitState` today, `GetVarAt`) see no change. The broadcast path (a column of states, via `MAP`)
-and the array-value path are kept.
+**Decision: include the faster form, same API and same state format.** `GetVar` finds its entry with
+`TEXTAFTER(us & s & key, key, 1, 1)` then `TEXTBEFORE(… & us, us)`, where `key` is `us & name & rs`
+(case-insensitive like today's `LEFT(…) = name & rs`; first match like today's `@FILTER`). The key on
+the end of the text makes the search always succeed: TEXTAFTER gives `#VALUE!` when the text is
+shorter than the delimiter, even with `if_not_found`, so a missing name reads as an empty entry and
+returns `#N/A`. The single-state path is inline; a column of states goes through `MAP` and a
+recursive call, because building a helper LAMBDA on every call cost ~20% of a step.
 
-Measured with prototypes `GetVarF`/`SetVarsF` (first match, no dedupe, no broadcast path; see the
-appendix): **8.5×** (2 values) and **11×** (5 values) `HSTACK`, 4–4.6× faster than today. The
-implementation PR re-measures the final form. The remaining gap to `HSTACK` is probably the per-call
-cost of invoking named LAMBDAs (inferred, not measured). No change to how Tim writes a step, so it
-lands as a library PR with the harness tests (broadcast over a column of states, 1×1 arrays from
-#377, types) unchanged.
+`SetVars` encodes all pairs in one `TEXTJOIN`. The **unique-key invariant stays**: a triangle of
+comparisons over the 10 slots spots a repeated name, and a repeat takes the old `SetVar` chain, so the
+text is what it always was and the positional readers (`SplitState` today, `GetVarAt`) see no change.
+The chain also catches anything TEXTJOIN can't do (`IFERROR`): a state over 32,767 characters, an
+error value. The broadcast path (a column of states) and the array-value path are kept.
+
+**Final form: 3.5× (2 values) and 3.7× (5 values) cheaper than before #387, at 9× and 15× `HSTACK`.**
+The prototypes reached 4–4.6×; they had no repeat check (4–8%), no `Help?` or column check, and made no
+promise on a miss. The remaining gap to `HSTACK` is probably the per-call cost of invoking named
+LAMBDAs (inferred, not measured). No change to how Tim writes a step.
 
 **Guidance this gives** (for excel-esports `docs/wisdom/tools.md`): SetVars is the default state
 form for authoring and debugging. Switch to `HSTACK` + `INDEX` (or a packed number) when the run is
@@ -419,29 +427,29 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
 
 ## Acceptance criteria
 
-- [ ] `StateStepParser` recognises SetVars-family (incl. SetVar-chain output) and array-family state
+- [x] `StateStepParser` recognises SetVars-family (incl. SetVar-chain output) and array-family state
       steps per the rules above, with bare or `<prefix>.` names only, and returns the state binding,
       input binding, state variables (key, binding name, GetVar line, next line) and output; unit
       tests include non-canonical lines, a cell-bound state, `v` after the GetVar lines, an extra
       constant binding (`maxB, $K$2`), comments-as-bindings, a nested LET in a next line, and non-steps.
-- [ ] `/State` (scaffold): popup command; dialog with State / Input / Write-to; selection prefill
+- [x] `/State` (scaffold): popup command; dialog with State / Input / Write-to; selection prefill
       from a 2×k label/value block; exact output text as above; `_`-suffixed binding names for
       `c`/`r`/A1/R1C1-like names; `nextX2` on clash; SetVar chaining past 10; prefix detection and
       library auto-load; refuses a non-empty target.
-- [ ] `/State` (edit): add / remove / rename per part 2, including `SetVar` layering on a non-SetVars
+- [x] `/State` (edit): add / remove / rename per part 2, including `SetVar` layering on a non-SetVars
       sample state, chaining past 10, the dangling-reference block on remove, and rename tests near
       references (`$B$2`, `Sheet1!B2`, `t[b]`) and case collisions.
-- [ ] LET to LAMBDA: state binding first (badge `state`), input second (badge movable), other value
+- [x] LET to LAMBDA: state binding first (badge `state`), input second (badge movable), other value
       bindings Keep off; builder accepts the state binding though it is a calculation; sampling-only
       bindings dropped; editable fold line with an absolutised seed; Write fold to writes only when
       complete. Non-state LETs unchanged (existing tests pass untouched).
-- [ ] Edit Lambda on a fold cell: one REDUCE/SCAN with a named two-parameter LAMBDA anywhere in the
+- [x] Edit Lambda on a fold cell: one REDUCE/SCAN with a named two-parameter LAMBDA anywhere in the
       formula; SetVars prototype with `k` stepper, array prototype on the seed; target cell rule;
       fold untouched; the new several-folds message; LET to LAMBDA round-trips the prototype back to
       the same LAMBDA text.
-- [ ] `SplitState` reads by key from the first state's keys; harness tests add a SetVar-reordered
+- [x] `SplitState` reads by key from the first state's keys; harness tests add a SetVar-reordered
       column and a missing key; existing tests unchanged.
-- [ ] Faster `GetVar`/`SetVars` pass the existing harness tests unchanged, keep unique keys (test:
+- [x] Faster `GetVar`/`SetVars` pass the existing harness tests unchanged, keep unique keys (test:
       `SetVars("x", 1, "x", 2)` gives the same text as today); the appendix benchmark re-run shows
       the new numbers.
 
@@ -472,7 +480,173 @@ wrong. Parts 4 and 2 follow once Tim has used that in a rep set.
   alongside as new names.
 - First slice is the add-in work in two PRs (Part 3, then Part 1).
 
+Taken while building Part 3 (Labs switch `state-let-to-lambda`, "State steps in LET to LAMBDA"):
+
+- A `SetVar` chain on a `SetVars` call counts as an output, as well as a chain on the state, because
+  Part 1 writes that shape past ten variables.
+- Array reads also accept the two-index forms of a row or column state: `INDEX(S, 1, k)`,
+  `INDEX(S, , k)`, `INDEX(S, k, 1)`. The position must be a number literal within the output's size,
+  and the output needs at least two values, so an ordinary `INDEX` of a range plus `HSTACK` rarely
+  reads as a step. An array step also needs an input its rules read: without one it's a lookup, and
+  LET to LAMBDA shows the ordinary dialog.
+- State variables also list keys read inline (no canonical line) and keys only the output sets, after
+  the read ones.
+- The input rule counts bindings read through a helper line or directly in the output's own
+  expressions as "read by a next line", and tries a relative cell before a `$`-anchored one, so
+  `maxB, $K$2` loses to `inp, H270`. A binding named `v` that reads the state isn't the input. A
+  binding the rules read beats one only passed straight to the output (`SetVars("last", inp)`), which
+  is the input only if it's a single cell or `INDEX` and nothing else qualifies. Names bound inside an
+  inner `LET` or `LAMBDA` don't count as reads here.
+- An input bound to a calculation (`v, INDEX(G1:G9, 1)`, the part 4 stepper) is a parameter too, so
+  the builder accepts any calculation the dialog lists on a state step. One left Keep off is made
+  absolute, like any excluded input.
+- The seed writes other LET bindings in place (`input1`, `k`), since a cell can't see them, and is
+  flattened to one line. It's rewritten on the formula tree. Its cell references go through
+  `LetToLambdaBuilder.AbsolutizeReference`, the same code as `AbsolutizeCellRefs`.
+- The fold line also takes `SCAN` and a wrapped fold (`=TEXTJOIN(" ",,REDUCE(…))`). Renaming the
+  LAMBDA rewrites only a step argument that is empty or the previous name, so Tim's edits survive.
+- **Write fold to** takes a cell on the active sheet and never overwrites a filled cell: the LAMBDA
+  is registered and a message says the fold wasn't written.
+- Tab order in the dialog is name, fold, target, then the input rows, and Alt+F jumps to the fold.
+  Ctrl+C copies the fold unless text is selected in a box.
+- The `input` badge moves with a **make input** button on the other rows. The row that loses it goes
+  Keep off.
+
+Taken while building Part 1 (Labs switch `state-scaffold`, "/State: new state step"):
+
+- `/State` is hidden from the popup's command list while the switch is off.
+- A variable named `a` or `v` takes the `_` suffix like any rejected name, so the step's own bindings
+  keep their names (`a_, GetVar(a, "a")`).
+- Two keys that land on one binding stay apart with another `_` (`c` gives `c_`, `c_` gives `c__`).
+- A key with a dot keeps its key, but its binding goes through `LetNameSanitizer`, because Excel refuses
+  a dot in a LET name (`a.b` gives `aB`). A key that can't start a name (`1st`) does the same.
+- A name with no value is an error in the dialog (`p needs a value`), not a blank.
+- A selection that isn't a 2×k block with text in every label counts as no prefill, as with a single
+  cell: State is empty and Write to is the active cell.
+- After a prefill the caret starts in Input, the only field left to fill. After Save the target is
+  selected, ready for F2.
+- The library counts as loaded only when `SetVars`, `SetVar` and `GetVar` are all there under one
+  prefix. With several prefixes, the first by ordinal order wins.
+- The dialog can't ask Excel about a typed target, because Excel's thread is waiting on it. Save checks
+  the cell, and if it's filled the dialog re-opens with what was typed and Save disabled for that cell.
+- The first empty cell below a block is searched for within 1,000 rows.
+- `RC`, `RnC` and `RCn` are suffixed by the scaffold alone, not in `ExcelNameValidator` as this spec
+  first said: Excel takes `rc` and `R1C` as LET names, so changing the validator would have refused them
+  in Refactor, Unnest and Gather for everyone. `RC1` itself is refused by LET in this build.
+- A variable named like a library call (`SetVars`, `SetVar`, `GetVar`) is suffixed too, so it can't hide
+  the call.
+- An Input may start with `=`. A value with a literal, a space and more (`p 0 b 4`) is an error, not an
+  intersection: it's a missing comma.
+- While the library loads Excel is free, so Save checks the workbook and the target again before
+  changing anything, and refuses with a message if either moved on.
+
+Taken while building Part 4 (Labs switch `state-edit-lambda`, "Edit Lambda on a fold"):
+
+- With the switch on, the fold check runs first, so `=GetVar(REDUCE(…, moveRobot), "p")` steps the
+  fold rather than expanding GetVar. A cell with no fold gets today's Edit Lambda.
+- Only a step that's a workbook name counts. A step bound in a LET around the fold, an inline
+  LAMBDA, a sheet-qualified name or a LAMBDA without exactly two parameters is no fold, and the
+  ordinary command runs.
+- The fold's seed and inputs are written in the prototype as typed (`G270`, not `$G$270`): it sits
+  on the same sheet. LET bindings around the fold are written in place. A name bound twice by
+  nested LETs, a parameter of a LAMBDA around the fold, or an empty seed or inputs slot is refused
+  with a message.
+- A step name the fold's expressions also use (a cell like `h1`, a whole column, a defined name)
+  gets a `_` in the prototype, because Excel would let it capture the reference. In build 20527
+  Excel refuses such a name inside a defined LAMBDA anyway, so this only guards other builds.
+  `k` takes a `_` when the step or the fold already uses `k`.
+- A step the parser doesn't recognise (a body that isn't a plain `SetVars` call, such as Airplane's
+  `SINGLE(IF(…))` walk) gets the stepper unless its seed is an `HSTACK`, `VSTACK` or array constant.
+- The target is empty only when it has no formula and isn't in a spill. After writing, the
+  prototype is selected.
+- A prototype over 8,192 characters is refused.
+
+Taken while building Part 2 (Labs switch `state-edit`, "/State: edit a state step"):
+
+- `state-edit` shows `/State` by itself. With it on and `state-scaffold` off, a cell that isn't a step
+  still gets the scaffold, since the spec makes that the other half of the command.
+- An array step or a `SetVar` chain on the state is refused with a message, not sent to the scaffold.
+  A `SetVar` chain on a `SetVars` call can be edited, because Part 1 writes it past ten variables.
+- The caret starts in the blank last row: adding is the usual edit. A blank name on an existing row
+  removes it, and the ✕ button does the same. Each row remembers its key, so a new name is a rename.
+- Sample values are shown, not edited, for existing variables; change them in the cell.
+- One Save applies removals, then renames, then additions. A rename onto a name still in use is
+  blocked, so swapping two names takes two edits.
+- Saving rewrites the cell in the one-binding-per-line layout, with each binding's text kept.
+- A rename always renames the GetVar line, but the next line only when it follows the convention
+  (`nextB`, `nextB2`). `np` keeps its name.
+- A rename when `S` holds the state elsewhere carries the value across, so the sample keeps working:
+  `a, SetVar(I266, "bat", GetVar(I266, "b"))`. The spec only covered `S`'s `SetVars`.
+- Remove also blocks on an inline `GetVar(a, "b")` and on a second line reading the same key, which
+  would otherwise give `#N/A` when run. A name an inner `LET` binds counts as a read, so it can block
+  needlessly; it never lets a dangling name through.
+- A next line another key still passes, or the input, stays when its variable goes.
+- A new binding avoids every name already in the step, cells and calls included (`maxB` gives
+  `maxB_`). A rename onto one is blocked, because Tim typed that name on purpose.
+- A cell where `LET` is only part of the formula (`=LET(…)&"x"`) isn't a step here: rewriting from the
+  parts would drop the rest.
+- A key used on anything but the bare state (`GetVar(s2, "b")`, a nested `SetVar`, a LAMBDA's own
+  parameter) stops a rename or remove with a message, because the text can't show whether it's this
+  state. A `GetVar` on a truly different state with the same key stops it too.
+- A new row's value can read lines above `S` only: `S` can't read anything below it.
+- A rename onto a key only the sample holds is blocked.
+- A `SetVar` over a call (the stepper's `IF(k = 1, …)`) no longer counts as building a state, so the
+  fold's seed slot stays empty as it does for the stepper itself. A `SetVar` over a cell still fills it.
+
+Taken while making `SplitState` read by key (Part 5; library only, so no Labs switch: it reaches the
+Labs channel on merge to `develop`):
+
+- The columns are the first state's keys, in its order. A key that only later rows hold isn't shown;
+  `SplitState` doesn't widen the table as the run goes.
+- Keys match ignoring case and take the first entry, the same read as `GetVar` (TEXTAFTER/TEXTBEFORE
+  on the separators), so the table shows what `GetVar` would return.
+- An empty first state (`NewState()`) shows `(empty)` as before. Later rows then have no keys to read
+  and show `#N/A`; the old positional read showed their first value.
+
+Taken while fixing #403 (`ApplyRenames` and `AbsolutizeCellRefs` on tokens). Excel 16.0 build 20527
+in `taglo-win` settled these:
+
+- `b:b` and `b:c` follow a LET name: `LET(b, B2, c, B3, COLUMNS(b:c))` is 1, not 2. They're renamed.
+- A built-in wins over a LET name: `LET(max, 5, MAX(max, 1))` is 5, and `LET(sum, LAMBDA(x, x+1), sum(1))`
+  is entered as `SUM(1)`, giving 1. Excel writes a binding's call in the binding's case (`FOO(1)` comes
+  back `foo(1)`), so a call is renamed only when it matches the binding's case exactly. A binding in
+  capitals spelt like a built-in (`LET(MAX, …)`) still renames the call, which shows as `#NAME?`.
+- `A0`, `XFE1` and `A1048577` are names, not cells, so they aren't made absolute.
+- `Data!A:B` stays: `LET(b, 2, COLUMNS(Sheet1!A:b))` is 2, so a qualified range's end isn't a LET name.
+- This build lets a LET name shadow a cell (`LET(x1, 5, x1)` is 5, as are `c` and `H1`). Excel then
+  writes every other use of that cell in the formula as the name `'H1'`, which gives `#NAME?`. Names
+  bound in the LET are left alone when refs are made absolute. Part 1 still suffixes these, as
+  specified.
+- Excel refuses `LOG10 (100)`, so a `(` after a space is an intersection, not a call.
+- Text the lexer can't read (an unterminated string) comes back unchanged. Excel refuses it anyway.
+
 ## Appendix — GetVar hot-loop benchmark (6 Nov 2026)
+
+**Final numbers** (after #387 and Part 6). Same method as below, re-run with
+`scripts/bench/state-engine/`: all versions as labelled names in one workbook, 10,000 steps, the
+median of 3 rounds of 7 recalcs.
+
+| Library | 2 values, ms | × today | × (b) | 5 values, ms | × today | × (b) |
+|---|---|---|---|---|---|---|
+| today (`6e01e21`) | 453 | 1 | 31× | 1,120 | 1 | 56× |
+| lazy Help (#387) | 198 | 2.3× cheaper | 13× | 528 | 2.1× cheaper | 26× |
+| lazy Help + fast GetVar/SetVars | 131 | 3.5× cheaper | 8.9× | 302 | 3.7× cheaper | 15× |
+| (b) HSTACK + INDEX | 14.7 | | 1× | 20.1 | | 1× |
+
+Where the prototypes' lead went (2 / 5 values, ms, two rounds): final `GetVar` with a helper LAMBDA
+171 / 377, inlined 139 / 305; prototype pair 108 / 244. Dropping the repeat check would save 4–8%
+(134 / 281), and comparing names without `& ""` ~4%, but that would miss `1` against `"1"`. A
+`UNIQUE(VSTACK(…))` check was slower (171 / 329).
+
+A one-off probe of old against new on 377 calls in one workbook (SetVars, GetVar, odd states and
+names; not kept in the repo) gave the same value, type and shape except: a value holding an empty
+`CHAR(31)` field, at its end or doubled (SetVars no longer strips it; the old chain did so by accident); an array `name` (GetVar takes the first, as SetVar does; a 1×1 array name now
+gives a true scalar, and a 2×1 name no longer errors); an error `name` on an empty state (the name's
+error, not `#N/A`). States over 32,767 characters are cut when read, before and after; at exactly 32,767 the new read
+loses the last character too (the leading separator pushes it over), and at 32,766 or fewer it
+doesn't (checked in real Excel).
+
+The sections below are the original measurement that led to Part 6.
 
 **Question.** What does a `SetVars`/`GetVar` state cost per REDUCE step, against `HSTACK` + `INDEX`
 and packed states, and what in its implementation costs?

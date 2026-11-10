@@ -1,10 +1,22 @@
 /*  FUNCTION NAME:      CLUSTERAGG
     DESCRIPTION:*//**Groups the cells of a grid into connected clusters - by membership predicate, by a pairwise link rule between neighbours, or both - and aggregates a value per cluster, returning a {clusterId, cellCount, aggregate} table sorted largest aggregate first.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            3-column array {clusterId, cellCount, aggregate}, sorted by aggregate descending
+    PARAMETERS:
+        grid            (Required) A 2D range or array of values (e.g. a map named range).
+        predicate       (Optional) LAMBDA(v, ...) returning TRUE for the cells that may belong to clusters, e.g. LAMBDA(v, NOT(ISNUMBER(v))). Omitted: every cell is eligible (useful with link_fn).
+        link_fn         (Optional) LAMBDA(a, b, ...) returning TRUE when two adjacent eligible cells with values a and b belong to the same cluster, e.g. LAMBDA(a, b, a = b) for same-value regions or LAMBDA(a, b, ABS(a - b) <= 1) for smooth regions. Linking is transitive. Omitted: all adjacent eligible cells are joined.
+        value_fn        (Optional) LAMBDA(v, ...) mapping an eligible cell's value to a number, e.g. LAMBDA(v, CODE(v) - 64). Omitted: every cell counts 1, so the aggregate is the cluster size.
+        agg_fn          (Optional) Aggregator applied to each cluster's column of mapped values. Pass a built-in by name (SUM, MAX, AVERAGE, ...) or a LAMBDA(values, ...). Default SUM.
+        dir_deltas      (Optional) Adjacency stencil in any direction notation - packed deltas (_dirOrthog), arrow glyphs (_arrowsOrthog), compass codes or screen directions; normalised via DIRDELTA. Default: 4-way orthogonal (_dirOrthog); pass _dirAll for 8-way.
+        min_size        (Optional) Clusters with fewer cells than this are dropped before the table is built. Pass 2 to keep only cells that link to at least one neighbour. Default 1 (keep all). Ids are not renumbered after dropping.
+        headers         (Optional) TRUE prepends the header row {clusterId, cellCount, aggregate}. Default FALSE.
+    EXAMPLE:            =CLUSTERAGG(mp, , LAMBDA(a, b, a = b), , , , 2, TRUE) -> {"clusterId", "cellCount", "aggregate"; 3, 17, 17; ...} - same-value regions of two or more cells, largest first
+    REVISIONS:          Date        Developer   Description
                         2026-08-22  Claude      Initial version
                         2026-08-24  Claude      Eta-wrap the user function before passing it as a MAP/SCAN/REDUCE/GROUPBY callback, so relative cell refs in lambda closures survive (#343)
                         2026-09-12  Claude      Added link_fn (pairwise neighbour rule), min_size and headers; predicate now optional; deltas renamed dir_deltas, default now 4-way (_dirOrthog); params re-ordered
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000; default stencil is _dirOrthog (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 CLUSTERAGG = LAMBDA(
 //  Parameter Declarations
@@ -16,27 +28,8 @@ CLUSTERAGG = LAMBDA(
     [dir_deltas],
     [min_size],
     [headers],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CLUSTERAGG(grid, [predicate], [link_fn], [value_fn], [agg_fn], [dir_deltas], [min_size], [headers])¶" &
-                "DESCRIPTION:   →Groups the cells of a grid into connected clusters (via LABELCLUSTERS), maps each cell to a number, and aggregates per cluster. Cluster membership comes from the predicate (which cells count at all) and/or link_fn (which adjacent pairs are joined). Returns a three-column {clusterId, cellCount, aggregate} table sorted by aggregate descending (ties by clusterId ascending), so the answer to ""largest / highest-scoring group"" is always row 1. Cluster ids are numbered by first appearance in reading order. Returns #N/A when no cluster survives.¶" &
-                "VERSION:       →Sep 12 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   grid           →(Required) A 2D range or array of values (e.g. a map named range).¶" &
-                "   predicate      →(Optional) LAMBDA(v, ...) returning TRUE for the cells that may belong to clusters, e.g. LAMBDA(v, NOT(ISNUMBER(v))). Omitted: every cell is eligible (useful with link_fn).¶" &
-                "   link_fn        →(Optional) LAMBDA(a, b, ...) returning TRUE when two adjacent eligible cells with values a and b belong to the same cluster, e.g. LAMBDA(a, b, a = b) for same-value regions or LAMBDA(a, b, ABS(a - b) <= 1) for smooth regions. Linking is transitive. Omitted: all adjacent eligible cells are joined.¶" &
-                "   value_fn       →(Optional) LAMBDA(v, ...) mapping an eligible cell's value to a number, e.g. LAMBDA(v, CODE(v) - 64). Omitted: every cell counts 1, so the aggregate is the cluster size.¶" &
-                "   agg_fn         →(Optional) Aggregator applied to each cluster's column of mapped values. Pass a built-in by name (SUM, MAX, AVERAGE, ...) or a LAMBDA(values, ...). Default SUM.¶" &
-                "   dir_deltas     →(Optional) Adjacency stencil in any direction notation - packed deltas (_dirOrthog), arrow glyphs (_arrowsOrthog), compass codes or screen directions; normalised via DIRDELTA. Default: 4-way orthogonal (_dirOrthog); pass _dirAll for 8-way.¶" &
-                "   min_size       →(Optional) Clusters with fewer cells than this are dropped before the table is built. Pass 2 to keep only cells that link to at least one neighbour. Default 1 (keep all). Ids are not renumbered after dropping.¶" &
-                "   headers        →(Optional) TRUE prepends the header row {clusterId, cellCount, aggregate}. Default FALSE.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=CLUSTERAGG(mp, , LAMBDA(a, b, a = b), , , , 2, TRUE)¶" &
-                "Result         →{""clusterId"", ""cellCount"", ""aggregate""; 3, 17, 17; ...} - same-value regions of two or more cells, largest first",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
-        Help?, ISOMITTED(grid),
         fn, IF(ISOMITTED(agg_fn), SUM, agg_fn),
         minSz, IF(ISOMITTED(min_size), 1, min_size),
         header?, IF(ISOMITTED(headers), FALSE, N(headers) <> 0),
@@ -63,6 +56,6 @@ CLUSTERAGG = LAMBDA(
         sorted, SORTBY(table, FILTER(aggs, keep, NA()), -1, FILTER(ids, keep, NA()), 1),
         body, IF(ISNA(@hitPos), NA(), IF(nKeep = 0, NA(), sorted)),
         result, IF(ISNA(@body), NA(), IF(header?, VSTACK({"clusterId", "cellCount", "aggregate"}, body), body)),
-        IF(Help?, Help, result)
+        result
 )
 );

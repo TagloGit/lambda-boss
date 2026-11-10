@@ -60,6 +60,63 @@ tests:
     args: ['=SetVars("cur", 1, "best", 5)', "=FALSE"]
     expected: [[1, 5]]
 
-  - name: help text
-    args: []
-    expected_type: array
+  # #407: a 1x1 array state from the step's own IF keeps every variable
+  - name: 1x1 array state keeps later variables
+    args: ['=REDUCE(SetVars("p", {1;2}, "q", 3), {1;2;3}, LAMBDA(a, v, IF({TRUE}, SetVar(a, "q", GetVar(a, "q") + v))))', "=TRUE"]
+    expected: [["p", "q"], ["[1, 2]", 9]]
+
+  # Spec 0011 part 5: every row is read by the first state's names, not by position
+  - name: SetVar-reordered row lines up by name
+    args: ['=VSTACK(SetVars("p", 0, "b", 4), SetVar(SetVars("p", 0, "b", 4), "p", 1))', "=TRUE"]
+    expected:
+      - ["p", "b"]
+      - [0, 4]
+      - [1, 4]
+
+  - name: SetVar step traced with SCAN lines up by name
+    args: ['=LET(seed, SetVars("p", 0, "b", 4), VSTACK(seed, SCAN(seed, {1;2;3}, LAMBDA(a, v, SetVar(a, "p", GetVar(a, "p") + v)))))', "=TRUE"]
+    expected:
+      - ["p", "b"]
+      - [0, 4]
+      - [1, 4]
+      - [3, 4]
+      - [6, 4]
+
+  - name: missing key gives NA in that row only
+    args: ['=VSTACK(SetVars("p", 1, "b", 2), SetVars("p", 3), SetVars("b", 6, "p", 5))']
+    expected:
+      - [1, 2]
+      - [3, -2146826246]
+      - [5, 6]
+
+  - name: keys only later rows hold are not shown
+    args: ['=VSTACK(SetVars("p", 1), SetVars("p", 2, "n", 9))', "=TRUE"]
+    expected:
+      - ["p"]
+      - [1]
+      - [2]
+
+  - name: names are read ignoring case
+    args: ['=VSTACK(SetVars("best", 1), SetVars("BEST", 2))']
+    expected:
+      - [1]
+      - [2]
+
+  - name: a name inside another entry is not a match
+    args: ['=VSTACK(SetVars("b", 1, "x", 0), SetVars("abc", 7, "x", "xbx", "b", 2))']
+    expected:
+      - [1, 0]
+      - [2, "xbx"]
+
+  - name: empty first state leaves later rows without keys
+    args: ['=VSTACK(NewState(), SetVars("a", 1))']
+    expected:
+      - ["(empty)"]
+      - [-2146826246]
+
+  - name: a value that changes type between rows keeps each row's type
+    args: ['=VSTACK(SetVars("x", 1), SetVars("x", "one"), SetVars("x", TRUE))']
+    expected:
+      - [1]
+      - ["one"]
+      - [True]

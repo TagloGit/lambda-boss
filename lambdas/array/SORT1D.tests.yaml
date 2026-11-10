@@ -30,7 +30,3 @@ tests:
   - name: single scalar value passes through
     args: ["=42"]
     expected: 42
-
-  - name: help text
-    args: []
-    expected_type: array

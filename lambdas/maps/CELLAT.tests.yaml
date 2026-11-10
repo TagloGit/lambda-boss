@@ -31,10 +31,6 @@ tests:
     args: ['={1;2}', '={1,2,3}']
     expected: [["A1", "B1", "C1"], ["A2", "B2", "C2"]]
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: Z and AA boundary (#380)
     args: ["=1", '={26,27,702,703}']
     expected: [["Z1", "AA1", "ZZ1", "AAA1"]]

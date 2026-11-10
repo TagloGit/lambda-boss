@@ -22,7 +22,3 @@ tests:
   - name: horizontal cases array works the same as vertical
     args: ['=0', '={1,3,5,9,10}', '=LAMBDA(a, v, i, a + v)', '=LAMBDA(a, v, i, a <= 20)']
     expected: 28
-
-  - name: help text
-    args: []
-    expected_type: array

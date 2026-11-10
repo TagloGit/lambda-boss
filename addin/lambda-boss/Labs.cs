@@ -18,7 +18,23 @@ public static class Labs
         "Show library channel in the popup",
         "Adds the channel the library is read from to the popup's status bar.");
 
-    public static readonly IReadOnlyList<LabsSwitch> All = new[] { PopupChannelBadge };
+    /// <summary>
+    ///     /State from any form of a state engine (spec 0015, #429). It replaced the four 0011
+    ///     switches (state-let-to-lambda, state-scaffold, state-edit-lambda, state-edit), so it
+    ///     also turns on the state-aware LET to LAMBDA and Edit Lambda's fold stepper.
+    /// </summary>
+    public static readonly LabsSwitch State = new(
+        "state-any-form",
+        "/State from any form",
+        "/State on the active cell: add, rename or remove a state variable, and move the engine between REDUCE, SCAN, library folds and the unfolded LET step, inline or named. Also turns on state steps in LET to LAMBDA and Edit Lambda's k stepper on a fold.");
+
+    public static readonly LabsSwitch CheckFormula = new(
+        "check-formula",
+        "Check Formula (Ctrl+Shift+K)",
+        "Points at unmatched or misplaced brackets and unknown names in the active cell's formula, or in the formula being edited. Also a ribbon button.");
+
+    public static readonly IReadOnlyList<LabsSwitch> All =
+        new[] { PopupChannelBadge, State, CheckFormula };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

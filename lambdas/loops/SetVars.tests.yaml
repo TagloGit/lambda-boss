@@ -28,6 +28,31 @@ tests:
     args: ["grid", '={"W";"W"}', "pos", '=MOVECELL("AX50","E")', "dir", "E"]
     expected: "grid\x1Et\x1EW\x1DW\x1Fpos\x1Et\x1EAY50\x1Fdir\x1Et\x1EE"
 
-  - name: help text
-    args: []
-    expected_type: array
+  # Unique keys: a repeated name replaces the earlier pair and moves to its later position
+  - name: repeated name keeps one entry
+    args: ["x", "=1", "x", "=2"]
+    expected: "x\x1En\x1E2"
+
+  - name: repeated name moves to the later position
+    args: ["x", "=1", "y", "=2", "x", "=3"]
+    expected: "y\x1En\x1E2\x1Fx\x1En\x1E3"
+
+  - name: repeat is case-insensitive and keeps the later spelling
+    args: ["x", "=1", "X", "=2"]
+    expected: "X\x1En\x1E2"
+
+  - name: repeat across the last slot
+    args: ["a", "=1", "b", "=2", "c", "=3", "d", "=4", "e", "=5", "f", "=6", "g", "=7", "h", "=8", "i", "=9", "a", "=10"]
+    expected: "b\x1En\x1E2\x1Fc\x1En\x1E3\x1Fd\x1En\x1E4\x1Fe\x1En\x1E5\x1Ff\x1En\x1E6\x1Fg\x1En\x1E7\x1Fh\x1En\x1E8\x1Fi\x1En\x1E9\x1Fa\x1En\x1E10"
+
+  - name: a number and its text are the same name
+    args: ["=1", "=5", "1", "=6"]
+    expected: "1\x1En\x1E6"
+
+  - name: omitted middle pair is skipped
+    args: ["a", "=1", "=", "=", "b", "=2"]
+    expected: "a\x1En\x1E1\x1Fb\x1En\x1E2"
+
+  - name: tags for text and boolean values
+    args: ["t", "hi", "f", "=FALSE"]
+    expected: "t\x1Et\x1Ehi\x1Ff\x1Eb\x1EFALSE"

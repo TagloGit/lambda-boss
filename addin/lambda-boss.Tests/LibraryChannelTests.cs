@@ -208,6 +208,58 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
+    public void State_IsOneSwitch_ListedAndOffByDefault()
+    {
+        Assert.Contains(Labs.State, Labs.All);
+        Assert.DoesNotContain(Labs.State.Id, new Settings().LabsSwitchesOn);
+        Assert.DoesNotContain(Labs.All, s =>
+            s.Id is "state-let-to-lambda" or "state-scaffold" or "state-edit-lambda" or "state-edit");
+    }
+
+    [Fact]
+    public void State_OldSwitchesMapToTheNewOne()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lb-settings-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{ \"LabsSwitchesOn\": [\"state-edit\", \"check-formula\"] }");
+            var loaded = Settings.Load(path);
+            Assert.Contains(Labs.State.Id, loaded.LabsSwitchesOn);
+            Assert.Contains(Labs.CheckFormula.Id, loaded.LabsSwitchesOn);
+            Assert.DoesNotContain("state-edit", loaded.LabsSwitchesOn);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ArgumentHints_AreOnByDefault_AndNoLongerALabsSwitch()
+    {
+        Assert.True(new Settings().ArgumentHints);
+        Assert.DoesNotContain(Labs.All, s => s.Id == "lambda-intellisense");
+    }
+
+    [Fact]
+    public void ArgumentHints_OldSettingsFileWithoutTheValue_ReadsAsOn()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lb-settings-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{ \"LabsSwitchesOn\": [\"lambda-intellisense\"] }");
+            Assert.True(Settings.Load(path).ArgumentHints);
+
+            File.WriteAllText(path, "{ \"ArgumentHints\": false }");
+            Assert.False(Settings.Load(path).ArgumentHints);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void LabsSwitches_HaveUniqueIds()
     {
         Assert.Equal(Labs.All.Count, Labs.All.Select(s => s.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());

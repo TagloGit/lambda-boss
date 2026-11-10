@@ -1,7 +1,15 @@
 /*  FUNCTION NAME:      CIRCPOS
     DESCRIPTION:*//**Position on a circular track of n items after advancing moves steps from start.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            number: position on a circular track of n after advancing moves steps; lifts over arrays
+    PARAMETERS:
+        moves           (Required) Number of steps to advance. Negative = backward. Scalar or array.
+        n               (Required) Size of the circular track (number of positions).
+        start           (Optional) Starting position. Default 1 (or 0 if zero_based=TRUE). Scalar or array.
+        zero_based      (Optional) If TRUE, uses 0-based indexing (0 to n-1). Default FALSE.
+    EXAMPLE:            =CIRCPOS(35, 19) -> 17
+    REVISIONS:          Date        Developer   Description
                         2026-04-15  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 CIRCPOS = LAMBDA(
 //  Parameter Declarations
@@ -9,27 +17,12 @@ CIRCPOS = LAMBDA(
     [n],
     [start],
     [zero_based],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →CIRCPOS(moves, n, [start], [zero_based])¶" &
-                "DESCRIPTION:   →Position on a circular track of n items after advancing moves steps from start.¶" &
-                "VERSION:       →Apr 15 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   moves         →(Required) Number of steps to advance. Negative = backward. Scalar or array.¶" &
-                "   n             →(Required) Size of the circular track (number of positions).¶" &
-                "   start         →(Optional) Starting position. Default 1 (or 0 if zero_based=TRUE). Scalar or array.¶" &
-                "   zero_based    →(Optional) If TRUE, uses 0-based indexing (0 to n-1). Default FALSE.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=CIRCPOS(35, 19)¶" &
-                "Result         →17",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
-        Help?, ISOMITTED(moves),
         ZeroBased, IF(ISOMITTED(zero_based), FALSE, zero_based),
         Start, IF(ISOMITTED(start), IF(ZeroBased, 0, 1), start),
     //  Procedure
         result, IF(ZeroBased, MOD(Start + moves, n), MOD(Start + moves - 1, n) + 1),
-        IF(Help?, Help, result)
+        result
 )
 );

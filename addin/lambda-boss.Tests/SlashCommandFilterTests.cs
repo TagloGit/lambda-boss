@@ -82,4 +82,18 @@ public class SlashCommandFilterTests
             lower.Select(c => c.Name),
             upper.Select(c => c.Name));
     }
+
+    [Fact]
+    public void Filter_LeavesOutACommandThatIsOff()
+    {
+        var commands = new[]
+        {
+            new SlashCommand("On", "", () => { }, () => true),
+            new SlashCommand("Off", "", () => { }, () => false),
+            new SlashCommand("Always", "", () => { }),
+        };
+
+        Assert.Equal(new[] { "On", "Always" }, SlashCommandFilter.Filter(commands, "").Select(c => c.Name));
+        Assert.Empty(SlashCommandFilter.Filter(commands, "/off"));
+    }
 }

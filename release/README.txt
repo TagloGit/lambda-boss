@@ -13,6 +13,11 @@ What's in this zip
   unblock.cmd         Optional helper for clearing the "downloaded from
                       the internet" mark Windows applies to USB-copied
                       files.
+  remove-lambda-boss.cmd
+                      Removes Lambda Boss from this Windows user's Excel
+                      (for the next person on a shared machine). Run it
+                      with Excel closed; it lists what it removed and
+                      what is left to delete.
 
 Requirements
 ------------
@@ -49,6 +54,14 @@ There are three ways to load the add-in. Pick whichever fits your setup.
    Just double-click lambda-boss64.xll. Excel will launch with Lambda
    Boss enabled for that session only. Quickest if you only need it
    once.
+
+Offline use (a competition machine)
+-----------------------------------
+
+The XLL carries the whole LAMBDA library as it was when it was built, so
+it needs no internet, library folder or settings file: with GitHub out of
+reach it uses that copy. Argument hints need the XLL's folder to be
+writable (they are written beside it), so prefer load path 1.
 
 If Excel warns about an unsigned add-in
 ---------------------------------------

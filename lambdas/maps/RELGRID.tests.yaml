@@ -70,10 +70,6 @@ tests:
     args: ["=SEQUENCE(3,3)", "N3", "=0", "=M2"]
     expected: [[-1, -1, -1], [0, 0, 0], [1, 1, 1]]
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: packed integer anchor (#380)
     args: ["=SEQUENCE(5,5)", "=3000003", "=1"]
     expected: [[-2, -1, 0, 1, 2], [-2, -1, 0, 1, 2], [-2, -1, 0, 1, 2], [-2, -1, 0, 1, 2], [-2, -1, 0, 1, 2]]

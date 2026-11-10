@@ -70,7 +70,3 @@ tests:
   - name: inverse of REPLACEARRAY (stamp in, read back)
     args: ['=REPLACEARRAY({0,0,0;0,0,0;0,0,0}, {1,2;3,4}, "B2")', "B2:C3"]
     expected: [[1, 2], [3, 4]]
-
-  - name: help text
-    args: []
-    expected_type: array

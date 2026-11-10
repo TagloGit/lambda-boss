@@ -1,11 +1,20 @@
 /*  FUNCTION NAME:      TLOOKUP
     DESCRIPTION:*//**Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the value under HeaderName for each Item (row mode: the matched row)
+    PARAMETERS:
+        Table           (Required) Full table including its header row (e.g. tblData[#All]). Row mode (HeaderName omitted) also accepts a data-only table (e.g. tblData).
+        Item            (Optional) Value to find in LookupCol to identify the row. Also accepts an array of items - result lifts element-wise (row mode stacks one row per item). If omitted, returns the entire data column under HeaderName (header row excluded).
+        LookupCol       (Optional) Column to search for Item (e.g. tblData[Person]). Excluding headers. Defaults to the first column of Table.
+        HeaderName      (Optional) Header text identifying the column whose value should be returned. If omitted (row mode), returns the matched row; when LookupCol is also omitted the first (key) column is dropped from the result. Note: in row mode an Item equal to the header text matches the header row - pass a data-only Table if keys could collide with headers.
+        If_not_found    (Optional) Value to return when Item or HeaderName is not found. Defaults to #N/A.
+    EXAMPLE:            =TLOOKUP(tblData[#All], "Tim", tblData[Person], "Age") -> 42
+    REVISIONS:          Date        Developer   Description
                         2026-05-07  Claude      Initial version
                         2026-05-14  Claude      Array-lift on Item via dispatcher: MAP over multi-item input, otherwise scalar body unchanged
                         2026-07-18  Claude      Item now optional (omitted returns whole data column under HeaderName); LookupCol now optional (defaults to first table column)
                         2026-07-18  Claude      Row mode: omitted HeaderName returns the matched row's other columns; works with or without a header row; array Items stack rows
                         2026-07-22  Claude      1x1-array Item handling: both modes deref Item with @ on the scalar path (INDEX with a lifted 1x1 row index collapsed row mode's whole-row return); @ also keeps column mode's scalar output a true scalar (#318)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 TLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -14,24 +23,7 @@ TLOOKUP = LAMBDA(
     [LookupCol],
     [HeaderName],
     [If_not_found],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →TLOOKUP(Table, [Item], [LookupCol], [HeaderName], [If_not_found])¶" &
-                "DESCRIPTION:   →Looks up a value from a header-row table by matching a row key in one column and returning the value under a named header.¶" &
-                "VERSION:       →Jul 18 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   Table          →(Required) Full table including its header row (e.g. tblData[#All]). Row mode (HeaderName omitted) also accepts a data-only table (e.g. tblData).¶" &
-                "   Item           →(Optional) Value to find in LookupCol to identify the row. Also accepts an array of items - result lifts element-wise (row mode stacks one row per item). If omitted, returns the entire data column under HeaderName (header row excluded).¶" &
-                "   LookupCol      →(Optional) Column to search for Item (e.g. tblData[Person]). Excluding headers. Defaults to the first column of Table.¶" &
-                "   HeaderName     →(Optional) Header text identifying the column whose value should be returned. If omitted (row mode), returns the matched row; when LookupCol is also omitted the first (key) column is dropped from the result. Note: in row mode an Item equal to the header text matches the header row - pass a data-only Table if keys could collide with headers.¶" &
-                "   If_not_found   →(Optional) Value to return when Item or HeaderName is not found. Defaults to #N/A.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=TLOOKUP(tblData[#All], ""Tim"", tblData[Person], ""Age"")¶" &
-                "Result         →42",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(Table),
+    LET(
     //  Procedure
         notFound, IF(ISOMITTED(If_not_found), NA(), If_not_found),
         lookCol, IF(ISOMITTED(LookupCol), DROP(TAKE(Table, , 1), 1), LookupCol),
@@ -68,6 +60,6 @@ TLOOKUP = LAMBDA(
                         IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
                             MAP(Item, scalar),
                             scalar(@Item)))),
-        IF(Help?, Help, result)
+        result
 )
 );

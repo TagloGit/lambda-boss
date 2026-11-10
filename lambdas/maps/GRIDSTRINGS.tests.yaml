@@ -34,7 +34,3 @@ tests:
   - name: duplicate selection dedupes
     args: ['={"A","B";"C","D"}', '={"→","←"}', "=TRUE"]
     expected: [["AB"], ["CD"], ["BA"], ["DC"]]
-
-  - name: help text
-    args: []
-    expected_type: array

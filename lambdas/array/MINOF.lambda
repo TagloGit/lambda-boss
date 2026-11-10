@@ -1,29 +1,21 @@
 /*  FUNCTION NAME:      MINOF
     DESCRIPTION:*//**Returns the label corresponding to the smallest value in a range.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            value: the label paired with the smallest value
+    PARAMETERS:
+        values          (Required) A 1D range of numeric values.
+        labels          (Required) A 1D range of labels, same size as values.
+    EXAMPLE:            =MINOF({33,6,21,12}, {"Harry","Evie","Hugh","James"}) -> Evie
+    REVISIONS:          Date        Developer   Description
                         2026-04-13  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 MINOF = LAMBDA(
 //  Parameter Declarations
     [values],
     [labels],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →MINOF(values, labels)¶" &
-                "DESCRIPTION:   →Returns the label corresponding to the smallest value in a range.¶" &
-                "VERSION:       →Apr 13 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   values         →(Required) A 1D range of numeric values.¶" &
-                "   labels         →(Required) A 1D range of labels, same size as values.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=MINOF({33,6,21,12}, {""Harry"",""Evie"",""Hugh"",""James""})¶" &
-                "Result         →Evie",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(values),
+    LET(
     //  Procedure
         result, INDEX(labels, XMATCH(MIN(values), values)),
-        IF(Help?, Help, result)
+        result
 )
 );

@@ -14,7 +14,3 @@ tests:
   - name: single column multi row
     args: ["={10;20;30}", "=LAMBDA(r, r/10)"]
     expected: [[1], [2], [3]]
-
-  - name: help text
-    args: []
-    expected_type: array

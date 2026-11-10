@@ -125,10 +125,6 @@ tests:
     args: ["=SEQUENCE(10,10)", "A1", "=3", "=3", "=", "=2"]
     expected: -2146826246
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: packed integer centre (#380)
     args: ["=SEQUENCE(10,10)", "=5000005", "=3", "=3"]
     expected: [[34, 35, 36], [44, 45, 46], [54, 55, 56]]
