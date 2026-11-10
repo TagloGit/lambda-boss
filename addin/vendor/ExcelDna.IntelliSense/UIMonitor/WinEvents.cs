@@ -48,6 +48,9 @@ namespace ExcelDna.IntelliSense
         [DllImport("user32.dll")]
         static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
+        [DllImport("kernel32.dll")]
+        static extern uint GetCurrentThreadId();
+
         [Flags]
         enum SetWinEventHookFlags : uint
         {
@@ -140,7 +143,12 @@ namespace ExcelDna.IntelliSense
         void InstallWinEventHook(object _)
         {
             var excelProcessId = Win32Helper.GetExcelProcessId();
-            _hWinEventHook = SetWinEventHook(_eventMin, _eventMax, IntPtr.Zero, _handleWinEventDelegate, excelProcessId, 0, SetWinEventHookFlags.WINEVENT_OUTOFCONTEXT);
+            // LAMBDA BOSS PATCH (lambda-boss#433): upstream hooked every thread in the process (idThread 0), so
+            // Office's other UI threads (React Native flyouts such as the account switcher) saw a WinEvent client
+            // and ran our callback. Every window the server watches (formula bar, in-cell editor, function list,
+            // Excel's tooltip, XLMAIN) belongs to Excel's main thread, which is the thread this runs on.
+            var excelMainThreadId = GetCurrentThreadId();
+            _hWinEventHook = SetWinEventHook(_eventMin, _eventMax, IntPtr.Zero, _handleWinEventDelegate, excelProcessId, excelMainThreadId, SetWinEventHookFlags.WINEVENT_OUTOFCONTEXT);
             if (_hWinEventHook == IntPtr.Zero)
             {
                 Logger.WinEvents.Error("SetWinEventHook failed");

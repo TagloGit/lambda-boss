@@ -16,16 +16,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\vendor\ExcelDna.IntelliSense\ExcelDna.IntelliSense.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- net48 ships these as framework assemblies but SDK-style projects don't reference them by default -->
     <Reference Include="System.Net.Http" />
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- ExcelDna.IntelliSense 1.9.0 pins ExcelDna.Integration to exactly 1.9.0, so ExcelDna.AddIn
-         moves with it: bump both together (spec 0013). -->
+    <!-- ExcelDna.IntelliSense is vendored and patched (addin/vendor/ExcelDna.IntelliSense, #433). It
+         references ExcelDna.Integration 1.9.0, so ExcelDna.AddIn moves with it: bump both together. -->
     <PackageReference Include="ExcelDna.AddIn" Version="1.9.0" />
-    <PackageReference Include="ExcelDna.IntelliSense" Version="1.9.0" />
     <PackageReference Include="gong-wpf-dragdrop" Version="3.2.*" />
     <PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.*" />
     <PackageReference Include="Ookii.Dialogs.Wpf" Version="5.0.1" />

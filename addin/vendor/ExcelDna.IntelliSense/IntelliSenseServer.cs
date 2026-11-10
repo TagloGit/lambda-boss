@@ -30,7 +30,7 @@ namespace ExcelDna.IntelliSense
     // REMEMBER: COM events are not necessarily safe macro contexts.
     public static class IntelliSenseServer
     {
-        const string ServerVersion = "1.9.0";  // TODO: Define and manage this somewhere else
+        const string ServerVersion = "1.9.0.433";  // LAMBDA BOSS PATCH (lambda-boss#433): ranks above a stock 1.9.0 server in another add-in, so this patched one is the one that runs
 
         // NOTE: Do not change these constants in custom versions. 
         //       They are part of the co-operative safety mechanism allowing different add-ins providing IntelliSense to work together safely.

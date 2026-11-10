@@ -48,13 +48,19 @@ The hints are on by default (out of Labs on 9 Nov, #422: "Argument hints look aw
 ## How it's built
 
 - **Engine: [ExcelDna.IntelliSense](https://github.com/Excel-DNA/IntelliSense)** (MIT, the
-  Excel-DNA project's own on-sheet IntelliSense, NuGet 1.9.0, packed into the XLL). It watches
-  Excel's formula editing through UI Automation on its own thread, parses the function name and
+  Excel-DNA project's own on-sheet IntelliSense, 1.9.0, packed into the XLL). It watches
+  Excel's formula editing through WinEvent hooks, on its own thread, parses the function name and
   argument index from the text, and draws the tooltips. It matches names case-insensitively and
   accepts dotted names, so prefixed library names work.
+- **Vendored and patched since #433** (`addin/vendor/ExcelDna.IntelliSense`, `VENDORED.md` there
+  lists the changes). With the stock server installed at startup, opening Office's account/profile
+  switcher crashed Excel in `hermes.dll`. The patch drops the server's loader-lock DLL
+  notification (managed code on Office's own threads as they load DLLs) and scopes its WinEvent
+  hooks to Excel's main thread, so it no longer touches anything outside Excel's formula editing.
+  Its server version is `1.9.0.433`, so it outranks a stock 1.9.0 server in another add-in.
 - **It already supports names it isn't told are UDFs.** Its XML provider reads
   `<xll name>.intellisense.xml` beside every loaded Excel-DNA add-in, and the display looks a
-  typed name up in that list without asking whether it's a UDF. So no fork is needed: Lambda
+  typed name up in that list without asking whether it's a UDF. So the names need no patch: Lambda
   Boss writes `lambda-boss64.intellisense.xml` beside its own XLL and asks the server to
   refresh. Its provider classes are internal and closed to extension (its own comment says so),
   which rules out an in-memory provider without forking; the file route is the supported one.

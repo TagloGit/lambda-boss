@@ -105,20 +105,19 @@ namespace ExcelDna.IntelliSense
         readonly ExcelSynchronizationContext _syncContextExcel; // Proper macro context
         readonly XmlIntelliSenseProvider _xmlProvider;
         readonly Dictionary<string, XllRegistrationInfo> _xllRegistrationInfos = new Dictionary<string, XllRegistrationInfo>();
-        LoaderNotification _loaderNotification;
-        bool _isDirty;
-        SendOrPostCallback _processLoadNotification;
         public event EventHandler Invalidate;
 
+        // LAMBDA BOSS PATCH (lambda-boss#433): upstream registered LdrRegisterDllNotification here, which runs
+        // managed code under the loader lock on whatever thread loads a DLL, including Office's own threads
+        // (React Native / hermes.dll building the account flyout). Excel crashed in hermes.dll when that flyout
+        // was first built with the server running. XLLs loaded after Initialize are now picked up by Refresh
+        // (AddLoadedXlls), which runs on the main thread in a macro context.
         public ExcelDnaIntelliSenseProvider(SynchronizationContext syncContextMain)
         {
-            _loaderNotification = new LoaderNotification();
-            _loaderNotification.LoadNotification += loaderNotification_LoadNotification;
             _syncContextMain = syncContextMain;
             _syncContextExcel = new ExcelSynchronizationContext();
             _xmlProvider = new XmlIntelliSenseProvider();
             _xmlProvider.Invalidate += (sender, e) => OnInvalidate(null);
-            _processLoadNotification = ProcessLoadNotification;
         }
 
         #region IIntelliSenseProvider implementation
@@ -134,18 +133,9 @@ namespace ExcelDna.IntelliSense
             lock (_xllRegistrationInfos)
             {
                 Logger.Provider.Info("ExcelDnaIntelliSenseProvider.Initialize - inside lock");
-                foreach (var xllPath in GetLoadedXllPaths())
+                foreach (var regInfo in AddLoadedXlls())
                 {
-                    if (!_xllRegistrationInfos.ContainsKey(xllPath))
-                    {
-                        Logger.Provider.Verbose($"ExcelDnaIntelliSenseProvider.Initialize: Adding XllRegistrationInfo for {xllPath}");
-                        XllRegistrationInfo regInfo = new XllRegistrationInfo(xllPath);
-                        _xllRegistrationInfos[xllPath] = regInfo;
-
-                        _xmlProvider.RegisterXmlFunctionInfo(GetXmlPath(xllPath));
-                        
-                        regInfo.Refresh();
-                    }
+                    regInfo.Refresh();
                 }
             }
             Logger.Provider.Info("ExcelDnaIntelliSenseProvider.Initialize - after lock");
@@ -159,14 +149,42 @@ namespace ExcelDna.IntelliSense
             lock (_xllRegistrationInfos)
             {
                 Logger.Provider.Info("ExcelDnaIntelliSenseProvider.Refresh - inside lock");
+                AddLoadedXlls(); // LAMBDA BOSS PATCH (#433): replaces the loader notification
                 foreach (var regInfo in _xllRegistrationInfos.Values)
                 {
                     regInfo.Refresh();
                 }
                 _xmlProvider.Refresh();
-                _isDirty = false;
             }
             Logger.Provider.Info("ExcelDnaIntelliSenseProvider.Refresh - after lock");
+        }
+
+        // LAMBDA BOSS PATCH (#433): registers every loaded .xll not yet known (and its .intellisense.xml),
+        // returning the new ones, and forgets any that have unloaded. Call inside lock (_xllRegistrationInfos),
+        // on the main thread.
+        List<XllRegistrationInfo> AddLoadedXlls()
+        {
+            var added = new List<XllRegistrationInfo>();
+            var loaded = new HashSet<string>(GetLoadedXllPaths());
+
+            foreach (var xllPath in _xllRegistrationInfos.Keys.Where(p => !loaded.Contains(p)).ToList())
+            {
+                _xllRegistrationInfos.Remove(xllPath);
+                _xmlProvider.UnregisterXmlFunctionInfo(GetXmlPath(xllPath));
+            }
+
+            foreach (var xllPath in loaded)
+            {
+                if (!_xllRegistrationInfos.ContainsKey(xllPath))
+                {
+                    Logger.Provider.Verbose($"ExcelDnaIntelliSenseProvider: Adding XllRegistrationInfo for {xllPath}");
+                    var regInfo = new XllRegistrationInfo(xllPath);
+                    _xllRegistrationInfos[xllPath] = regInfo;
+                    _xmlProvider.RegisterXmlFunctionInfo(GetXmlPath(xllPath));
+                    added.Add(regInfo);
+                }
+            }
+            return added;
         }
 
         // May be called from any thread
@@ -193,61 +211,6 @@ namespace ExcelDna.IntelliSense
         }
 
         #endregion
-
-        // DANGER: Still subject to LoaderLock warning ...
-        // TODO: Consider Load/Unload done when AddIns is enumerated...
-        void loaderNotification_LoadNotification(object sender, LoaderNotification.NotificationEventArgs e)
-        {
-            Debug.Print($"@>@>@>@> LoadNotification: {e.Reason} - {e.FullDllName}");
-            if (e.FullDllName.EndsWith(".xll", StringComparison.OrdinalIgnoreCase))
-                _syncContextMain.Post(_processLoadNotification, e);
-        }
-
-        // Runs on the main thread, but not in a macro context 
-        // WARNING: The sequence of calls here, between queued 
-        //          instances of ProcessLoadNotification, Refresh and OnInvalidate
-        //          is quite fragile.
-        void ProcessLoadNotification(object state)
-        {
-            var notification = (LoaderNotification.NotificationEventArgs)state;
-            var xllPath = notification.FullDllName;
-
-            Logger.Provider.Verbose($"ExcelDnaIntelliSenseProvider.ProcessLoadNotification {notification}, {xllPath}");
-            lock (_xllRegistrationInfos)
-            {
-                Logger.Provider.Verbose($"ExcelDnaIntelliSenseProvider.ProcessLoadNotification - inside lock");
-                XllRegistrationInfo regInfo;
-                if (!_xllRegistrationInfos.TryGetValue(xllPath, out regInfo))
-                {
-                    if (notification.Reason == LoaderNotification.Reason.Loaded)
-                    {
-                        regInfo = new XllRegistrationInfo(xllPath);
-                        _xllRegistrationInfos[xllPath] = regInfo;
-                        //regInfo.Refresh();    // Rather not.... so that we don't even try during the AddIns enumeration... OnInvalidate will lead to Refresh()
-
-                        _xmlProvider.RegisterXmlFunctionInfo(GetXmlPath(xllPath));
-
-                        if (!_isDirty)
-                        {
-                            _isDirty = true;
-                            // This call would case trouble while Excel is shutting down.
-                            // CONSIDER: Is there a check we might do.... (and do we in fact get .xll loads during shutdown?)
-                           _syncContextExcel.Post(OnInvalidate, null);
-                        }
-
-                    }
-                }
-                else if (notification.Reason == LoaderNotification.Reason.Unloaded)
-                {
-                    _xllRegistrationInfos.Remove(xllPath);
-                    _xmlProvider.UnregisterXmlFunctionInfo(GetXmlPath(xllPath));
-
-                    // Not too eager when cleaning up
-                    // OnInvalidate();
-                }
-            }
-            Logger.Provider.Verbose($"ExcelDnaIntelliSenseProvider.ProcessLoadNotification - after lock");
-        }
 
         string GetXmlPath(string xllPath) => Path.ChangeExtension(xllPath, ".intellisense.xml");
 
@@ -309,7 +272,6 @@ namespace ExcelDna.IntelliSense
         public void Dispose()
         {
             Logger.Provider.Info("ExcelDnaIntelliSenseProvider.Dispose");
-            _loaderNotification.Dispose();
         }
     }
 }

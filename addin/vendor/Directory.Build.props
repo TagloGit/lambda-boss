@@ -1,0 +1,7 @@
+<Project>
+  <!--
+    Stops MSBuild from importing the repo's Directory.Build.props for vendored code: its global
+    usings, nullable and analyzer settings are for our code, not upstream's. Each vendored project
+    sets what it needs in its own csproj.
+  -->
+</Project>

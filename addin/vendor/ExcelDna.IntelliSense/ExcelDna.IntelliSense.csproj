@@ -1,28 +1,35 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFrameworks>net462;net6.0-windows</TargetFrameworks>
-		<UseWindowsForms>true</UseWindowsForms>
-		<UseWPF>true</UseWPF>
+  <!-- Vendored ExcelDna.IntelliSense 1.9.0 (MIT), patched for lambda-boss#433: see VENDORED.md. -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>ExcelDna.IntelliSense</AssemblyName>
+    <RootNamespace>ExcelDna.IntelliSense</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+    <!-- Upstream code as-is: no analyzers or style rules from the rest of the repo. -->
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <RunAnalyzers>false</RunAnalyzers>
+    <WarningLevel>0</WarningLevel>
+    <AssemblyTitle>Excel-DNA IntelliSense (Lambda Boss patched)</AssemblyTitle>
+    <Product>ExcelDna.IntelliSense</Product>
+    <Copyright>Copyright © Excel-DNA Contributors 2013-2024</Copyright>
+    <Version>1.9.0.433</Version>
+  </PropertyGroup>
 
-		<SignAssembly>true</SignAssembly>
-		<AssemblyOriginatorKeyFile>..\assets\exceldna.snk</AssemblyOriginatorKeyFile>
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
 
-		<AssemblyTitle>Excel-DNA IntelliSense</AssemblyTitle>
-		<Description>IntelliSense service for Microsoft Excel</Description>
-		<Product>ExcelDna.IntelliSense.Tools</Product>
-		<Copyright>Copyright © Excel-DNA Contributors 2013-2024</Copyright>
-	</PropertyGroup>
-
-	<ItemGroup Condition=" '$(TargetFramework)' == 'net462' ">
-		<Reference Include="System.Windows.Forms" />
-		<Reference Include="WindowsBase" />
-		<Reference Include="Microsoft.CSharp" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="ExcelDna.Interop" />
-		<PackageReference Include="ExcelDna.Integration" />
-	</ItemGroup>
+  <ItemGroup>
+    <!-- ExcelDna.AddIn in lambda-boss.csproj moves with this: keep both on the same version. -->
+    <PackageReference Include="ExcelDna.Integration" Version="1.9.0" />
+    <PackageReference Include="ExcelDna.Interop" Version="15.0.1" PrivateAssets="all" />
+  </ItemGroup>
 
 </Project>
