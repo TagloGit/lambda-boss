@@ -319,7 +319,7 @@ internal static class FormulaChecker
     public const int MaxRepairLength = 12000;
 
     /// <summary>The repair search stops after this long and says so.</summary>
-    public static TimeSpan RepairBudget { get; set; } = TimeSpan.FromMilliseconds(250);
+    public static TimeSpan RepairBudget { get; set; } = TimeSpan.FromMilliseconds(400);
 
     /// <summary>
     ///     Tries every single <c>)</c> removal, and every <c>)</c> insertion where an argument ends
@@ -624,6 +624,9 @@ internal static class FormulaChecker
         /// <summary>The range came from a library LAMBDA's header, not Excel's own table.</summary>
         public bool ArityFromLibrary { get; set; }
 
+        /// <summary>A quick pass already counted "too many arguments" at a comma.</summary>
+        public bool ArityReported { get; set; }
+
         public int ArgIndex { get; set; }
         public int ArgTokens { get; set; }
         public FormulaToken? ArgFirst { get; set; }
@@ -805,6 +808,15 @@ internal static class FormulaChecker
             }
 
             FinishArgument(f, isLast: false);
+
+            // The repair search's re-checks: a call past its maximum is a fault now, not at its
+            // ), so the re-check can stop here instead of reading to the end.
+            if (_quick && f.Arity is { } a && !f.ArityReported && f.ArgIndex + 2 > a.Max)
+            {
+                f.ArityReported = true;
+                Add(new FormulaProblem(FormulaProblemKind.ArgumentCount, f.Start, 0, ""));
+            }
+
             f.ArgIndex++;
             f.ArgTokens = 0;
             f.ArgFirst = null;
@@ -915,7 +927,7 @@ internal static class FormulaChecker
                 Add(new FormulaProblem(FormulaProblemKind.BadShape, f.Start, f.Open.End - f.Start,
                     $"LAMBDA needs at least a calculation.{at}"));
             }
-            else if (f.Arity is { } a && closer is not null && (argCount < a.Min || argCount > a.Max))
+            else if (f.Arity is { } a && closer is not null && !f.ArityReported && (argCount < a.Min || argCount > a.Max))
             {
                 var name = f.NameToken!.Text;
                 var has = $"{name} has {argCount} argument{(argCount == 1 ? "" : "s")}";
