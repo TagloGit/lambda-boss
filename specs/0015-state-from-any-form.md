@@ -168,28 +168,36 @@ that shipped. Neither is in the add-in, and none is the default. The setup:
 - **In-cell** ([x1](assets/0015-x1-in-cell.png)): the shipped LET step in the fold's own cell.
 - **(i) Laid out to the right** ([x2](assets/0015-x2-layout-right.png)): a marker, a `k` cell,
   `TOCOL(inputs)` as a column, the state's starting values in cells, and a step cell reading them.
-  The prototype searches for free space (it moved to `J2` past filled cells, and to `J82` when
-  `D82` was filled), and fold-back clears the block.
+  The prototype never overwrites a filled cell: it looks for a free 16×5 block, starting two
+  columns right of the fold and moving right past anything filled. It landed at `J2` because the
+  walk's inputs fill column E, and at `J82` when a test put a value in `D82`. Fold-back clears
+  the block.
 - **(ii) One cell to the right** ([x3](assets/0015-x3-layout-one-cell.png)): the LET step alone,
   with `_for, "B2"` as its marker, the seed written out, and the first input hard-coded (`v, "F"`).
 
 | | In-cell | (i) to the right | (ii) one cell |
 |---|---|---|---|
-| Unfold, in Excel (ms) | 2–17 | 38–119 (11 cells) | 3–22 |
+| Unfold, Excel write time (ms) | 2–17 | 38–119 (11 cell writes; the inputs spill) | 3–22 |
 | Fold-back after the fix, all four shapes | 4/4 | 4/4 | 4/4 |
 | Column, row, string inputs | step 1 right | right | right |
-| 2-D inputs | **`#REF!`** (`INDEX(_inputs, 1)`) | right (`TOCOL`) | right (literal) |
+| 2-D inputs | **`#REF!`** (`INDEX(_inputs, 1)`) | right (`TOCOL`) | right, since the first input is typed in as a literal |
 | To look at step k | edit `a` and `v` by hand; named: change `k` | change `k`, but `a` stays the starting values | type `a` and `v` by hand |
 | State at step k is the true one | named only (stepper) | **no**: `k`=3 gave `p`=-1, `b`=6 | no |
 
 **Reading.**
-- Every form folds back reliably, and every edit is fast.
+- In this test (one engine, one planted bug, four input shapes), every form folded back correctly,
+  and every write took Excel well under a quarter of a second.
 - What separates them is whether you see the true state at step k. Only the named in-cell form has
   that (its `k` stepper runs the real steps). In layout (i), changing `k` shows step k applied to the
   starting values, which looks like stepping but isn't. It would need the step named or held as a
   LAMBDA in the block to be honest.
 - Layout (ii) is the in-cell form in another cell with fewer `_` lines. It keeps the fold visible
   beside the step, which helps when comparing answers.
+
+The screenshots are from the column case. x1 shows the step unfolded in `B4`, with the buggy rule,
+at step 1. In x2 and x3, `B4` holds the fixed fold, because the in-cell run had already finished;
+x2 has `k`=3. The formula bar shows only the first line of each step. An Excel tip covers the
+bottom left of each image.
 
 Timings are the tool's own write times. They are not how long Tim takes to find the bug; that
 needs Tim, under the clock, in a rep.
