@@ -208,24 +208,12 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
-    public void StateLetToLambda_IsListedAndOffByDefault()
+    public void State_IsOneSwitch_ListedAndOffByDefault()
     {
-        Assert.Contains(Labs.StateLetToLambda, Labs.All);
-        Assert.DoesNotContain(Labs.StateLetToLambda.Id, new Settings().LabsSwitchesOn);
-    }
-
-    [Fact]
-    public void StateEditLambda_IsListedAndOffByDefault()
-    {
-        Assert.Contains(Labs.StateEditLambda, Labs.All);
-        Assert.DoesNotContain(Labs.StateEditLambda.Id, new Settings().LabsSwitchesOn);
-    }
-
-    [Fact]
-    public void StateEdit_IsListedAndOffByDefault()
-    {
-        Assert.Contains(Labs.StateEdit, Labs.All);
-        Assert.DoesNotContain(Labs.StateEdit.Id, new Settings().LabsSwitchesOn);
+        Assert.Contains(Labs.State, Labs.All);
+        Assert.DoesNotContain(Labs.State.Id, new Settings().LabsSwitchesOn);
+        Assert.DoesNotContain(Labs.All, s =>
+            s.Id is "state-let-to-lambda" or "state-scaffold" or "state-edit-lambda" or "state-edit");
     }
 
     [Fact]

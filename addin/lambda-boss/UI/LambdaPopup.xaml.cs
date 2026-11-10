@@ -439,7 +439,7 @@ public partial class LambdaPopup
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
             },
-            () => !Labs.IsOn(Labs.StateEditLambda)),
+            () => !Labs.IsOn(Labs.State)),
         new SlashCommand(
             "Edit Lambda",
             "Expand a LAMBDA call back to =LET(...). On a fold, write its step beside it with a k stepper: "
@@ -449,7 +449,7 @@ public partial class LambdaPopup
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => EditLambdaCommand.Run());
             },
-            () => Labs.IsOn(Labs.StateEditLambda)),
+            () => Labs.IsOn(Labs.State)),
         new SlashCommand(
             "Gather",
             "Roll up the active cell's precedents into a single =LET(...)",
@@ -476,22 +476,13 @@ public partial class LambdaPopup
             }),
         new SlashCommand(
             "State",
-            "New state step: GetVar lines, next lines and SetVars output from names and initial values",
+            "State engine on the active cell: add, rename or remove a variable; fold or unfold; inline or named. An empty cell gets a new one",
             () =>
             {
                 Hide();
                 ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.Run());
             },
-            () => Labs.IsOn(Labs.StateScaffold) && !Labs.IsOn(Labs.StateEdit)),
-        new SlashCommand(
-            "State",
-            "On a state step: add, remove or rename a variable. Elsewhere: a new state step from names and initial values",
-            () =>
-            {
-                Hide();
-                ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.Run());
-            },
-            () => Labs.IsOn(Labs.StateEdit)),
+            () => Labs.IsOn(Labs.State)),
         new SlashCommand(
             "Load Library",
             "Switch to Library mode to pick a library",

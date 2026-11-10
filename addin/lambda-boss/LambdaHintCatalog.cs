@@ -21,6 +21,9 @@ internal sealed class LambdaHintCatalog
     // Name as typed in a cell (bare or prefixed) -> bare name.
     private readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
 
+    // Bare name -> the library folder it came from (for /State's library folds).
+    private readonly Dictionary<string, string> _libraries = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     ///     Records every documented LAMBDA the popup knows, under its bare name and its
     ///     library's default prefix. Constants and files without metadata are skipped.
@@ -37,6 +40,9 @@ internal sealed class LambdaHintCatalog
                 var bare = lambda.Doc.Name;
                 _docs[bare] = lambda.Doc;
                 _aliases[bare] = bare;
+
+                if (lambda.LibraryInfo?.FolderName is { Length: > 0 } folder)
+                    _libraries[bare] = folder;
 
                 var prefix = lambda.LibraryInfo?.DefaultPrefix;
                 if (!string.IsNullOrEmpty(prefix))
@@ -70,6 +76,23 @@ internal sealed class LambdaHintCatalog
         }
 
         return changed;
+    }
+
+    /// <summary>
+    ///     The library folds /State offers (spec 0015): every documented LAMBDA whose header shows a
+    ///     seed, inputs and a step LAMBDA. Read from the metadata, so there's no list to keep.
+    /// </summary>
+    public IReadOnlyList<StateFoldKind> StateFolds()
+    {
+        lock (_gate)
+        {
+            return _docs.Values
+                .Select(d => StateFoldKind.FromDoc(d, _libraries.TryGetValue(d.Name, out var l) ? l : ""))
+                .Where(k => k != null)
+                .Select(k => k!)
+                .OrderBy(k => k.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
     }
 
     /// <summary>Every name the catalogue knows, bare and prefixed (Check Formula's "not loaded" list).</summary>

@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Interop;
-using System.Windows.Threading;
 
 using ExcelDna.Integration;
 
@@ -10,17 +9,13 @@ using LambdaBoss.UI;
 namespace LambdaBoss.Commands;
 
 /// <summary>
-///     Slash-command handler for <c>/State</c> (spec 0011, part 1): scaffolds a new state step
-///     from a 2×k label/value selection or typed names, and writes it to an empty cell.
+///     Slash-command handler for <c>/State</c> (spec 0015, lambda-boss#429): always on the active
+///     cell. An empty cell gets a new state engine; a cell holding one in any form (a fold with an
+///     inline or named step, or the unfolded LET step) opens with its variables, form and name, and
+///     Save rewrites the cell and stores or updates the named LAMBDA.
 /// </summary>
 internal static class StateStepCommand
 {
-    private const int MaxPrefillColumns = 10;
-    private const int MaxRowsToSearch = 1000;
-
-    /// <summary>The prefix used when the library isn't in the workbook yet, for the preview.</summary>
-    private const string PreviewPrefix = StateScaffold.LibraryFolder + ".";
-
     public static void Run()
     {
         try
@@ -30,226 +25,152 @@ internal static class StateStepCommand
             if (workbook == null)
                 return;
 
-            dynamic sheet = app.ActiveCell.Worksheet;
-
-            if (Labs.IsOn(Labs.StateEdit))
+            dynamic cell = app.ActiveCell;
+            string formula = Convert.ToString(cell.Formula2) ?? "";
+            if (formula.Length == 0 && cell.Value2 != null)
             {
-                string formula = Convert.ToString(app.ActiveCell.Formula2);
-                StateEditView? view = StateEdit.Read(formula);
-                if (view != null)
-                {
-                    RunEdit(app, sheet, formula, view);
-                    return;
-                }
+                ShowError("The active cell holds a value or is part of a spill. Pick an empty cell, or the cell that holds the state engine.");
+                return;
             }
 
-            // Typed, because a dynamic here would make the dialog call below dynamic too.
-            string? prefix = StateScaffold.FindPrefix(ConvertLetToLambdaCommand.GetExistingNames(workbook));
-            StateStepDraft draft = InitialDraft(app);
+            Dictionary<string, string> names = ConvertLetToLambdaCommand.GetExistingNames(workbook);
+            Func<string, string?> refersTo = n => names.TryGetValue(n, out var r) ? r : null;
+            var folds = LambdaHints.Catalog.StateFolds();
 
-            var filled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!IsEmpty(sheet.Range[draft.Target]))
-                filled.Add(StateScaffold.NormalAddress(draft.Target));
+            var read = StateEngines.Read(formula, refersTo, folds);
+            if (read.Refusal != null)
+            {
+                ShowError(read.Refusal);
+                return;
+            }
 
+            string? prefix = StateScaffold.FindPrefix(names);
+            var engine = read.IsEmpty ? StateEngine.New(prefix ?? StateScaffold.LibraryFolder + ".") : read.Engine!;
+            Func<StateFoldKind, string> callName = k => CallName(k, names);
+
+            string? note = null;
+            if (read.IsEmpty && prefix == null)
+                note = $"The Loops library isn't loaded: Save loads it with the prefix {StateScaffold.LibraryFolder}.";
+            if (folds.Count == 0)
+                note = (note == null ? "" : note + " ") + "Library folds show once the popup has read the libraries.";
+
+            string address = cell.Address(false, false);
+            dynamic sheet = cell.Worksheet;
             var excelHwnd = new IntPtr(app.Hwnd);
 
+            StateEngineChange? change = null;
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
-                string? message = null;
-                while (true)
+                dispatcher.Invoke(() =>
                 {
-                    (StateStepDraft? Draft, string? Formula) saved =
-                        ShowDialog(dispatcher, excelHwnd, draft, prefix, filled, message);
-                    if (saved.Draft == null) return;
-
-                    draft = saved.Draft;
-                    if (!IsEmpty(sheet.Range[draft.Target]))
-                    {
-                        filled.Add(StateScaffold.NormalAddress(draft.Target));
-                        message = null;
-                        continue;
-                    }
-
-                    if (prefix == null)
-                    {
-                        LoadLibraryThenWrite(sheet, draft);
-                        return;
-                    }
-
-                    message = TryWrite(sheet, draft.Target, saved.Formula!);
-                    if (message == null) return;
-                }
+                    var window = new StateWindow(engine, folds, refersTo, callName, note);
+                    var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
+                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
+                    if (window.ShowDialog() == true) change = window.Change;
+                });
             });
+            if (change == null) return;
+
+            var load = LibrariesToLoad(engine, change, prefix, names);
+            if (load.Count == 0)
+            {
+                Save(sheet, address, formula, engine, change, names);
+                return;
+            }
+
+            LoadThenSave(sheet, address, formula, engine, change, load);
         }
         catch (Exception ex)
         {
-            Logger.Error("StateStep", ex);
+            Logger.Error("State", ex);
             ShowError($"Unexpected error: {ex.Message}");
         }
     }
 
     /// <summary>
-    ///     Edit mode (spec 0011, part 2): the active cell is a state step, so the dialog lists its
-    ///     variables and Save rewrites the cell. It re-opens with the edits if Excel refuses.
+    ///     How the workbook spells a fold: bare, with the prefix it was loaded under, or with the
+    ///     library's folder as the prefix it will be loaded with.
     /// </summary>
-    private static void RunEdit(dynamic app, dynamic sheet, string formula, StateEditView view)
+    private static string CallName(StateFoldKind kind, IReadOnlyDictionary<string, string> names)
     {
-        if (view.Refusal != null)
+        if (kind.IsNative) return kind.Name;
+        if (IsLambda(names, kind.Name)) return kind.Name;
+
+        var prefixed = names.Keys
+            .Where(n => !n.Contains('!') && n.Contains('.') && StateStepParser.IsNamed(n, kind.Name) && IsLambda(names, n))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (prefixed != null) return prefixed;
+
+        return string.IsNullOrEmpty(kind.Library) ? kind.Name : $"{kind.Library}.{kind.Name}";
+    }
+
+    private static bool IsLambda(IReadOnlyDictionary<string, string> names, string name) =>
+        names.TryGetValue(name, out var refersTo) && LambdaSignatureParser.IsLambdaFormula(refersTo);
+
+    /// <summary>
+    ///     The libraries Save loads first: Loops when a new engine has no SetVars/GetVar, and a
+    ///     library fold's own library when the workbook doesn't have that fold yet.
+    /// </summary>
+    private static List<string> LibrariesToLoad(
+        StateEngine engine, StateEngineChange change, string? prefix, IReadOnlyDictionary<string, string> names)
+    {
+        var load = new List<string>();
+        if (engine.IsNew && prefix == null) load.Add(StateScaffold.LibraryFolder);
+
+        var fold = change.Fold;
+        if (fold is { IsNative: false } && !string.IsNullOrEmpty(fold.Library)
+            && !IsLambda(names, CallName(fold, names))
+            && !load.Contains(fold.Library!, StringComparer.OrdinalIgnoreCase))
+            load.Add(fold.Library!);
+
+        return load;
+    }
+
+    /// <summary>Stores the named step, then writes the cell.</summary>
+    private static void Save(
+        dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change,
+        IReadOnlyDictionary<string, string> names)
+    {
+        var result = StateEngines.Apply(
+            engine, change, n => names.TryGetValue(n, out var r) ? r : null, k => CallName(k, names));
+        if (result.Formula == null)
         {
-            ShowError(view.Refusal);
+            ShowError(result.Error ?? "Nothing was changed.");
             return;
         }
 
-        var address = StateScaffold.Address((int)app.ActiveCell.Row, (int)app.ActiveCell.Column);
-        var excelHwnd = new IntPtr(app.Hwnd);
-
-        ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
-        {
-            var rows = view.Rows;
-            string? message = null;
-            while (true)
-            {
-                string? edited = null;
-                var currentRows = rows;
-                var currentMessage = message;
-                dispatcher.Invoke(() =>
-                {
-                    var window = new StateEditWindow(formula, currentRows, currentMessage);
-                    var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
-                    WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
-
-                    if (window.ShowDialog() == true)
-                    {
-                        edited = window.Formula;
-                        currentRows = window.CurrentRows;
-                    }
-                });
-                if (edited == null) return;
-
-                rows = currentRows;
-                message = TryWrite(sheet, address, edited);
-                if (message == null) return;
-            }
-        });
-    }
-
-    private static (StateStepDraft? Draft, string? Formula) ShowDialog(
-        Dispatcher dispatcher,
-        IntPtr excelHwnd,
-        StateStepDraft draft,
-        string? prefix,
-        ISet<string> filled,
-        string? message)
-    {
-        StateStepDraft? result = null;
-        string? formula = null;
-        var note = prefix == null
-            ? $"Loops library not loaded. Save loads it with the prefix {StateScaffold.LibraryFolder}."
-            : null;
-
-        dispatcher.Invoke(() =>
-        {
-            var window = new StateStepWindow(draft, prefix ?? PreviewPrefix, filled, note, message);
-            var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
-            WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
-
-            if (window.ShowDialog() == true)
-            {
-                result = window.Result;
-                formula = window.Formula;
-            }
-        });
-
-        return (result, formula);
-    }
-
-    /// <summary>
-    ///     The fast path: a 2×k block with text labels on top prefills the State field and writes
-    ///     below the block. Anything else starts from the active cell with an empty State.
-    /// </summary>
-    private static StateStepDraft InitialDraft(dynamic app)
-    {
-        dynamic activeCell = app.ActiveCell;
-        var activeAddress = StateScaffold.Address((int)activeCell.Row, (int)activeCell.Column);
-
-        try
-        {
-            dynamic selection = app.Selection;
-            int columns = selection.Columns.Count;
-            if ((int)selection.Areas.Count == 1 && (int)selection.Rows.Count == 2 && columns <= MaxPrefillColumns)
-            {
-                int row = selection.Row;
-                int column = selection.Column;
-
-                var labels = new List<object?>();
-                var valueRefs = new List<string>();
-                for (var i = 0; i < columns; i++)
-                {
-                    labels.Add(selection.Cells.Item(1, i + 1).Value2);
-                    valueRefs.Add(StateScaffold.Address(row + 1, column + i));
-                }
-
-                var state = StateScaffold.PrefillState(labels, valueRefs);
-                if (state != null)
-                    return new StateStepDraft(state, "", FirstEmptyBelow(app.ActiveCell.Worksheet, row + 2, column));
-            }
-        }
-        catch (Exception ex)
-        {
-            // The selection may not be cells at all (a shape, a chart).
-            Logger.Error("StateStep/Selection", ex);
-        }
-
-        return new StateStepDraft("", "", activeAddress);
-    }
-
-    private static string FirstEmptyBelow(dynamic sheet, int row, int column)
-    {
-        for (var r = row; r < row + MaxRowsToSearch; r++)
-            if (IsEmpty(sheet.Cells.Item(r, column)))
-                return StateScaffold.Address(r, column);
-
-        return StateScaffold.Address(row, column);
-    }
-
-    // A spill child reports no formula of its own, so the value counts too.
-    private static bool IsEmpty(dynamic cell) =>
-        string.IsNullOrEmpty(Convert.ToString(cell.Formula2)) && cell.Value2 == null;
-
-    /// <summary>Writes the step. Returns why not, or null when it's written.</summary>
-    private static string? TryWrite(dynamic sheet, string address, string formula)
-    {
         try
         {
             dynamic target = sheet.Range[address];
-            target.Formula2 = formula;
-            Logger.Info($"StateStep: Written to {address}");
-
-            try
+            if ((Convert.ToString(target.Formula2) ?? "") != original)
             {
-                target.Select();
-            }
-            catch (Exception ex)
-            {
-                // Written either way. Select fails when Tim has moved to another sheet.
-                Logger.Error("StateStep/Select", ex);
+                ShowError($"{address} changed while /State was open, so nothing was written.");
+                return;
             }
 
-            return null;
+            if (result.DefinitionName != null)
+            {
+                LambdaLoader.InjectLambda(result.DefinitionName, result.Definition!);
+                Logger.Info($"State: Stored {result.DefinitionName}");
+            }
+
+            target.Formula2 = result.Formula;
+            Logger.Info($"State: Written to {address}");
         }
         catch (Exception ex)
         {
-            Logger.Error("StateStep/Write", ex);
-            return $"Excel refused the step, so nothing was written. Check the values. ({ex.Message})";
+            Logger.Error("State/Write", ex);
+            ShowError($"Excel refused the formula, so the cell wasn't changed. ({ex.Message})");
         }
     }
 
     /// <summary>
-    ///     Fetches the Loops names, then adds them to the workbook and writes the step on Excel's
-    ///     thread. If the library can't be loaded, nothing is written. Excel is free during the
-    ///     fetch, so the workbook and target are checked again before anything changes.
+    ///     Fetches the libraries, then (on Excel's thread) adds them and saves. Excel is free during
+    ///     the fetch, so the workbook and the cell are checked again before anything changes.
     /// </summary>
-    private static void LoadLibraryThenWrite(dynamic sheet, StateStepDraft draft)
+    private static void LoadThenSave(
+        dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change, List<string> folders)
     {
         Task.Run(async () =>
         {
@@ -257,27 +178,24 @@ internal static class StateStepCommand
             {
                 var provider = ShowLambdaPopupCommand.CreateProvider();
                 var libraries = await provider.GetLibrariesAsync();
-                var info = libraries.FirstOrDefault(l => string.Equals(
-                    l.FolderName, StateScaffold.LibraryFolder, StringComparison.OrdinalIgnoreCase));
+                var loads = new List<(IReadOnlyList<(string Name, string Formula)> Lambdas, string Comment)>();
 
-                if (info == null)
+                foreach (var folder in folders)
                 {
-                    ShowError("The Loops library isn't in your configured repos, so nothing was written.");
-                    return;
+                    var info = libraries.FirstOrDefault(l =>
+                        string.Equals(l.FolderName, folder, StringComparison.OrdinalIgnoreCase));
+                    if (info == null)
+                    {
+                        ShowError($"The {folder} library isn't in your configured repos, so nothing was written.");
+                        return;
+                    }
+
+                    var lambdas = info.IsLocal
+                        ? provider.LoadLocalLibrary(info.LocalSourceConfig!, info.FolderName, info.DefaultPrefix)
+                        : await provider.LoadLibraryAsync(info.RepoConfig, info.FolderName, info.DefaultPrefix);
+                    var source = info.IsLocal ? info.LocalSourceConfig!.Path : info.RepoConfig.Url;
+                    loads.Add((lambdas, LambdaLoader.BuildComment(source, info.FolderName, info.DefaultPrefix)));
                 }
-
-                var lambdas = info.IsLocal
-                    ? provider.LoadLocalLibrary(info.LocalSourceConfig!, info.FolderName, info.DefaultPrefix)
-                    : await provider.LoadLibraryAsync(info.RepoConfig, info.FolderName, info.DefaultPrefix);
-
-                var needed = lambdas
-                    .Where(l => StateScaffold.LibraryNames.Any(n => StateStepParser.IsNamed(l.Name, n)))
-                    .ToList();
-
-                var source = info.IsLocal ? info.LocalSourceConfig!.Path : info.RepoConfig.Url;
-                var comment = LambdaLoader.BuildComment(source, info.FolderName, info.DefaultPrefix);
-                var prefix = info.DefaultPrefix.Length == 0 ? "" : info.DefaultPrefix + ".";
-                var formula = StateScaffold.Build(draft.State, draft.Input, prefix).Formula!;
 
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {
@@ -286,33 +204,40 @@ internal static class StateStepCommand
                         dynamic app = ExcelDnaUtil.Application;
                         if ((string)app.ActiveWorkbook.Name != (string)sheet.Parent.Name)
                         {
-                            ShowError("The workbook changed while the Loops library loaded, so nothing was written.");
+                            ShowError("The workbook changed while the library loaded, so nothing was written.");
                             return;
                         }
 
-                        if (!IsEmpty(sheet.Range[draft.Target]))
+                        if ((Convert.ToString(sheet.Range[address].Formula2) ?? "") != original)
                         {
-                            ShowError($"{draft.Target} filled up while the Loops library loaded, so nothing was written.");
+                            ShowError($"{address} changed while the library loaded, so nothing was written.");
                             return;
                         }
 
-                        foreach (var (name, lambda) in needed)
-                            LambdaLoader.InjectLambda(name, lambda, comment);
+                        foreach (var (lambdas, comment) in loads)
+                            foreach (var (name, lambda) in lambdas)
+                                LambdaLoader.InjectLambda(name, lambda, comment);
 
-                        var refused = TryWrite(sheet, draft.Target, formula);
-                        if (refused != null) ShowError(refused);
+                        Dictionary<string, string> names = ConvertLetToLambdaCommand.GetExistingNames(app.ActiveWorkbook);
+
+                        // A new engine is written with the prefix the library actually loaded under.
+                        var saved = engine;
+                        if (engine.IsNew && StateScaffold.FindPrefix(names) is { } loaded)
+                            saved = StateEngine.New(loaded);
+
+                        Save(sheet, address, original, saved, change, names);
                     }
                     catch (Exception ex)
                     {
-                        Logger.Error("StateStep/Inject", ex);
-                        ShowError($"Couldn't load the Loops library, so nothing was written: {ex.Message}");
+                        Logger.Error("State/Inject", ex);
+                        ShowError($"Couldn't load the library, so nothing was written: {ex.Message}");
                     }
                 });
             }
             catch (Exception ex)
             {
-                Logger.Error("StateStep/Fetch", ex);
-                ShowError($"Couldn't load the Loops library, so nothing was written: {ex.Message}");
+                Logger.Error("State/Fetch", ex);
+                ShowError($"Couldn't load the library, so nothing was written: {ex.Message}");
             }
         });
     }

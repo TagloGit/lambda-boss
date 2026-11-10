@@ -1,5 +1,9 @@
 # 0011 — State-step authoring (SetVars / GetVar)
 
+> **Superseded in part by [0015](0015-state-from-any-form.md)** (9 Nov 2026): `/State` now works on
+> the active cell in any form, and one Labs switch (`state-any-form`) replaces the four below. The
+> engine here (parser, edit, LET to LAMBDA for steps, the `k` stepper) is what 0015 builds on.
+
 Issue: #386. Related, not absorbed: #384 (engine trace for array states), #385 (Unnest step names),
 #382 (argument hints), #381 (hide Help in Edit Lambda), #387 (Help block cost, filed off this spec).
 

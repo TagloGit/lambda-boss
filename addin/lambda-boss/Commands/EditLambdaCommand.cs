@@ -43,7 +43,7 @@ internal static class EditLambdaCommand
             var activeCell = app.ActiveCell;
             var formula = activeCell?.Formula2 as string;
 
-            if (Labs.IsOn(Labs.StateEditLambda) && TryEditFold(app, workbook, activeCell, formula))
+            if (Labs.IsOn(Labs.State) && TryEditFold(app, workbook, activeCell, formula))
                 return;
 
             var call = TryParseLambdaCall(formula);

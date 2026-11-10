@@ -18,25 +18,15 @@ public static class Labs
         "Show library channel in the popup",
         "Adds the channel the library is read from to the popup's status bar.");
 
-    public static readonly LabsSwitch StateLetToLambda = new(
-        "state-let-to-lambda",
-        "State steps in LET to LAMBDA",
-        "Turns a SetVars/GetVar or HSTACK state step into LAMBDA(state, input, ...) and offers the REDUCE fold line.");
-
-    public static readonly LabsSwitch StateScaffold = new(
-        "state-scaffold",
-        "/State: new state step",
-        "Adds the /State popup command, which writes a SetVars/GetVar state step from names and initial values.");
-
-    public static readonly LabsSwitch StateEditLambda = new(
-        "state-edit-lambda",
-        "Edit Lambda on a fold",
-        "On a REDUCE or SCAN cell with a named step, Edit Lambda writes the step beside it, with a k stepper.");
-
-    public static readonly LabsSwitch StateEdit = new(
-        "state-edit",
-        "/State: edit a state step",
-        "On a cell holding a SetVars/GetVar state step, /State adds, removes or renames a variable and keeps every line in step.");
+    /// <summary>
+    ///     /State from any form of a state engine (spec 0015, #429). It replaced the four 0011
+    ///     switches (state-let-to-lambda, state-scaffold, state-edit-lambda, state-edit), so it
+    ///     also turns on the state-aware LET to LAMBDA and Edit Lambda's fold stepper.
+    /// </summary>
+    public static readonly LabsSwitch State = new(
+        "state-any-form",
+        "/State from any form",
+        "/State on the active cell: add, rename or remove a state variable, and move the engine between REDUCE, SCAN, library folds and the unfolded LET step, inline or named. Also turns on state steps in LET to LAMBDA and Edit Lambda's k stepper on a fold.");
 
     public static readonly LabsSwitch CheckFormula = new(
         "check-formula",
@@ -44,7 +34,7 @@ public static class Labs
         "Points at unmatched or misplaced brackets and unknown names in the active cell's formula, or in the formula being edited. Also a ribbon button.");
 
     public static readonly IReadOnlyList<LabsSwitch> All =
-        new[] { PopupChannelBadge, StateLetToLambda, StateScaffold, StateEditLambda, StateEdit, CheckFormula };
+        new[] { PopupChannelBadge, State, CheckFormula };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

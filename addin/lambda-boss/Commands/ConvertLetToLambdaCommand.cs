@@ -49,7 +49,7 @@ internal static class ConvertLetToLambdaCommand
 
             var existingNames = GetExistingNames(workbook);
             var excelHwnd = new IntPtr(app.Hwnd);
-            var stateStep = Labs.IsOn(Labs.StateLetToLambda) ? StateStepParser.TryParse(parsed) : null;
+            var stateStep = Labs.IsOn(Labs.State) ? StateStepParser.TryParse(parsed) : null;
             dynamic? sheet = stateStep == null ? null : activeCell!.Worksheet;
 
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>

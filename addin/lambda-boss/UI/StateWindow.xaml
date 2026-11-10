@@ -1,8 +1,8 @@
-<Window x:Class="LambdaBoss.UI.StateStepWindow"
+<Window x:Class="LambdaBoss.UI.StateWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Lambda Boss — New state step"
-        Width="560" Height="460"
+        Title="Lambda Boss — State"
+        Width="620" Height="640"
         WindowStyle="ToolWindow"
         ShowInTaskbar="True"
         Topmost="True"
@@ -26,7 +26,6 @@
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="#dcdcaa" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Margin" Value="0,0,12,0" />
         </Style>
     </Window.Resources>
 
@@ -34,47 +33,55 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" MaxHeight="190" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
 
-        <TextBlock Grid.Row="0" Grid.Column="0" Text="State" Style="{StaticResource FieldLabel}" />
-        <TextBox x:Name="StateBox"
-                 Grid.Row="0" Grid.Column="1"
-                 ToolTip="Names and initial values: p 0, b 4"
-                 TextChanged="Field_TextChanged" />
+        <TextBlock x:Name="HeaderText"
+                   Grid.Row="0"
+                   Foreground="#9cdcfe"
+                   FontSize="12"
+                   TextWrapping="Wrap"
+                   Margin="0,0,0,8" />
 
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Input" Style="{StaticResource FieldLabel}" Margin="0,8,12,0" />
-        <TextBox x:Name="InputBox"
-                 Grid.Row="1" Grid.Column="1"
-                 Margin="0,8,0,0"
-                 ToolTip="One sample input. Blank writes an empty string."
-                 TextChanged="Field_TextChanged" />
+        <TextBlock Grid.Row="1" Text="Variables" Style="{StaticResource FieldLabel}" />
 
-        <TextBlock Grid.Row="2" Grid.Column="0" Text="Write to" Style="{StaticResource FieldLabel}" Margin="0,8,12,0" />
-        <TextBox x:Name="TargetBox"
-                 Grid.Row="2" Grid.Column="1"
-                 Margin="0,8,0,0"
-                 Width="120"
-                 HorizontalAlignment="Left"
-                 TextChanged="Field_TextChanged" />
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
+            <StackPanel x:Name="RowsPanel" />
+        </ScrollViewer>
+
+        <Grid Grid.Row="3" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="200" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Form" Style="{StaticResource FieldLabel}" Margin="0,0,8,0" />
+            <ComboBox x:Name="FormBox"
+                      Grid.Column="1"
+                      FontSize="13"
+                      ToolTip="LET step unfolds the engine into the cell; the rest wrap the step in that fold"
+                      SelectionChanged="Form_SelectionChanged" />
+            <TextBlock Grid.Column="2" Text="Name" Style="{StaticResource FieldLabel}" Margin="16,0,8,0" />
+            <TextBox x:Name="NameBox"
+                     Grid.Column="3"
+                     ToolTip="Blank keeps the step inline. A name stores it as a named LAMBDA"
+                     TextChanged="Field_TextChanged" />
+        </Grid>
 
         <TextBlock x:Name="MessageText"
-                   Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+                   Grid.Row="4"
                    Margin="0,8,0,0"
-                   Foreground="#e74856"
                    FontSize="11"
                    TextWrapping="Wrap"
                    Visibility="Collapsed" />
 
         <TextBox x:Name="PreviewBox"
-                 Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
+                 Grid.Row="5"
                  Margin="0,8,0,0"
                  Padding="8"
                  FontSize="13"
@@ -85,7 +92,7 @@
                  VerticalScrollBarVisibility="Auto"
                  HorizontalScrollBarVisibility="Auto" />
 
-        <DockPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Margin="0,12,0,0">
+        <DockPanel Grid.Row="6" Margin="0,12,0,0">
             <Button x:Name="CancelButton"
                     DockPanel.Dock="Right"
                     Content="Cancel"
@@ -105,11 +112,11 @@
                     BorderThickness="0"
                     IsEnabled="False"
                     Click="SaveButton_Click" />
-            <TextBlock x:Name="NoteText"
-                       Foreground="#808080"
+            <TextBlock Foreground="#808080"
                        FontSize="11"
                        TextWrapping="Wrap"
-                       VerticalAlignment="Center" />
+                       VerticalAlignment="Center"
+                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one." />
         </DockPanel>
     </Grid>
 </Window>
