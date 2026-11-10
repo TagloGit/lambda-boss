@@ -94,12 +94,14 @@ consequences and not the bracket. Now:
   formula whose brackets balance (an argument-count fault alone) gets no panel. Only edits up to
   the first fault are tried (text before it reads the same after any later edit), nearest first;
   each re-check reuses the tokens, skips name suggestions and stops once it can't beat the best
-  edit so far. The search stops at 150 ms; when it does, the window says so, doesn't lead with
+  edit so far; a call past its maximum argument count is a fault at the comma, so a re-check stops
+  there. The search stops at 400 ms (Excel in the VM, x64 under emulation, ran about 10× slower
+  than the Mac); when it does, the window says so, doesn't lead with
   the fix and doesn't fold problems under it (uniqueness isn't proven). Above 12,000 characters
-  it isn't tried. On the Mac (net9, M4), a 5,000-character LET: 8–26 ms with a stray `)`; about
-  150 ms with a `)` missing at the end (the end-of-line insertion is tried first, so it's found
-  even when the clock cuts the search). In Excel in the VM the window was up 0.15–0.7 s after the
-  key, mid-edit.
+  it isn't tried. A 5,000-character LET with a stray `)` late on: 64 ms for the whole search on
+  the Mac (net9, M4), and complete within the budget in Excel in the VM. With a `)` missing at the
+  end the end-of-line insertion is tried first, so it's found even when the clock cuts the search
+  (no button then). In Excel in the VM the window was up 0.15–0.7 s after the key, mid-edit.
 - **Library counts** trust the header's flags and say so ("(by its library header)"): a
   workbook whose own LAMBDA shares a library name, or an out-of-date header, can be wrong.
 - **Known limit.** The search finds *valid* edits, not intended ones. In stall 8 (Tim deleted
@@ -110,6 +112,44 @@ consequences and not the bracket. Now:
 Screenshots (VM, Excel 365, mid-edit, Ctrl+Shift+K): `assets/0014-cf2-01-tim-reduce.png` (one
 fix), `assets/0014-cf2-03-stall1-several.png` (two valid edits), `assets/0014-cf2-02-stall7.png`,
 `assets/0014-cf2-04-argcount.png`.
+
+### Fix buttons (#426)
+
+Agreed limits (Tim and the director, 9 Nov): buttons only when the fix is unambiguous, a preview
+before applying, lambda-boss's own Revert, mid-edit handled, "fix all" only when every problem has
+exactly one fix.
+
+- **Bracket:** one button, only when exactly one edit makes the formula valid *and* the search
+  finished. Its preview is the "After the edit it reads" line. When the bracket clears every
+  problem it says so: "Remove the ) — fixes all 4 problems". Several valid edits: no button.
+- **Mistyped names** (LET/LAMBDA names, defined names, library LAMBDAs, functions, tables, table
+  columns): one button per candidate within the typo limits, nearest first, at most 3, never a
+  silent pick. Each sits beside the changed line with the change highlighted. Column names are
+  escaped (`'[`, `']`, `'#`, `''`). No button for run-together names (`TOCOPOSTOCELL`) or
+  sheet-qualified names (a sheet-local name may not exist on that sheet).
+- **Fix all:** several mistyped names, each with exactly one candidate, and nothing else. Not
+  combined with a bracket fix: the names' candidates come from the broken formula's scope, which
+  the bracket changes (review of #434: `=LET(fare, 1, y, 2), fars+y)` would silently pick
+  `fares` over the LET name `fare`).
+- **A cell** is written through COM, which clears Excel's undo, so the cell's previous content is
+  kept. The window re-checks the cell and offers **Revert** (button or Ctrl+Z). The cell is
+  written only if it still holds what was checked.
+- **Mid-edit** the add-in can't change Excel's edit buffer. The fix presses Esc twice (the first
+  may only close Formula AutoComplete's list), F2 to re-open the cell in Edit mode, selects its
+  text (Ctrl+End, Ctrl+Shift+Home), pastes the fixed formula and moves the cursor to the fix. It
+  waits until no modifier key is down. Nothing is entered, so Excel's undo is untouched and Tim
+  presses Enter. The clipboard's text is put back 2 s later. Typing the formula instead lost
+  characters to Formula AutoComplete in the VM. Ctrl+Shift+K on the fixed text shows **Revert**,
+  which pastes the original back.
+- **The window closes when Excel takes focus back**, so a fix is never applied to text that has
+  changed since the check.
+
+VM proof (Excel 365, 10 Nov; `assets/0014-fix-0*.png`): Tim's example mid-edit → one click → Edit
+mode with the cursor where the `)` was, re-check "No bracket or name problems found", Revert →
+the original first line again, fix + Enter → exactly the fixed formula (as Excel stores it: Excel
+drops the space after a comma in LAMBDA parameter lists on entry). A cell `=SUM(fare)` → "Use
+fares" → `=SUM(fares)` → Revert → `=SUM(fare)`. A 5,000-character LET mid-edit: search complete,
+one click, the entered formula is the fix.
 
 ## How it's built
 
@@ -147,8 +187,9 @@ fix), `assets/0014-cf2-03-stall1-several.png` (two valid edits), `assets/0014-cf
 - **One window, focus taken.** It opens activated so Esc closes it; Excel gets focus back after.
 - **Brackets listed before names**, then by position.
 - **Unused LET names are shown as notes** (amber), not errors.
-- **No fixes applied.** The window shows the nearest name and the bracket edit; it doesn't
-  rewrite the formula.
+- **Fixes are buttons, never automatic.** Revert keeps only the last fix.
+- **Mid-edit fixes paste**, so the clipboard is briefly replaced (its text is restored; other
+  clipboard formats, and Excel's copy mode, are not).
 - **Argument counts only where certain**; library LAMBDAs trust their header flags.
 - **Unknown names are double-checked with Excel** before they're reported for a cell.
 - **Sheets and tables are checked only when the snapshot has them** (a workbook was read).
