@@ -135,8 +135,19 @@ its library first, as it loads Loops for a new engine.
 - Several folds in one cell: the first (outermost, then leftmost). COM can't see where the caret is.
 - A fold inside a bigger formula can change variables, fold kind and name in place, but won't
   unfold: put it in its own cell first.
-- Changing to a different fold drops the old fold's other arguments (a `stop` LAMBDA), and the
-  dialog lists them. Keeping the same fold keeps them.
+- A fold's other arguments (a `stop` or `continue` LAMBDA) carry over by name: REDUCEUNTIL's
+  `stop` goes to SCANUNTIL's `stop`, and the unfolded step keeps them as `_stop, …` lines under
+  `_inputs`. One the new fold has no slot for is dropped and the dialog says so. A required one the
+  step doesn't have (REDUCEWHILE's `continue`) gets a placeholder, `LAMBDA(a, v, i, TRUE)`, and a note.
+- In the unfolded step, `_seed` and `_inputs` are the fold's arguments whatever `a` and `v` say, so
+  editing `a`/`v` to look at another step never changes the seed or inputs on fold-back.
+- An optional seed left out (FOLDROWS) stays out: adding a variable doesn't invent one.
+- Only a line right after the input line holding a number or `k` (what the unfolded form writes for
+  `i`) becomes a step parameter again. A rule named `i` anywhere else in a fold keeps its meaning,
+  and the new parameter is `i_`.
+- Changing the variables of a named step that's already stored updates it for every cell that calls
+  it; the dialog says so. If Excel refuses the cell, the old definition is put back.
+- Whoever had any of the four 0011 switches on gets `state-any-form` on.
 - Text is canonical: one binding per line, four-space indent. A fold Tim typed in another layout
   comes back in this one; after that, every round trip gives the same text.
 - Named steps have cell references made absolute, as LET to LAMBDA does, so a relative reference in
@@ -144,6 +155,12 @@ its library first, as it loads Loops for a new engine.
 - Save refuses if the cell changed while the dialog was open (Excel is free while a library loads).
 - The k stepper and the one-sample LET step are kept as Edit Lambda's and LET to LAMBDA's 0011
   behaviour, now behind the one switch.
+
+## Doubts
+
+- FOLDROWS appends the rows its step returns rather than carrying a state, so a SetVars step under
+  FOLDROWS builds a column of states, and `INDEX(_inputs, 1)` on 2-D items isn't a row. It's in the
+  list because the issue named it; Tim may prefer it left out.
 
 ## Out of scope
 

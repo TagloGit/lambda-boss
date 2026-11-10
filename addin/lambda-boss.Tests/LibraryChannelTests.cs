@@ -217,6 +217,24 @@ public class LibraryChannelTests : IDisposable
     }
 
     [Fact]
+    public void State_OldSwitchesMapToTheNewOne()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lb-settings-{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, "{ \"LabsSwitchesOn\": [\"state-edit\", \"check-formula\"] }");
+            var loaded = Settings.Load(path);
+            Assert.Contains(Labs.State.Id, loaded.LabsSwitchesOn);
+            Assert.Contains(Labs.CheckFormula.Id, loaded.LabsSwitchesOn);
+            Assert.DoesNotContain("state-edit", loaded.LabsSwitchesOn);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void ArgumentHints_AreOnByDefault_AndNoLongerALabsSwitch()
     {
         Assert.True(new Settings().ArgumentHints);

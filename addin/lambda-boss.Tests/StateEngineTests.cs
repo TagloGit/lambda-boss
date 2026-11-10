@@ -10,10 +10,18 @@ public class StateEngineTests
 {
     private static string Lines(params string[] lines) => string.Join("\n", lines);
 
-    private static readonly StateFoldKind ReduceUntil = new("REDUCEUNTIL", 0, 1, 2, new[] { "acc", "current", "i" }, "loops");
-    private static readonly StateFoldKind ScanUntil = new("SCANUNTIL", 0, 1, 2, new[] { "acc", "current", "i" }, "loops");
-    private static readonly StateFoldKind FoldRows = new("FOLDROWS", 2, 0, 1, new[] { "accSoFar", "currentRow", "i" }, "loops");
-    private static readonly IReadOnlyList<StateFoldKind> Kinds = new[] { ReduceUntil, ScanUntil, FoldRows };
+    private static readonly StateFoldArgument[] UntilArgs =
+    {
+        new("seed", true, false), new("cases", true, false), new("fn", true, true), new("stop", false, true)
+    };
+
+    private static readonly StateFoldKind ReduceUntil = new("REDUCEUNTIL", 0, 1, 2, new[] { "acc", "current", "i" }, "loops", UntilArgs);
+    private static readonly StateFoldKind ScanUntil = new("SCANUNTIL", 0, 1, 2, new[] { "acc", "current", "i" }, "loops", UntilArgs);
+    private static readonly StateFoldKind ReduceWhile = new("REDUCEWHILE", 0, 1, 2, new[] { "acc", "current", "i" }, "loops",
+        new StateFoldArgument[] { new("seed", true, false), new("cases", true, false), new("fn", true, true), new("continue", true, true) });
+    private static readonly StateFoldKind FoldRows = new("FOLDROWS", 2, 0, 1, new[] { "accSoFar", "currentRow", "i" }, "loops",
+        new StateFoldArgument[] { new("items", true, false), new("fn", true, true), new("seed", false, false) });
+    private static readonly IReadOnlyList<StateFoldKind> Kinds = new[] { ReduceUntil, ScanUntil, ReduceWhile, FoldRows };
 
     // Tim's walk from the issue, as /State writes it on an empty cell.
     private static readonly string NewWalk = Lines(
@@ -376,7 +384,7 @@ public class StateEngineTests
     }
 
     [Fact]
-    public void ChangingTheFold_KeepsOtherArgumentsOnlyForTheSameFold()
+    public void ChangingTheFold_CarriesOtherArgumentsByName()
     {
         var book = new Book();
         var until = Robot.Replace("=REDUCE(", "=REDUCEUNTIL(").Replace("LAMBDA(a, v,", "LAMBDA(a, v, i,")
@@ -385,9 +393,12 @@ public class StateEngineTests
         var same = book.Save(until, ReduceUntil, null, r => Add(r, "c"));
         Assert.EndsWith("LAMBDA(a, v, i, GetVar(a, \"b\") = 0))", same);
 
-        var other = book.Apply(book.Read(until), ScanUntil, null);
+        var scan = book.Apply(book.Read(until), ScanUntil, null);
+        Assert.EndsWith("LAMBDA(a, v, i, GetVar(a, \"b\") = 0))", scan.Formula);
+
+        var other = book.Apply(book.Read(until), StateFoldKind.Reduce, "moveRobot");
         Assert.DoesNotContain("= 0)", other.Formula);
-        Assert.Contains(other.Notes, n => n.Contains("aren't written"));
+        Assert.Contains(other.Notes, n => n.Contains("isn't written"));
     }
 
     // ------------------------------------------------------------ variables, from each form
@@ -573,5 +584,97 @@ public class StateEngineTests
             if (dir != null) return dir.FullName;
         }
         throw new DirectoryNotFoundException("repo root");
+    }
+
+    // ------------------------------------------------------------ review findings (PR #430)
+
+    [Fact]
+    public void LetStep_HandEditedSample_NeverBecomesTheSeedOrInputs()
+    {
+        var book = new Book();
+        var let = book.Save(Robot, null, null)
+            .Replace("    a, _seed,", "    a, SetVars(\"p\", 3, \"b\", 1),")
+            .Replace("    v, INDEX(_inputs, 1),", "    v, \"C\",");
+
+        Assert.Equal(Robot, book.Save(let, StateFoldKind.Reduce, null));
+    }
+
+    [Fact]
+    public void LibraryFold_StopArgument_SurvivesTheLetStep()
+    {
+        var book = new Book();
+        var until = Robot.Replace("=REDUCE(", "=REDUCEUNTIL(").Replace("LAMBDA(a, v,", "LAMBDA(a, v, i,")
+            .Replace(")))", ")), LAMBDA(a, v, i, GetVar(a, \"b\") = 0))");
+
+        var let = book.Save(until, null, null);
+        Assert.Contains("    _stop, LAMBDA(a, v, i, GetVar(a, \"b\") = 0),\n", let);
+
+        Assert.Equal(until, book.Save(let, ReduceUntil, null));
+        Assert.Equal(until.Replace("=REDUCEUNTIL(", "=SCANUNTIL("), book.Save(let, ScanUntil, null));
+    }
+
+    [Fact]
+    public void RequiredOtherArgument_GetsAPlaceholderAndANote()
+    {
+        var book = new Book();
+        var result = book.Apply(book.Read(Robot), ReduceWhile, null);
+
+        Assert.EndsWith(")), LAMBDA(a, v, i, TRUE))", result.Formula);
+        Assert.Contains(result.Notes, n => n.Contains("continue"));
+    }
+
+    [Fact]
+    public void FoldRows_WithoutASeed_ReadsAndStaysWithout()
+    {
+        var book = new Book();
+        var rows = Lines(
+            "=FOLDROWS(G1:G5, LAMBDA(a, v, i, LET(",
+            "    p, GetVar(a, \"p\"),",
+            "    nextP, p,",
+            "    SetVars(\"p\", nextP)",
+            ")))");
+
+        var engine = book.Read(rows);
+        Assert.Equal("", engine.Seed);
+
+        var added = book.Save(rows, FoldRows, null, r => Add(r, "c"));
+        Assert.StartsWith("=FOLDROWS(G1:G5, LAMBDA(a, v, i, LET(", added);
+        Assert.EndsWith(")))", added);
+        Assert.Contains("SetVars(\"p\", nextP, \"c\", nextC)", added);
+
+        Assert.Equal(rows, book.Save(book.Save(rows, null, null), FoldRows, null));
+    }
+
+    [Fact]
+    public void ARuleNamedI_IsNotTakenAsTheStepIndex()
+    {
+        var book = new Book();
+        var robot = Robot.Replace("    p, GetVar", "    i, 10,\n    p, GetVar").Replace("nextP, p + IF", "nextP, i + p + IF");
+
+        var until = book.Save(robot, ReduceUntil, null);
+        Assert.Contains("LAMBDA(a, v, i_, LET(\n    i, 10,", until);
+    }
+
+    [Fact]
+    public void EditingANamedStep_SaysItChangesForEveryCaller()
+    {
+        var book = new Book();
+        var named = book.Save(Robot, StateFoldKind.Reduce, "moveRobot");
+
+        var result = book.Apply(book.Read(named), StateFoldKind.Reduce, "moveRobot", Add(book.Read(named).Rows, "c"));
+        Assert.Contains(result.Notes, n => n.Contains("every cell that calls it"));
+
+        var unchanged = book.Apply(book.Read(named), StateFoldKind.Reduce, "moveRobot");
+        Assert.DoesNotContain(unchanged.Notes, n => n.Contains("every cell that calls it"));
+    }
+
+    [Fact]
+    public void RenamingOntoASlotName_IsRefusedInTheLetStep()
+    {
+        var book = new Book();
+        var result = book.Apply(book.Read(Robot), null, null, Rename(book.Read(Robot).Rows, "b", "_inputs"));
+
+        Assert.Null(result.Formula);
+        Assert.Contains("_inputs", result.Error);
     }
 }

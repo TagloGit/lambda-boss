@@ -15,7 +15,8 @@ public sealed record StateFoldKind(
     int InputsIndex,
     int StepIndex,
     IReadOnlyList<string> StepParameters,
-    string? Library)
+    string? Library,
+    IReadOnlyList<StateFoldArgument>? Arguments = null)
 {
     private static readonly Regex StepSignature = new(@"^\s*LAMBDA\s*\(([^()]*)\)", RegexOptions.IgnoreCase);
 
@@ -25,8 +26,25 @@ public sealed record StateFoldKind(
 
     public bool IsNative => Library == null;
 
+    /// <summary>Every documented argument, in order (empty for REDUCE and SCAN).</summary>
+    public IReadOnlyList<StateFoldArgument> AllArguments => Arguments ?? Array.Empty<StateFoldArgument>();
+
+    /// <summary>True for an argument that isn't the seed, the inputs or the step (a stop, a continue).</summary>
+    public bool IsOther(int index) => index != SeedIndex && index != InputsIndex && index != StepIndex;
+
+    /// <summary>The seed can be left out (FOLDROWS).</summary>
+    public bool SeedIsOptional => SeedIndex < AllArguments.Count && !AllArguments[SeedIndex].Required;
+
+    /// <summary>The name of argument <paramref name="index" />, for the unfolded form's <c>_name</c> line.</summary>
+    public string ArgumentName(int index) => index < AllArguments.Count ? AllArguments[index].Name : $"arg{index + 1}";
+
     /// <summary>The number of arguments the fold needs written: up to its last seed, inputs or step slot.</summary>
     public int WrittenArguments => Math.Max(SeedIndex, Math.Max(InputsIndex, StepIndex)) + 1;
+
+    /// <summary>The arguments a call must have to be read: an optional seed at the end can be left out.</summary>
+    public int RequiredWritten => SeedIsOptional && SeedIndex == WrittenArguments - 1
+        ? Math.Max(InputsIndex, StepIndex) + 1
+        : WrittenArguments;
 
     /// <summary>
     ///     The fold <paramref name="doc" /> describes, or null when it isn't one. A fold has a
@@ -57,7 +75,10 @@ public sealed record StateFoldKind(
         var inputs = IndexWhere(ps, p => p.Required, skip: new[] { seed, step });
         if (inputs < 0) return null;
 
-        return new StateFoldKind(doc.Name, seed, inputs, step, stepParameters, library ?? "");
+        var arguments = ps
+            .Select(p => new StateFoldArgument(p.Name, p.Required, StepSignature.IsMatch(p.Description)))
+            .ToList();
+        return new StateFoldKind(doc.Name, seed, inputs, step, stepParameters, library ?? "", arguments);
     }
 
     private static int IndexWhere(IReadOnlyList<LambdaParamDoc> ps, Func<LambdaParamDoc, bool> test, int[]? skip = null)
@@ -68,6 +89,9 @@ public sealed record StateFoldKind(
         return -1;
     }
 }
+
+/// <summary>One documented argument of a fold. <paramref name="IsLambda" />: documented as <c>LAMBDA(…)</c>.</summary>
+public sealed record StateFoldArgument(string Name, bool Required, bool IsLambda);
 
 /// <summary>
 ///     One state engine as <c>/State</c> sees it, whatever form the cell holds it in (spec 0015).
@@ -89,9 +113,15 @@ public sealed record StateEngine(
     string Prefix,
     string Before,
     string After,
-    IReadOnlyList<(int Index, string Text)> OtherArguments,
+    IReadOnlyList<(string Name, string Text)> OtherArguments,
     string? Note)
 {
+    /// <summary>
+    ///     Lines of the unfolded form that stand in for an extra step argument (<c>i, 1</c> or
+    ///     <c>i, k</c>, right after the input line). Only these become a parameter again on fold-back.
+    /// </summary>
+    public IReadOnlyList<string> StandIns { get; init; } = Array.Empty<string>();
+
     /// <summary>The placeholder for a value Tim types over.</summary>
     public const string Placeholder = "\"\"";
 
@@ -110,7 +140,7 @@ public sealed record StateEngine(
     public static StateEngine New(string prefix) => new(
         StateFoldKind.Reduce, "REDUCE", null, "", NewInputs,
         new[] { "a", "v" }, Array.Empty<(string, string)>(), "", prefix, "=", "",
-        Array.Empty<(int, string)>(), null);
+        Array.Empty<(string, string)>(), null);
 
     public bool IsNew => Output.Length == 0;
 }
@@ -173,7 +203,7 @@ public static class StateEngines
             var root = FormulaParser.Parse(formula!).Root;
             var calls = StateStepParser.Walk(root).OfType<FunctionCallNode>()
                 .Select(c => (Call: c, Kind: KindOf(c, kinds)))
-                .Where(c => c.Kind != null && c.Call.Arguments.Count >= c.Kind.WrittenArguments
+                .Where(c => c.Kind != null && c.Call.Arguments.Count >= c.Kind.RequiredWritten
                     && c.Call.Arguments[c.Kind.StepIndex] is not EmptyArgNode)
                 .ToList();
 
@@ -246,18 +276,21 @@ public static class StateEngines
             var parameters = ParametersFor(edited, change.Fold, out var bindings, out var paramError);
             if (paramError != null) return Failed(paramError, notes);
 
-            if (change.Fold != null && engine.Fold != null && !SameKind(change.Fold, engine.Fold) && engine.OtherArguments.Count > 0)
-                notes.Add($"{engine.FoldCallName}'s other arguments ({string.Join(", ", engine.OtherArguments.Select(a => a.Text))}) aren't written by {change.Fold.Name}.");
-
             var shaped = edited with { Parameters = parameters, Bindings = bindings, StepName = name };
 
             string? definition = null;
             if (name != null)
+            {
                 definition = Definition(shaped);
+                var stored = refersTo(name);
+                if (string.Equals(name, engine.StepName, StringComparison.OrdinalIgnoreCase)
+                    && stored != null && Normal(stored) != Normal(definition))
+                    notes.Add($"Save updates {name}: every cell that calls it gets the change.");
+            }
 
             var formula = change.Fold == null
                 ? LetStep(shaped)
-                : FoldFormula(shaped, change.Fold, engine, callName);
+                : FoldFormula(shaped, change.Fold, engine, callName, notes);
 
             if (formula.Length > MaxFormulaLength)
                 return Failed($"The cell would be over {MaxFormulaLength:N0} characters, Excel's limit.", notes);
@@ -277,6 +310,8 @@ public static class StateEngines
             return Failed(ex.Message, notes);
         }
     }
+
+    private static string Normal(string formula) => formula.Replace("\r", "").Trim();
 
     private static StateEngineResult Failed(string error, List<string> notes, IReadOnlyList<string>? blockers = null) =>
         new(null, null, null, notes, error, blockers ?? Array.Empty<string>());
@@ -351,8 +386,8 @@ public static class StateEngines
         var inputs = args[kind.InputsIndex].ToFormula().Trim();
         var others = args
             .Select((a, i) => (Index: i, Text: a.ToFormula().Trim()))
-            .Where(a => a.Index != kind.SeedIndex && a.Index != kind.InputsIndex && a.Index != kind.StepIndex
-                && a.Text.Length > 0)
+            .Where(a => kind.IsOther(a.Index) && a.Text.Length > 0)
+            .Select(a => (kind.ArgumentName(a.Index), a.Text))
             .ToList();
 
         var engine = new StateEngine(
@@ -417,8 +452,46 @@ public static class StateEngines
             return text;
         }
 
-        var seed = Resolve(seedText);
-        var inputs = Resolve(inputsText);
+        // _seed and _inputs are the fold's arguments whatever a and v say: Tim edits a and v to
+        // look at another step, and that sample must never become the seed.
+        string seed, inputs;
+        if (byName.TryGetValue(SeedSlot, out var seedLine))
+        {
+            seed = seedLine;
+            drop.Add(SeedSlot);
+        }
+        else
+        {
+            seed = Resolve(seedText);
+        }
+
+        if (byName.TryGetValue(InputsSlot, out var inputsLine))
+        {
+            inputs = inputsLine;
+            drop.Add(InputsSlot);
+        }
+        else
+        {
+            inputs = Resolve(inputsText);
+        }
+
+        // The fold's other arguments (_stop) sit between _inputs and the state line.
+        var names = parsed.Bindings.Select(b => b.Name).ToList();
+        var stateAt = names.FindIndex(n => string.Equals(n, step.StateBinding.Name, StringComparison.OrdinalIgnoreCase));
+        var others = new List<(string Name, string Text)>();
+        for (var i = 0; i < stateAt; i++)
+        {
+            var b = parsed.Bindings[i];
+            if (drop.Contains(b.Name) || !b.Name.StartsWith("_", StringComparison.Ordinal) || b.Name.Length < 2) continue;
+            others.Add((b.Name[1..], b.RhsText));
+            drop.Add(b.Name);
+        }
+
+        // Stand-ins for extra step arguments (i, 1 or i, k) come right after the input line.
+        var standIns = new List<string>();
+        var inputAt = names.FindIndex(n => string.Equals(n, step.InputBinding.Name, StringComparison.OrdinalIgnoreCase));
+        for (var i = inputAt + 1; i < parsed.Bindings.Count && IsStandInValue(parsed.Bindings[i].RhsText); i++)
+            standIns.Add(parsed.Bindings[i].Name);
 
         // Lines that only fed the sample (the 0011 stepper's k, a slot nothing else reads) go with it.
         var bindings = parsed.Bindings.Where(b => !drop.Contains(b.Name)).Select(b => (b.Name, b.RhsText)).ToList();
@@ -430,7 +503,7 @@ public static class StateEngines
             foreach (var extra in LambdaSignatureParser.Parse(refersTo(stepName)!).Parameters.Skip(2))
             {
                 var at = bindings.FindIndex(b => string.Equals(b.Name, extra, StringComparison.OrdinalIgnoreCase));
-                if (at >= 0 && IsCounterValue(bindings[at].RhsText))
+                if (at >= 0 && standIns.Contains(bindings[at].Name, StringComparer.OrdinalIgnoreCase))
                 {
                     parameters.Add(bindings[at].Name);
                     bindings.RemoveAt(at);
@@ -444,7 +517,7 @@ public static class StateEngines
 
         var engine = new StateEngine(
             null, null, stepName, seed, inputs, parameters,
-            bindings, parsed.Body, PrefixOf(parsed.Body), "=", "", Array.Empty<(int, string)>(), null);
+            bindings, parsed.Body, PrefixOf(parsed.Body), "=", "", others, null) { StandIns = standIns };
 
         var leftover = NamesIn(
             bindings.Select(b => b.RhsText).Append(parsed.Body),
@@ -571,7 +644,8 @@ public static class StateEngines
         var seed = paramLines[0].RhsText;
         return engine with
         {
-            Seed = engine.Seed.Length == 0 && seed == StateEngine.Placeholder ? "" : seed,
+            // A seed that was left out (FOLDROWS) stays out: there is nothing to add keys to.
+            Seed = engine.Seed.Length == 0 ? "" : seed,
             Bindings = parsed.Bindings.Skip(engine.Parameters.Count).Select(b => (b.Name, b.RhsText)).ToList(),
             Output = parsed.Body
         };
@@ -662,7 +736,7 @@ public static class StateEngines
         {
             var name = fold.StepParameters[i];
             var at = lines.FindIndex(l => string.Equals(l.Name, name, StringComparison.OrdinalIgnoreCase));
-            if (at >= 0 && IsCounterValue(lines[at].Value))
+            if (at >= 0 && engine.StandIns.Contains(lines[at].Name, StringComparer.OrdinalIgnoreCase))
             {
                 parameters.Add(lines[at].Name);
                 lines.RemoveAt(at);
@@ -686,7 +760,8 @@ public static class StateEngines
         return found;
     }
 
-    private static bool IsCounterValue(string value)
+    /// <summary>What the unfolded form writes for an extra step argument: a number, or the stepper's <c>k</c>.</summary>
+    private static bool IsStandInValue(string value)
     {
         var v = value.Trim();
         return Regex.IsMatch(v, @"^[0-9]+$") || Regex.IsMatch(v, @"^k_*$", RegexOptions.IgnoreCase);
@@ -739,7 +814,8 @@ public static class StateEngines
         return sb.ToString();
     }
 
-    private static string FoldFormula(StateEngine engine, StateFoldKind fold, StateEngine original, Func<StateFoldKind, string> callName)
+    private static string FoldFormula(
+        StateEngine engine, StateFoldKind fold, StateEngine original, Func<StateFoldKind, string> callName, List<string> notes)
     {
         var name = original.Fold != null && SameKind(original.Fold, fold) && original.FoldCallName != null
             ? original.FoldCallName
@@ -747,22 +823,49 @@ public static class StateEngines
 
         var step = engine.StepName ?? $"LAMBDA({string.Join(", ", engine.Parameters)}, {StepLet(0, engine, absolute: false)})";
 
-        var slots = new string?[fold.WrittenArguments];
-        slots[fold.SeedIndex] = engine.Seed.Length == 0 ? StateEngine.Placeholder : engine.Seed;
-        slots[fold.InputsIndex] = engine.Inputs.Length == 0 ? StateEngine.NewInputs : engine.Inputs;
-        slots[fold.StepIndex] = step;
+        var count = Math.Max(fold.WrittenArguments, fold.AllArguments.Count);
+        var args = new string[count];
+        args[fold.SeedIndex] = engine.Seed.Length > 0 ? engine.Seed : fold.SeedIsOptional ? "" : StateEngine.Placeholder;
+        args[fold.InputsIndex] = engine.Inputs.Length == 0 ? StateEngine.NewInputs : engine.Inputs;
+        args[fold.StepIndex] = step;
 
-        var args = slots.Select(s => s ?? "").ToList();
-        if (original.Fold != null && SameKind(original.Fold, fold))
+        // The fold's other arguments (a stop, a continue) carry over by name.
+        var unused = engine.OtherArguments.ToList();
+        for (var i = 0; i < count; i++)
         {
-            foreach (var (index, text) in original.OtherArguments.OrderBy(a => a.Index))
+            if (!fold.IsOther(i)) continue;
+            var argName = fold.ArgumentName(i);
+            var at = unused.FindIndex(o => string.Equals(o.Name, argName, StringComparison.OrdinalIgnoreCase));
+            if (at >= 0)
             {
-                while (args.Count <= index) args.Add("");
-                args[index] = text;
+                args[i] = unused[at].Text;
+                unused.RemoveAt(at);
+            }
+            else if (i < fold.AllArguments.Count && fold.AllArguments[i].Required)
+            {
+                args[i] = fold.AllArguments[i].IsLambda
+                    ? $"LAMBDA({string.Join(", ", engine.Parameters)}, TRUE)"
+                    : StateEngine.Placeholder;
+                notes.Add($"{fold.Name} needs its {argName} argument: Save writes a placeholder, {args[i]}.");
+            }
+            else
+            {
+                args[i] = "";
             }
         }
 
-        var call = $"{name}({string.Join(", ", args)})";
+        if (unused.Count > 0)
+            notes.Add($"{fold.Name} has no {string.Join(" or ", unused.Select(u => u.Name))} argument, so {string.Join(", ", unused.Select(u => u.Text))} isn't written.");
+
+        // Optional arguments left empty at the end are left out. An optional seed that is only the
+        // placeholder is the same as no seed (FOLDROWS starts from "" either way).
+        if (fold.SeedIsOptional && args[fold.SeedIndex] == StateEngine.Placeholder) args[fold.SeedIndex] = "";
+        var written = args.Length;
+        while (written > 0 && args[written - 1].Length == 0
+               && written - 1 != fold.InputsIndex && written - 1 != fold.StepIndex)
+            written--;
+
+        var call = $"{name}({string.Join(", ", args.Take(written))})";
         var before = original.IsNew || original.Fold == null ? "=" : original.Before;
         var after = original.IsNew || original.Fold == null ? "" : original.After;
         return before + call + after;
@@ -784,6 +887,12 @@ public static class StateEngines
             (SeedSlot, engine.Seed.Length == 0 ? StateEngine.Placeholder : engine.Seed),
             (InputsSlot, engine.Inputs.Length == 0 ? StateEngine.NewInputs : engine.Inputs)
         };
+        lines.AddRange(engine.OtherArguments.Select(o => ("_" + o.Name, o.Text)));
+
+        var reserved = lines.Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var clash = engine.Bindings.Select(b => b.Name).Concat(engine.Parameters).FirstOrDefault(reserved.Contains);
+        if (clash != null)
+            throw new InvalidOperationException($"{clash} is a name the unfolded step uses for the fold's arguments. Rename it first.");
 
         if (engine.StepName == null)
         {

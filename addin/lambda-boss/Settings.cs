@@ -118,6 +118,11 @@ public sealed class Settings
             if (settings == null)
                 return new Settings();
 
+            // The four 0011 state switches became one (spec 0015): whoever had any keeps the feature.
+            var legacy = new[] { "state-let-to-lambda", "state-scaffold", "state-edit-lambda", "state-edit" };
+            if (settings.LabsSwitchesOn.RemoveWhere(id => legacy.Contains(id, StringComparer.OrdinalIgnoreCase)) > 0)
+                settings.LabsSwitchesOn.Add("state-any-form");
+
             // Ensure there's always at least the default repo
             if (settings.Repos.Count == 0)
                 settings.Repos.Add(new RepoConfig { Url = RepoConfig.HomeRepoUrl });

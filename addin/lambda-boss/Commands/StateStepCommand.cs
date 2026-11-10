@@ -40,7 +40,9 @@ internal static class StateStepCommand
             var read = StateEngines.Read(formula, refersTo, folds);
             if (read.Refusal != null)
             {
-                ShowError(read.Refusal);
+                ShowError(folds.Count == 0
+                    ? read.Refusal + " (Library folds are known once the popup has read the libraries: open it, wait a moment and try again.)"
+                    : read.Refusal);
                 return;
             }
 
@@ -149,13 +151,25 @@ internal static class StateStepCommand
                 return;
             }
 
+            string? previous = null;
             if (result.DefinitionName != null)
             {
+                previous = names.TryGetValue(result.DefinitionName, out var old) ? old : null;
                 LambdaLoader.InjectLambda(result.DefinitionName, result.Definition!);
                 Logger.Info($"State: Stored {result.DefinitionName}");
             }
 
-            target.Formula2 = result.Formula;
+            try
+            {
+                target.Formula2 = result.Formula;
+            }
+            catch
+            {
+                // The cell stays as it was, so the name goes back too.
+                if (previous != null) LambdaLoader.InjectLambda(result.DefinitionName!, previous);
+                throw;
+            }
+
             Logger.Info($"State: Written to {address}");
         }
         catch (Exception ex)
