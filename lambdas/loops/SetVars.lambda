@@ -29,6 +29,7 @@
                         2026-05-02  Claude      Extend pair capacity from 5 to 10
                         2026-11-06  Claude      Join all pairs in one TEXTJOIN; only a repeated name takes the SetVar chain (spec 0011 part 6)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-10  Claude      Keep error values, as SetVar does, without leaving the one-TEXTJOIN path (#442)
 */
 SetVars = LAMBDA(
 //  Parameter Declarations
@@ -57,17 +58,22 @@ SetVars = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
-    //  One entry, as SetVar writes it
+        fs, CHAR(28),
+    //  One entry, as SetVar writes it. A value holding an error is tagged e, each element typed.
         enc, LAMBDA(nm, [value],
                 LET(
                     firstVal, @INDEX(value, 1, 1),
                     typeCode, TYPE(firstVal),
-                    @nm & rs & IF(typeCode = 1, "n", IF(typeCode = 4, "b", "t")) & rs &
-                        IF(ROWS(value) * COLUMNS(value) > 1, TEXTJOIN(gs, FALSE, value), firstVal & "")
+                    plain, IF(ROWS(value) * COLUMNS(value) > 1, TEXTJOIN(gs, FALSE, value), firstVal & ""),
+                    IF(ISERROR(plain),
+                        @nm & rs & "e" & rs & TEXTJOIN(gs, FALSE, IF(ISERROR(value), fs & ERROR.TYPE(value),
+                            IF(ISNUMBER(value), "n", IF(ISLOGICAL(value), "b", "t")) & value)),
+                        @nm & rs & IF(typeCode = 1, "n", IF(typeCode = 4, "b", "t")) & rs & plain
+                    )
                 )
             ),
     //  Keys stay unique: a repeated name (case-insensitive) takes the SetVar chain, which replaces it.
-    //  So does anything TEXTJOIN can't do: a state over its 32,767 characters, an error value.
+    //  So does anything TEXTJOIN can't do: a state over its 32,767 characters.
         repeat?, OR(
                 IF(ISOMITTED(n_2), FALSE, OR(n_2 & "" = n_1 & "")),
                 IF(ISOMITTED(n_3), FALSE, OR(n_3 & "" = n_1 & "", n_3 & "" = n_2 & "")),

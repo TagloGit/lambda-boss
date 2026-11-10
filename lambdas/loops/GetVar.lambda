@@ -5,7 +5,7 @@
         state           (Required) Single state string, or a vertical column of states (e.g. a SCAN result).
         name            (Required) Variable name to read.
     EXAMPLE:            =GetVar(SetVar(NewState(), "x", 5), "x") -> 5 (number — element type recovered from the tag)
-    NOTE:               Tag values: n=number, b=boolean, t=text. When state is a column, the variable must be scalar — array values collapse to their first element under broadcast.
+    NOTE:               Tag values: n=number, b=boolean, t=text, e=holds an error (each element typed; the error comes back as itself). When state is a column, the variable must be scalar — array values collapse to their first element under broadcast.
     REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
                         2026-04-29  Claude      Read per-entry tag and coerce to native type
@@ -13,6 +13,7 @@
                         2026-11-01  Claude      Deref a single state with @: a 1x1-array state (e.g. INDEX of a SCAN inside a LAMBDA) made TEXTSPLIT keep only its first entry (#376)
                         2026-11-06  Claude      Find the entry with TEXTAFTER/TEXTBEFORE instead of splitting the whole state (spec 0011 part 6)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-10  Claude      Read an entry holding an error (tag e) back with the error in place (#442)
 */
 GetVar = LAMBDA(
 //  Parameter Declarations
@@ -35,7 +36,17 @@ GetVar = LAMBDA(
                     tag, LEFT(entry, 1),
                     payload, MID(entry, 3, LEN(entry)),
                     raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
-                    IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", IF(tag = "", NA(), raw)))
+                    IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", IF(tag = "", NA(), IF(tag <> "e", raw,
+                    //  An entry holding an error (SetVar's tag e): each element carries its own type,
+                    //  and an error is CHAR(28) and its ERROR.TYPE. #SPILL! and the other errors no formula
+                    //  can type as a literal (9 to 13, and anything past 14) come back as #N/A.
+                        LET(
+                            et, LEFT(raw, 1),
+                            eb, MID(raw, 2, LEN(raw)),
+                            IF(et = "n", --eb, IF(et = "b", eb = "TRUE", IF(et = "t", eb,
+                                CHOOSE(IF(--eb > 14, 7, --eb), #NULL!, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #GETTING_DATA,
+                                    #N/A, #N/A, #N/A, #N/A, #N/A, FILTER(0, FALSE)))))
+                        )))))
                 ),
                 MAP(state, LAMBDA(s, GetVar(s, name)))
             ),

@@ -272,3 +272,40 @@ The R1 L12 robot (`p` 0, `b` 4) ran on `G270` = `FFBCFFFXFBF`; Tim's walk `p`/`v
 **Not driven in the VM:**
 - An empty cell → SCAN, and the HSTACK refusal. A message box left open by an earlier step blocked
   the script. Both are covered by unit tests.
+
+## Engine fixes from Tim's 10 Nov notes (#437, #442)
+
+**#437, a 1×1 `VSTACK` seed gives `#N/A`.** Not a bug in the current library. In real Excel (build
+20527, VM), Tim's exact formula gives the right state with `develop` and with `main`. The same
+formula gives `#N/A` only with the 12 Sep library (`f122534`, before #377), which matches the #407
+report: that workbook held a stale copy of SetVar/GetVar. Re-load Loops into the workbook to fix
+it (in Name Manager, a current `SetVar` contains `@INDEX(value, 1, 1)`). Harness cases now pin a 1×1
+`VSTACK` seed, `DROP` to one row and a one-row `FILTER`, through `SetVars` and a `SetVar` chain,
+under REDUCE.
+
+**#442, errors in a state.** An error, or an array holding one, used to make the whole state an
+error (TEXTJOIN can't join an error). Now:
+
+- **Encoding.** When the plain encoding fails, the entry is tagged `e` and every element carries
+  its own type: `n`, `b` or `t` before its text, or `CHAR(28)` and its `ERROR.TYPE`. A state with
+  no errors is byte-for-byte what it was, and stays on SetVars' one-TEXTJOIN path.
+- **GetVar** gives the error back as itself, in place (default chosen: real state behaves as
+  before, so `IFERROR`/`ISNA` on a read still work). Codes 1–8 and 14 (`#CALC!`) round-trip
+  exactly. `#SPILL!`, `#CONNECT!`, `#BLOCKED!`, `#UNKNOWN!` and `#FIELD!` (codes 9–13) can reach a
+  state (`=A1` of a cell showing one) but can't be typed as a literal, so they come back as `#N/A`;
+  SplitState still names them. A code past 14 (a newer error) also comes back as `#N/A`.
+- **Caveats (review of #444).** A stored `#N/A` and a missing name both read as `#N/A`, so
+  `IFNA(GetVar(…))` can't tell them apart. A mixed-type list without an error still takes its type
+  from the first element (`{5;"x"}` reads back as `{5;#VALUE!}`), as before; with an error in it,
+  every element keeps its type. That gap is old and left alone: closing it costs a type check per
+  element on the hot path. An error adds one character per element, so a list just under 32,767
+  characters can tip over the limit when it holds one.
+- **SplitState** shows a list as `[B1, #VALUE!, A2]` (the error as text in place) and a single
+  error as the error itself.
+- **Cost.** One `ISERROR` per pair in SetVars and one tag compare in GetVar. The #405 benchmark
+  (VM, 3 rounds × 7 recalcs) shows no slowdown: 10,000 steps, 5 values, `develop` 511/1028/950 ms
+  against 447/384/366 ms for this change; 2 values 239/188/189 against 194/192/166. The runs were
+  noisy (another job was building in the VM), so read it as "no measurable change".
+- An old library reading a new state with an error entry gets wrong values (`n1`, `CHAR(28)2`), not an
+  error: one more reason to re-load Loops into an old workbook.
+

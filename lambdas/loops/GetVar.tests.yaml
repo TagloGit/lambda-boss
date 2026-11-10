@@ -120,3 +120,111 @@ tests:
   - name: a 1x1 array state from the step's own IF stays readable through REDUCE
     args: ['=REDUCE(SetVars("p", {1;2}, "q", 3), {1;2;3}, LAMBDA(a, v, IF({TRUE}, SetVar(a, "q", GetVar(a, "q") + v))))', "p"]
     expected: [[1], [2]]
+
+  # #437: a 1x1 array value (VSTACK of one cell, DROP to one row, a one-row FILTER) through REDUCE.
+  # Tim's #N/A came from a 12 Sep copy of the library (before #377); these pin the fixed engine.
+  - name: REDUCE seeded with a 1x1 VSTACK through SetVars (Tim's walk, #437)
+    args: ['=REDUCE(SetVars("visited", VSTACK("A1"), "p", "A1"), SEQUENCE(1), LAMBDA(a, v, LET(visited, GetVar(a, "visited"), p, GetVar(a, "p"), nextVisited, visited, nextP, p, SetVars("visited", nextVisited, "p", nextP))))', "p"]
+    expected: "A1"
+
+  - name: REDUCE seeded with a 1x1 VSTACK grows the list through SetVars
+    args: ['=REDUCE(SetVars("visited", VSTACK("A1"), "p", "A1"), SEQUENCE(2), LAMBDA(a, v, SetVars("visited", VSTACK(GetVar(a, "visited"), "B" & v), "p", "B" & v)))', "visited"]
+    expected: [["A1"], ["B1"], ["B2"]]
+
+  - name: REDUCE seeded with a 1x1 VSTACK through a SetVar chain
+    args: ['=REDUCE(SetVar(SetVar(NewState(), "visited", VSTACK("A1")), "p", "A1"), SEQUENCE(2), LAMBDA(a, v, SetVar(SetVar(a, "visited", GetVar(a, "visited")), "p", GetVar(a, "p") & v)))', "p"]
+    expected: "A112"
+
+  - name: SetVar chain under REDUCE with DROP to one row keeps the next variable
+    args: ['=REDUCE(SetVar(NewState(), "path", {"E4";"E3"}), SEQUENCE(1), LAMBDA(a, v, SetVar(SetVar(a, "path", DROP(GetVar(a, "path"), -1)), "n", 1)))', "n"]
+    expected: 1
+
+  - name: one-row FILTER through SetVars under REDUCE
+    args: ['=REDUCE(SetVars("hits", FILTER({"a";"b"}, {TRUE;FALSE}), "n", 0), {1;2}, LAMBDA(a, v, SetVars("hits", FILTER(VSTACK(GetVar(a, "hits"), "z"), VSTACK(TRUE, FALSE)), "n", GetVar(a, "n") + 1)))', "n"]
+    expected: 2
+
+  - name: one-row FILTER through a SetVar chain under REDUCE
+    args: ['=REDUCE(SetVar(NewState(), "hits", FILTER({"a";"b"}, {FALSE;TRUE})), {1;2}, LAMBDA(a, v, SetVar(SetVar(a, "hits", FILTER(GetVar(a, "hits"), TRUE)), "n", v)))', "hits"]
+    expected: "b"
+
+  # #442: an error is kept, in place, and comes back as itself
+  - name: an error in an array variable comes back in place
+    args: ['=SetVars("a", 1, "ns", {1;2}/{1;0})', "ns"]
+    expected: [[1], [-2146826281]]
+
+  - name: an error in an array variable leaves the other variables readable
+    args: ['=SetVars("a", 1, "ns", {1;2}/{1;0})', "a"]
+    expected: 1
+
+  - name: an error entry keeps each element's type
+    args: ['=SetVars("m", IF({TRUE;TRUE;TRUE;FALSE}, {1;"x";TRUE;0}, #VALUE!))', "m"]
+    expected: [[1], ["x"], [True], [-2146826273]]
+
+  - name: a scalar error variable comes back as the error
+    args: ['=SetVars("a", 1, "e", 1/0)', "e"]
+    expected: -2146826281
+
+  - name: SetVar keeps a scalar error
+    args: ['=SetVar(SetVar(NewState(), "a", 1), "e", NA())', "e"]
+    expected: -2146826246
+
+  - name: SetVar keeps an error in an array
+    args: ['=SetVar(NewState(), "ns", IF({TRUE;FALSE;TRUE}, {"B1";"";"A2"}, #VALUE!))', "ns"]
+    expected: [["B1"], [-2146826273], ["A2"]]
+
+  - name: CALC error round-trips
+    args: ['=SetVars("c", FILTER(0, FALSE))', "c"]
+    expected: -2146826238
+
+  - name: a repeated name with an error value keeps the later error
+    args: ['=SetVars("x", 1, "x", NA())', "x"]
+    expected: -2146826246
+
+  - name: REDUCE carries an error array and keeps counting
+    args: ['=REDUCE(SetVars("ns", {1;2}, "n", 0), {1;2;3}, LAMBDA(a, v, SetVars("ns", GetVar(a, "ns")/{1;0}, "n", GetVar(a, "n") + 1)))', "n"]
+    expected: 3
+
+  - name: REDUCE carries an error array in place
+    args: ['=REDUCE(SetVars("ns", {1;2}, "n", 0), {1;2;3}, LAMBDA(a, v, SetVars("ns", GetVar(a, "ns")/{1;0}, "n", GetVar(a, "n") + 1)))', "ns"]
+    expected: [[1], [-2146826281]]
+
+  - name: REDUCE carries a scalar error read back with GetVar
+    args: ['=REDUCE(SetVars("e", 1/0, "n", 0), {1;2;3}, LAMBDA(a, v, SetVars("e", GetVar(a, "e"), "n", GetVar(a, "n") + 1)))', "e"]
+    expected: -2146826281
+
+  - name: SCAN step holding an error array reads back in place
+    args: ['=INDEX(SCAN(SetVars("ns", {1;2}, "n", 0), {1;2}, LAMBDA(a, v, SetVars("ns", {1;2}/{1;0} * v, "n", GetVar(a, "n") + 1))), 2)', "ns"]
+    expected: [[2], [-2146826281]]
+
+  - name: broadcast over a column of states with an error row
+    args: ['=VSTACK(SetVars("e", 1), SetVars("e", 1/0), SetVars("e", 3))', "e"]
+    expected: [[1], [-2146826281], [3]]
+
+  # #444 review: ranges, every typable error, rows, FALSE and empty elements, SetState
+  - name: an error in a cell range comes back in place
+    setup:
+      cells:
+        - address: C2:C4
+          values: [[1], ["=NA()"], [3]]
+    args: ['=SetVar(NewState(), "r", C2:C4)', "r"]
+    expected: [[1], [-2146826246], [3]]
+
+  - name: CALC inside an array comes back in place
+    args: ['=SetVars("c", IF({TRUE;FALSE}, 1, FILTER(0, FALSE)))', "c"]
+    expected: [[1], [-2146826238]]
+
+  - name: every typable error round-trips
+    args: ['=SetVars("e", IF({FALSE;FALSE;FALSE;FALSE;FALSE;FALSE}, 0, CHOOSE({1;2;3;4;5;6}, #NULL!, #REF!, #NUM!, #NAME?, #GETTING_DATA, #DIV/0!)))', "e"]
+    expected: [[-2146826288], [-2146826265], [-2146826252], [-2146826259], [-2146826245], [-2146826281]]
+
+  - name: a row with an error reads back as a column, like any array
+    args: ['=SetVars("h", {1,2}/{1,0})', "h"]
+    expected: [[1], [-2146826281]]
+
+  - name: FALSE and an empty text keep their types beside an error
+    args: ['=SetVars("m", IF({TRUE;TRUE;FALSE}, {FALSE;"";0}, NA()))', "m"]
+    expected: [[False], [""], [-2146826246]]
+
+  - name: SetState slot holding an error reads back through GetVarAt
+    args: ['=SetState(1, {1;2}/{1;0})', "2"]
+    expected: [[1], [-2146826281]]

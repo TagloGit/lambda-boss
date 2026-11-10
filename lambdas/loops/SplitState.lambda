@@ -13,6 +13,7 @@
                         2026-05-02  Claude      Add IncludeHeaders to prepend a row of variable names
                         2026-11-09  Claude      Read each row by the first state's names, not by position; a missing name gives #N/A (spec 0011 part 5)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-10  Claude      An entry holding an error shows it in place: as its text in a list, as itself alone (#442)
 */
 SplitState = LAMBDA(
 //  Parameter Declarations
@@ -31,6 +32,24 @@ SplitState = LAMBDA(
     //  so a state whose keys come in another order (a SetVar chain moves a re-set key to the end)
     //  still lines up. A row without the name shows #N/A.
         names, IF(firstState = "", "", TEXTBEFORE(firstParts, rs)),
+    //  An entry holding an error (SetVar's tag e) has each element typed, an error as CHAR(28) and
+    //  its ERROR.TYPE. A list shows each error as its text in place; a single error shows as itself.
+        errorText, {"#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A", "#GETTING_DATA",
+            "#SPILL!", "#CONNECT!", "#BLOCKED!", "#UNKNOWN!", "#FIELD!", "#CALC!"},
+        showErrors, LAMBDA(payload,
+                LET(
+                    els, TEXTSPLIT(payload, gs),
+                    et, LEFT(els, 1),
+                    eb, MID(els, 2, LEN(els)),
+                    shown, IF(et = CHAR(28), IFERROR(INDEX(errorText, 1, --eb), "#ERROR"), eb),
+                    firstT, INDEX(et, 1, 1),
+                    firstB, INDEX(eb, 1, 1),
+                    IF(COLUMNS(els) > 1, "[" & TEXTJOIN(", ", FALSE, shown) & "]",
+                        IF(firstT = "n", --firstB, IF(firstT = "b", firstB = "TRUE", IF(firstT = "t", firstB,
+                            CHOOSE(IF(--firstB > 14, 7, --firstB), #NULL!, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #GETTING_DATA,
+                                #N/A, #N/A, #N/A, #N/A, #N/A, FILTER(0, FALSE))))))
+                )
+            ),
         body, MAKEARRAY(n, numVars, LAMBDA(r, c,
                     LET(
                         s, INDEX(state, r, 1),
@@ -43,10 +62,11 @@ SplitState = LAMBDA(
                                 tag, LEFT(entry, 1),
                                 payload, MID(entry, 3, LEN(entry)),
                                 IF(entry = "", NA(),
+                                    IF(tag = "e", showErrors(payload),
                                     IF(ISNUMBER(FIND(gs, payload)),
                                         "[" & SUBSTITUTE(payload, gs, ", ") & "]",
                                         IF(tag = "n", --payload,
-                                            IF(tag = "b", payload = "TRUE", payload))))
+                                            IF(tag = "b", payload = "TRUE", payload)))))
                             )
                         )
                     )
