@@ -46,7 +46,7 @@ SplitState = LAMBDA(
                     firstB, INDEX(eb, 1, 1),
                     IF(COLUMNS(els) > 1, "[" & TEXTJOIN(", ", FALSE, shown) & "]",
                         IF(firstT = "n", --firstB, IF(firstT = "b", firstB = "TRUE", IF(firstT = "t", firstB,
-                            CHOOSE(--firstB, #NULL!, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #GETTING_DATA,
+                            CHOOSE(IF(--firstB > 14, 7, --firstB), #NULL!, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #GETTING_DATA,
                                 #N/A, #N/A, #N/A, #N/A, #N/A, FILTER(0, FALSE))))))
                 )
             ),

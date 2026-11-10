@@ -291,13 +291,21 @@ error (TEXTJOIN can't join an error). Now:
   no errors is byte-for-byte what it was, and stays on SetVars' one-TEXTJOIN path.
 - **GetVar** gives the error back as itself, in place (default chosen: real state behaves as
   before, so `IFERROR`/`ISNA` on a read still work). Codes 1–8 and 14 (`#CALC!`) round-trip
-  exactly. `#SPILL!`, `#CONNECT!`, `#BLOCKED!`, `#UNKNOWN!` and `#FIELD!` can't be written by a
-  formula, so they come back as `#N/A`; SplitState still names them.
+  exactly. `#SPILL!`, `#CONNECT!`, `#BLOCKED!`, `#UNKNOWN!` and `#FIELD!` (codes 9–13) can reach a
+  state (`=A1` of a cell showing one) but can't be typed as a literal, so they come back as `#N/A`;
+  SplitState still names them. A code past 14 (a newer error) also comes back as `#N/A`.
+- **Caveats (review of #444).** A stored `#N/A` and a missing name both read as `#N/A`, so
+  `IFNA(GetVar(…))` can't tell them apart. A mixed-type list without an error still takes its type
+  from the first element (`{5;"x"}` reads back as `{5;#VALUE!}`), as before; with an error in it,
+  every element keeps its type. That gap is old and left alone: closing it costs a type check per
+  element on the hot path. An error adds one character per element, so a list just under 32,767
+  characters can tip over the limit when it holds one.
 - **SplitState** shows a list as `[B1, #VALUE!, A2]` (the error as text in place) and a single
   error as the error itself.
 - **Cost.** One `ISERROR` per pair in SetVars and one tag compare in GetVar. The #405 benchmark
   (VM, 3 rounds × 7 recalcs) shows no slowdown: 10,000 steps, 5 values, `develop` 511/1028/950 ms
   against 447/384/366 ms for this change; 2 values 239/188/189 against 194/192/166. The runs were
   noisy (another job was building in the VM), so read it as "no measurable change".
-- An old library reading a new state with an error entry sees the encoded text, not the error.
+- An old library reading a new state with an error entry gets wrong values (`n1`, `CHAR(28)2`), not an
+  error: one more reason to re-load Loops into an old workbook.
 

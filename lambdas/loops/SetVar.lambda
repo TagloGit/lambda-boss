@@ -6,7 +6,7 @@
         name            (Required) Variable name. Cannot contain CHAR(30).
         value           (Required) Scalar or 1-D array. Element type (number, boolean, or text) is recorded in the entry's tag. An error, or an array holding one, is kept: GetVar gives the error back.
     EXAMPLE:            =SetVar(NewState(), "best", 5) -> state string holding best=5 (tagged as number)
-    NOTE:               All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element.
+    NOTE:               All elements of an array value are assumed to share a type — the tag is set from TYPE of the first element, so a text element in a number list reads back as #VALUE!. An array holding an error is the exception: each element keeps its own type.
     REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
                         2026-04-29  Claude      Add per-entry type tag (n/b/t)

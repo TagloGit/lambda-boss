@@ -176,7 +176,7 @@ tests:
     args: ['=SetVars("c", FILTER(0, FALSE))', "c"]
     expected: -2146826238
 
-  - name: a repeated name with an error value takes the chain and keeps it
+  - name: a repeated name with an error value keeps the later error
     args: ['=SetVars("x", 1, "x", NA())', "x"]
     expected: -2146826246
 
@@ -199,3 +199,32 @@ tests:
   - name: broadcast over a column of states with an error row
     args: ['=VSTACK(SetVars("e", 1), SetVars("e", 1/0), SetVars("e", 3))', "e"]
     expected: [[1], [-2146826281], [3]]
+
+  # #444 review: ranges, every typable error, rows, FALSE and empty elements, SetState
+  - name: an error in a cell range comes back in place
+    setup:
+      cells:
+        - address: C2:C4
+          values: [[1], ["=NA()"], [3]]
+    args: ['=SetVar(NewState(), "r", C2:C4)', "r"]
+    expected: [[1], [-2146826246], [3]]
+
+  - name: CALC inside an array comes back in place
+    args: ['=SetVars("c", IF({TRUE;FALSE}, 1, FILTER(0, FALSE)))', "c"]
+    expected: [[1], [-2146826238]]
+
+  - name: every typable error round-trips
+    args: ['=SetVars("e", IF({FALSE;FALSE;FALSE;FALSE;FALSE;FALSE}, 0, CHOOSE({1;2;3;4;5;6}, #NULL!, #REF!, #NUM!, #NAME?, #GETTING_DATA, #DIV/0!)))', "e"]
+    expected: [[-2146826288], [-2146826265], [-2146826252], [-2146826259], [-2146826245], [-2146826281]]
+
+  - name: a row with an error reads back as a column, like any array
+    args: ['=SetVars("h", {1,2}/{1,0})', "h"]
+    expected: [[1], [-2146826281]]
+
+  - name: FALSE and an empty text keep their types beside an error
+    args: ['=SetVars("m", IF({TRUE;TRUE;FALSE}, {FALSE;"";0}, NA()))', "m"]
+    expected: [[False], [""], [-2146826246]]
+
+  - name: SetState slot holding an error reads back through GetVarAt
+    args: ['=SetState(1, {1;2}/{1;0})', "2"]
+    expected: [[1], [-2146826281]]

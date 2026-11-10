@@ -58,7 +58,7 @@ tests:
     expected: "t\x1Et\x1Ehi\x1Ff\x1Eb\x1EFALSE"
 
   # #442: an error is tagged e; each element carries its type, an error is CHAR(28) and its ERROR.TYPE
-  - name: an error in an array stays on the one-TEXTJOIN path
+  - name: an error in an array is encoded in place
     args: ["a", "=1", "ns", "={1;2}/{1;0}"]
     expected: "a\x1En\x1E1\x1Fns\x1Ee\x1En1\x1D\x1C2"
 

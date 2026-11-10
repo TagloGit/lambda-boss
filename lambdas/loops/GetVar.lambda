@@ -38,13 +38,13 @@ GetVar = LAMBDA(
                     raw, IF(ISNUMBER(FIND(gs, payload)), TOCOL(TEXTSPLIT(payload, gs)), payload),
                     IF(tag = "n", --raw, IF(tag = "b", raw = "TRUE", IF(tag = "", NA(), IF(tag <> "e", raw,
                     //  An entry holding an error (SetVar's tag e): each element carries its own type,
-                    //  and an error is CHAR(28) and its ERROR.TYPE. #SPILL! and the other errors a
-                    //  formula can't write (9 to 13) come back as #N/A.
+                    //  and an error is CHAR(28) and its ERROR.TYPE. #SPILL! and the other errors no formula
+                    //  can type as a literal (9 to 13, and anything past 14) come back as #N/A.
                         LET(
                             et, LEFT(raw, 1),
                             eb, MID(raw, 2, LEN(raw)),
                             IF(et = "n", --eb, IF(et = "b", eb = "TRUE", IF(et = "t", eb,
-                                CHOOSE(--eb, #NULL!, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #GETTING_DATA,
+                                CHOOSE(IF(--eb > 14, 7, --eb), #NULL!, #DIV/0!, #VALUE!, #REF!, #NAME?, #NUM!, #N/A, #GETTING_DATA,
                                     #N/A, #N/A, #N/A, #N/A, #N/A, FILTER(0, FALSE)))))
                         )))))
                 ),
