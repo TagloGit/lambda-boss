@@ -321,6 +321,8 @@ public class FormulaCheckerTests
     [InlineData("=LET(RC1,1,RC1)", "column reference")]
     [InlineData("=LET(a.b,1,a.b)", "dot")]
     [InlineData("=LAMBDA(r1,r1+1)(1)", "row reference")]
+    [InlineData("=LET($B$2,1,2)", "a reference")]
+    [InlineData("=LAMBDA($A$1,1)(1)", "a reference")]
     public void Names_Excel_refuses_are_flagged(string f, string why)
     {
         Assert.Contains(Errors(f), p => p.Kind == FormulaProblemKind.BadShape && p.Start == f.IndexOf('(') + 1 && p.Message.Contains(why));

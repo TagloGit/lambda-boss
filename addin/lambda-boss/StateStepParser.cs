@@ -299,7 +299,9 @@ public static class StateStepParser
 
         // A name or a guard is read only when it's the output, not the state itself, and every
         // guard's other branch hands back the state.
-        if (site.BindingIndex == state) return null;
+        // Reached through a name, the output's line must come after the state's: `a, _seed` then a
+        // body of `a` (or `IF(c, a, a)`) hands back the seed unchanged and isn't a step.
+        if (site.BindingIndex is { } outputLine && outputLine <= state) return null;
         if (site.Guards.Any(g => !string.Equals(g, bindings[state].Name, StringComparison.OrdinalIgnoreCase)))
             return null;
 

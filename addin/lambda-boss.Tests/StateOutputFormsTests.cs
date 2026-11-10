@@ -161,6 +161,9 @@ public class StateOutputFormsTests
     [InlineData("=LET(a, SetVars(\"p\", 1), v, 1, p, GetVar(a, \"p\"), np, p, IF(v=1, b, SetVars(\"p\", np)))")]
     [InlineData("=LET(a, SetVars(\"p\", 1), v, 1, p, GetVar(a, \"p\"), np, p, a)")]
     [InlineData("=LET(a, SetVars(\"p\", 1), v, 1, p, GetVar(a, \"p\"), np, p, IF(v=1, np, a))")]
+    // #445 review: a body that hands back the seed through an alias of it isn't a step
+    [InlineData("=LET(_seed, SetVars(\"p\", 1), _inputs, SEQUENCE(3), a, _seed, v, INDEX(_inputs, 1), p, GetVar(a, \"p\"), np, p + v, a)")]
+    [InlineData("=LET(start, SetVars(\"p\", 1), a, start, v, 1, p, GetVar(a, \"p\"), np, p + v, IF(v=1, a, a))")]
     public void NotAStep_WhenTheOtherBranchIsntTheState(string formula)
     {
         Assert.Null(StateStepParser.TryParse(LetParser.Parse(formula)));

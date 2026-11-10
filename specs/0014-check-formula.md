@@ -188,7 +188,7 @@ Measured in Excel 16 (build 20527, A1 mode) in the VM, LET and LAMBDA alike. **T
 as `A1`, `x1`, `B2`, `XFD1048576` (they bind and shadow the cell: with 100 in `B2`,
 `=LET(B2, 5, B2+1)` gives 6). **Refused:** `TRUE`/`FALSE` in any case, a dot (`a.b`), and an R1C1
 row or column on its own: `R1`–`R1048576`, `C1`–`C16384`, `RC1`. Check Formula flags exactly the
-refused set. Defined names keep their own, stricter rules (`c`, `r`, `rc` are refused there).
+refused set, plus any name with `$` (a reference). Not measured, and taken by extension of the rule: `RC0`, `RC16385`, leading zeros (`R01` reads as row 1). All of this is A1 mode; in R1C1 mode `B2`, `RC` and `R1C1` would behave differently. Defined names keep their own, stricter rules (`c`, `r`, `rc` are refused there).
 
 ## Defaults Tim can reverse
 

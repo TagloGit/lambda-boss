@@ -892,11 +892,10 @@ internal static class FormulaChecker
             if (isParameter && bare.Length > 2 && bare[0] == '[' && bare[^1] == ']')
                 bare = bare[1..^1];
 
-            var refused = RefusedLocalName(bare) ?? (bare.IndexOfAny(RefChars) >= 0 ? "a reference" : null);
+            var refused = RefusedLocalName(bare) ?? (bare.IndexOfAny(RefChars) >= 0 ? "Excel reads it as a reference" : null);
             if (refused != null)
                 Add(new FormulaProblem(FormulaProblemKind.BadShape, n.Start, n.Text.Length,
-                    $"{n.Text} can't be a {(isParameter ? "LAMBDA parameter" : "LET name")}: " +
-                    $"Excel reads it as {refused}."));
+                    $"{n.Text} can't be a {(isParameter ? "LAMBDA parameter" : "LET name")}: {refused}."));
 
             // A LET name is visible from the argument after its value; a parameter from the next argument.
             var decl = new Declaration(n, bare, isParameter, isParameter ? "LAMBDA" : "LET", f,
@@ -1294,7 +1293,6 @@ internal static class FormulaChecker
         return name;
     }
 
-    /// <summary>A1-style cell address within Excel's grid (XFD1048576), with or without <c>$</c>.</summary>
     private static readonly Regex RowOrColumnR1C1 = new(@"^(?:R([0-9]+)|C([0-9]+)|RC([0-9]+))$",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
@@ -1309,18 +1307,21 @@ internal static class FormulaChecker
     internal static string? RefusedLocalName(string name)
     {
         if (name.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || name.Equals("FALSE", StringComparison.OrdinalIgnoreCase))
-            return "a value";
+            return "Excel reads it as a value";
         if (name.IndexOf('.') >= 0)
-            return "a name with a dot, which only defined names may have";
+            return "a dot is allowed only in defined names";
+        if (name.IndexOf('$') >= 0)
+            return "Excel reads it as a reference";
         var m = RowOrColumnR1C1.Match(name);
         if (!m.Success)
             return null;
         if (m.Groups[1].Success)
-            return long.TryParse(m.Groups[1].Value, out var row) && row >= 1 && row <= 1048576 ? "a row reference (R1C1)" : null;
+            return long.TryParse(m.Groups[1].Value, out var row) && row >= 1 && row <= 1048576 ? "Excel reads it as a row reference (R1C1)" : null;
         var col = m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value;
-        return long.TryParse(col, out var c) && c >= 1 && c <= 16384 ? "a column reference (R1C1)" : null;
+        return long.TryParse(col, out var c) && c >= 1 && c <= 16384 ? "Excel reads it as a column reference (R1C1)" : null;
     }
 
+    /// <summary>A1-style cell address within Excel's grid (XFD1048576), with or without <c>$</c>.</summary>
     internal static bool IsCellReference(string s)
     {
         var m = CellRef.Match(s);
