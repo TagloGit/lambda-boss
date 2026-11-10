@@ -188,7 +188,64 @@ blocked when the guard's condition still reads the key, like any other line.
   step.
 - A name that resolves to the state's own binding is not an output.
 - Keys the output sets that nothing reads back with `GetVar` (the `items` pair in #443) are listed
-  as variables like any other pair. #440 will treat them as debug-only.
+  as variables like any other pair. #440 treats them as debug-only (next section).
+
+## Debug toggle (#440)
+
+Tim debugs an inline fold by switching `REDUCE` to `SCAN` (`REDUCEUNTIL` to `SCANUNTIL`,
+`REDUCEWHILE` to `SCANWHILE`), wrapping it in `SplitState(…, 1)` (headers on) and adding temporary
+outputs to the final SetVars (`"item", item, "c", c, "w", w`). The dialog does it in one go, both
+ways. Logic is `StateDebug.cs` and `StateEngines.Apply`; the window only wires it.
+
+```excel
+=SplitState(SCAN(SetVars("visited", G150, "p", G150), SEQUENCE(5), LAMBDA(a, v, LET(
+    …rules…,
+    SetVars("visited", nextVisited, "p", nextP, "item", item, "c", c, "w", w)
+))), 1)
+```
+
+**The debug form.** A SCAN-family fold (name starts `SCAN`: SCAN, SCANUNTIL, SCANWHILE, SCANLEAD)
+that is the first argument of `SplitState(…, 1)` (bare or with the library prefix; `TRUE` also
+reads as headers on). The fold can sit inside a bigger formula, and the wrapper is found from the
+text either side of the fold, so it works for inline and named steps and for the #438/#443 forms
+(named output, guarded step). Anything else is not debug: a SCAN with no wrapper is Tim's own and is
+left alone; a REDUCE inside `SplitState` is a normal fold; `SplitState(…, 0)` is not the toggle's.
+
+**How the way back is remembered: it isn't.** There is no stored state. The fold kind is read off
+the form: a debug SCAN goes back to REDUCE, SCANUNTIL to REDUCEUNTIL, SCANWHILE to REDUCEWHILE
+(`StateDebug.Twin`; a library fold has to be one the popup has read). A SCAN-family fold with no
+REDUCE twin (SCANLEAD) loses only the wrapper on the way out and stays as it is. Going in needs a
+SCAN twin: a fold without one (FOLDROWS) is refused with a message.
+
+**Debug-only outputs.** A key the final SetVars sets that is never read back (no
+`GetVar(…, "key")` anywhere in the step: rules, guard, stop or continue argument) and is not in
+the seed. This applies to any form, debug or not, so the #443 `items` pair is one. They are not
+state variables:
+
+- The Variables list leaves them out. The dialog shows them as a grey line under the list,
+  "Debug outputs, not state variables: item, c, w." (read-only; adding them from the UI is not
+  built, since Tim types them in a second).
+- Add, rename and remove of real variables leave them where they are. A new real variable goes
+  after them in the output. A new variable can't take a debug output's name (an error says so).
+- A key that is in the seed counts as a variable even if nothing reads it.
+
+**Enter debug (Debug checkbox on, or `StateDebug.Toggle(engine, true, kinds)`).** The fold switches
+to its SCAN twin and `SplitState(` … `, 1)` goes round it, spelled with the state library's prefix
+(`loops.SplitState` when the step uses `loops.SetVars`). Nothing else changes: no debug outputs are
+added, and the seed, inputs, rules and name stay.
+
+**Exit debug (checkbox off, or `Toggle(engine, false, kinds)`).** The wrapper comes off, the fold
+goes back to its REDUCE twin, and the debug-only outputs are removed from the SetVars call. The
+lines that computed them (`item, …`) stay, so the rules are never touched, and the dialog says
+which outputs it dropped. Normal, then debug, then normal gives the same text back.
+
+**Defaults taken:**
+- The wrapper is written `, 1)` with a space. A debug form Tim typed (`,1)`) keeps its own spacing
+  until it is toggled out.
+- The checkbox switches the Form box to the twin, and the Form box can still be changed afterwards.
+  Debug with the form on LET step, or on a fold with no SCAN twin, shows an error and can't be saved.
+- Leaving debug outputs in a normal REDUCE is allowed; only the exit command drops them.
+- The Debug checkbox is under the same Labs switch, `state-any-form`.
 
 ## Exploration: sheet layouts (10 Nov 2026, for Tim to choose)
 

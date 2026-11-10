@@ -124,6 +124,22 @@ public static class StateEdit
         static StateEditResult Failed(string error) => new(null, error, Array.Empty<string>());
     }
 
+    /// <summary>
+    ///     The step with these keys taken out of its output's SetVars call, and nothing else
+    ///     changed: the debug toggle's way out. The lines that computed them stay.
+    /// </summary>
+    public static string DropOutputKeys(string formula, IReadOnlyCollection<string> keys)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        if (keys is null) throw new ArgumentNullException(nameof(keys));
+
+        var step = new EditableStep(formula);
+        step.DropOutput(keys);
+        var written = step.Write();
+        LetParser.Parse(written);
+        return written;
+    }
+
     private static string? CheckRows(IReadOnlyList<StateEditRow> rows)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -458,6 +474,13 @@ public static class StateEdit
             _sampleChanged |= _sample.Pairs.Count != before;
 
             return blockers;
+        }
+
+        /// <summary>Takes keys out of the output call only; their lines stay.</summary>
+        public void DropOutput(IReadOnlyCollection<string> keys)
+        {
+            _output.Remove(keys.ToList());
+            _variables.RemoveAll(v => keys.Contains(v.Key, StringComparer.OrdinalIgnoreCase));
         }
 
         /// <summary>Renames a key and its lines. Returns why not, or null.</summary>

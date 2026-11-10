@@ -18,6 +18,7 @@ public partial class StateWindow
     private readonly Func<string, string?> _refersTo;
     private readonly Func<StateFoldKind, string> _callName;
     private readonly List<RowBox> _rows = new();
+    private readonly List<StateFoldKind> _folds = new();
     private readonly bool _loaded;
 
     public StateWindow(
@@ -49,10 +50,20 @@ public partial class StateWindow
             FormBox.Items.Add(new ComboBoxItem { Content = label, Tag = fold });
         }
 
+        _folds.AddRange(folds);
+
+        var debugKeys = engine.DebugKeys;
+        if (debugKeys.Count > 0)
+        {
+            DebugText.Text = "Debug outputs, not state variables: " + string.Join(", ", debugKeys) + ".";
+            DebugText.Visibility = Visibility.Visible;
+        }
+
         FormBox.SelectedIndex = engine.Fold == null
             ? 0
             : 1 + folds.FindIndex(f => Same(f, engine.Fold));
         NameBox.Text = engine.StepName ?? "";
+        DebugBox.IsChecked = engine.IsDebug;
 
         _loaded = true;
         Refresh();
@@ -72,7 +83,8 @@ public partial class StateWindow
     private StateEngineChange CurrentChange() => new(
         _rows.Select(r => r.ToRow()).ToList(),
         SelectedFold,
-        NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim());
+        NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
+        DebugBox.IsChecked == true);
 
     private static bool Same(StateFoldKind a, StateFoldKind b) =>
         string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
@@ -147,6 +159,26 @@ public partial class StateWindow
     }
 
     private void Form_SelectionChanged(object sender, SelectionChangedEventArgs e) => Refresh();
+
+    // Turning debug on or off switches the form to its twin (REDUCE and SCAN, REDUCEUNTIL and
+    // SCANUNTIL, ...) so one click does the whole job; the Form box can still be changed after.
+    private void Debug_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_loaded) return;
+
+        var on = DebugBox.IsChecked == true;
+        if (SelectedFold is { } current && StateDebug.Twin(current, _folds, on) is { } twin)
+        {
+            var at = _folds.FindIndex(f => Same(f, twin));
+            if (at >= 0)
+            {
+                FormBox.SelectedIndex = 1 + at;
+                return;
+            }
+        }
+
+        Refresh();
+    }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
