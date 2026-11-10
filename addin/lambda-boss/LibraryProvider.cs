@@ -16,6 +16,10 @@ public class LibraryProvider
     private readonly List<LocalSourceConfig> _localSources;
     private readonly BuiltInLibrarySource _builtIn;
 
+    // Repos (by cache key) whose listing failed on the last refresh. Library loads skip the
+    // network for them, so an offline session doesn't wait on a timeout per library.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _offlineRepos = new();
+
     private List<LibraryInfo>? _libraries;
     private List<LambdaInfo>? _lambdas;
 
@@ -69,7 +73,8 @@ public class LibraryProvider
         RepoConfig config, string libraryName, string prefix)
     {
         var source = new GitHubSource(config, _httpClient);
-        var library = await GetLibraryAsync(config, source, libraryName, offline: false);
+        var offline = config.IsHomeRepo && _offlineRepos.ContainsKey(config.GetCacheKey());
+        var library = await GetLibraryAsync(config, source, libraryName, offline);
         return library.LoadWithPrefix(prefix);
     }
 
@@ -147,20 +152,12 @@ public class LibraryProvider
                 var (owner, repo) = config.ParseOwnerRepo();
                 var repoLabel = $"{owner}/{repo}";
 
-                if (invalidateCache)
-                {
-                    try { _cache.InvalidateAll(config); }
-                    catch (Exception cacheEx)
-                    {
-                        Logger.Error($"LibraryProvider: Cache invalidation failed for {repoLabel}", cacheEx);
-                    }
-                }
-
                 IReadOnlyList<string> libraryNames;
                 var offline = false;
                 try
                 {
                     libraryNames = await source.ListLibrariesAsync();
+                    _offlineRepos.TryRemove(config.GetCacheKey(), out _);
                 }
                 catch (Exception ex) when (config.IsHomeRepo && _builtIn.ListLibraries().Count > 0)
                 {
@@ -168,6 +165,17 @@ public class LibraryProvider
                     Logger.Error($"LibraryProvider: Can't list {repoLabel}; using the libraries built into the add-in", ex);
                     libraryNames = _builtIn.ListLibraries();
                     offline = true;
+                    _offlineRepos[config.GetCacheKey()] = true;
+                }
+
+                // Only once GitHub has answered: offline, a refresh keeps the cache it can't replace.
+                if (invalidateCache && !offline)
+                {
+                    try { _cache.InvalidateAll(config); }
+                    catch (Exception cacheEx)
+                    {
+                        Logger.Error($"LibraryProvider: Cache invalidation failed for {repoLabel}", cacheEx);
+                    }
                 }
 
                 foreach (var libName in libraryNames)

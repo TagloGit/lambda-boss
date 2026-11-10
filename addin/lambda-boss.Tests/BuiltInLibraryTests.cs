@@ -122,6 +122,48 @@ public class BuiltInLibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task HomeRepo_OfflineAfterRefresh_LoadsSkipTheNetwork()
+    {
+        var handler = new CountingHandler();
+        var provider = new LibraryProvider(new[] { HomeRepo }, new HttpClient(handler), new SourceCache(_tempCacheDir));
+
+        await provider.RefreshAsync();
+        var afterRefresh = handler.Requests;
+        var loaded = await provider.LoadLibraryAsync(HomeRepo, "maps", "");
+
+        Assert.Equal(1, afterRefresh);
+        Assert.Equal(afterRefresh, handler.Requests);
+        Assert.Contains(loaded, l => l.Name == "MAZE");
+    }
+
+    [Fact]
+    public async Task HomeRepo_OfflineRefresh_KeepsTheDiskCache()
+    {
+        var cache = new SourceCache(_tempCacheDir);
+        var metadata = LibraryMetadata.LoadFromString("name: Maps\ndescription: d\ndefault_prefix: ");
+        cache.Store(HomeRepo, new FetchedLibrary("maps", metadata,
+            new Dictionary<string, string> { ["CACHEDONLY.lambda"] = "CACHEDONLY = LAMBDA(x, x);" }));
+        var provider = new LibraryProvider(new[] { HomeRepo }, new HttpClient(new MockHttpHandler()), cache);
+
+        await provider.RefreshAsync(invalidateCache: true);
+
+        Assert.True(cache.IsCached(HomeRepo, "maps"));
+        Assert.Contains(await provider.GetAllLambdasAsync(), l => l.Name == "CACHEDONLY");
+    }
+
+    private sealed class CountingHandler : HttpMessageHandler
+    {
+        public int Requests;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
+            System.Threading.CancellationToken cancellationToken)
+        {
+            System.Threading.Interlocked.Increment(ref Requests);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+        }
+    }
+
+    [Fact]
     public void DefaultClient_GivesUpWithinSeconds()
     {
         Assert.True(LibraryProvider.RequestTimeout <= TimeSpan.FromSeconds(15));
