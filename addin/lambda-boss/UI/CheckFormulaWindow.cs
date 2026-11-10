@@ -25,6 +25,8 @@ internal sealed class CheckFormulaWindow : Window
     private static readonly Brush OkBrush = Frozen(Color.FromRgb(0x1E, 0x7B, 0x34));
     private static readonly Brush BadBrush = Frozen(Color.FromRgb(0xB0, 0x1E, 0x1E));
     private static readonly Brush PanelBrush = Frozen(Color.FromRgb(0xFA, 0xFA, 0xFA));
+    private static readonly Brush FixBrush = Frozen(Color.FromRgb(0xB8, 0xF0, 0xC0));
+    private static readonly Brush FixPanelBrush = Frozen(Color.FromRgb(0xF0, 0xFA, 0xF2));
     private static readonly FontFamily Mono = new("Consolas");
 
     // Frozen, because the type may first be touched on Excel's thread and used on the window thread.
@@ -121,6 +123,10 @@ internal sealed class CheckFormulaWindow : Window
         if (notes > 0)
             headline += $" {notes} note{(notes == 1 ? "" : "s")}.";
 
+        // One bracket edit fixes it: lead with that edit (issue #426).
+        if (result.Repair == RepairOutcome.One)
+            headline = result.Repairs[0].Describe(result.Formula);
+
         root.Children.Add(new TextBlock
         {
             Text = headline,
@@ -156,11 +162,30 @@ internal sealed class CheckFormulaWindow : Window
             }
         });
 
-        // One entry per problem: what, and an excerpt around it.
+        // The bracket repair, when the search found anything.
+        var repairPanel = RepairPanel(result);
+        if (repairPanel is not null)
+            root.Children.Add(repairPanel);
+
+        // One entry per problem: what, and an excerpt around it. Problems the fix clears are
+        // listed after the rest, under "caused by this".
         var list = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
         var n = 0;
-        foreach (var p in result.Problems)
+        var causedHeader = false;
+        foreach (var p in result.Problems.OrderBy(p => p.IsConsequence ? 1 : 0))
         {
+            if (p.IsConsequence && !causedHeader)
+            {
+                causedHeader = true;
+                list.Children.Add(new TextBlock
+                {
+                    Text = "Caused by this ) — the fix clears them:",
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = Brushes.DimGray,
+                    Margin = new Thickness(0, 4, 0, 6)
+                });
+            }
+
             if (p.Kind == FormulaProblemKind.More)
             {
                 list.Children.Add(new TextBlock { Text = p.Message, Foreground = Brushes.Gray });
@@ -173,7 +198,7 @@ internal sealed class CheckFormulaWindow : Window
             {
                 Text = $"{n}. {Label(p.Kind)} · character {p.Start + 1}",
                 FontWeight = FontWeights.SemiBold,
-                Foreground = p.IsNote ? Brushes.DarkGoldenrod : BadBrush
+                Foreground = p.IsNote ? Brushes.DarkGoldenrod : p.IsConsequence ? Brushes.DimGray : BadBrush
             });
             item.Children.Add(new TextBlock { Text = p.Message, TextWrapping = TextWrapping.Wrap, FontSize = 13 });
             if (p.Start < result.Formula.Length)
@@ -209,6 +234,105 @@ internal sealed class CheckFormulaWindow : Window
         });
         root.Children.Add(Footer());
         return root;
+    }
+
+    /// <summary>The edit(s) the repair search found, each with what the changed call then reads.</summary>
+    private static FrameworkElement? RepairPanel(FormulaCheckResult result)
+    {
+        if (result.Repair is RepairOutcome.NotNeeded)
+            return null;
+
+        var panel = new StackPanel();
+        string? intro = result.Repair switch
+        {
+            RepairOutcome.One => result.RepairNote is null ? "This one bracket edit makes the whole formula valid:" : "This bracket edit makes the whole formula valid:",
+            RepairOutcome.Several => "Each of these single bracket edits makes the formula valid (likeliest first). Check which one you meant:",
+            RepairOutcome.Closest => $"No single bracket edit makes the formula valid. The closest leave {result.Repairs[0].Remaining} problem{(result.Repairs[0].Remaining == 1 ? "" : "s")}:",
+            RepairOutcome.NoneFound => "No single bracket edit fixes this.",
+            _ => null
+        };
+        if (intro is not null)
+            panel.Children.Add(new TextBlock { Text = intro, TextWrapping = TextWrapping.Wrap, FontSize = 13 });
+
+        foreach (var r in result.Repairs)
+        {
+            var item = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+            if (result.Repair != RepairOutcome.One)
+                item.Children.Add(new TextBlock
+                {
+                    Text = r.Describe(result.Formula),
+                    FontWeight = FontWeights.SemiBold,
+                    TextWrapping = TextWrapping.Wrap
+                });
+
+            // The spot in the formula as it is.
+            item.Children.Add(Excerpt(result.Formula, r.Position, r.Insert ? 0 : 1, r.Insert ? FixBrush : ErrorBrush,
+                r.Insert ? "⟨)⟩" : null));
+
+            // What the changed call reads after the edit.
+            if (r.CallStart >= 0 && r.CallLength > 0)
+            {
+                item.Children.Add(new TextBlock
+                {
+                    Text = "After the edit it reads:",
+                    Foreground = Brushes.DimGray,
+                    Margin = new Thickness(0, 4, 0, 0)
+                });
+                item.Children.Add(new TextBlock
+                {
+                    Text = Shorten(r.Fixed.Substring(r.CallStart, r.CallLength)),
+                    FontFamily = Mono,
+                    FontSize = 14,
+                    Background = FixBrush,
+                    TextWrapping = TextWrapping.Wrap
+                });
+            }
+
+            panel.Children.Add(item);
+        }
+
+        if (result.RepairNote is { } note)
+            panel.Children.Add(new TextBlock
+            {
+                Text = note,
+                Foreground = Brushes.Gray,
+                FontSize = 11,
+                Margin = new Thickness(0, 6, 0, 0)
+            });
+
+        return new Border
+        {
+            BorderBrush = Brushes.LightGray,
+            BorderThickness = new Thickness(1),
+            Background = FixPanelBrush,
+            Padding = new Thickness(8),
+            Margin = new Thickness(0, 10, 0, 0),
+            Child = panel
+        };
+    }
+
+    /// <summary>One line, at most 160 characters: the start and the end of a long call.</summary>
+    private static string Shorten(string call)
+    {
+        var flat = string.Join(" ", call.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(l => l.Trim()));
+        return flat.Length <= 160 ? flat : flat[..100] + " … " + flat[^56..];
+    }
+
+    /// <summary>About 30 characters each side of a spot, the spot marked; <paramref name="insertMark"/> shows an insertion.</summary>
+    private static TextBlock Excerpt(string text, int start, int length, Brush brush, string? insertMark)
+    {
+        var block = new TextBlock { FontFamily = Mono, FontSize = 14, Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap };
+        var from = Math.Max(0, start - 30);
+        var to = Math.Min(text.Length, start + length + 30);
+        string Flat(string s) => s.Replace("\r", "").Replace('\n', ' ');
+        if (from > 0)
+            block.Inlines.Add(new Run("…") { Foreground = Brushes.Gray });
+        block.Inlines.Add(new Run(Flat(text[from..start])));
+        block.Inlines.Add(new Run(insertMark ?? Flat(text.Substring(start, length))) { Background = brush, FontWeight = FontWeights.Bold });
+        block.Inlines.Add(new Run(Flat(text[(start + length)..to])));
+        if (to < text.Length)
+            block.Inlines.Add(new Run("…") { Foreground = Brushes.Gray });
+        return block;
     }
 
     private static TextBlock Footer() => new()
@@ -270,6 +394,7 @@ internal sealed class CheckFormulaWindow : Window
         FormulaProblemKind.CommaOutsideFunction => "Misplaced )",
         FormulaProblemKind.Unterminated => "Never closed",
         FormulaProblemKind.BadShape => "LET / LAMBDA shape",
+        FormulaProblemKind.ArgumentCount => "Argument count",
         FormulaProblemKind.UnknownName => "Unknown name",
         FormulaProblemKind.NotLoaded => "Library LAMBDA not loaded",
         FormulaProblemKind.UnknownReference => "Unknown sheet, table or column",

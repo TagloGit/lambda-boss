@@ -380,4 +380,178 @@ public class FormulaCheckerTests
         Assert.Equal(FormulaChecker.MaxProblems, result.Problems.Count);
         Assert.Equal(FormulaProblemKind.More, result.Problems[^1].Kind);
     }
+    // ------------------------------------------------------------ argument counts (#424)
+
+    [Theory]
+    [InlineData("=IF(A1>0,SUM(B1),C1,D1)", "IF has 4 arguments; it takes at most 3.")]
+    [InlineData("=XLOOKUP(A1,B1:B3)", "XLOOKUP has 2 arguments; it needs 3 to 6.")]
+    [InlineData("=REDUCE(0,A1:A3)", "REDUCE has 2 arguments; it needs 3.")]
+    [InlineData("=SUM()", "SUM has 0 arguments; it needs at least 1.")]
+    [InlineData("=PI(1)", "PI has 1 argument; it takes none.")]
+    [InlineData("=_xlfn.XLOOKUP(A1,B1:B3)", "_xlfn.XLOOKUP has 2 arguments; it needs 3 to 6.")]
+    public void Wrong_argument_counts_name_the_function(string formula, string message)
+    {
+        var p = Assert.Single(Errors(formula));
+        Assert.Equal(FormulaProblemKind.ArgumentCount, p.Kind);
+        Assert.StartsWith(message, p.Message);
+        Assert.Equal(formula.LastIndexOf(')'), p.RelatedStart);
+    }
+
+    [Theory]
+    [InlineData("=XLOOKUP(1,A1:A3,B1:B3,,2)")]
+    [InlineData("=ROW()+COLUMN()+PI()+TODAY()")]
+    [InlineData("=REDUCE(,A1:A3,LAMBDA(a,v,a+v))")]
+    [InlineData("=SORTBY(A1:A3,B1:B3,-1,C1:C3,1)")]
+    [InlineData("=TEXTSPLIT(A1,,\"-\")")]
+    [InlineData("=LET(IFX,LAMBDA(a,a),IFX(1))")]
+    [InlineData("=CHOOSE(2,\"a\",\"b\",\"c\",\"d\")")]
+    [InlineData("=VLOOKUP(1,A1:B3,2)")]
+    public void Valid_argument_counts_are_clean(string formula)
+    {
+        Assert.Empty(Errors(formula));
+    }
+
+    [Fact]
+    public void Library_LAMBDA_argument_counts_come_from_the_metadata()
+    {
+        var ctx = Workbook();
+        ctx.DefinedNames.Add("TLOOKUP");
+        ctx.DefinedNames.Add("lookup.TLOOKUP");
+        ctx.LibraryArgumentCounts["TLOOKUP"] = (3, 4);
+        ctx.LibraryArgumentCounts["lookup.TLOOKUP"] = (3, 4);
+
+        var p = Assert.Single(Errors("=TLOOKUP(A1:B3,\"x\")", ctx));
+        Assert.Equal("TLOOKUP has 2 arguments; it needs 3 to 4. The ) at character 19 closes it.", p.Message);
+        Assert.Empty(Errors("=TLOOKUP(A1:B3,\"x\",\"y\")", ctx));
+        Assert.Single(Errors("=lookup.TLOOKUP(A1:B3,1,2,3,4)", ctx));
+    }
+
+    // ------------------------------------------------------------ repair search (#426)
+
+    private static FormulaCheckResult Check(string formula, FormulaNameContext? ctx = null) =>
+        FormulaChecker.Check(formula, ctx ?? Workbook());
+
+    [Fact]
+    public void Tims_REDUCE_example_leads_with_the_stray_bracket()
+    {
+        // #426: one stray ) after TAKE(moves, 5) closed REDUCE early; #423 reported three consequences.
+        const string f = "=LET(start, A1,\n moves, B1:B10,\n step, LAMBDA(acc, m, acc + m),\n" +
+                         " final, REDUCE(start, TAKE(moves, 5)), step),\n final)";
+        var r = Check(f);
+        var stray = f.IndexOf("5)),", StringComparison.Ordinal) + 2;
+
+        Assert.Equal(RepairOutcome.One, r.Repair);
+        Assert.True(r.HasSingleFix);
+        var fix = Assert.Single(r.Repairs);
+        Assert.False(fix.Insert);
+        Assert.Equal(stray, fix.Position);
+        Assert.Equal($"Remove the ) after …start, TAKE(moves, 5) (character {stray + 1}).", fix.Describe(f));
+        Assert.Equal("REDUCE(start, TAKE(moves, 5), step)", fix.Fixed.Substring(fix.CallStart, fix.CallLength));
+        Assert.Empty(FormulaChecker.Check(fix.Fixed, Workbook()).Problems.Where(p => !p.IsNote));
+
+        // Everything else is folded under the fix.
+        Assert.All(r.Problems.Where(p => !p.IsNote), p => Assert.True(p.IsConsequence));
+        Assert.Contains(r.Problems, p => p.Kind == FormulaProblemKind.ArgumentCount && p.Message.StartsWith("REDUCE has 2 arguments; it needs 3."));
+    }
+
+    [Fact]
+    public void Stall_1_ranks_the_bracket_Tim_removed_first()
+    {
+        // Two single edits make it valid: the ) after "I" (Tim's fix) and the ) after GRIDLOOKUP's 1.
+        const string f = "=LET(start,K9,pos,MOVECELL(start,$E$3,SEQUENCE(30)),nonIce,GRIDLOOKUP(mp,pos,1)<>\"I\"),nonIce)";
+        var r = Check(f);
+        Assert.Equal(RepairOutcome.Several, r.Repair);
+        Assert.Equal(f.IndexOf("\"I\")", StringComparison.Ordinal) + 3, r.Repairs[0].Position);
+        Assert.False(r.HasSingleFix);
+
+        // mp is a typo the bracket doesn't explain: still reported on its own.
+        Assert.Contains(r.Problems, p => p.Kind == FormulaProblemKind.UnknownName && At(f, p) == "mp" && !p.IsConsequence);
+    }
+
+    [Fact]
+    public void Stall_6_removes_the_extra_bracket_at_the_end()
+    {
+        const string f = "=SUMIFS(Deliveries!$D$3:$D$42,Deliveries!$C$3:$C$42,G58,Deliveries!$D$3:$D$42,\">=\"&H58))";
+        var ctx = Workbook();
+        ctx.Sheets.Add("Deliveries");
+        var r = Check(f, ctx);
+        Assert.Equal(RepairOutcome.One, r.Repair);
+        Assert.Equal(f.Length - 1, r.Repairs[0].Position);
+    }
+
+    [Fact]
+    public void Stall_7_removes_the_bracket_that_closed_REDUCE()
+    {
+        const string f = "=REDUCE(VSTACK(0,1),TAKE(EXPLODE(G142),$I$140)),LAMBDA(a,v,a+v))";
+        var ctx = Workbook();
+        ctx.DefinedNames.Add("EXPLODE");
+        ctx.LibraryArgumentCounts["EXPLODE"] = (1, 4);
+        var r = Check(f, ctx);
+        Assert.Equal(RepairOutcome.One, r.Repair);
+        Assert.Equal(f.IndexOf("$I$140))", StringComparison.Ordinal) + 7, r.Repairs[0].Position);
+    }
+
+    [Fact]
+    public void Stall_8_offers_a_valid_edit_and_shows_what_it_changes()
+    {
+        // Tim deleted TAKE( and left its ). Removing the ) after G142 is valid too (EXPLODE takes a
+        // chunk size), though Tim restored TAKE( instead: the preview shows EXPLODE(G142,$I$140).
+        const string f = "=REDUCE(VSTACK(0,1),EXPLODE(G142),$I$140),LAMBDA(a,v,a+v))";
+        var ctx = Workbook();
+        ctx.DefinedNames.Add("EXPLODE");
+        ctx.LibraryArgumentCounts["EXPLODE"] = (1, 4);
+        var r = Check(f, ctx);
+        Assert.Equal(RepairOutcome.One, r.Repair);
+        var fix = r.Repairs[0];
+        Assert.Equal("EXPLODE(G142,$I$140)", fix.Fixed.Substring(fix.CallStart, fix.CallLength));
+    }
+
+    [Fact]
+    public void Missing_bracket_is_added_at_the_end()
+    {
+        const string f = "=SUM(IF(A2:A6=\"x\",B2:B6)";
+        var r = Check(f);
+        Assert.Equal(RepairOutcome.One, r.Repair);
+        Assert.True(r.Repairs[0].Insert);
+        Assert.Equal(f.Length, r.Repairs[0].Position);
+        Assert.Equal(f + ")", r.Repairs[0].Fixed);
+    }
+
+    [Fact]
+    public void A_count_no_bracket_fixes_reports_none()
+    {
+        var r = Check("=IF(A1>0,1,2,3)");
+        Assert.Equal(RepairOutcome.NoneFound, r.Repair);
+        Assert.Empty(r.Repairs);
+    }
+
+    [Fact]
+    public void Name_only_problems_skip_the_search()
+    {
+        Assert.Equal(RepairOutcome.NotNeeded, Check("=XLOOKUP(G113,tyupe,fares)").Repair);
+    }
+
+    [Fact]
+    public void Repair_search_on_a_5000_character_LET_is_fast()
+    {
+        var sb = new System.Text.StringBuilder("=LET(");
+        for (var i = 0; sb.Length < 5000; i++)
+            sb.Append($"\n val_{i}, REDUCE(0, SEQUENCE({i}+1), LAMBDA(acc, x, acc + IF(x > {i}, x, 0))),");
+        sb.Append("\n val_0)");
+        var valid = sb.ToString();
+        Assert.Empty(Errors(valid));
+
+        // A stray ) late in the formula, and a missing one at the end.
+        var stray = valid.Insert(valid.LastIndexOf("SEQUENCE(", StringComparison.Ordinal) + 13, ")");
+        var missing = valid[..^1];
+        foreach (var f in new[] { stray, missing })
+        {
+            var sw = Stopwatch.StartNew();
+            var r = Check(f);
+            sw.Stop();
+            Assert.Equal(RepairOutcome.One, r.Repair);
+            Assert.Empty(FormulaChecker.Check(r.Repairs[0].Fixed, Workbook()).Problems.Where(p => !p.IsNote));
+            Assert.True(sw.ElapsedMilliseconds < 1000, $"{sw.ElapsedMilliseconds} ms");
+        }
+    }
 }

@@ -115,6 +115,22 @@ TLOOKUP = LAMBDA(
     }
 
     [Fact]
+    public void Catalog_ArgumentCounts_ComeFromRequiredAndOptionalFlags()
+    {
+        // Check Formula (#424): required parameters set the minimum, all of them the maximum.
+        var catalog = new LambdaHintCatalog();
+        var library = new LibraryInfo { DefaultPrefix = "lookup", FolderName = "lookup" };
+        catalog.AddLibraryLambdas(new[]
+        {
+            new LambdaInfo { Name = "TLOOKUP", LibraryInfo = library, Doc = LambdaDocParser.Parse(Tlookup) }
+        });
+
+        var counts = catalog.ArgumentCounts();
+        Assert.Equal((1, 3), counts["TLOOKUP"]);
+        Assert.Equal((1, 3), counts["lookup.TLOOKUP"]);
+    }
+
+    [Fact]
     public void Xml_RoundTripsThroughExcelDnaIntelliSense()
     {
         var catalog = new LambdaHintCatalog();

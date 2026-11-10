@@ -29,6 +29,9 @@ internal enum FormulaProblemKind
     /// <summary>A sheet, table or table column that doesn't exist.</summary>
     UnknownReference,
 
+    /// <summary>A function called with too few or too many arguments (issue #424).</summary>
+    ArgumentCount,
+
     /// <summary>Not an error: a LET name that is never used (often the other half of a typo).</summary>
     UnusedName,
 
@@ -51,6 +54,83 @@ internal sealed record FormulaProblem(
     int RelatedLength = 0)
 {
     public bool IsNote => Kind is FormulaProblemKind.UnusedName or FormulaProblemKind.More;
+
+    /// <summary>The bracket repair (issue #426) clears it: it is a consequence of the bracket, not a problem of its own.</summary>
+    public bool IsConsequence { get; init; }
+
+    /// <summary>A bracket, comma, shape or argument-count fault: the kind one misplaced <c>)</c> can cause.</summary>
+    public bool IsStructural => Kind is FormulaProblemKind.ExtraCloseBracket or FormulaProblemKind.UnclosedBracket
+                                    or FormulaProblemKind.CommaOutsideFunction or FormulaProblemKind.BadShape
+                                    or FormulaProblemKind.ArgumentCount
+                                || (Kind == FormulaProblemKind.UnknownName && RelatedStart >= 0);
+}
+
+/// <summary>
+///     One single-bracket edit the repair search tried (issue #426): remove the <c>)</c> at
+///     <see cref="Position"/>, or insert one before it. <see cref="Fixed"/> is the whole formula
+///     after the edit; <see cref="CallStart"/>/<see cref="CallLength"/> index it and mark the call
+///     the edit changes (empty when none), so the window can show what the edit does.
+///     <see cref="Remaining"/> counts the bracket, shape and argument faults left (0: fully valid).
+/// </summary>
+internal sealed record BracketRepair(
+    bool Insert,
+    int Position,
+    string Fixed,
+    int Remaining,
+    int CallStart,
+    int CallLength,
+    string? CallName)
+{
+    public string Action => Insert ? "Add a ) here" : "Remove this )";
+
+    /// <summary>
+    ///     The report's first line: "Remove the ) after start, TAKE(moves, 5) (character 101)."
+    ///     Quotes up to about 24 characters before the spot, from its own line.
+    /// </summary>
+    public string Describe(string formula)
+    {
+        var lineStart = formula.LastIndexOfAny(new[] { '\n', '\r' }, Math.Max(0, Position - 1)) + 1;
+        if (Position == 0)
+            lineStart = 0;
+        var from = Math.Max(lineStart, Position - 24);
+        var before = formula[from..Position];
+        var cut = from > lineStart;
+        if (cut)
+        {
+            // Start at a word: after the first space, comma or bracket.
+            var k = before.IndexOfAny(new[] { ' ', ',', '(' });
+            if (k >= 0 && k < before.Length - 1)
+                before = before[(k + 1)..];
+        }
+
+        before = before.Trim();
+        var where = before.Length == 0 ? "" : $" after {(cut ? "…" : "")}{before}";
+        return Insert
+            ? $"Add a ){where} (character {Position + 1})."
+            : $"Remove the ){where} (character {Position + 1}).";
+    }
+}
+
+/// <summary>What the repair search concluded.</summary>
+internal enum RepairOutcome
+{
+    /// <summary>No bracket, comma or argument-count fault: nothing to search for.</summary>
+    NotNeeded,
+
+    /// <summary>Exactly one single edit makes the formula valid.</summary>
+    One,
+
+    /// <summary>Several single edits each make it valid; ranked.</summary>
+    Several,
+
+    /// <summary>None makes it valid; the edits that leave fewest faults, ranked.</summary>
+    Closest,
+
+    /// <summary>No single edit helps.</summary>
+    NoneFound,
+
+    /// <summary>The formula is too long to search, or the search ran out of time.</summary>
+    Skipped
 }
 
 /// <summary>
@@ -77,6 +157,9 @@ internal sealed class FormulaNameContext
     /// <summary>Names Excel was asked about and resolved (add-in functions, for instance).</summary>
     public HashSet<string> OtherKnownNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Library LAMBDA name (bare and prefixed) to its argument range, from the header metadata.</summary>
+    public Dictionary<string, (int Min, int Max)> LibraryArgumentCounts { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>When the snapshot was taken (UTC), or null for a context built by hand.</summary>
     public DateTime? TakenUtc { get; set; }
 
@@ -94,6 +177,8 @@ internal sealed class FormulaNameContext
         c.Sheets.UnionWith(Sheets);
         c.LibraryNames.UnionWith(LibraryNames);
         c.OtherKnownNames.UnionWith(OtherKnownNames);
+        foreach (var (k, v) in LibraryArgumentCounts)
+            c.LibraryArgumentCounts[k] = v;
         foreach (var (k, v) in Tables)
             c.Tables[k] = new HashSet<string>(v, StringComparer.OrdinalIgnoreCase);
         return c;
@@ -102,15 +187,35 @@ internal sealed class FormulaNameContext
 
 internal sealed class FormulaCheckResult
 {
-    public FormulaCheckResult(string formula, IReadOnlyList<FormulaProblem> problems)
+    public FormulaCheckResult(string formula, IReadOnlyList<FormulaProblem> problems,
+        RepairOutcome repair = RepairOutcome.NotNeeded, IReadOnlyList<BracketRepair>? repairs = null,
+        string? repairNote = null)
     {
         Formula = formula;
         Problems = problems;
+        Repair = repair;
+        Repairs = repairs ?? Array.Empty<BracketRepair>();
+        RepairNote = repairNote;
     }
 
     public string Formula { get; }
 
     public IReadOnlyList<FormulaProblem> Problems { get; }
+
+    public RepairOutcome Repair { get; }
+
+    /// <summary>The edits to show, best first: the one fix, the several, or the closest.</summary>
+    public IReadOnlyList<BracketRepair> Repairs { get; }
+
+    /// <summary>Why the search was skipped or cut short, for the window; null otherwise.</summary>
+    public string? RepairNote { get; }
+
+    /// <summary>Exactly one edit makes the formula valid, and the search tried every edit.</summary>
+    public bool HasSingleFix => Repair == RepairOutcome.One && RepairNote is null;
+
+    /// <summary>The same result with a different problem list (Excel confirmed some names).</summary>
+    public FormulaCheckResult WithProblems(IReadOnlyList<FormulaProblem> problems) =>
+        new(Formula, problems, Repair, Repairs, RepairNote);
 
     public bool HasErrors => Problems.Any(p => !p.IsNote);
 }
@@ -173,10 +278,24 @@ internal static class FormulaChecker
             return new FormulaCheckResult(formula, problems);
         }
 
-        new Pass(tokens, names, problems, reportUnclosed: unterminated is null).Run();
+        var pass = new Pass(tokens, names, problems, reportUnclosed: unterminated is null, quick: false);
+        pass.Run();
 
         // Brackets first (they are usually the cause), then shape, names, and notes last.
         problems = problems.OrderBy(p => Priority(p.Kind)).ThenBy(p => p.Start).ToList();
+
+        var repair = RepairOutcome.NotNeeded;
+        IReadOnlyList<BracketRepair> repairs = Array.Empty<BracketRepair>();
+        string? note = null;
+        if (unterminated is null && problems.Any(p => p.Kind is FormulaProblemKind.ExtraCloseBracket
+                or FormulaProblemKind.UnclosedBracket or FormulaProblemKind.CommaOutsideFunction
+                or FormulaProblemKind.ArgumentCount))
+        {
+            (repair, repairs, note) = SearchRepairs(formula, tokens, names, problems, pass);
+            if (repair == RepairOutcome.One)
+                problems = problems.Select(p => p.IsStructural ? p with { IsConsequence = true } : p).ToList();
+        }
+
         if (problems.Count > MaxProblems)
         {
             var more = problems.Count - MaxProblems + 1;
@@ -185,8 +304,143 @@ internal static class FormulaChecker
                 $"…and {more} more."));
         }
 
-        return new FormulaCheckResult(formula, problems);
+        return new FormulaCheckResult(formula, problems, repair, repairs, note);
     }
+
+    // ------------------------------------------------------------ repair search (#426)
+
+    /// <summary>Above this length the repair search isn't tried.</summary>
+    public const int MaxRepairLength = 12000;
+
+    /// <summary>The repair search stops after this long and says so.</summary>
+    public static TimeSpan RepairBudget { get; set; } = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>
+    ///     Tries every single <c>)</c> removal, and every <c>)</c> insertion where an argument ends
+    ///     (before a comma, a <c>)</c> or the end), re-checking the formula after each. Each re-check
+    ///     is one linear pass over the existing tokens, without suggestions.
+    /// </summary>
+    private static (RepairOutcome, IReadOnlyList<BracketRepair>, string?) SearchRepairs(
+        string formula, IReadOnlyList<FormulaToken> tokens, FormulaNameContext names,
+        IReadOnlyList<FormulaProblem> problems, Pass original)
+    {
+        var originalClosers = original.Closers;
+        if (formula.Length > MaxRepairLength)
+            return (RepairOutcome.Skipped, Array.Empty<BracketRepair>(),
+                $"Bracket repair search skipped: the formula is over {MaxRepairLength:N0} characters.");
+
+        var baseline = problems.Count(p => p.IsStructural);
+        var first = problems.First(p => p.IsStructural);
+        var anchor = first.RelatedStart >= 0 ? first.RelatedStart : first.Start;
+
+        // The text before the first fault reads the same after any later edit, so only edits up
+        // to it can make the formula valid. Tried nearest that point first (and insertions at a
+        // line's end first), so a search cut short by the clock has tried the likeliest.
+        var last = Math.Min(tokens.Count - 1, original.FirstStructuralToken);
+        var detectedAt = tokens[last].Start;
+        var candidates = new List<(bool Insert, int Index, int Pos)>();
+        for (var i = 0; i <= last; i++)
+            if (tokens[i].Type == FormulaTokenType.RParen)
+                candidates.Add((false, i, tokens[i].Start));
+        for (var i = 0; i <= last; i++)
+            if (tokens[i].Type is FormulaTokenType.Comma or FormulaTokenType.RParen or FormulaTokenType.Eof)
+                candidates.Add((true, i, i > 0 ? tokens[i - 1].End : tokens[i].Start - tokens[i].Lead.Length));
+        candidates = candidates
+            .OrderBy(c => c.Insert && AtLineEnd(c.Pos) ? 0 : 1)
+            .ThenBy(c => Math.Abs(detectedAt - c.Pos))
+            .ToList();
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var byResult = new Dictionary<string, BracketRepair>(StringComparer.Ordinal);
+        var tried = 0;
+        var best = baseline - 1;
+        foreach (var (insert, index, pos) in candidates)
+        {
+            if (clock.Elapsed > RepairBudget)
+                break;
+            tried++;
+
+            var fixedText = insert ? formula.Insert(pos, ")") : formula.Remove(pos, 1);
+            var edited = new List<FormulaToken>(tokens.Count + 1);
+            FormulaToken? inserted = null;
+            for (var i = 0; i < tokens.Count; i++)
+            {
+                if (insert && i == index)
+                {
+                    inserted = new FormulaToken(FormulaTokenType.RParen, "", ")", pos);
+                    edited.Add(inserted);
+                }
+
+                if (!insert && i == index)
+                    continue;
+                edited.Add(tokens[i]);
+            }
+
+            var found = new List<FormulaProblem>();
+            // Stop reading once it can't beat (or tie) the best edit so far.
+            var pass = new Pass(edited, names, found, reportUnclosed: true, quick: true) { AbortAt = best + 1 };
+            pass.Run();
+            var remaining = pass.StructuralCount;
+            if (remaining > best)
+                continue;
+            best = remaining;
+
+            // The call the edit changes: the one the inserted ) now closes, or the one the
+            // removed ) used to close (it now runs further).
+            int Shift(int at) => insert ? (at >= pos ? at + 1 : at) : (at > pos ? at - 1 : at);
+            ClosedCall? call = null;
+            if (insert)
+                call = pass.Closers.Values.FirstOrDefault(c => ReferenceEquals(c.Closer, inserted));
+            else
+            {
+                var removed = tokens[index];
+                var was = originalClosers.Values.FirstOrDefault(c => ReferenceEquals(c.Closer, removed));
+                if (was is not null && pass.Closers.TryGetValue(was.Open, out var now))
+                    call = now;
+            }
+
+            var repair = call is null
+                ? new BracketRepair(insert, pos, fixedText, remaining, -1, 0, null)
+                : new BracketRepair(insert, pos, fixedText, remaining, Shift(call.Start),
+                    (ReferenceEquals(call.Closer, inserted) ? pos + 1 : Shift(call.Closer.End)) - Shift(call.Start),
+                    call.Name);
+            // Identical results keep the later edit: in "))" the second bracket is the stray one.
+            if (!byResult.TryGetValue(fixedText, out var same) || same.Position < pos)
+                byResult[fixedText] = repair;
+        }
+
+        var cut = tried < candidates.Count
+            ? $"Bracket repair search stopped after {tried} of {candidates.Count} edits (time limit)."
+            : null;
+
+        // Best first: fewest faults left; then an insertion at the end of a line or of the formula
+        // (one binding per line); then nearest the first fault.
+        bool AtLineEnd(int j)
+        {
+            while (j < formula.Length && formula[j] is ' ' or '\t')
+                j++;
+            return j >= formula.Length || formula[j] is '\n' or '\r';
+        }
+
+        var ranked = byResult.Values
+            .OrderBy(r => r.Remaining)
+            .ThenBy(r => r.Insert && AtLineEnd(r.Position) ? 0 : 1)
+            .ThenBy(r => Math.Abs(r.Position - anchor))
+            .ToList();
+
+        if (ranked.Count == 0)
+            return (cut is null ? RepairOutcome.NoneFound : RepairOutcome.Skipped, ranked, cut);
+        var valid = ranked.Where(r => r.Remaining == 0).ToList();
+        if (valid.Count == 1)
+            return (RepairOutcome.One, valid, cut);
+        if (valid.Count > 1)
+            return (RepairOutcome.Several, valid.Take(5).ToList(), cut);
+        var fewest = ranked[0].Remaining;
+        return (RepairOutcome.Closest, ranked.Where(r => r.Remaining == fewest).Take(3).ToList(), cut);
+    }
+
+    /// <summary>A call and the <c>)</c> that closed it, in a pass's own token coordinates.</summary>
+    private sealed record ClosedCall(FormulaToken Open, int Start, string Name, FormulaToken Closer);
 
     private static int Priority(FormulaProblemKind kind) => kind switch
     {
@@ -195,6 +449,7 @@ internal static class FormulaChecker
         FormulaProblemKind.CommaOutsideFunction => 1,
         FormulaProblemKind.UnclosedBracket => 1,
         FormulaProblemKind.BadShape => 2,
+        FormulaProblemKind.ArgumentCount => 2,
         FormulaProblemKind.UnusedName => 9,
         FormulaProblemKind.More => 10,
         _ => 5
@@ -311,6 +566,9 @@ internal static class FormulaChecker
         /// <summary>The called function, upper case and unprefixed; null for a bare bracket.</summary>
         public string? Function { get; }
 
+        /// <summary>The argument range of the called function, when it's known (#424).</summary>
+        public (int Min, int Max)? Arity { get; set; }
+
         public int ArgIndex { get; set; }
         public int ArgTokens { get; set; }
         public FormulaToken? ArgFirst { get; set; }
@@ -340,21 +598,42 @@ internal static class FormulaChecker
 
         private readonly bool _reportUnclosed;
 
+        // The repair search's re-checks: no name suggestions (they're the slow part).
+        private readonly bool _quick;
+
         public Pass(IReadOnlyList<FormulaToken> tokens, FormulaNameContext names, List<FormulaProblem> problems,
-            bool reportUnclosed)
+            bool reportUnclosed, bool quick)
         {
             _t = tokens;
             _names = names;
             _problems = problems;
             _reportUnclosed = reportUnclosed;
+            _quick = quick;
         }
+
+        /// <summary>Each closed call's opening bracket, with its closer.</summary>
+        public Dictionary<FormulaToken, ClosedCall> Closers { get; } = new();
 
         private Frame? Top => _stack.Count == 0 ? null : _stack[^1];
 
+        /// <summary>
+        ///     The index of the token being read when the first bracket, shape or argument fault was
+        ///     found (the token count if at the end), or -1. An edit after it can't clear that fault.
+        /// </summary>
+        public int FirstStructuralToken { get; private set; } = -1;
+
+        /// <summary>A quick pass stops once it has found this many such faults.</summary>
+        public int AbortAt { get; set; } = int.MaxValue;
+
+        public int StructuralCount { get; private set; }
+
+        private int _i;
+
         public void Run()
         {
-            for (var i = 0; i < _t.Count; i++)
+            for (var i = 0; i < _t.Count && StructuralCount < AbortAt; i++)
             {
+                _i = i;
                 var tok = _t[i];
                 switch (tok.Type)
                 {
@@ -378,6 +657,10 @@ internal static class FormulaChecker
                 }
             }
 
+            _i = _t.Count;
+            if (StructuralCount >= AbortAt)
+                return;
+
             // A LET name never used is often the other half of a typo (ouyt defined, out used).
             foreach (var d in _all.Where(d => !d.Used && !d.IsParameter))
                 Add(new FormulaProblem(FormulaProblemKind.UnusedName, d.Token.Start, d.Token.Text.Length,
@@ -391,7 +674,17 @@ internal static class FormulaChecker
             }
         }
 
-        private void Add(FormulaProblem p) => _problems.Add(p);
+        private void Add(FormulaProblem p)
+        {
+            if (p.IsStructural)
+            {
+                if (StructuralCount == 0)
+                    FirstStructuralToken = _i;
+                StructuralCount++;
+            }
+
+            _problems.Add(p);
+        }
 
         private void CountArgToken(FormulaToken tok, bool isSoleNameCandidate)
         {
@@ -416,7 +709,23 @@ internal static class FormulaChecker
             else if (Top is { } outer)
                 outer.ArgSoleName = null;
 
-            _stack.Add(new Frame(nameToken, open));
+            var frame = new Frame(nameToken, open);
+            if (nameToken is not null)
+                frame.Arity = ArityOf(nameToken.Text);
+            _stack.Add(frame);
+        }
+
+        /// <summary>A native function's or library LAMBDA's argument range, unless a LET or LAMBDA name shadows it.</summary>
+        private (int Min, int Max)? ArityOf(string raw)
+        {
+            if (raw.IndexOfAny(RefChars) >= 0)
+                return null;
+            var name = Strip(raw);
+            if (FindInScope(name) is not null)
+                return null;
+            if (ExcelFunctionArity.TryGet(name, out var native))
+                return native;
+            return _names.LibraryArgumentCounts.TryGetValue(name, out var lib) ? lib : null;
         }
 
         private void OnComma(FormulaToken comma)
@@ -462,6 +771,7 @@ internal static class FormulaChecker
             if (!empty)
                 FinishArgument(f, isLast: true);
             FinishFrameShape(f, close);
+            Closers[f.Open] = new ClosedCall(f.Open, f.Start, f.Label, close);
 
             _stack.RemoveAt(_stack.Count - 1);
             if (_stack.Count == 0)
@@ -544,6 +854,17 @@ internal static class FormulaChecker
             {
                 Add(new FormulaProblem(FormulaProblemKind.BadShape, f.Start, f.Open.End - f.Start,
                     $"LAMBDA needs at least a calculation.{at}"));
+            }
+            else if (f.Arity is { } a && closer is not null && (argCount < a.Min || argCount > a.Max))
+            {
+                var name = f.NameToken!.Text;
+                var has = $"{name} has {argCount} argument{(argCount == 1 ? "" : "s")}";
+                var needs = argCount < a.Min
+                    ? a.Max == a.Min ? $"it needs {a.Min}" : a.Max >= 255 ? $"it needs at least {a.Min}" : $"it needs {a.Min} to {a.Max}"
+                    : a.Max == 0 ? "it takes none" : $"it takes at most {a.Max}";
+                Add(new FormulaProblem(FormulaProblemKind.ArgumentCount, f.Start, f.Open.End - f.Start,
+                    $"{has}; {needs}.{at}",
+                    RelatedStart: closer.Start, RelatedLength: 1));
             }
         }
 
@@ -668,6 +989,12 @@ internal static class FormulaChecker
             {
                 Add(new FormulaProblem(FormulaProblemKind.NotLoaded, tok.Start, tok.Text.Length,
                     $"{tok.Text} is a library LAMBDA that isn't loaded in this workbook. Load it from the Lambda Boss popup."));
+                return;
+            }
+
+            if (_quick)
+            {
+                Add(new FormulaProblem(FormulaProblemKind.UnknownName, tok.Start, tok.Text.Length, ""));
                 return;
             }
 

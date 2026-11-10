@@ -213,7 +213,7 @@ public static class CheckFormulaCommand
             }
         }
 
-        return kept.Count == result.Problems.Count ? result : new FormulaCheckResult(result.Formula, kept);
+        return kept.Count == result.Problems.Count ? result : result.WithProblems(kept);
     }
 
     private static string SafeAddress(dynamic cell)
@@ -334,6 +334,8 @@ internal static class WorkbookNames
     {
         foreach (var n in LambdaHints.Catalog.Names())
             ctx.LibraryNames.Add(n);
+        foreach (var (n, range) in LambdaHints.Catalog.ArgumentCounts())
+            ctx.LibraryArgumentCounts[n] = range;
     }
 }
 

@@ -102,6 +102,27 @@ internal sealed class LambdaHintCatalog
             return _aliases.Keys.ToList();
     }
 
+    /// <summary>
+    ///     Each known name (bare and prefixed) with its argument range from the header's
+    ///     Required/Optional flags (Check Formula, issue #424). Names whose header lists no
+    ///     parameters are left out: their count isn't known.
+    /// </summary>
+    public IReadOnlyDictionary<string, (int Min, int Max)> ArgumentCounts()
+    {
+        lock (_gate)
+        {
+            var d = new Dictionary<string, (int, int)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (alias, bare) in _aliases)
+            {
+                var ps = _docs[bare].Parameters;
+                if (ps.Count > 0)
+                    d[alias] = (ps.Count(p => p.Required), ps.Count);
+            }
+
+            return d;
+        }
+    }
+
     public int Count
     {
         get

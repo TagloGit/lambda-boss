@@ -54,6 +54,7 @@ What it reports, brackets first because they're usually the cause:
 | Extra `)` | "Extra ): nothing is left to close. SUMIFS( at character 2 was closed by the ) at character 89." |
 | Unclosed `(` | "SUM( is never closed: a ) is missing, at the end or somewhere inside it." |
 | Never closed | an unterminated `"`, `'`, `[` or `{` |
+| Argument count (#424) | "REDUCE has 2 arguments; it needs 3. The ) at character 101 closes it."; "IF has 4 arguments; it takes at most 3." |
 | LET / LAMBDA shape | "LET has 6 arguments: it needs name, value pairs and then a final calculation…"; a calculation where a LET name should be; a LET name that is a cell reference (`x1`) |
 | Unknown name | "fare isn't defined anywhere. Did you mean fares?"; "TOCOPOSTOCELL … contains POSTOCELL: two names run together?"; "x is out of scope here: it's defined at character 18, inside a LAMBDA that has already closed." |
 | Library LAMBDA not loaded | "TLOOKUP is a library LAMBDA that isn't loaded in this workbook." |
@@ -65,6 +66,38 @@ name (LAMBDAs included), a table, a cell reference, `TRUE`/`FALSE`, or something
 evaluates to other than `#NAME?` (add-in functions: asked of Excel when checking a cell, and
 remembered for checks made mid-edit). Strings, quoted sheet names and structured references are
 never mistaken for brackets.
+
+### v2: lead with the fix (#424, #426)
+
+Tim, 9 Nov, on a stray `)` after `TAKE(moves, 5)` that closed REDUCE early: v1 reported three
+consequences and not the bracket. Now:
+
+- **Argument counts.** Native functions from a min/max table (`ExcelFunctionArity`, about 200
+  functions whose counts are certain; any other function isn't counted, so a wrong entry can't
+  raise a false alarm). Library LAMBDAs from their header's `(Required)`/`(Optional)` flags
+  (spec 0013): required ones set the minimum, all of them the maximum. A LET or LAMBDA name that
+  shadows a function isn't counted. An empty argument (`XLOOKUP(a,b,c,,2)`) counts.
+- **Repair search.** When there's a bracket, comma or argument-count fault, the checker tries
+  every single `)` removal, and every `)` insertion where an argument ends (before a comma, a `)`
+  or the end), and re-checks after each. An edit "works" when no bracket, shape or count fault is
+  left (an unrelated typo can remain). The window then:
+  - **one edit works**: the first line is the fix, e.g. *"Remove the ) after …start, TAKE(moves,
+    5) (character 101)."*, then a green panel with the spot and what the changed call reads after
+    the edit (`REDUCE(start, TAKE(moves, 5), step)`), then the other problems, with those the fix
+    clears listed under "Caused by this )";
+  - **several work**: they're listed, likeliest first (an insertion at the end of a line or the
+    formula, then nearest the first fault), each with its preview: "Check which one you meant";
+  - **none works**: the edits that leave fewest faults, if any reduce them, or "No single
+    bracket edit fixes this."
+- **Instant.** Only edits up to the first fault are tried (text before it reads the same after
+  any later edit), nearest first; each re-check reuses the tokens, skips name suggestions and
+  stops once it can't beat the best edit so far. The search stops at 150 ms and says so; above
+  12,000 characters it isn't tried. A 5,000-character LET: 10–70 ms with a stray `)`, 150 ms
+  (capped, fix still found first) with a `)` missing at the end.
+- **Known limit.** The search finds *valid* edits, not intended ones. In stall 8 (Tim deleted
+  `TAKE(` and left its `)`), removing the `)` after `EXPLODE(G142` is valid, because EXPLODE takes
+  a chunk size; Tim restored `TAKE(` instead. The preview shows `EXPLODE(G142,$I$140)`, which is
+  why every fix shows what the call reads after it.
 
 ## How it's built
 
@@ -102,14 +135,15 @@ never mistaken for brackets.
 - **One window, focus taken.** It opens activated so Esc closes it; Excel gets focus back after.
 - **Brackets listed before names**, then by position.
 - **Unused LET names are shown as notes** (amber), not errors.
-- **No fixes applied.** The window shows the nearest name; it doesn't rewrite the formula.
+- **No fixes applied.** The window shows the nearest name and the bracket edit; it doesn't
+  rewrite the formula.
+- **Argument counts only where certain**; library LAMBDAs trust their header flags.
 - **Unknown names are double-checked with Excel** before they're reported for a cell.
 - **Sheets and tables are checked only when the snapshot has them** (a workbook was read).
 - **Positions are 1-based characters**, counting the `=`.
 
 ## Not in scope (ideas for later)
 
-- Argument counts for native functions and library LAMBDAs (Excel's "too few arguments"), and a
-  stray comma inside a call.
+- A stray comma inside a call (the repair search tries brackets only).
 - Moving Excel's cursor to the problem.
 - Local-language formulas (`;` separators): Tim's Excel is English.
