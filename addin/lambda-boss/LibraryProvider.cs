@@ -129,6 +129,10 @@ public class LibraryProvider
     /// </summary>
     public void InvalidateCache(RepoConfig config, string libraryName)
     {
+        // Offline the cache can't be replaced, so keep it (the popup invalidates before each load).
+        if (config.IsHomeRepo && _offlineRepos.ContainsKey(config.GetCacheKey()))
+            return;
+
         _cache.Invalidate(config, libraryName);
     }
 

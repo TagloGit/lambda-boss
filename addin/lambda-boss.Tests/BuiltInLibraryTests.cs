@@ -151,6 +151,22 @@ public class BuiltInLibraryTests : IDisposable
         Assert.Contains(await provider.GetAllLambdasAsync(), l => l.Name == "CACHEDONLY");
     }
 
+    [Fact]
+    public async Task HomeRepo_Offline_InvalidateCacheKeepsTheCache()
+    {
+        var cache = new SourceCache(_tempCacheDir);
+        var metadata = LibraryMetadata.LoadFromString("name: Maps\ndescription: d\ndefault_prefix: ");
+        cache.Store(HomeRepo, new FetchedLibrary("maps", metadata,
+            new Dictionary<string, string> { ["CACHEDONLY.lambda"] = "CACHEDONLY = LAMBDA(x, x);" }));
+        var provider = new LibraryProvider(new[] { HomeRepo }, new HttpClient(new MockHttpHandler()), cache);
+        await provider.RefreshAsync();
+
+        provider.InvalidateCache(HomeRepo, "maps");
+        var loaded = await provider.LoadLibraryAsync(HomeRepo, "maps", "");
+
+        Assert.Contains(loaded, l => l.Name == "CACHEDONLY");
+    }
+
     private sealed class CountingHandler : HttpMessageHandler
     {
         public int Requests;
