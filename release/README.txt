@@ -13,6 +13,11 @@ What's in this zip
   unblock.cmd         Optional helper for clearing the "downloaded from
                       the internet" mark Windows applies to USB-copied
                       files.
+  remove-lambda-boss.cmd
+                      Removes Lambda Boss from this Windows user's Excel
+                      (for the next person on a shared machine). Run it
+                      with Excel closed; it lists what it removed and
+                      what is left to delete.
 
 Requirements
 ------------
