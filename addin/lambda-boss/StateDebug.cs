@@ -17,6 +17,8 @@ public static class StateDebug
     private static readonly Regex Opening = new(
         @"(?<![A-Za-z0-9_.])(?:[A-Za-z_][A-Za-z0-9_]*\.)?SplitState\s*\(\s*$", RegexOptions.IgnoreCase);
 
+    private static readonly Regex Literal = new("\"((?:[^\"]|\"\")*)\"");
+
     private static readonly Regex Closing = new(@"^\s*,\s*(?:1|TRUE)\s*\)", RegexOptions.IgnoreCase);
 
     // The way back from each SCAN: the REDUCE it was switched from.
@@ -84,6 +86,10 @@ public static class StateDebug
     {
         if (engine is null) throw new ArgumentNullException(nameof(engine));
 
+        // Off on a form that isn't debug changes nothing: a SCAN Tim wrote himself stays a SCAN.
+        if (!on && !engine.IsDebug)
+            return new StateEngineChange(engine.Rows, engine.Fold, engine.StepName, false);
+
         var fold = engine.Fold == null ? null : Twin(engine.Fold, kinds, on) ?? engine.Fold;
         return new StateEngineChange(engine.Rows, fold, engine.StepName, on);
     }
@@ -105,11 +111,21 @@ public static class StateDebug
             if (step?.Site == null) return Array.Empty<string>();
 
             var read = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // A string literal anywhere outside the fold may be a key read from the result.
+            foreach (Match m in Literal.Matches(engine.Before + "\n" + engine.After))
+                read.Add(m.Groups[1].Value.Replace("\"\"", "\""));
+
             foreach (var text in parsed.Bindings.Select(b => b.RhsText).Append(parsed.Body))
                 foreach (var call in Calls(text))
-                    if (StateStepParser.IsNamed(call.Name, "GetVar") && call.Arguments.Count == 2
-                        && StringLiteral(call.Arguments[1]) is { } key)
-                        read.Add(key);
+                {
+                    // A key read some way we can't follow: be conservative, every output is real.
+                    if (StateStepParser.IsNamed(call.Name, "GetVarAt")) return Array.Empty<string>();
+                    if (!StateStepParser.IsNamed(call.Name, "GetVar")) continue;
+                    if (call.Arguments.Count != 2 || StringLiteral(call.Arguments[1]) is not { } key)
+                        return Array.Empty<string>();
+                    read.Add(key);
+                }
 
             var seeded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (engine.Seed.Length > 0)

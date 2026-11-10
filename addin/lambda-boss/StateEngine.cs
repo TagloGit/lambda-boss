@@ -274,6 +274,17 @@ public static class StateEngines
 
         try
         {
+            // 0. A name can't be a debug output's: it would be set twice in the output.
+            if (!engine.IsNew)
+            {
+                var known = engine.DebugKeys;
+                var clash = change.Rows.FirstOrDefault(r =>
+                    r.Key.Trim().Length > 0 && !string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal)
+                    && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase));
+                if (clash != null)
+                    return Failed($"{clash.Key.Trim()} is already a debug output of this step. Pick another name.", notes);
+            }
+
             // 1. Variables.
             string? editError;
             IReadOnlyList<string> blockers = Array.Empty<string>();
@@ -290,17 +301,12 @@ public static class StateEngines
                 return Failed($"Debug runs the fold as a SCAN, and {change.Fold!.Name} has no SCAN twin the dialog knows.", notes);
 
             var debugKeys = edited.DebugKeys;
-            if (!engine.IsNew)
-            {
-                var known = engine.DebugKeys;
-                var clash = change.Rows.FirstOrDefault(r =>
-                    r.OriginalKey == null && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase));
-                if (clash != null)
-                    return Failed($"{clash.Key.Trim()} is already a debug output of this step. Pick another name.", notes);
-            }
-
             if (engine.IsDebug && !debug && debugKeys.Count > 0)
             {
+                if (edited.Rows.Count == 0)
+                    return Failed(
+                        $"Nothing in this step reads {string.Join(", ", debugKeys)} back, so leaving debug would drop every output. Read one with GetVar, or add a variable, first.",
+                        notes);
                 edited = Rebuild(edited, StateEdit.DropOutputKeys(Intermediate(edited, withOtherArguments: true), debugKeys));
                 notes.Add($"Debug off: dropped the debug outputs {string.Join(", ", debugKeys)}.");
             }
@@ -973,7 +979,7 @@ public static class StateEngines
         // The debug wrapper goes on or comes off; every other wrapper is left as it was.
         if (original.IsDebug && !debug && StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter))
             (before, after) = (bare, bareAfter);
-        else if (!original.IsDebug && debug)
+        else if (!original.IsDebug && debug && !StateDebug.TryUnwrap(before, after, out _, out _))
             (before, after) = StateDebug.Wrap(before, after, engine.Prefix);
 
         return before + call + after;

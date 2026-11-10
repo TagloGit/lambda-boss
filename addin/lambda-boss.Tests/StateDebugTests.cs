@@ -340,4 +340,64 @@ public class StateDebugTests
         Assert.Equal(new[] { "c", "w" }, engine.DebugKeys);
         Assert.Contains("item", engine.Rows.Select(r => r.Key));
     }
+
+    // ------------------------------------------------------------ review fixes
+
+    [Fact]
+    public void ReduceAlreadyInSplitState_EntersWithoutDoubleWrapping_AndExitsClean()
+    {
+        var wrapped = Fold("=SplitState(REDUCE(", "LAMBDA(a, v, ", ", 1)", "    " + DebugOutput);
+        var book = new Book();
+
+        var entered = book.Toggle(wrapped, on: true);
+        Assert.DoesNotContain("SplitState(SplitState", entered);
+        Assert.Equal(CanonicalDebug, entered);
+
+        Assert.Equal(Normal, book.Toggle(entered, on: false));
+    }
+
+    [Fact]
+    public void AKeyReadOutsideTheStep_IsNotDebugOnly()
+    {
+        const string formula = "=GetVar(REDUCE(SetVars(\"p\", G1), xs, LAMBDA(a, v, LET(\n"
+            + "    p, GetVar(a, \"p\"),\n    np, p + v,\n    SetVars(\"p\", np, \"ans\", np * 2)\n))), \"ans\")";
+        var engine = new Book().Read(formula);
+
+        Assert.Empty(engine.DebugKeys);
+        Assert.Contains("ans", engine.Rows.Select(r => r.Key));
+    }
+
+    [Fact]
+    public void ToggleOff_OnAPlainScan_IsANoOp()
+    {
+        var plain = Normal.Replace("=REDUCE(", "=SCAN(");
+        var book = new Book();
+
+        Assert.Equal(plain, book.Toggle(plain, on: false));
+    }
+
+    [Theory]
+    [InlineData("    k, GetVar(a, \"x\" & p),")]
+    [InlineData("    k, GetVarAt(a, 1),")]
+    public void AKeyReadSomeOtherWay_MakesEveryOutputReal(string extraLine)
+    {
+        var formula = CanonicalDebug.Replace(
+            "    p, GetVar(a, \"p\"),", "    p, GetVar(a, \"p\"),\n" + extraLine);
+        var engine = new Book().Read(formula);
+
+        Assert.Empty(engine.DebugKeys);
+        Assert.Contains("item", engine.Rows.Select(r => r.Key));
+    }
+
+    [Fact]
+    public void RenamingToADebugOutputsName_SaysSo()
+    {
+        var book = new Book();
+        var engine = book.Read(CanonicalDebug);
+        var rows = engine.Rows.Select(r => r.Key == "p" ? r with { Key = "c" } : r).ToList();
+        var result = book.Apply(engine, new StateEngineChange(rows, engine.Fold, null));
+
+        Assert.Null(result.Formula);
+        Assert.Contains("debug output", result.Error);
+    }
 }

@@ -228,21 +228,35 @@ state variables:
 - Add, rename and remove of real variables leave them where they are. A new real variable goes
   after them in the output. A new variable can't take a debug output's name (an error says so).
 - A key that is in the seed counts as a variable even if nothing reads it.
+- A key also counts as read when a string literal of that name appears in the text before or
+  after the fold (`=GetVar(REDUCE(…), "ans")`): the result is read from outside the step.
+- Conservative: if the step uses `GetVarAt`, or a `GetVar` whose key isn't a string literal, no
+  key can be shown to be unread, so there are no debug-only keys at all.
+- Renaming a variable to a debug output's name gets the same "already a debug output" error as
+  adding one.
 
 **Enter debug (Debug checkbox on, or `StateDebug.Toggle(engine, true, kinds)`).** The fold switches
 to its SCAN twin and `SplitState(` … `, 1)` goes round it, spelled with the state library's prefix
 (`loops.SplitState` when the step uses `loops.SetVars`). Nothing else changes: no debug outputs are
-added, and the seed, inputs, rules and name stay.
+added, and the seed, inputs, rules and name stay. A fold that is already the first argument of
+`SplitState(…, 1)` (a REDUCE written that way) is not wrapped again: entering only switches it to
+its SCAN twin and keeps the wrapper.
 
 **Exit debug (checkbox off, or `Toggle(engine, false, kinds)`).** The wrapper comes off, the fold
 goes back to its REDUCE twin, and the debug-only outputs are removed from the SetVars call. The
 lines that computed them (`item, …`) stay, so the rules are never touched, and the dialog says
-which outputs it dropped. Normal, then debug, then normal gives the same text back.
+which outputs it dropped. Normal, then debug, then normal gives the same text back. Exit on a form
+that isn't debug (a plain SCAN, or a REDUCE already in `SplitState`) changes nothing: the twin
+mapping back applies only to a form that opened as debug. If exiting would drop every output the
+step has, it is refused with a message.
 
 **Defaults taken:**
 - The wrapper is written `, 1)` with a space. A debug form Tim typed (`,1)`) keeps its own spacing
   until it is toggled out.
 - The checkbox switches the Form box to the twin, and the Form box can still be changed afterwards.
+  Unticking returns to the form the dialog opened with: the REDUCE twin only when it opened in
+  debug form, otherwise the original fold (a plain SCAN stays a SCAN). The grey debug-outputs line
+  adds "Save drops them." while an opened debug form is unticked.
   Debug with the form on LET step, or on a fold with no SCAN twin, shows an error and can't be saved.
 - Leaving debug outputs in a normal REDUCE is allowed; only the exit command drops them.
 - The Debug checkbox is under the same Labs switch, `state-any-form`.

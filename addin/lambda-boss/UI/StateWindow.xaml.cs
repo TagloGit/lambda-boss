@@ -144,6 +144,10 @@ public partial class StateWindow
         lines.AddRange(result.Blockers);
         lines.AddRange(result.Notes);
 
+        var dropping = _engine.IsDebug && DebugBox.IsChecked != true && _engine.DebugKeys.Count > 0;
+        DebugText.Text = "Debug outputs, not state variables: " + string.Join(", ", _engine.DebugKeys)
+            + (dropping ? ". Save drops them." : ".");
+
         MessageText.Text = string.Join(Environment.NewLine, lines);
         MessageText.Foreground = result.Error != null
             ? new SolidColorBrush(Color.FromRgb(0xe7, 0x48, 0x56))
@@ -166,15 +170,24 @@ public partial class StateWindow
     {
         if (!_loaded) return;
 
+        // On: the SCAN twin. Off: only when the dialog opened in debug form does the fold go back
+        // to its REDUCE twin; otherwise back to the form it opened with (a plain SCAN stays a SCAN).
         var on = DebugBox.IsChecked == true;
-        if (SelectedFold is { } current && StateDebug.Twin(current, _folds, on) is { } twin)
+        StateFoldKind? target = null;
+        if (SelectedFold is { } current)
         {
-            var at = _folds.FindIndex(f => Same(f, twin));
-            if (at >= 0)
-            {
-                FormBox.SelectedIndex = 1 + at;
-                return;
-            }
+            if (on || _engine.IsDebug)
+                target = StateDebug.Twin(current, _folds, on);
+            else if (_engine.Fold != null
+                && StateDebug.Twin(_engine.Fold, _folds, toScan: true) is { } scan && Same(current, scan))
+                target = _engine.Fold;
+        }
+
+        var at = target == null ? -1 : _folds.FindIndex(f => Same(f, target));
+        if (at >= 0)
+        {
+            FormBox.SelectedIndex = 1 + at;
+            return;
         }
 
         Refresh();
