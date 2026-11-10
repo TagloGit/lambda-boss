@@ -42,6 +42,22 @@ internal static class LambdaHints
             _installed = true;
             Logger.Info($"LambdaHints: started ({Catalog.Count} names), file {XmlPath}");
 
+            // The patched server (#433) finds XLLs on Refresh rather than by watching DLL loads, so refresh
+            // once Excel is idle: by then every add-in loaded at startup after this one is in, and their
+            // hints show too.
+            ExcelAsyncUtil.QueueAsMacro(() =>
+            {
+                try
+                {
+                    if (_installed)
+                        IntelliSenseServer.Refresh();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("LambdaHints: startup refresh", ex);
+                }
+            });
+
             // Fill the catalogue in the background, the way the popup would (disk cache, else GitHub).
             // LibraryProvider.RefreshAsync hands its lambdas to OnLibrariesRefreshed.
             Task.Run(async () =>

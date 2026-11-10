@@ -23,8 +23,10 @@ Every change is marked `LAMBDA BOSS PATCH` in the code.
 2. **WinEvent hooks on Excel's main thread only.** `UIMonitor/WinEvents.cs` passes the main
    thread's id to `SetWinEventHook` instead of 0 (every thread in the process). The windows the
    server watches (formula bar `EXCEL<`, in-cell editor `EXCEL6`, function list `__XLACOOUTER`,
-   `XLToolTip`, `XLMAIN`) all belong to that thread; other threads' windows no longer reach
-   our callback.
+   `XLToolTip`, `XLMAIN`) all belong to that thread. The out-of-context callback always ran on
+   the main thread; what changes is that events from Office's other threads are no longer
+   delivered to it (nor their windows queried with `GetClassName`), and no hook applies to those
+   threads. This one is defence in depth: patch 1 is the one that fits Tim's bisect.
 3. **Server version `1.9.0.433`** (`IntelliSenseServer.ServerVersion`), so that beside another
    add-in carrying the stock 1.9.0 server, this patched one is the one that runs (the
    co-operative scheme activates the highest version). A future upstream release ranks above it.
@@ -33,6 +35,23 @@ Every change is marked `LAMBDA BOSS PATCH` in the code.
 
 UI Automation isn't involved: 1.9.0 makes no UI Automation calls (WinEvents and Win32 messages
 to Excel's own edit windows only).
+
+**Confidence: inferred, not reproduced.** Patch 1 fits Tim's bisect (`hermes.dll` loads once per
+session, so a server installed after the first flyout never sees it load), but the VM's Excel
+(16.0.20527, one account) builds its account card without `hermes.dll` and never crashed, stock
+or patched. Tim's PC is the proof.
+
+## Limits
+
+- **Add-ins loaded later.** Lambda Boss refreshes the server once Excel is idle after startup
+  (`LambdaHints.StartIfEnabled`) and whenever its hints file changes. An Excel-DNA add-in loaded
+  by hand later in the session gets its hints at the next of those refreshes, not at once.
+- **When this server isn't the one running**, the patch doesn't apply: hints turned off (another
+  add-in's stock server may take over), or a stock server of a higher version (1.9.1 or later)
+  in another add-in. Lambda Boss carries no other.
+- A `DisabledVersions` setting of exactly `1.9.0` doesn't disable `1.9.0.433`; `1.9.*` does.
+- Focus moving into a window on another Office thread is no longer seen, so an argument tooltip
+  may stay up while a flyout or pane on another thread has focus mid-edit (cosmetic).
 
 ## Updating
 

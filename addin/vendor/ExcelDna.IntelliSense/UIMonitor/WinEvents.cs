@@ -143,10 +143,12 @@ namespace ExcelDna.IntelliSense
         void InstallWinEventHook(object _)
         {
             var excelProcessId = Win32Helper.GetExcelProcessId();
-            // LAMBDA BOSS PATCH (lambda-boss#433): upstream hooked every thread in the process (idThread 0), so
-            // Office's other UI threads (React Native flyouts such as the account switcher) saw a WinEvent client
-            // and ran our callback. Every window the server watches (formula bar, in-cell editor, function list,
-            // Excel's tooltip, XLMAIN) belongs to Excel's main thread, which is the thread this runs on.
+            // LAMBDA BOSS PATCH (lambda-boss#433): upstream hooked every thread in the process (idThread 0), so events
+            // from Office's other UI threads (React Native flyouts such as the account switcher) were delivered to us
+            // (the out-of-context callback itself always runs on this thread) and their windows were queried with
+            // GetClassName. Scoped to this thread, no hook applies to those threads at all. Every window the server
+            // watches (formula bar, in-cell editor, function list, Excel's tooltip, XLMAIN) belongs to Excel's main
+            // thread, which is the thread this runs on (installs are posted to the main-thread sync context).
             var excelMainThreadId = GetCurrentThreadId();
             _hWinEventHook = SetWinEventHook(_eventMin, _eventMax, IntPtr.Zero, _handleWinEventDelegate, excelProcessId, excelMainThreadId, SetWinEventHookFlags.WINEVENT_OUTOFCONTEXT);
             if (_hWinEventHook == IntPtr.Zero)

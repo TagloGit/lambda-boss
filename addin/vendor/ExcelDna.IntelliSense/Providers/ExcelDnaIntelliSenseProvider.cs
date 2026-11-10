@@ -165,7 +165,17 @@ namespace ExcelDna.IntelliSense
         List<XllRegistrationInfo> AddLoadedXlls()
         {
             var added = new List<XllRegistrationInfo>();
-            var loaded = new HashSet<string>(GetLoadedXllPaths());
+            HashSet<string> loaded;
+            try
+            {
+                loaded = new HashSet<string>(GetLoadedXllPaths());
+            }
+            catch (Exception ex)
+            {
+                // A failed module enumeration must not cost the rest of the refresh (the XML reload).
+                Logger.Provider.Warn($"ExcelDnaIntelliSenseProvider: loaded-XLL enumeration failed: {ex.Message}");
+                return added;
+            }
 
             foreach (var xllPath in _xllRegistrationInfos.Keys.Where(p => !loaded.Contains(p)).ToList())
             {
