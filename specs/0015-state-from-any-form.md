@@ -181,4 +181,44 @@ its library first, as it loads Loops for a new engine.
       fold with `i`, inline and named.
 - [x] Library folds come from the real headers (REDUCEUNTIL, SCANUNTIL, FOLDROWS) with the right
       argument order and parameters.
-- [ ] VM proof through the popup on Tim's walk and R1 L12 (screenshots in `specs/assets/0015-*`).
+- [x] VM proof through the popup on Tim's walk and R1 L12 (screenshots in `specs/assets/0015-*`).
+
+## VM proof (10 Nov 2026)
+
+Real Excel 16.0 build 20527 in `taglo-win`, with the PR's CI XLL and the Labs channel. Each step was
+driven through the popup (Ctrl+Shift+L, `/State`, Enter), and the dialog through UI Automation.
+The R1 L12 robot (`p` 0, `b` 4) ran on `G270` = `FFBCFFFXFBF`; Tim's walk `p`/`visited` ran over
+`E2:E11`.
+
+- **Empty cell → new engine** ([01](assets/0015-01-new-engine.png)). Loops wasn't in the workbook,
+  so Save loaded it and wrote the issue's shape with `loops.`.
+- **Empty cell → each form.** LET step ([11](assets/0015-11-empty-to-let-step.png)), REDUCE named,
+  REDUCEUNTIL and FOLDROWS were all written and all evaluate.
+- **Robot fold:** `p`=4, `b`=0, which matches the hand trace.
+- **From the fold:** add `c` ([02](assets/0015-02-add-from-fold.png)), rename it to `charges`, then
+  remove it. That gives the same text back. Removing `b` is blocked with "nextP reads b"
+  ([03](assets/0015-03-remove-blocked.png)).
+- **Fold → LET step** ([04](assets/0015-04-fold-to-let-step.png)). The cell shows step 1 (`p`=1,
+  `b`=3). Add and remove from there ([05](assets/0015-05-add-from-let-step.png)), then refold: same
+  text.
+- **Inline → named** ([06](assets/0015-06-inline-to-named.png)). Then named → LET step with the
+  `k` stepper ([07](assets/0015-07-named-to-let-k-stepper.png)). With `k`=3 the cell shows `p`=1,
+  `b`=1, which is right. Add from there updates `moveRobot`. Refold gives the named text; clearing
+  the name gives the inline text back, with the note ([08](assets/0015-08-named-to-inline.png)).
+- **Library folds:** the Form list is read from the headers
+  ([09](assets/0015-09-form-list.png)). SCANUNTIL writes `LAMBDA(a, v, i, …)`
+  ([10](assets/0015-10-scanuntil.png)) and spills 11 rows ending at `p`=4. Back to REDUCE: same
+  text.
+- **Walk:** rename `visited` → `seen` and back; fold → LET step → fold; inline → named → inline.
+  Every one gives the same text, and the `visited` trail stays `0,1,3,2,5,3,5,6,3,5,6`.
+- **A cell inside a spill** gets a message ([12](assets/0015-12-spill-message.png)).
+
+**Found in real Excel:**
+- Excel writes `LAMBDA(a, v,` as `LAMBDA(a,v,`, so "the same text" means the text as Excel holds it.
+  Repeated round trips are stable.
+- Because of that spacing, the "Save updates moveRobot" note was showing when nothing had changed.
+  Definitions are now compared by tokens, not layout. That fix came after the run.
+
+**Not driven in the VM:**
+- An empty cell → SCAN, and the HSTACK refusal. A message box left open by an earlier step blocked
+  the script. Both are covered by unit tests.

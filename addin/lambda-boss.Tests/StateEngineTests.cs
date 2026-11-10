@@ -664,6 +664,8 @@ public class StateEngineTests
         var result = book.Apply(book.Read(named), StateFoldKind.Reduce, "moveRobot", Add(book.Read(named).Rows, "c"));
         Assert.Contains(result.Notes, n => n.Contains("every cell that calls it"));
 
+        // Excel stores the definition with its own spacing; that's no change.
+        book.Names["moveRobot"] = book.Names["moveRobot"].Replace("    a,\n    v,", "a,v,");
         var unchanged = book.Apply(book.Read(named), StateFoldKind.Reduce, "moveRobot");
         Assert.DoesNotContain(unchanged.Notes, n => n.Contains("every cell that calls it"));
     }

@@ -314,7 +314,18 @@ public static class StateEngines
         }
     }
 
-    private static string Normal(string formula) => formula.Replace("\r", "").Trim();
+    /// <summary>A formula's tokens without the layout: Excel stores <c>LAMBDA(a, v,</c> as <c>LAMBDA(a,v,</c>.</summary>
+    private static string Normal(string formula)
+    {
+        try
+        {
+            return string.Concat(FormulaParser.Tokenize(formula).Select(t => t.Text));
+        }
+        catch (FormatException)
+        {
+            return formula.Replace("\r", "").Trim();
+        }
+    }
 
     private static StateEngineResult Failed(string error, List<string> notes, IReadOnlyList<string>? blockers = null) =>
         new(null, null, null, notes, error, blockers ?? Array.Empty<string>());
