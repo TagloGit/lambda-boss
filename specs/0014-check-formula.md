@@ -89,15 +89,27 @@ consequences and not the bracket. Now:
     formula, then nearest the first fault), each with its preview: "Check which one you meant";
   - **none works**: the edits that leave fewest faults, if any reduce them, or "No single
     bracket edit fixes this."
-- **Instant.** Only edits up to the first fault are tried (text before it reads the same after
-  any later edit), nearest first; each re-check reuses the tokens, skips name suggestions and
-  stops once it can't beat the best edit so far. The search stops at 150 ms and says so; above
-  12,000 characters it isn't tried. A 5,000-character LET: 10–70 ms with a stray `)`, 150 ms
-  (capped, fix still found first) with a `)` missing at the end.
+- **Instant.** One `)` edit moves the bracket balance by one, so the search runs only when the
+  formula is off by exactly one: removals for an extra `)`, insertions for a missing one. A
+  formula whose brackets balance (an argument-count fault alone) gets no panel. Only edits up to
+  the first fault are tried (text before it reads the same after any later edit), nearest first;
+  each re-check reuses the tokens, skips name suggestions and stops once it can't beat the best
+  edit so far. The search stops at 150 ms; when it does, the window says so, doesn't lead with
+  the fix and doesn't fold problems under it (uniqueness isn't proven). Above 12,000 characters
+  it isn't tried. On the Mac (net9, M4), a 5,000-character LET: 8–26 ms with a stray `)`; about
+  150 ms with a `)` missing at the end (the end-of-line insertion is tried first, so it's found
+  even when the clock cuts the search). In Excel in the VM the window was up 0.15–0.7 s after the
+  key, mid-edit.
+- **Library counts** trust the header's flags and say so ("(by its library header)"): a
+  workbook whose own LAMBDA shares a library name, or an out-of-date header, can be wrong.
 - **Known limit.** The search finds *valid* edits, not intended ones. In stall 8 (Tim deleted
   `TAKE(` and left its `)`), removing the `)` after `EXPLODE(G142` is valid, because EXPLODE takes
   a chunk size; Tim restored `TAKE(` instead. The preview shows `EXPLODE(G142,$I$140)`, which is
   why every fix shows what the call reads after it.
+
+Screenshots (VM, Excel 365, mid-edit, Ctrl+Shift+K): `assets/0014-cf2-01-tim-reduce.png` (one
+fix), `assets/0014-cf2-03-stall1-several.png` (two valid edits), `assets/0014-cf2-02-stall7.png`,
+`assets/0014-cf2-04-argcount.png`.
 
 ## How it's built
 

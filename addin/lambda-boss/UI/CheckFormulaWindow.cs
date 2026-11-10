@@ -124,7 +124,7 @@ internal sealed class CheckFormulaWindow : Window
             headline += $" {notes} note{(notes == 1 ? "" : "s")}.";
 
         // One bracket edit fixes it: lead with that edit (issue #426).
-        if (result.Repair == RepairOutcome.One)
+        if (result.HasSingleFix)
             headline = result.Repairs[0].Describe(result.Formula);
 
         root.Children.Add(new TextBlock
@@ -172,7 +172,7 @@ internal sealed class CheckFormulaWindow : Window
         var list = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
         var n = 0;
         var causedHeader = false;
-        foreach (var p in result.Problems.OrderBy(p => p.IsConsequence ? 1 : 0))
+        foreach (var p in result.Problems.OrderBy(p => p.Kind == FormulaProblemKind.More ? 2 : p.IsConsequence ? 1 : 0))
         {
             if (p.IsConsequence && !causedHeader)
             {
@@ -245,7 +245,9 @@ internal sealed class CheckFormulaWindow : Window
         var panel = new StackPanel();
         string? intro = result.Repair switch
         {
-            RepairOutcome.One => result.RepairNote is null ? "This one bracket edit makes the whole formula valid:" : "This bracket edit makes the whole formula valid:",
+            RepairOutcome.One => result.RepairNote is null
+                ? "This one bracket edit makes the whole formula valid:"
+                : "This bracket edit makes the whole formula valid. The search was cut short, so there may be others:",
             RepairOutcome.Several => "Each of these single bracket edits makes the formula valid (likeliest first). Check which one you meant:",
             RepairOutcome.Closest => $"No single bracket edit makes the formula valid. The closest leave {result.Repairs[0].Remaining} problem{(result.Repairs[0].Remaining == 1 ? "" : "s")}:",
             RepairOutcome.NoneFound => "No single bracket edit fixes this.",
@@ -257,7 +259,7 @@ internal sealed class CheckFormulaWindow : Window
         foreach (var r in result.Repairs)
         {
             var item = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
-            if (result.Repair != RepairOutcome.One)
+            if (!result.HasSingleFix)
                 item.Children.Add(new TextBlock
                 {
                     Text = r.Describe(result.Formula),

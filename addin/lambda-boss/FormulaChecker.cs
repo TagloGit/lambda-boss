@@ -292,7 +292,7 @@ internal static class FormulaChecker
                 or FormulaProblemKind.ArgumentCount))
         {
             (repair, repairs, note) = SearchRepairs(formula, tokens, names, problems, pass);
-            if (repair == RepairOutcome.One)
+            if (repair == RepairOutcome.One && note is null)
                 problems = problems.Select(p => p.IsStructural ? p with { IsConsequence = true } : p).ToList();
         }
 
@@ -329,9 +329,24 @@ internal static class FormulaChecker
             return (RepairOutcome.Skipped, Array.Empty<BracketRepair>(),
                 $"Bracket repair search skipped: the formula is over {MaxRepairLength:N0} characters.");
 
+        // One ) edit moves the balance by one, so it can only help when the formula is off by
+        // exactly one: an extra ) (try removals) or a missing one (try insertions).
+        var balance = tokens.Count(t => t.Type == FormulaTokenType.RParen)
+                      - tokens.Count(t => t.Type == FormulaTokenType.LParen);
+        if (balance == 0)
+            return (RepairOutcome.NotNeeded, Array.Empty<BracketRepair>(), null);
+        if (Math.Abs(balance) > 1)
+            return (RepairOutcome.NoneFound, Array.Empty<BracketRepair>(), null);
+        var removals = balance > 0;
+
         var baseline = problems.Count(p => p.IsStructural);
         var first = problems.First(p => p.IsStructural);
-        var anchor = first.RelatedStart >= 0 ? first.RelatedStart : first.Start;
+
+        // Rank near the first fault: for a misplaced ) the bracket that closed the call too soon;
+        // for an extra one, the extra ) itself.
+        var anchor = first.Kind == FormulaProblemKind.CommaOutsideFunction && first.RelatedStart >= 0
+            ? first.RelatedStart
+            : first.Start;
 
         // The text before the first fault reads the same after any later edit, so only edits up
         // to it can make the formula valid. Tried nearest that point first (and insertions at a
@@ -340,11 +355,24 @@ internal static class FormulaChecker
         var detectedAt = tokens[last].Start;
         var candidates = new List<(bool Insert, int Index, int Pos)>();
         for (var i = 0; i <= last; i++)
-            if (tokens[i].Type == FormulaTokenType.RParen)
-                candidates.Add((false, i, tokens[i].Start));
-        for (var i = 0; i <= last; i++)
-            if (tokens[i].Type is FormulaTokenType.Comma or FormulaTokenType.RParen or FormulaTokenType.Eof)
-                candidates.Add((true, i, i > 0 ? tokens[i - 1].End : tokens[i].Start - tokens[i].Lead.Length));
+        {
+            var t = tokens[i];
+            if (removals)
+            {
+                if (t.Type == FormulaTokenType.RParen)
+                    candidates.Add((false, i, t.Start));
+                continue;
+            }
+
+            if (t.Type is not (FormulaTokenType.Comma or FormulaTokenType.RParen or FormulaTokenType.Eof))
+                continue;
+
+            // Not "()" from a bare bracket: Excel refuses an empty one.
+            if (i > 0 && tokens[i - 1].Type == FormulaTokenType.LParen
+                      && !(i > 1 && tokens[i - 2].Type == FormulaTokenType.Name && tokens[i - 1].Lead.Length == 0))
+                continue;
+            candidates.Add((true, i, i > 0 ? tokens[i - 1].End : t.Start - t.Lead.Length));
+        }
         candidates = candidates
             .OrderBy(c => c.Insert && AtLineEnd(c.Pos) ? 0 : 1)
             .ThenBy(c => Math.Abs(detectedAt - c.Pos))
@@ -569,6 +597,9 @@ internal static class FormulaChecker
         /// <summary>The argument range of the called function, when it's known (#424).</summary>
         public (int Min, int Max)? Arity { get; set; }
 
+        /// <summary>The range came from a library LAMBDA's header, not Excel's own table.</summary>
+        public bool ArityFromLibrary { get; set; }
+
         public int ArgIndex { get; set; }
         public int ArgTokens { get; set; }
         public FormulaToken? ArgFirst { get; set; }
@@ -711,13 +742,17 @@ internal static class FormulaChecker
 
             var frame = new Frame(nameToken, open);
             if (nameToken is not null)
-                frame.Arity = ArityOf(nameToken.Text);
+            {
+                frame.Arity = ArityOf(nameToken.Text, out var fromLibrary);
+                frame.ArityFromLibrary = fromLibrary;
+            }
             _stack.Add(frame);
         }
 
         /// <summary>A native function's or library LAMBDA's argument range, unless a LET or LAMBDA name shadows it.</summary>
-        private (int Min, int Max)? ArityOf(string raw)
+        private (int Min, int Max)? ArityOf(string raw, out bool fromLibrary)
         {
+            fromLibrary = false;
             if (raw.IndexOfAny(RefChars) >= 0)
                 return null;
             var name = Strip(raw);
@@ -725,7 +760,8 @@ internal static class FormulaChecker
                 return null;
             if (ExcelFunctionArity.TryGet(name, out var native))
                 return native;
-            return _names.LibraryArgumentCounts.TryGetValue(name, out var lib) ? lib : null;
+            fromLibrary = _names.LibraryArgumentCounts.TryGetValue(name, out var lib);
+            return fromLibrary ? lib : null;
         }
 
         private void OnComma(FormulaToken comma)
@@ -863,7 +899,7 @@ internal static class FormulaChecker
                     ? a.Max == a.Min ? $"it needs {a.Min}" : a.Max >= 255 ? $"it needs at least {a.Min}" : $"it needs {a.Min} to {a.Max}"
                     : a.Max == 0 ? "it takes none" : $"it takes at most {a.Max}";
                 Add(new FormulaProblem(FormulaProblemKind.ArgumentCount, f.Start, f.Open.End - f.Start,
-                    $"{has}; {needs}.{at}",
+                    $"{has}; {needs}{(f.ArityFromLibrary ? " (by its library header)" : "")}.{at}",
                     RelatedStart: closer.Start, RelatedLength: 1));
             }
         }

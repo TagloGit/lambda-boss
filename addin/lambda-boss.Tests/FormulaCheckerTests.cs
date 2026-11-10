@@ -421,7 +421,7 @@ public class FormulaCheckerTests
         ctx.LibraryArgumentCounts["lookup.TLOOKUP"] = (3, 4);
 
         var p = Assert.Single(Errors("=TLOOKUP(A1:B3,\"x\")", ctx));
-        Assert.Equal("TLOOKUP has 2 arguments; it needs 3 to 4. The ) at character 19 closes it.", p.Message);
+        Assert.Equal("TLOOKUP has 2 arguments; it needs 3 to 4 (by its library header). The ) at character 19 closes it.", p.Message);
         Assert.Empty(Errors("=TLOOKUP(A1:B3,\"x\",\"y\")", ctx));
         Assert.Single(Errors("=lookup.TLOOKUP(A1:B3,1,2,3,4)", ctx));
     }
@@ -517,12 +517,38 @@ public class FormulaCheckerTests
         Assert.Equal(f + ")", r.Repairs[0].Fixed);
     }
 
-    [Fact]
-    public void A_count_no_bracket_fixes_reports_none()
+    [Theory]
+    [InlineData("=IF(A1>0,1,2,3)")]
+    [InlineData("=MID(ROUND(A1),2)")]
+    [InlineData("=TEXT(A1)")]
+    public void Balanced_brackets_skip_the_search(string formula)
     {
-        var r = Check("=IF(A1>0,1,2,3)");
-        Assert.Equal(RepairOutcome.NoneFound, r.Repair);
+        // One ) edit unbalances them, so it can't help.
+        var r = Check(formula);
+        Assert.Equal(RepairOutcome.NotNeeded, r.Repair);
         Assert.Empty(r.Repairs);
+    }
+
+    [Fact]
+    public void Two_brackets_off_reports_none()
+    {
+        Assert.Equal(RepairOutcome.NoneFound, Check("=SUM(1)))").Repair);
+    }
+
+    [Theory]
+    [InlineData("=IF(A1,1,2)\n)")]
+    [InlineData("=SUMIFS(A:A,B:B,1) )")]
+    public void An_extra_bracket_after_a_space_ranks_the_trailing_one_first(string formula)
+    {
+        var r = Check(formula);
+        Assert.Equal(RepairOutcome.Several, r.Repair);
+        Assert.Equal(formula.Length - 1, r.Repairs[0].Position);
+    }
+
+    [Fact]
+    public void An_empty_bracket_is_not_offered()
+    {
+        Assert.DoesNotContain(Check("=(").Repairs, r => r.Fixed == "=()");
     }
 
     [Fact]
@@ -549,6 +575,7 @@ public class FormulaCheckerTests
             var sw = Stopwatch.StartNew();
             var r = Check(f);
             sw.Stop();
+            // The likeliest edit is tried first, so even a search cut short by the clock finds it.
             Assert.Equal(RepairOutcome.One, r.Repair);
             Assert.Empty(FormulaChecker.Check(r.Repairs[0].Fixed, Workbook()).Problems.Where(p => !p.IsNote));
             Assert.True(sw.ElapsedMilliseconds < 1000, $"{sw.ElapsedMilliseconds} ms");
