@@ -156,6 +156,40 @@ its library first, as it loads Loops for a new engine.
 - The k stepper and the one-sample LET step are kept as Edit Lambda's and LET to LAMBDA's 0011
   behaviour, now behind the one switch.
 
+## Step outputs: a named output and a guarded step (#438, #443)
+
+The step's output is the SetVars call (or a SetVar chain the 0011 parser already accepts), but
+it need not be the whole LET body. Recognised everywhere a state step is read: the 0011 parser,
+`/State` (inline fold, named fold, LET step, library folds), Edit state, LET to LAMBDA and Edit
+Lambda's `k` stepper.
+
+- **A named output (#438).** The body is a bare name bound, in the same LET and above the body,
+  to the SetVars call: `out, SetVars("visited", nextVisited, "p", nextP), out`.
+- **A guarded step (#443).** The body is `IF(cond, a, SetVars(...))`, or `IF(cond, SetVars(...), a)`,
+  where `a` is the step's state (the fold's state parameter; in the unfolded LET step, the state
+  binding). The guard is a break clause: it hands the state back unchanged.
+- **Combined.** The same guard around a name (`IF(cond, a, out)`, `IF(cond, out, a)`), or inside
+  the named binding (`out, IF(cond, a, SetVars(...)), out`). A guard nested deeper
+  (`IF(c1, a, IF(c2, a, SetVars(...)))`) reads too.
+- **Where it sits does not matter.** A fold with such a step inside a bigger formula
+  (`=SplitState(REDUCE(...), 1)`) keeps the text around it, as before.
+
+**Edits rewrite only the SetVars call.** Adding, renaming and removing a variable change the
+pairs inside the call and the lines around the step as usual. The `out` binding's name and the
+bare `out` body stay, and so do the guard, its condition and the swapped branches. A rename also
+reaches the guard's condition (`GetVar(a, "p")` and the renamed binding names); a removal is
+blocked when the guard's condition still reads the key, like any other line.
+
+**Defaults taken:**
+- The other branch of a guard must be a bare name equal to the state. Any other `IF` is not a
+  step (it could be anything).
+- Only SetVars outputs are read through a name or a guard. An HSTACK/VSTACK array output still
+  has to be the bare body, so no ordinary LET that ends in a name bound to an HSTACK becomes a
+  step.
+- A name that resolves to the state's own binding is not an output.
+- Keys the output sets that nothing reads back with `GetVar` (the `items` pair in #443) are listed
+  as variables like any other pair. #440 will treat them as debug-only.
+
 ## Exploration: sheet layouts (10 Nov 2026, for Tim to choose)
 
 Two prototypes were built on the engine and run in `taglo-win` against the in-cell unfolded form

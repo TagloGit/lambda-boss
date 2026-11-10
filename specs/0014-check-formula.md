@@ -55,7 +55,7 @@ What it reports, brackets first because they're usually the cause:
 | Unclosed `(` | "SUM( is never closed: a ) is missing, at the end or somewhere inside it." |
 | Never closed | an unterminated `"`, `'`, `[` or `{` |
 | Argument count (#424) | "REDUCE has 2 arguments; it needs 3. The ) at character 101 closes it."; "IF has 4 arguments; it takes at most 3." |
-| LET / LAMBDA shape | "LET has 6 arguments: it needs name, value pairs and then a final calculation…"; a calculation where a LET name should be; a LET name that is a cell reference (`x1`) |
+| LET / LAMBDA shape | "LET has 6 arguments: it needs name, value pairs and then a final calculation…"; a calculation where a LET name should be; a LET name or LAMBDA parameter Excel refuses (`TRUE`, `r1`, `C3`, `RC1`, `a.b`; see below) |
 | Unknown name | "fare isn't defined anywhere. Did you mean fares?"; "TOCOPOSTOCELL … contains POSTOCELL: two names run together?"; "x is out of scope here: it's defined at character 18, inside a LAMBDA that has already closed." |
 | Library LAMBDA not loaded | "TLOOKUP is a library LAMBDA that isn't loaded in this workbook." |
 | Unknown sheet, table or column | "There's no sheet called Shet1. Did you mean Sheet1?"; "Table tblFares has no column called Faer." |
@@ -180,6 +180,15 @@ one click, the entered formula is the fix.
 - **Lifecycle.** The switch takes effect at once from the settings window: on, it registers the
   OnKey shortcut, installs the hook and starts the timer; off, it undoes all three. The ribbon
   button shows only with the switch on.
+
+## Which LET names Excel takes (#441, 10 Nov 2026)
+
+Measured in Excel 16 (build 20527, A1 mode) in the VM, LET and LAMBDA alike. **Taken:** `c`, `C`,
+`r`, `R`, `rc`, `RC`, `R1C`, `R1C1`, `R2C3`, `R0`, `C0`, `C16385`, `R1048577`, and A1-style names such
+as `A1`, `x1`, `B2`, `XFD1048576` (they bind and shadow the cell: with 100 in `B2`,
+`=LET(B2, 5, B2+1)` gives 6). **Refused:** `TRUE`/`FALSE` in any case, a dot (`a.b`), and an R1C1
+row or column on its own: `R1`–`R1048576`, `C1`–`C16384`, `RC1`. Check Formula flags exactly the
+refused set, plus any name with `$` (a reference). Not measured, and taken by extension of the rule: `RC0`, `RC16385`, leading zeros (`R01` reads as row 1). All of this is A1 mode; in R1C1 mode `B2`, `RC` and `R1C1` would behave differently. Defined names keep their own, stricter rules (`c`, `r`, `rc` are refused there).
 
 ## Defaults Tim can reverse
 

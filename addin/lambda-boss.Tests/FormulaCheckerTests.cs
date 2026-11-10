@@ -258,11 +258,11 @@ public class FormulaCheckerTests
     }
 
     [Fact]
-    public void LET_name_that_is_a_cell_reference_is_reported()
+    public void LET_name_shaped_like_a_cell_is_taken_as_Excel_takes_it()
     {
+        // #441: Excel 16 binds x1 (and B2, XFD1048576) as a LET name, shadowing the cell.
         const string f = "=LET(x1,5,x1*2)";
-        var p = Assert.Single(Errors(f), e => e.Kind == FormulaProblemKind.BadShape);
-        Assert.Equal("x1", At(f, p));
+        Assert.DoesNotContain(Errors(f), e => e.Kind == FormulaProblemKind.BadShape);
     }
 
     [Fact]
@@ -281,12 +281,51 @@ public class FormulaCheckerTests
         Assert.Contains("own definition", p.Message);
     }
 
+    // #441, measured in Excel 16 (build 20527, A1 mode): these are taken as LET names and LAMBDA parameters.
     [Theory]
     [InlineData("=LET(r,1,r)")]
+    [InlineData("=LET(R,1,R)")]
+    [InlineData("=LET(c,1,c)")]
     [InlineData("=LET(C,1,C)")]
-    public void R_and_C_are_not_valid_LET_names(string f)
+    [InlineData("=LET(rc,1,rc)")]
+    [InlineData("=LET(R1C1,1,R1C1)")]
+    [InlineData("=LET(R1C,1,R1C)")]
+    [InlineData("=LET(R0,1,R0)")]
+    [InlineData("=LET(C16385,1,C16385)")]
+    [InlineData("=LET(B2,1,B2)")]
+    [InlineData("=LET(r_,1,r_)")]
+    [InlineData("=LAMBDA(c,c+1)(1)")]
+    [InlineData("=LAMBDA(r,r+1)(1)")]
+    [InlineData("=LAMBDA([c],c+1)(1)")]
+    public void Names_Excel_takes_are_not_flagged(string f)
     {
-        Assert.Contains(Errors(f), p => p.Kind == FormulaProblemKind.BadShape && p.Start == 5);
+        Assert.DoesNotContain(Errors(f), p => p.Kind == FormulaProblemKind.BadShape);
+    }
+
+    [Fact]
+    public void Tims_c_and_w_fold_is_clean()
+    {
+        const string f = "=LET(items,{\"C\";\"W\"},ns,{\"A2\";\"B1\"},c,XLOOKUP(\"C\",items,ns,\"\"),w,XLOOKUP(\"W\",items,ns,\"\"),nextP,IF(c<>\"\",c,IF(w<>\"\",w,\"???\")),nextP)";
+        Assert.DoesNotContain(Errors(f), p => p.Kind == FormulaProblemKind.BadShape);
+    }
+
+    // #441: and these Excel refuses.
+    [Theory]
+    [InlineData("=LET(TRUE,1,2)", "a value")]
+    [InlineData("=LET(false,1,2)", "a value")]
+    [InlineData("=LET(r1,1,r1)", "row reference")]
+    [InlineData("=LET(R5,1,R5)", "row reference")]
+    [InlineData("=LET(R1048576,1,2)", "row reference")]
+    [InlineData("=LET(c1,1,c1)", "column reference")]
+    [InlineData("=LET(C16384,1,2)", "column reference")]
+    [InlineData("=LET(RC1,1,RC1)", "column reference")]
+    [InlineData("=LET(a.b,1,a.b)", "dot")]
+    [InlineData("=LAMBDA(r1,r1+1)(1)", "row reference")]
+    [InlineData("=LET($B$2,1,2)", "a reference")]
+    [InlineData("=LAMBDA($A$1,1)(1)", "a reference")]
+    public void Names_Excel_refuses_are_flagged(string f, string why)
+    {
+        Assert.Contains(Errors(f), p => p.Kind == FormulaProblemKind.BadShape && p.Start == f.IndexOf('(') + 1 && p.Message.Contains(why));
     }
 
     [Theory]

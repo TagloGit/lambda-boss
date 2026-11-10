@@ -892,14 +892,10 @@ internal static class FormulaChecker
             if (isParameter && bare.Length > 2 && bare[0] == '[' && bare[^1] == ']')
                 bare = bare[1..^1];
 
-            if (IsCellReference(bare) || bare.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
-                                      || bare.Equals("FALSE", StringComparison.OrdinalIgnoreCase)
-                                      || bare.Equals("R", StringComparison.OrdinalIgnoreCase)
-                                      || bare.Equals("C", StringComparison.OrdinalIgnoreCase)
-                                      || bare.IndexOfAny(RefChars) >= 0)
+            var refused = RefusedLocalName(bare) ?? (bare.IndexOfAny(RefChars) >= 0 ? "Excel reads it as a reference" : null);
+            if (refused != null)
                 Add(new FormulaProblem(FormulaProblemKind.BadShape, n.Start, n.Text.Length,
-                    $"{n.Text} can't be a {(isParameter ? "LAMBDA parameter" : "LET name")}: " +
-                    "Excel reads it as a cell reference or value."));
+                    $"{n.Text} can't be a {(isParameter ? "LAMBDA parameter" : "LET name")}: {refused}."));
 
             // A LET name is visible from the argument after its value; a parameter from the next argument.
             var decl = new Declaration(n, bare, isParameter, isParameter ? "LAMBDA" : "LET", f,
@@ -1295,6 +1291,34 @@ internal static class FormulaChecker
         }
 
         return name;
+    }
+
+    private static readonly Regex RowOrColumnR1C1 = new(@"^(?:R([0-9]+)|C([0-9]+)|RC([0-9]+))$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    ///     Why Excel refuses <paramref name="name" /> as a LET name or LAMBDA parameter, or null when
+    ///     it takes it. Measured in Excel 16 (build 20527, A1 mode, #441): it takes <c>c</c>, <c>r</c>,
+    ///     <c>RC</c>, <c>R1C1</c> and even A1-style names such as <c>B2</c>, which shadow the cell. It
+    ///     refuses TRUE and FALSE, a dot, and an R1C1 row or column on its own: <c>R5</c>, <c>C3</c>,
+    ///     <c>RC1</c> (within the sheet: <c>R0</c> and <c>C16385</c> are taken). Defined names have
+    ///     other rules (<see cref="ExcelNameValidator" />: there <c>c</c> and <c>r</c> are refused).
+    /// </summary>
+    internal static string? RefusedLocalName(string name)
+    {
+        if (name.Equals("TRUE", StringComparison.OrdinalIgnoreCase) || name.Equals("FALSE", StringComparison.OrdinalIgnoreCase))
+            return "Excel reads it as a value";
+        if (name.IndexOf('.') >= 0)
+            return "a dot is allowed only in defined names";
+        if (name.IndexOf('$') >= 0)
+            return "Excel reads it as a reference";
+        var m = RowOrColumnR1C1.Match(name);
+        if (!m.Success)
+            return null;
+        if (m.Groups[1].Success)
+            return long.TryParse(m.Groups[1].Value, out var row) && row >= 1 && row <= 1048576 ? "Excel reads it as a row reference (R1C1)" : null;
+        var col = m.Groups[2].Success ? m.Groups[2].Value : m.Groups[3].Value;
+        return long.TryParse(col, out var c) && c >= 1 && c <= 16384 ? "Excel reads it as a column reference (R1C1)" : null;
     }
 
     /// <summary>A1-style cell address within Excel's grid (XFD1048576), with or without <c>$</c>.</summary>

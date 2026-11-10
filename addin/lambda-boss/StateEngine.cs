@@ -410,7 +410,9 @@ public static class StateEngines
             "", formula[..call.Start], formula[call.End..], others, null);
 
         refusal = CheckStep(engine);
-        return refusal == null ? engine with { Prefix = PrefixOf(engine.Output) } : null;
+        // A named output (#438) or a guard (#443) leaves no call in the body: take the seed's prefix then.
+        var prefix = IsStateCall(engine.Output) ? PrefixOf(engine.Output) : PrefixOf(engine.Seed);
+        return refusal == null ? engine with { Prefix = prefix } : null;
     }
 
     /// <summary>
@@ -600,6 +602,19 @@ public static class StateEngines
         if (step == null || !string.Equals(step.StateBinding.Name, engine.Parameters[0], StringComparison.OrdinalIgnoreCase))
             return NotAStep;
         return StateEdit.Read(text) is { } view ? view.Refusal : NotAStep;
+    }
+
+    private static bool IsStateCall(string text)
+    {
+        try
+        {
+            return FormulaParser.Parse(text).Root is FunctionCallNode call
+                   && (StateStepParser.IsNamed(call.Name, "SetVars") || StateStepParser.IsNamed(call.Name, "SetVar"));
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static string PrefixOf(string output)
