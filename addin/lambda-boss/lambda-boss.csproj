@@ -20,6 +20,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The library as it is at build time, carried inside the DLL (and so the packed XLL) for
+         offline use with nothing beside the XLL: BuiltInLibrarySource. Tests (*.tests.yaml) stay out. -->
+    <EmbeddedResource Include="..\..\lambdas\**\_library.yaml;..\..\lambdas\**\*.lambda;..\..\lambdas\**\*.const"
+                      LogicalName="lambdas/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- net48 ships these as framework assemblies but SDK-style projects don't reference them by default -->
     <Reference Include="System.Net.Http" />
     <Reference Include="Microsoft.CSharp" />

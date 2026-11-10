@@ -14,17 +14,26 @@ public class LibraryProvider
     private readonly SourceCache _cache;
     private readonly List<RepoConfig> _repos;
     private readonly List<LocalSourceConfig> _localSources;
+    private readonly BuiltInLibrarySource _builtIn;
 
     private List<LibraryInfo>? _libraries;
     private List<LambdaInfo>? _lambdas;
 
+    /// <summary>
+    ///     A request that hasn't answered in this long gives up, so an offline machine whose network
+    ///     swallows requests falls back to the built-in library in seconds, not HttpClient's 100.
+    /// </summary>
+    internal static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(10);
+
     public LibraryProvider(IEnumerable<RepoConfig> repos, HttpClient? httpClient = null,
-        SourceCache? cache = null, IEnumerable<LocalSourceConfig>? localSources = null)
+        SourceCache? cache = null, IEnumerable<LocalSourceConfig>? localSources = null,
+        BuiltInLibrarySource? builtIn = null)
     {
         _repos = repos.ToList();
         _localSources = localSources?.ToList() ?? new List<LocalSourceConfig>();
-        _httpClient = httpClient ?? new HttpClient();
+        _httpClient = httpClient ?? new HttpClient { Timeout = RequestTimeout };
         _cache = cache ?? new SourceCache();
+        _builtIn = builtIn ?? BuiltInLibrarySource.Default;
     }
 
     /// <summary>
@@ -60,20 +69,43 @@ public class LibraryProvider
         RepoConfig config, string libraryName, string prefix)
     {
         var source = new GitHubSource(config, _httpClient);
+        var library = await GetLibraryAsync(config, source, libraryName, offline: false);
+        return library.LoadWithPrefix(prefix);
+    }
 
-        // Try cache first
-        var library = _cache.Load(config, libraryName);
-        if (library == null)
+    /// <summary>
+    ///     A GitHub library from the disk cache, else from GitHub. For the home repo, a fetch that
+    ///     fails (or <paramref name="offline"/>, when listing already failed) falls back to the
+    ///     copy built into the add-in.
+    /// </summary>
+    private async Task<FetchedLibrary> GetLibraryAsync(
+        RepoConfig config, GitHubSource source, string libraryName, bool offline)
+    {
+        var cached = _cache.Load(config, libraryName);
+        if (cached != null)
+            return cached;
+
+        if (!offline)
         {
-            library = await source.FetchLibraryAsync(libraryName);
-            try { _cache.Store(config, library); }
-            catch (Exception cacheEx)
+            try
             {
-                Logger.Error($"LibraryProvider: Cache write failed for '{libraryName}'", cacheEx);
+                var fetched = await source.FetchLibraryAsync(libraryName);
+                try { _cache.Store(config, fetched); }
+                catch (Exception cacheEx)
+                {
+                    Logger.Error($"LibraryProvider: Cache write failed for '{libraryName}'", cacheEx);
+                }
+
+                return fetched;
+            }
+            catch (Exception ex) when (config.IsHomeRepo && _builtIn.Has(libraryName))
+            {
+                Logger.Error($"LibraryProvider: Fetch of '{libraryName}' failed; using the copy built into the add-in", ex);
             }
         }
 
-        return library.LoadWithPrefix(prefix);
+        return _builtIn.FetchLibrary(libraryName)
+            ?? throw new InvalidOperationException($"Library '{libraryName}' isn't built into the add-in");
     }
 
     /// <summary>
@@ -124,24 +156,26 @@ public class LibraryProvider
                     }
                 }
 
-                var libraryNames = await source.ListLibrariesAsync();
+                IReadOnlyList<string> libraryNames;
+                var offline = false;
+                try
+                {
+                    libraryNames = await source.ListLibrariesAsync();
+                }
+                catch (Exception ex) when (config.IsHomeRepo && _builtIn.ListLibraries().Count > 0)
+                {
+                    // No network (a competition machine): the library built into the add-in.
+                    Logger.Error($"LibraryProvider: Can't list {repoLabel}; using the libraries built into the add-in", ex);
+                    libraryNames = _builtIn.ListLibraries();
+                    offline = true;
+                }
 
                 foreach (var libName in libraryNames)
                 {
                     FetchedLibrary? fetched;
                     try
                     {
-                        // Try cache first
-                        fetched = _cache.Load(config, libName);
-                        if (fetched == null)
-                        {
-                            fetched = await source.FetchLibraryAsync(libName);
-                            try { _cache.Store(config, fetched); }
-                            catch (Exception cacheEx)
-                            {
-                                Logger.Error($"LibraryProvider: Cache write failed for '{libName}'", cacheEx);
-                            }
-                        }
+                        fetched = await GetLibraryAsync(config, source, libName, offline);
                     }
                     catch (Exception ex)
                     {

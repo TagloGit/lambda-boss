@@ -142,6 +142,16 @@ still enabled:
   included, works. Put the XLL in `%APPDATA%\Microsoft\AddIns` (the recommended load path; always
   writable by the user) or any folder the user can write to.
 
+**No library folder needed (10 Nov, single-XLL check for Vegas).** The XLL now carries the
+repo's `lambdas/` as it was at build time (embedded resources in `lambda-boss.dll`,
+`BuiltInLibrarySource`). When the home repo can't be listed or a library can't be fetched, and
+nothing is cached, Lambda Boss uses that copy, so the popup, Import All, the hints, Check
+Formula's catalogue and `/State`'s library folds all work from the lone XLL. GitHub requests give
+up after 10 s rather than 100, so a network that swallows requests costs seconds. Other repos
+have no built-in copy. The competition setup is now: copy the XLL into
+`%APPDATA%\Microsoft\AddIns` and tick it in the Add-Ins dialog. A local folder still works as
+before, but isn't needed.
+
 ## Performance
 
 No lag while typing: the UI Automation work and the tooltip drawing run on
