@@ -257,8 +257,8 @@ internal static class FormulaFixer
         foreach (var m in modifiers)
             inputs.Add(Vk(m, 0));
         Key(inputs, vk);
-        foreach (var m in modifiers.Reverse())
-            inputs.Add(Vk(m, KeyUp));
+        for (var i = modifiers.Length - 1; i >= 0; i--)
+            inputs.Add(Vk(modifiers[i], KeyUp));
     }
 
     private static void Key(List<Input> inputs, ushort vk)
