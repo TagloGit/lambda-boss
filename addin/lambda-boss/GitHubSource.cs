@@ -81,10 +81,23 @@ public class GitHubSource
 
     private async Task<List<(string Path, bool IsDir)>?> LoadTreeAsync()
     {
+        // A request that never answers (offline, timeout) throws from here: the contents API would
+        // only wait out the same timeout again.
+        var url = $"https://api.github.com/repos/{_owner}/{_repo}/git/trees/{_config.Branch}?recursive=1";
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("User-Agent", "LambdaBoss");
+        request.Headers.Add("Accept", "application/vnd.github.v3+json");
+        var response = await _httpClient.SendAsync(request);
+        ThrowIfRateLimited(response);
+        if (!response.IsSuccessStatusCode)
+        {
+            Logger.Info($"GitHubSource: git tree answered {(int)response.StatusCode}; using contents API");
+            return null;
+        }
+
         try
         {
-            var url = $"https://api.github.com/repos/{_owner}/{_repo}/git/trees/{_config.Branch}?recursive=1";
-            var json = await GetApiJsonAsync(url);
+            var json = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
             if (root.TryGetProperty("truncated", out var truncated) && truncated.ValueKind == JsonValueKind.True)
@@ -104,13 +117,9 @@ public class GitHubSource
 
             return result;
         }
-        catch (GitHubRateLimitException)
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Logger.Info($"GitHubSource: git tree unavailable ({ex.Message}); using contents API");
+            Logger.Info($"GitHubSource: git tree unreadable ({ex.Message}); using contents API");
             return null;
         }
     }

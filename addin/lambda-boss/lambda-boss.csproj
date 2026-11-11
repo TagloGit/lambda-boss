@@ -24,6 +24,11 @@
          offline use with nothing beside the XLL: BuiltInLibrarySource. Tests (*.tests.yaml) stay out. -->
     <EmbeddedResource Include="..\..\lambdas\**\_library.yaml;..\..\lambdas\**\*.lambda;..\..\lambdas\**\*.const"
                       LogicalName="lambdas/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- When that copy was taken: offline, a cached library older than this loses to it (#452). -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>LibraryBuiltUtc</_Parameter1>
+      <_Parameter2>$([System.DateTime]::UtcNow.ToString("o"))</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
 
   <ItemGroup>

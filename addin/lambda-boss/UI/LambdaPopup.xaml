@@ -13,6 +13,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -60,9 +61,27 @@
                  BorderThickness="1"
                  TextChanged="SearchBox_TextChanged" />
 
+        <!-- The workbook holds an out-of-date copy of a library (#452): one click or Ctrl+R reloads it -->
+        <Border x:Name="StaleBanner"
+                Grid.Row="2"
+                Margin="0,0,0,6"
+                Padding="6,4"
+                Background="#3a3220"
+                BorderBrush="#d7ba7d"
+                BorderThickness="1"
+                CornerRadius="2"
+                Cursor="Hand"
+                Visibility="Collapsed"
+                MouseLeftButtonDown="StaleBanner_Click">
+            <TextBlock x:Name="StaleBannerText"
+                       Foreground="#d7ba7d"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+        </Border>
+
         <!-- Library list (library mode) -->
         <ListBox x:Name="LibraryList"
-                 Grid.Row="2"
+                 Grid.Row="3"
                  Background="#252526"
                  Foreground="#cccccc"
                  BorderBrush="#3e3e3e"
@@ -82,7 +101,7 @@
                             <TextBlock Text="{Binding LambdaCountLabel}" Foreground="#569cd6" FontSize="11"
                                        VerticalAlignment="Center" />
                             <TextBlock Text="  " />
-                            <TextBlock Text="{Binding LoadedLabel}" Foreground="#608b4e" FontSize="11"
+                            <TextBlock Text="{Binding LoadedLabel}" Foreground="{Binding LoadedBrush}" FontSize="11"
                                        VerticalAlignment="Center" />
                             <!-- ReSharper restore Xaml.BindingWithContextNotResolved -->
                         </StackPanel>
@@ -97,7 +116,7 @@
 
         <!-- Lambda list (search mode) -->
         <ListBox x:Name="LambdaList"
-                 Grid.Row="2"
+                 Grid.Row="3"
                  Background="#252526"
                  Foreground="#cccccc"
                  BorderBrush="#3e3e3e"
@@ -138,7 +157,7 @@
 
         <!-- Commands list (commands mode) -->
         <ListBox x:Name="CommandsList"
-                 Grid.Row="2"
+                 Grid.Row="3"
                  Background="#252526"
                  Foreground="#cccccc"
                  BorderBrush="#3e3e3e"
@@ -169,7 +188,7 @@
 
         <!-- Prefix prompt (shown when loading) -->
         <Border x:Name="PrefixPanel"
-                Grid.Row="3"
+                Grid.Row="4"
                 Margin="0,6,0,0"
                 Padding="6,4"
                 Background="#2d2d2d"
@@ -200,7 +219,7 @@
         </Border>
 
         <!-- Status bar -->
-        <DockPanel Grid.Row="4" Margin="0,4,0,0">
+        <DockPanel Grid.Row="5" Margin="0,4,0,0">
             <TextBlock x:Name="ChannelBadge"
                        DockPanel.Dock="Right"
                        Margin="8,0,0,0"

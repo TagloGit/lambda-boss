@@ -131,7 +131,8 @@ public class BuiltInLibraryTests : IDisposable
         var afterRefresh = handler.Requests;
         var loaded = await provider.LoadLibraryAsync(HomeRepo, "maps", "");
 
-        Assert.Equal(1, afterRefresh);
+        // The git tree answers 404, then the contents API is tried once (#452).
+        Assert.Equal(2, afterRefresh);
         Assert.Equal(afterRefresh, handler.Requests);
         Assert.Contains(loaded, l => l.Name == "MAZE");
     }

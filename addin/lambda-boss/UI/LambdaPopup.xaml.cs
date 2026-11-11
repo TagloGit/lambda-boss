@@ -41,24 +41,12 @@ public partial class LambdaPopup
     ///     Sets the data for the popup to display.
     /// </summary>
     public void SetData(IReadOnlyList<LibraryInfo> libraries, IReadOnlyList<LambdaInfo> lambdas,
-        ISet<string>? loadedLibraryKeys = null)
+        IReadOnlyList<ScannedLibrary>? loaded = null)
     {
-        _allLibraries = libraries
-            .Select(l => new LibraryDisplayItem
-            {
-                DisplayName = l.DisplayName,
-                Description = l.Description,
-                LambdaCountLabel = $"({l.LambdaCount})",
-                DefaultPrefix = l.DefaultPrefix,
-                RepoLabel = l.RepoLabel,
-                FolderName = l.FolderName,
-                RepoConfig = l.IsLocal ? null : l.RepoConfig,
-                LocalSourceConfig = l.LocalSourceConfig,
-                LoadedLabel = !l.IsLocal && loadedLibraryKeys != null
-                    && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
-                    ? "✓ loaded" : ""
-            })
-            .ToList();
+        _dataReady = true;
+        _libraryInfos = libraries;
+        _loaded = loaded ?? Array.Empty<ScannedLibrary>();
+        _allLibraries = BuildLibraryItems();
 
         _allLambdas = lambdas
             .Select(l => new LambdaDisplayItem
@@ -75,33 +63,138 @@ public partial class LambdaPopup
     }
 
     /// <summary>
-    ///     Refreshes the loaded indicators on existing library items without replacing all data.
+    ///     Refreshes the loaded and out-of-date marks from a new scan of the workbook's names.
     /// </summary>
-    public void UpdateLoadedKeys(ISet<string>? loadedLibraryKeys)
+    public void UpdateLoaded(IReadOnlyList<ScannedLibrary>? loaded)
     {
-        if (_allLibraries.Count == 0)
+        _loaded = loaded ?? Array.Empty<ScannedLibrary>();
+        if (_libraryInfos.Count > 0)
+            _allLibraries = BuildLibraryItems();
+        else
+            UpdateStaleBanner();
+    }
+
+    // False until the first SetData. Enter pressed before then is held, not acted on (#449 follow-up):
+    // with no libraries there's nothing to match, and the top search hit could be anything.
+    private bool _dataReady;
+    private bool _pendingEnter;
+
+    /// <summary>
+    ///     The library data has arrived. If the popup is open, what's typed stays and the lists
+    ///     refilter around it (clearing it here once cut "loops" to a fragment whose top hit was a
+    ///     Math LAMBDA); an Enter pressed while loading runs now.
+    /// </summary>
+    public void OnDataArrived()
+    {
+        if (!IsVisible)
             return;
 
-        _allLibraries = _allLibraries
-            .Select(l => new LibraryDisplayItem
+        if (_mode != Mode.Commands)
+            ApplyFilter(SearchBox.Text);
+
+        if (_pendingEnter && !_prefixPromptActive)
+        {
+            _pendingEnter = false;
+            BeginLoad(fromSearchBox: true);
+        }
+    }
+
+    private IReadOnlyList<LibraryInfo> _libraryInfos = Array.Empty<LibraryInfo>();
+    private IReadOnlyList<ScannedLibrary> _loaded = Array.Empty<ScannedLibrary>();
+
+    // The add-in's library under one prefix, kept while the provider's data stands: rewriting
+    // Maps' 67 names on every open would be wasted work.
+    private readonly Dictionary<(FetchedLibrary, string), IReadOnlyList<(string Name, string Formula)>> _prefixed = new();
+
+    private List<LibraryDisplayItem> BuildLibraryItems()
+    {
+        var items = new List<LibraryDisplayItem>();
+        foreach (var l in _libraryInfos)
+        {
+            var scanned = l.IsLocal ? null : _loaded.FirstOrDefault(s =>
+                string.Equals(MakeLoadedKey(s.RepoUrl, s.LibraryName), MakeLoadedKey(l.RepoConfig.Url, l.FolderName),
+                    StringComparison.Ordinal));
+            var (differ, total) = scanned != null && l.Library != null
+                ? StaleCount(l.Library, scanned)
+                : (0, 0);
+
+            items.Add(new LibraryDisplayItem
             {
                 DisplayName = l.DisplayName,
                 Description = l.Description,
-                LambdaCountLabel = l.LambdaCountLabel,
+                LambdaCountLabel = $"({l.LambdaCount})",
                 DefaultPrefix = l.DefaultPrefix,
                 RepoLabel = l.RepoLabel,
                 FolderName = l.FolderName,
-                RepoConfig = l.RepoConfig,
+                RepoConfig = l.IsLocal ? null : l.RepoConfig,
                 LocalSourceConfig = l.LocalSourceConfig,
-                LoadedLabel = !l.IsLocal && l.RepoConfig != null && loadedLibraryKeys != null
-                    && loadedLibraryKeys.Contains(MakeLoadedKey(l.RepoConfig.Url, l.FolderName))
-                    ? "✓ loaded" : ""
-            })
-            .ToList();
+                LoadedLabel = scanned == null ? "" : differ > 0 ? $"⚠ out of date ({differ} of {total})" : "✓ loaded",
+                LoadedPrefix = scanned?.Prefix,
+                Stale = differ > 0,
+                Differ = differ,
+                Total = total
+            });
+        }
+
+        UpdateStaleBanner(items);
+        return items;
     }
+
+    private (int Differ, int Total) StaleCount(FetchedLibrary library, ScannedLibrary scanned)
+    {
+        try
+        {
+            if (!_prefixed.TryGetValue((library, scanned.Prefix), out var current))
+                _prefixed[(library, scanned.Prefix)] = current = library.LoadWithPrefix(scanned.Prefix);
+            return LibraryStaleness.Compare(scanned.Lambdas, current);
+        }
+        catch (Exception ex)
+        {
+            Common.Logger.Error($"LambdaPopup: couldn't compare '{scanned.LibraryName}' with the add-in's copy", ex);
+            return (0, 0);
+        }
+    }
+
+    /// <summary>
+    ///     One line above the list when the workbook holds an out-of-date copy of any library.
+    /// </summary>
+    private void UpdateStaleBanner(List<LibraryDisplayItem>? items = null)
+    {
+        var stale = (items ?? _allLibraries).Where(l => l.Stale).ToList();
+        if (stale.Count == 0)
+        {
+            StaleBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var names = string.Join(", ", stale.Select(l => l.DisplayName));
+        StaleBannerText.Text = stale.Count == 1
+            ? $"⚠ {names} in this workbook is out of date: {stale[0].Differ} of {stale[0].Total} names differ from the add-in's. Ctrl+R reloads it."
+            : $"⚠ {names} in this workbook are out of date. Ctrl+R reloads them.";
+        StaleBanner.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    ///     Reloads every out-of-date library with the prefix the workbook already uses (#452).
+    /// </summary>
+    private void ReloadStale()
+    {
+        var stale = _allLibraries.Where(l => l.Stale && l.RepoConfig != null).ToList();
+        if (stale.Count == 0)
+            return;
+
+        HidePrefixPrompt();
+        foreach (var l in stale)
+            LibraryLoadRequested?.Invoke(this,
+                new LibraryLoadRequest(l.RepoConfig!, l.FolderName, l.LoadedPrefix ?? "", l.DisplayName));
+        Hide();
+    }
+
+    private void StaleBanner_Click(object sender, MouseButtonEventArgs e) => ReloadStale();
 
     public void ResetAndShow()
     {
+        _pendingEnter = false;
         SearchBox.Text = "";
         HidePrefixPrompt();
         SwitchMode(Mode.Library);
@@ -143,6 +236,13 @@ public partial class LambdaPopup
             return;
         }
 
+        if (e.Key == Key.R && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            ReloadStale();
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.Escape:
@@ -159,8 +259,13 @@ public partial class LambdaPopup
             case Key.Enter:
                 if (_mode == Mode.Commands)
                     ExecuteSelectedCommand();
+                else if (!_dataReady)
+                {
+                    _pendingEnter = true;
+                    StatusText.Text = "Loading libraries… Enter will load when they arrive";
+                }
                 else
-                    BeginLoad();
+                    BeginLoad(SearchBox.IsFocused);
                 e.Handled = true;
                 break;
 
@@ -356,14 +461,14 @@ public partial class LambdaPopup
         }
     }
 
-    private void BeginLoad()
+    private void BeginLoad(bool fromSearchBox)
     {
         string? defaultPrefix = null;
         _exactLibrary = null;
 
         // Typed a library's name or prefix and pressed Enter in the box: load that
         // library, whatever the top hit is. Picking a row with the arrows still wins.
-        if (_mode != Mode.Commands && SearchBox.IsFocused
+        if (_mode != Mode.Commands && fromSearchBox
             && ExactLibraryMatch.Find(_allLibraries, SearchBox.Text) is { } exact)
         {
             _exactLibrary = exact;
@@ -594,6 +699,16 @@ internal class LibraryDisplayItem
     public RepoConfig? RepoConfig { get; init; }
     public LocalSourceConfig? LocalSourceConfig { get; init; }
     public string LoadedLabel { get; init; } = "";
+
+    /// <summary>The prefix the workbook's copy was loaded with; null when it isn't loaded.</summary>
+    public string? LoadedPrefix { get; init; }
+
+    /// <summary>The workbook holds this library, but not as the add-in has it now (#452).</summary>
+    public bool Stale { get; init; }
+    public int Differ { get; init; }
+    public int Total { get; init; }
+
+    public string LoadedBrush => Stale ? "#d7ba7d" : "#608b4e";
     public bool IsLocal => LocalSourceConfig != null;
     public string SourceIcon => IsLocal ? "\U0001F4C1" : "";
 }

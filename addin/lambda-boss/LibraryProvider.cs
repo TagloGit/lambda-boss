@@ -18,7 +18,7 @@ public class LibraryProvider
 
     // Repos (by cache key) whose listing failed on the last refresh. Library loads skip the
     // network for them, so an offline session doesn't wait on a timeout per library.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _offlineRepos = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _offlineRepos = new();
 
     private List<LibraryInfo>? _libraries;
     private List<LambdaInfo>? _lambdas;
@@ -72,24 +72,37 @@ public class LibraryProvider
     public async Task<IReadOnlyList<(string Name, string Formula)>> LoadLibraryAsync(
         RepoConfig config, string libraryName, string prefix)
     {
+        FallbackNote = null;
         var source = new GitHubSource(config, _httpClient);
         var offline = config.IsHomeRepo && _offlineRepos.ContainsKey(config.GetCacheKey());
-        var library = await GetLibraryAsync(config, source, libraryName, offline);
+        var library = await GetLibraryAsync(config, source, libraryName, offline, fresh: true);
         return library.LoadWithPrefix(prefix);
     }
 
     /// <summary>
-    ///     A GitHub library from the disk cache, else from GitHub. For the home repo, a fetch that
-    ///     fails (or <paramref name="offline"/>, when listing already failed) falls back to the
-    ///     copy built into the add-in.
+    ///     Set when the last refresh or load couldn't use GitHub and fell back to a saved copy: what
+    ///     happened and which copy, for the popup's status line. Null when everything came fresh.
+    /// </summary>
+    public string? FallbackNote { get; private set; }
+
+    /// <summary>
+    ///     A GitHub library. With <paramref name="fresh"/> (every load into a workbook) it always comes
+    ///     from GitHub when GitHub answers; otherwise (the popup's list) the disk cache within its TTL
+    ///     is used first. When GitHub can't be used (a failed fetch, or <paramref name="offline"/>
+    ///     after listing failed) the newer of the disk cache and the copy built into the add-in wins,
+    ///     so an old cache never outranks a newer add-in, and the reverse (#452).
     /// </summary>
     private async Task<FetchedLibrary> GetLibraryAsync(
-        RepoConfig config, GitHubSource source, string libraryName, bool offline)
+        RepoConfig config, GitHubSource source, string libraryName, bool offline, bool fresh = false)
     {
-        var cached = _cache.Load(config, libraryName);
-        if (cached != null)
-            return cached;
+        if (!offline && !fresh)
+        {
+            var cached = _cache.Load(config, libraryName);
+            if (cached != null)
+                return cached;
+        }
 
+        Exception? failure = null;
         if (!offline)
         {
             try
@@ -103,14 +116,50 @@ public class LibraryProvider
 
                 return fetched;
             }
-            catch (Exception ex) when (config.IsHomeRepo && _builtIn.Has(libraryName))
+            catch (Exception ex)
             {
-                Logger.Error($"LibraryProvider: Fetch of '{libraryName}' failed; using the copy built into the add-in", ex);
+                Logger.Error($"LibraryProvider: Fetch of '{libraryName}' failed; trying a saved copy", ex);
+                failure = ex;
             }
         }
 
-        return _builtIn.FetchLibrary(libraryName)
-            ?? throw new InvalidOperationException($"Library '{libraryName}' isn't built into the add-in");
+        var why = failure is GitHubRateLimitException limit ? limit.Message
+            : offline && _offlineRepos.TryGetValue(config.GetCacheKey(), out var listing) ? listing
+            : "GitHub can't be reached";
+        if (Fallback(config, libraryName, why) is { } saved)
+            return saved;
+
+        if (failure != null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+        throw new InvalidOperationException($"Library '{libraryName}' isn't built into the add-in");
+    }
+
+    /// <summary>
+    ///     The newer of the disk cache (any age) and, for the home repo, the built-in copy; null when
+    ///     there's neither. Records which one in <see cref="FallbackNote"/>.
+    /// </summary>
+    private FetchedLibrary? Fallback(RepoConfig config, string libraryName, string why)
+    {
+        var builtIn = config.IsHomeRepo ? _builtIn.FetchLibrary(libraryName) : null;
+        var cachedAt = _cache.StoredAtUtc(config, libraryName);
+        var cacheIsNewer = cachedAt.HasValue
+            && (builtIn == null || (_builtIn.BuiltAtUtc.HasValue && cachedAt.Value > _builtIn.BuiltAtUtc.Value));
+
+        if (cacheIsNewer && _cache.Load(config, libraryName, ignoreTtl: true) is { } cached)
+        {
+            FallbackNote = $"{why}: using the copy saved {cachedAt!.Value:d MMM HH:mm} UTC";
+            Logger.Info($"LibraryProvider: '{libraryName}' from the disk cache ({cachedAt:o}): {why}");
+            return cached;
+        }
+
+        if (builtIn == null)
+            return null;
+
+        FallbackNote = _builtIn.BuiltAtUtc is { } built
+            ? $"{why}: using the library built into the add-in ({built:d MMM HH:mm} UTC)"
+            : $"{why}: using the library built into the add-in";
+        Logger.Info($"LibraryProvider: '{libraryName}' from the built-in copy: {why}");
+        return builtIn;
     }
 
     /// <summary>
@@ -145,6 +194,7 @@ public class LibraryProvider
     /// </param>
     public async Task RefreshAsync(bool invalidateCache = false)
     {
+        FallbackNote = null;
         var libraries = new List<LibraryInfo>();
         var lambdas = new List<LambdaInfo>();
 
@@ -169,7 +219,7 @@ public class LibraryProvider
                     Logger.Error($"LibraryProvider: Can't list {repoLabel}; using the libraries built into the add-in", ex);
                     libraryNames = _builtIn.ListLibraries();
                     offline = true;
-                    _offlineRepos[config.GetCacheKey()] = true;
+                    _offlineRepos[config.GetCacheKey()] = ex is GitHubRateLimitException limit ? limit.Message : "GitHub can't be reached";
                 }
 
                 // Only once GitHub has answered: offline, a refresh keeps the cache it can't replace.
@@ -203,7 +253,8 @@ public class LibraryProvider
                         DisplayName = fetched.Metadata.Name,
                         Description = fetched.Metadata.Description,
                         DefaultPrefix = fetched.Metadata.DefaultPrefix,
-                        LambdaCount = fetched.Files.Count
+                        LambdaCount = fetched.Files.Count,
+                        Library = fetched
                     };
                     libraries.Add(info);
 
@@ -247,7 +298,8 @@ public class LibraryProvider
                         DisplayName = fetched.Metadata.Name,
                         Description = fetched.Metadata.Description,
                         DefaultPrefix = fetched.Metadata.DefaultPrefix,
-                        LambdaCount = fetched.Files.Count
+                        LambdaCount = fetched.Files.Count,
+                        Library = fetched
                     };
                     libraries.Add(info);
 
@@ -328,6 +380,12 @@ public sealed class LibraryInfo
     public string Description { get; init; } = "";
     public string DefaultPrefix { get; init; } = "";
     public int LambdaCount { get; init; }
+
+    /// <summary>
+    ///     The library's files as the add-in has them now, so the popup can tell whether a
+    ///     workbook's copy is out of date (#452). Null only for hand-built test data.
+    /// </summary>
+    public FetchedLibrary? Library { get; init; }
 
     /// <summary>
     ///     Whether this library comes from a local directory source.

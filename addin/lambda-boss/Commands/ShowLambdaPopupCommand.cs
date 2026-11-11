@@ -55,7 +55,7 @@ public static class ShowLambdaPopupCommand
             var excelHwnd = new IntPtr(app.Hwnd);
 
             // Scan Name Manager on the Excel main thread (COM-safe)
-            var loadedKeys = ScanLoadedLibraryKeys();
+            var loaded = ScanLoadedLibraries();
 
             EnsureWindowThread();
 
@@ -80,12 +80,12 @@ public static class ShowLambdaPopupCommand
                     }
 
                     // Always refresh loaded state from Name Manager
-                    _window.UpdateLoadedKeys(loadedKeys);
+                    _window.UpdateLoaded(loaded);
                     _window.ResetAndShow();
 
                     if (!_dataLoaded)
                     {
-                        LoadDataAsync(loadedKeys);
+                        LoadDataAsync(loaded);
                     }
                 }
             });
@@ -217,7 +217,7 @@ public static class ShowLambdaPopupCommand
         readyEvent.Wait();
     }
 
-    private static async void LoadDataAsync(HashSet<string>? loadedKeys, bool invalidateCache = false)
+    private static async void LoadDataAsync(IReadOnlyList<ScannedLibrary>? loaded, bool invalidateCache = false)
     {
         try
         {
@@ -234,13 +234,14 @@ public static class ShowLambdaPopupCommand
             var lambdas = await _provider.GetAllLambdasAsync();
 
             _dataLoaded = true;
+            var note = _provider.FallbackNote;
 
             _windowDispatcher?.Invoke(() =>
             {
-                _window?.SetData(libraries, lambdas, loadedKeys);
-                _window?.SetStatus("↑↓ navigate · Enter load · Tab switch · Esc close");
-                // Re-apply the view so data shows up
-                _window?.ResetAndShow();
+                _window?.SetData(libraries, lambdas, loaded);
+                _window?.SetStatus(note ?? "↑↓ navigate · Enter load · Tab switch · Esc close");
+                // Refilter around whatever is typed; never clear it (#452 / popup race)
+                _window?.OnDataArrived();
             });
         }
         catch (Exception ex)
@@ -271,26 +272,20 @@ public static class ShowLambdaPopupCommand
     }
 
     /// <summary>
-    ///     Scans Name Manager comments on the Excel main thread.
+    ///     Scans Name Manager comments on the Excel main thread: each library the workbook holds, with
+    ///     its names and definitions, so the popup can mark a copy that's out of date (#452).
     /// </summary>
-    private static HashSet<string> ScanLoadedLibraryKeys()
+    private static IReadOnlyList<ScannedLibrary> ScanLoadedLibraries()
     {
-        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         try
         {
-            var scanned = LambdaLoader.ScanLoadedLibraries();
-            foreach (var lib in scanned)
-            {
-                keys.Add(LambdaPopup.MakeLoadedKey(lib.RepoUrl, lib.LibraryName));
-            }
+            return LambdaLoader.ScanLoadedLibraries();
         }
         catch (Exception ex)
         {
-            Logger.Error("ScanLoadedLibraryKeys", ex);
+            Logger.Error("ScanLoadedLibraries", ex);
+            return Array.Empty<ScannedLibrary>();
         }
-
-        return keys;
     }
 
     private static void OnLibraryLoadRequested(object? sender, LibraryLoadRequest request)
@@ -315,12 +310,11 @@ public static class ShowLambdaPopupCommand
                 }
                 else
                 {
-                    // Invalidate cache so we always get fresh data
-                    _provider.InvalidateCache(request.RepoConfig!, request.LibraryName);
-
+                    // Always from GitHub when it answers; otherwise the newer saved copy (#452).
                     lambdas = await _provider.LoadLibraryAsync(
                         request.RepoConfig!, request.LibraryName, request.Prefix);
                 }
+                var loadNote = request.IsLocal ? null : _provider.FallbackNote;
 
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {
@@ -385,7 +379,9 @@ public static class ShowLambdaPopupCommand
                         var summary = parts.Count > 0 ? string.Join(", ", parts) : $"{lambdas.Count} loaded";
 
                         _windowDispatcher?.Invoke(() =>
-                            _window?.SetStatus($"{request.DisplayName}: {summary}"));
+                            _window?.SetStatus(loadNote is null
+                                ? $"{request.DisplayName}: {summary}"
+                                : $"{request.DisplayName}: {summary}. {loadNote}"));
                     }
                     catch (Exception ex)
                     {
