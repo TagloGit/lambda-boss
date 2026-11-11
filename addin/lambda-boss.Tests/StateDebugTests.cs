@@ -23,6 +23,10 @@ public class StateDebugTests
     private const string NormalOutput = "SetVars(\"visited\", nextVisited, \"p\", nextP)";
     private const string DebugOutput = "SetVars(\"visited\", nextVisited, \"p\", nextP, \"item\", item, \"c\", c, \"w\", w)";
 
+    // What Debug on writes: the incoming values and every intermediate, in front of Tim's outputs.
+    private const string EnteredOutput =
+        "SetVars(\"in.visited\", visited, \"in.p\", p, \"item\", item, \"ns\", ns, \"items\", items, \"c\", c, \"w\", w, \"visited\", nextVisited, \"p\", nextP)";
+
     private static readonly string[] Rules =
     {
         "    visited, GetVar(a, \"visited\"),",
@@ -46,8 +50,8 @@ public class StateDebugTests
     // Tim's debug form as he typed it (LAMBDA(a,v, and ,1)).
     private static readonly string TimDebug = Fold("=SplitState(SCAN(", "LAMBDA(a,v, ", ",1)", "    " + DebugOutput);
 
-    // The debug form the toggle writes, before any debug outputs are added.
-    private static readonly string EnteredDebug = Fold("=SplitState(SCAN(", "LAMBDA(a, v, ", ", 1)", "    " + NormalOutput);
+    // The debug form the toggle writes: everything shown.
+    private static readonly string EnteredDebug = Fold("=SplitState(SCAN(", "LAMBDA(a, v, ", ", 1)", "    " + EnteredOutput);
 
     private static readonly string CanonicalDebug = Fold("=SplitState(SCAN(", "LAMBDA(a, v, ", ", 1)", "    " + DebugOutput);
 
@@ -184,9 +188,14 @@ public class StateDebugTests
         var book = new Book();
 
         var debug = book.Toggle(Compact, on: true);
-        Assert.Equal("=SplitState(" + Compact[1..].Replace("REDUCE(", "SCAN(") + ", 1)", debug);
+        Assert.Equal(CompactEntered, debug);
         Assert.Equal(Compact, book.Toggle(debug, on: false));
     }
+
+    // Debug on puts the incoming values and the intermediate in front, spaced as Tim spaces his own.
+    private static readonly string CompactEntered = "=SplitState(" + Compact[1..]
+        .Replace("REDUCE(", "SCAN(")
+        .Replace("SetVars(\"x\",nextX,", "SetVars(\"in.x\",x,\"in.seen\",seen,\"try\",try,\"x\",nextX,") + ", 1)";
 
     [Fact]
     public void CompactFold_WithADebugOutputTypedIn_DropsItAndGivesBackTimsExactText()
@@ -194,13 +203,13 @@ public class StateDebugTests
         var book = new Book();
 
         var debug = book.Toggle(Compact, on: true)
-            .Replace("SetVars(\"x\",nextX,\"seen\",nextSeen)", "SetVars(\"x\",nextX,\"seen\",nextSeen,\"try\",try)");
-        Assert.Equal(new[] { "try" }, book.Read(debug).DebugKeys);
+            .Replace("\"seen\",nextSeen)", "\"seen\",nextSeen,\"dbl\",try*2)");
+        Assert.Equal(new[] { "in.x", "in.seen", "try", "dbl" }, book.Read(debug).DebugKeys);
 
         var result = book.Apply(book.Read(debug), StateDebug.Toggle(book.Read(debug), false, Kinds));
         Assert.Null(result.Error);
         Assert.Equal(Compact, result.Formula);
-        Assert.Contains(result.Notes, n => n.Contains("try"));
+        Assert.Contains(result.Notes, n => n.Contains("dbl"));
     }
 
     [Fact]
@@ -208,7 +217,7 @@ public class StateDebugTests
     {
         var book = new Book();
         var debug = book.Toggle(Compact, on: true)
-            .Replace("SetVars(\"x\",nextX,\"seen\",nextSeen)", "SetVars(\"x\",nextX, \"try\" , try,\"seen\",nextSeen)");
+            .Replace("\"x\",nextX,\"seen\",nextSeen)", "\"x\",nextX, \"dbl\" , try*2,\"seen\",nextSeen)");
 
         Assert.Equal(Compact, book.Toggle(debug, on: false));
     }
@@ -223,7 +232,7 @@ public class StateDebugTests
 
         var on = book.Read(Compact);
         var debug = book.Apply(on, Dialog(on, true)).Formula!;
-        Assert.Equal("=SplitState(" + Compact[1..].Replace("REDUCE(", "SCAN(") + ", 1)", debug);
+        Assert.Equal(CompactEntered, debug);
 
         var off = book.Read(debug);
         Assert.Equal(Compact, book.Apply(off, Dialog(off, false)).Formula);
@@ -246,9 +255,9 @@ public class StateDebugTests
     {
         var book = new Book();
         var entered = book.Toggle(Normal, on: true);
-        var typed = entered.Replace(NormalOutput, DebugOutput);
+        var typed = entered.Replace("\"p\", nextP)", "\"p\", nextP, \"step\", v)");
 
-        Assert.Equal(CanonicalDebug, typed);
+        Assert.Contains("step", book.Read(typed).DebugKeys);
         Assert.Equal(Normal, book.Toggle(typed, on: false));
     }
 
@@ -338,7 +347,7 @@ public class StateDebugTests
         Assert.Equal(new[] { "item", "c", "w" }, engine.DebugKeys);
 
         Assert.Equal(normal, book.Toggle(debug, on: false));
-        Assert.Equal(debug.Replace(DebugOutput, NormalOutput), book.Toggle(normal, on: true));
+        Assert.Equal(debug.Replace(DebugOutput, EnteredOutput), book.Toggle(normal, on: true));
     }
 
     [Fact]
@@ -427,7 +436,11 @@ public class StateDebugTests
 
         var entered = book.Toggle(wrapped, on: true);
         Assert.DoesNotContain("SplitState(SplitState", entered);
-        Assert.Equal(CanonicalDebug, entered);
+        // The outputs Tim typed stay where they are; what they don't already show goes in front.
+        Assert.Equal(
+            CanonicalDebug.Replace(DebugOutput,
+                "SetVars(\"in.visited\", visited, \"in.p\", p, \"ns\", ns, \"items\", items, \"visited\", nextVisited, \"p\", nextP, \"item\", item, \"c\", c, \"w\", w)"),
+            entered);
 
         Assert.Equal(Normal, book.Toggle(entered, on: false));
     }

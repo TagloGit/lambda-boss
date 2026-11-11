@@ -314,6 +314,17 @@ public static class StateEngines
                 notes.Add($"Debug off: dropped the debug outputs {string.Join(", ", debugKeys)}.");
             }
 
+            // In shows everything: the incoming values and every intermediate go in front of the outputs.
+            if (debug && !engine.IsDebug)
+            {
+                var shown = StateDebug.DebugOutputs(edited);
+                if (shown.Count > 0)
+                {
+                    edited = Rebuild(edited, StateEdit.AddOutputPairsFirst(Intermediate(edited, withOtherArguments: true), shown));
+                    notes.Add($"Debug on: the step also outputs {string.Join(", ", shown.Select(s => s.Key))}. Debug off drops them.");
+                }
+            }
+
             // 2. Name.
             var name = string.IsNullOrWhiteSpace(change.StepName) ? null : change.StepName!.Trim();
             if (name != null)

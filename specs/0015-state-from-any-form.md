@@ -241,8 +241,8 @@ state variables:
 
 **Enter debug (Debug checkbox on, or `StateDebug.Toggle(engine, true, kinds)`).** The fold switches
 to its SCAN twin and `SplitState(` … `, 1)` goes round it, spelled with the state library's prefix
-(`loops.SplitState` when the step uses `loops.SetVars`). Nothing else changes: no debug outputs are
-added, and the seed, inputs, rules and name stay. A fold that is already the first argument of
+(`loops.SplitState` when the step uses `loops.SetVars`). The output shows everything (next
+section, #455). The seed, inputs, rules and name stay. A fold that is already the first argument of
 `SplitState(…, 1)` (a REDUCE written that way) is not wrapped again: entering only switches it to
 its SCAN twin and keeps the wrapper.
 
@@ -264,6 +264,60 @@ step has, it is refused with a message.
   Debug with the form on LET step, or on a fold with no SCAN twin, shows an error and can't be saved.
 - Leaving debug outputs in a normal REDUCE is allowed; only the exit command drops them.
 - The Debug checkbox is under the same Labs switch, `state-any-form`.
+
+## Debug shows everything (#455)
+
+Tim's R4 retry (11 Nov): a SCAN in debug form showed `#VALUE!` in every cell. He typed the
+intermediates into the output, then the incoming `crates` and `cash`, and only then saw the seed
+was `SetVars("crates", "", "cash", "")`. The typing was the slow part. Now entering debug writes
+them for him:
+
+```excel
+=SplitState(SCAN(SetVars("crates", "", "cash", ""), TEXTSPLIT("B4,S2,B9,S9,B5", ","), LAMBDA(a, v, LET(
+    crates, GetVar(a, "crates"),
+    cash, GetVar(a, "cash"),
+    qty, --MID(v, 2, 9),
+    bought, IF(LEFT(v) = "B", crates + qty, crates),
+    nextCrates, IF(LEFT(v) = "S", bought - qty, bought),
+    nextCash, cash + IF(LEFT(v) = "B", -3, 5) * qty,
+    SetVars("in.crates", crates, "in.cash", cash, "qty", qty, "bought", bought, "crates", nextCrates, "cash", nextCash)
+))), 1)
+```
+
+- **Incoming values** come first: each state variable's `GetVar(a, …)` line, under `in.<key>`
+  (`in.crates`). The dot is legal in a SetVars key and in SplitState's header, can't clash with a
+  LET name, and reads as "crates coming in". Only the GetVar lines: a key read inline has no
+  line to show.
+- **Every LET intermediate** comes next, under its binding name, in the step's order.
+- **Then Tim's own outputs**, as he wrote them; any debug outputs he had typed stay after them.
+- **Left out:** a LAMBDA line (a helper in the LET: a function isn't a value SetVars can hold);
+  the line that is the output (`out`, #438); a next line already passed as an output's value
+  (`nextCrates` is already the `crates` column); and any key the output already sets (Tim's own
+  `"item", item` stays where he put it).
+- **Spacing** follows Tim's: the pairs go in after `SetVars(` with the separator he typed between
+  his first key and value (`,` in a compact fold, `, ` otherwise).
+- **Past ten pairs**, the ones that don't fit go round the call as SetVar layers, after the real
+  outputs (SetVars takes ten).
+- They are **debug-only outputs** (nothing reads them, they aren't in the seed), so the Variables
+  list leaves them out and **Debug off removes them all**, SetVar layers included, giving back the
+  cell Tim wrote character for character. He can delete any of them by hand while in debug; off
+  cleans up what's left. No per-step choice (Tim: overkill).
+- A **named step** gets them in its definition, so every cell calling it outputs them until Debug
+  off; the dialog's "Save updates …" note says so.
+- Debug on saved with a variable edit shows the new variable too (`in.days`).
+
+**A `""` seed used in arithmetic.** When a seed value is `""` and a rule adds, subtracts,
+multiplies, divides or raises that variable's GetVar line, the /State dialog says so: "crates and
+cash start as "" in the seed, and bought, nextCash adds or multiplies with them: "" + a number is
+#VALUE!. Seed a number (0) instead." Read-only. A fresh scaffold (`nextP, p`) never trips it.
+
+## Loops loads bare (#456)
+
+/State on a workbook without Loops loads it with no prefix and writes bare calls (`SetVars`,
+`GetVar`, `SplitState`, `REDUCEUNTIL`). Tim always works with bare names. The prefix path stays
+only when the workbook already holds a prefixed Loops: that copy is the workbook's choice, and a
+library fold it hasn't loaded yet is loaded under the same prefix. Other libraries keep their
+default prefix. (The 10 Nov VM proof below predates this: it loaded `loops.`.)
 
 ## Exploration: sheet layouts (10 Nov 2026, for Tim to choose)
 

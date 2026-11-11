@@ -29,7 +29,25 @@ public static class StateScaffold
 
     public static readonly IReadOnlyList<string> LibraryNames = new[] { "SetVars", "SetVar", "GetVar", "NewState" };
 
-    private const int SetVarsPairLimit = 10;
+    /// <summary>
+    ///     The prefix /State loads a library under (spec 0015, "Loops loads bare"): Loops with the
+    ///     prefix the workbook's own copy already has, else none, so the cell reads <c>SetVars</c>
+    ///     and not <c>loops.SetVars</c>. <paramref name="statePrefix" /> is <see cref="FindPrefix" />'s
+    ///     answer. Any other library keeps its default prefix.
+    /// </summary>
+    public static string LoadPrefix(string folder, string? statePrefix, string defaultPrefix) =>
+        string.Equals(folder, LibraryFolder, StringComparison.OrdinalIgnoreCase)
+            ? (statePrefix ?? "").TrimEnd('.')
+            : defaultPrefix;
+
+    /// <summary>How a cell spells a library function that isn't in the workbook yet: as <see cref="LoadPrefix" /> will load it.</summary>
+    public static string NameToLoad(string folder, string? statePrefix, string defaultPrefix, string name)
+    {
+        var prefix = LoadPrefix(folder, statePrefix, defaultPrefix);
+        return prefix.Length == 0 ? name : $"{prefix}.{name}";
+    }
+
+    internal const int SetVarsPairLimit = 10;
     private const string StateBinding = "a";
     private const string InputBinding = "v";
 

@@ -140,6 +140,25 @@ public static class StateEdit
         return written;
     }
 
+    /// <summary>
+    ///     The step with these pairs put at the front of its output's SetVars call, and nothing else
+    ///     changed: the debug toggle's way in (spec 0015, "Debug shows everything"). The call keeps
+    ///     its own text after them, so the way out (<see cref="DropOutputKeys" />) gives it back
+    ///     exactly. Pairs past SetVars' ten go on as SetVar layers, after the real outputs.
+    /// </summary>
+    public static string AddOutputPairsFirst(string formula, IReadOnlyList<(string Key, string Value)> pairs)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+        if (pairs is null) throw new ArgumentNullException(nameof(pairs));
+        if (pairs.Count == 0) return formula;
+
+        var step = new EditableStep(formula);
+        step.AddFirst(pairs);
+        var written = step.Write();
+        LetParser.Parse(written);
+        return written;
+    }
+
     private static string? CheckRows(IReadOnlyList<StateEditRow> rows)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -301,6 +320,8 @@ public static class StateEdit
         public void Remove(ICollection<string> keys) =>
             Pairs.RemoveAll(p => keys.Contains(p.Key, StringComparer.OrdinalIgnoreCase));
 
+        public void Prepend(IEnumerable<KeyedText> pairs) => Pairs = pairs.Concat(Pairs).ToList();
+
         public bool Has(string key) => Pairs.Any(p => SameKey(p.Key, key));
 
         public void RewriteValues(Func<string, string> rewrite) =>
@@ -375,6 +396,7 @@ public static class StateEdit
         private readonly string _siteText;
         private string? _bodyText;
         private bool _keepOutputText;
+        private List<KeyedText>? _addedFirst;
         private string _template;
         private bool _sampleChanged;
 
@@ -487,6 +509,39 @@ public static class StateEdit
             _keepOutputText = true;
             _output.Remove(keys.ToList());
             _variables.RemoveAll(v => keys.Contains(v.Key, StringComparer.OrdinalIgnoreCase));
+        }
+
+        /// <summary>Puts pairs at the front of the output call only; no line changes.</summary>
+        public void AddFirst(IReadOnlyList<(string Key, string Value)> pairs)
+        {
+            _addedFirst = pairs.Select(p => new KeyedText(p.Key, p.Value)).ToList();
+            _output.Prepend(_addedFirst);
+        }
+
+        /// <summary>
+        ///     The output call as Tim wrote it with the added pairs in front, spaced as he spaces his
+        ///     own. Pairs past SetVars' ten go round it as SetVar layers. Null when nothing was added
+        ///     or the call isn't a plain SetVars of literal keys: it's then written afresh.
+        /// </summary>
+        private string? InsertedOutput()
+        {
+            if (_addedFirst == null) return null;
+            var args = _call.Arguments;
+            if (!StateStepParser.IsNamed(_call.Name, "SetVars") || args.Count < 2 || args.Count % 2 != 0) return null;
+            for (var i = 0; i < args.Count; i += 2)
+                if (StringLiteral(args[i]) == null || args[i + 1] is EmptyArgNode) return null;
+
+            var typed = _siteText[args[0].End..args[1].Start];
+            var sep = typed.Contains('\n') ? ", " : typed;
+
+            var room = Math.Max(0, StateScaffold.SetVarsPairLimit - args.Count / 2);
+            var inner = _addedFirst.Take(room).Select(p => StateScaffold.Quoted(p.Key) + sep + p.Value).ToList();
+
+            var text = _siteText[_call.Start..args[0].Start]
+                       + string.Concat(inner.Select(p => p + sep))
+                       + _siteText[args[0].Start.._call.End];
+            return _addedFirst.Skip(room).Aggregate(
+                text, (state, p) => $"{_prefix}SetVar({state}, {StateScaffold.Quoted(p.Key)}, {p.Value})");
         }
 
         /// <summary>Renames a key and its lines. Returns why not, or null.</summary>
@@ -607,7 +662,7 @@ public static class StateEdit
         {
             if (_sampleChanged) StateLine.Rhs = _sample.Write(_prefix);
 
-            var written = _template.Replace(Hole, VerbatimOutput() ?? _output.Write(_prefix));
+            var written = _template.Replace(Hole, VerbatimOutput() ?? InsertedOutput() ?? _output.Write(_prefix));
             if (_siteLine != null) _siteLine.Rhs = written;
 
             var sb = new StringBuilder("=");
@@ -623,8 +678,17 @@ public static class StateEdit
         /// </summary>
         private string? VerbatimOutput()
         {
-            var args = _call.Arguments;
-            if (!_keepOutputText || _output.Base != null || args.Count < 2 || args.Count % 2 != 0) return null;
+            if (!_keepOutputText || _output.Base != null) return null;
+
+            // SetVar layers whose keys all go (the debug pairs past SetVars' ten) come off whole.
+            var call = _call;
+            while (StateStepParser.IsNamed(call.Name, "SetVar") && call.Arguments.Count == 3
+                   && StringLiteral(call.Arguments[1]) is { } layered && !_output.Has(layered)
+                   && call.Arguments[0] is FunctionCallNode under)
+                call = under;
+
+            var args = call.Arguments;
+            if (!StateStepParser.IsNamed(call.Name, "SetVars") || args.Count < 2 || args.Count % 2 != 0) return null;
 
             var original = new List<KeyedText>();
             for (var i = 0; i < args.Count; i += 2)
@@ -653,7 +717,7 @@ public static class StateEdit
 
             // Each kept pair keeps its own text and the separator typed before it, so a pair added
             // as ",key,value" goes with the comma it came with. The first kept pair needs none.
-            var sb = new StringBuilder(_siteText[_call.Start..args[0].Start]);
+            var sb = new StringBuilder(_siteText[call.Start..args[0].Start]);
             for (var n = 0; n < kept.Count; n++)
             {
                 var pair = kept[n];
@@ -661,7 +725,7 @@ public static class StateEdit
                 sb.Append(_siteText[args[2 * pair].Start..args[2 * pair + 1].End]);
             }
 
-            sb.Append(_siteText[args[args.Count - 1].End.._call.End]);
+            sb.Append(_siteText[args[args.Count - 1].End..call.End]);
             return sb.ToString();
         }
 
