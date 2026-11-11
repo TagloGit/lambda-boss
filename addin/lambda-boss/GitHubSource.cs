@@ -28,16 +28,26 @@ public class GitHubSource
     /// </summary>
     public async Task<IReadOnlyList<string>> ListLibrariesAsync()
     {
+        var tree = await GetTreeAsync();
+        if (tree != null)
+        {
+            var fromTree = new List<string>();
+            foreach (var (path, isDir) in tree)
+            {
+                if (isDir && path.StartsWith("lambdas/", StringComparison.Ordinal)
+                          && path.IndexOf('/', 8) < 0)
+                {
+                    fromTree.Add(path.Substring(8));
+                }
+            }
+
+            Logger.Info($"GitHubSource: Found {fromTree.Count} libraries in {_owner}/{_repo}@{_config.Branch} (tree)");
+            return fromTree;
+        }
+
         // GET /repos/{owner}/{repo}/contents/lambdas → JSON array of entries
         var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/lambdas?ref={_config.Branch}";
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Add("User-Agent", "LambdaBoss");
-        request.Headers.Add("Accept", "application/vnd.github.v3+json");
-
-        var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await GetApiJsonAsync(url);
         var entries = JsonSerializer.Deserialize<JsonElement[]>(json)!;
 
         var libraries = new List<string>();
@@ -51,6 +61,96 @@ public class GitHubSource
 
         Logger.Info($"GitHubSource: Found {libraries.Count} libraries in {_owner}/{_repo}@{_config.Branch}");
         return libraries;
+    }
+
+    private readonly object _treeLock = new();
+    private Task<List<(string Path, bool IsDir)>?>? _treeTask;
+
+    /// <summary>
+    ///     One recursive git-tree call per instance answers every listing. Returns null when the tree
+    ///     is unusable (404, truncated, bad JSON) so callers fall back to the contents API; a rate
+    ///     limit throws <see cref="GitHubRateLimitException"/>.
+    /// </summary>
+    private Task<List<(string Path, bool IsDir)>?> GetTreeAsync()
+    {
+        lock (_treeLock)
+        {
+            return _treeTask ??= LoadTreeAsync();
+        }
+    }
+
+    private async Task<List<(string Path, bool IsDir)>?> LoadTreeAsync()
+    {
+        try
+        {
+            var url = $"https://api.github.com/repos/{_owner}/{_repo}/git/trees/{_config.Branch}?recursive=1";
+            var json = await GetApiJsonAsync(url);
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("truncated", out var truncated) && truncated.ValueKind == JsonValueKind.True)
+            {
+                Logger.Info("GitHubSource: git tree truncated; using contents API");
+                return null;
+            }
+
+            var result = new List<(string Path, bool IsDir)>();
+            foreach (var item in root.GetProperty("tree").EnumerateArray())
+            {
+                var path = item.GetProperty("path").GetString()!;
+                var type = item.GetProperty("type").GetString();
+                if (type == "tree") result.Add((path, true));
+                else if (type == "blob") result.Add((path, false));
+            }
+
+            return result;
+        }
+        catch (GitHubRateLimitException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"GitHubSource: git tree unavailable ({ex.Message}); using contents API");
+            return null;
+        }
+    }
+
+    /// <summary>
+    ///     GETs an api.github.com URL and returns the body, throwing <see cref="GitHubRateLimitException"/>
+    ///     on a rate limit and HttpRequestException on any other failure.
+    /// </summary>
+    private async Task<string> GetApiJsonAsync(string url)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("User-Agent", "LambdaBoss");
+        request.Headers.Add("Accept", "application/vnd.github.v3+json");
+
+        var response = await _httpClient.SendAsync(request);
+        ThrowIfRateLimited(response);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    private static void ThrowIfRateLimited(HttpResponseMessage response)
+    {
+        var code = (int)response.StatusCode;
+        if (code != 403 && code != 429) return;
+
+        var remaining = FirstHeader(response, "X-RateLimit-Remaining");
+        if (code != 429 && remaining?.Trim() != "0") return;
+
+        DateTime? reset = null;
+        if (long.TryParse(FirstHeader(response, "X-RateLimit-Reset"), out var seconds))
+        {
+            reset = DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+        }
+
+        throw new GitHubRateLimitException(reset);
+    }
+
+    private static string? FirstHeader(HttpResponseMessage response, string name)
+    {
+        return response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
     }
 
     /// <summary>
@@ -82,29 +182,43 @@ public class GitHubSource
     /// </summary>
     public async Task<IReadOnlyList<string>> ListLambdaFilesAsync(string libraryName)
     {
+        var tree = await GetTreeAsync();
+        if (tree != null)
+        {
+            var prefix = $"lambdas/{libraryName}/";
+            var fromTree = new List<string>();
+            foreach (var (path, isDir) in tree)
+            {
+                if (isDir || !path.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                var name = path.Substring(prefix.Length);
+                if (name.IndexOf('/') >= 0) continue;
+                if (IsLambdaFile(name)) fromTree.Add(name);
+            }
+
+            return fromTree;
+        }
+
         var url = $"https://api.github.com/repos/{_owner}/{_repo}/contents/lambdas/{libraryName}?ref={_config.Branch}";
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Add("User-Agent", "LambdaBoss");
-        request.Headers.Add("Accept", "application/vnd.github.v3+json");
-
-        var response = await _httpClient.SendAsync(request);
-        response.EnsureSuccessStatusCode();
-
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await GetApiJsonAsync(url);
         var entries = JsonSerializer.Deserialize<JsonElement[]>(json)!;
 
         var files = new List<string>();
         foreach (var entry in entries)
         {
             var name = entry.GetProperty("name").GetString()!;
-            if (name.EndsWith(".lambda", StringComparison.OrdinalIgnoreCase)
-                || name.EndsWith(".const", StringComparison.OrdinalIgnoreCase))
+            if (IsLambdaFile(name))
             {
                 files.Add(name);
             }
         }
 
         return files;
+    }
+
+    private static bool IsLambdaFile(string name)
+    {
+        return name.EndsWith(".lambda", StringComparison.OrdinalIgnoreCase)
+               || name.EndsWith(".const", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -127,6 +241,22 @@ public class GitHubSource
 
         Logger.Info($"GitHubSource: Fetched library '{libraryName}' ({files.Count} files) from {_owner}/{_repo}@{_config.Branch}");
         return new FetchedLibrary(libraryName, metadata, files);
+    }
+}
+
+/// <summary>
+///     GitHub's unauthenticated API limit is used up. <see cref="ResetUtc"/> is when it lifts, if known.
+/// </summary>
+public class GitHubRateLimitException : HttpRequestException
+{
+    public DateTime? ResetUtc { get; }
+
+    public GitHubRateLimitException(DateTime? resetUtc)
+        : base(resetUtc.HasValue
+            ? $"GitHub's hourly limit for this network is used up until {resetUtc.Value:HH:mm} UTC"
+            : "GitHub's hourly limit for this network is used up")
+    {
+        ResetUtc = resetUtc;
     }
 }
 
