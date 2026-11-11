@@ -52,12 +52,18 @@ public class SourceCache
     /// <summary>
     ///     Attempts to load a library from cache. Returns null if not cached.
     /// </summary>
-    public FetchedLibrary? Load(RepoConfig config, string libraryName)
+    public FetchedLibrary? Load(RepoConfig config, string libraryName) => Load(config, libraryName, ignoreTtl: false);
+
+    /// <summary>
+    ///     Loads a cached library. With <paramref name="ignoreTtl"/>, an entry past its TTL still loads:
+    ///     the offline fallback weighs it against the built-in copy by age instead (#452).
+    /// </summary>
+    public FetchedLibrary? Load(RepoConfig config, string libraryName, bool ignoreTtl)
     {
         var dir = GetLibraryDir(config, libraryName);
         var yamlPath = Path.Combine(dir, "_library.yaml");
 
-        if (!IsFresh(yamlPath))
+        if (ignoreTtl ? !File.Exists(yamlPath) : !IsFresh(yamlPath))
             return null;
 
         var metadata = LibraryMetadata.LoadFromFile(yamlPath);
@@ -76,6 +82,15 @@ public class SourceCache
 
         Logger.Info($"SourceCache: Loaded library '{libraryName}' ({files.Count} files) from cache");
         return new FetchedLibrary(libraryName, metadata, files);
+    }
+
+    /// <summary>
+    ///     When a library was last stored, whatever the TTL, or null when it isn't cached.
+    /// </summary>
+    public DateTime? StoredAtUtc(RepoConfig config, string libraryName)
+    {
+        var yamlPath = Path.Combine(GetLibraryDir(config, libraryName), "_library.yaml");
+        return File.Exists(yamlPath) ? File.GetLastWriteTimeUtc(yamlPath) : null;
     }
 
     /// <summary>

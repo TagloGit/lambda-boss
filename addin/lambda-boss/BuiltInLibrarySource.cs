@@ -20,9 +20,17 @@ public sealed class BuiltInLibrarySource
 
     public static BuiltInLibrarySource Default { get; } = new(typeof(BuiltInLibrarySource).Assembly);
 
-    public BuiltInLibrarySource(Assembly assembly)
+    /// <summary>
+    ///     When the library was copied into the add-in (the build time, from the csproj), or null when
+    ///     the assembly carries no stamp. Offline, a cached library older than this loses to the
+    ///     built-in copy (#452).
+    /// </summary>
+    public DateTime? BuiltAtUtc { get; }
+
+    public BuiltInLibrarySource(Assembly assembly, DateTime? builtAtUtc = null)
     {
         _assembly = assembly;
+        BuiltAtUtc = builtAtUtc ?? ReadBuiltAt(assembly);
         _resourcesByLibrary = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var resource in assembly.GetManifestResourceNames())
@@ -74,6 +82,17 @@ public sealed class BuiltInLibrarySource
 
         Logger.Info($"BuiltInLibrarySource: Read library '{libraryName}' ({files.Count} files) from the add-in");
         return new FetchedLibrary(libraryName, metadata, files);
+    }
+
+    private static DateTime? ReadBuiltAt(Assembly assembly)
+    {
+        var stamp = assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+            .FirstOrDefault(a => a.Key == "LibraryBuiltUtc")?.Value;
+        return DateTime.TryParse(stamp, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+            out var when)
+            ? when
+            : null;
     }
 
     private string Read(string resource)
