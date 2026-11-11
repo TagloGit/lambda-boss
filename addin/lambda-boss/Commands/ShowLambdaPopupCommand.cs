@@ -314,7 +314,7 @@ public static class ShowLambdaPopupCommand
                     lambdas = await _provider.LoadLibraryAsync(
                         request.RepoConfig!, request.LibraryName, request.Prefix);
                 }
-                var loadNote = request.IsLocal ? null : _provider.FallbackNote;
+                var loadNote = request.IsLocal ? null : _provider.FallbackNoteFor(request.LibraryName);
 
                 ExcelAsyncUtil.QueueAsMacro(() =>
                 {

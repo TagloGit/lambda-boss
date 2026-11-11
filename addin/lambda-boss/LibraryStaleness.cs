@@ -40,6 +40,9 @@ internal static class LibraryStaleness
     /// </summary>
     internal static string Normalize(string formula)
     {
+        // Excel stores a #REF! inside a name qualified by the sheet that was active ("Case!#REF!"),
+        // seen in the VM on 11 Nov in GetVar and SplitState.
+        formula = SheetRef.Replace(formula, "#REF!");
         var sb = new StringBuilder(formula.Length);
         var inString = false;
         var start = formula.StartsWith("=", StringComparison.Ordinal) ? 1 : 0;
@@ -59,6 +62,10 @@ internal static class LibraryStaleness
 
         return sb.ToString();
     }
+
+    private static readonly System.Text.RegularExpressions.Regex SheetRef = new(
+        @"(?:'(?:[^']|'')+'|[A-Za-z_\\][\w.]*)!#REF!",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     // Excel reports a sheet-scoped name as "Sheet1!Name".
     private static string StripSheet(string name)

@@ -73,10 +73,44 @@ public class LibraryProvider
         RepoConfig config, string libraryName, string prefix)
     {
         FallbackNote = null;
-        var source = new GitHubSource(config, _httpClient);
+        _loadNotes.TryRemove(libraryName, out _);
         var offline = config.IsHomeRepo && _offlineRepos.ContainsKey(config.GetCacheKey());
-        var library = await GetLibraryAsync(config, source, libraryName, offline, fresh: true);
+        var library = await GetLibraryAsync(config, SourceFor(config), libraryName, offline, fresh: true);
+        _loadNotes[libraryName] = FallbackNote;
+
+        // The popup compares workbooks with what a load gives now, not the session's first refresh.
+        foreach (var info in _libraries ?? new List<LibraryInfo>())
+        {
+            if (!info.IsLocal && info.RepoConfig.GetCacheKey() == config.GetCacheKey()
+                && string.Equals(info.FolderName, libraryName, StringComparison.OrdinalIgnoreCase))
+                info.Library = library;
+        }
+
         return library.LoadWithPrefix(prefix);
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string?> _loadNotes =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The fallback note of the last load of this library (null: it came from GitHub).</summary>
+    public string? FallbackNoteFor(string libraryName) =>
+        _loadNotes.TryGetValue(libraryName, out var note) ? note : null;
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (GitHubSource Source, DateTime At)> _sources = new();
+
+    /// <summary>
+    ///     One source per repo for a minute, so loads in a row (Import All, a reload of several
+    ///     libraries) share one listing call; after that a load lists afresh.
+    /// </summary>
+    private GitHubSource SourceFor(RepoConfig config)
+    {
+        var key = config.GetCacheKey();
+        var now = DateTime.UtcNow;
+        if (_sources.TryGetValue(key, out var held) && now - held.At < TimeSpan.FromMinutes(1))
+            return held.Source;
+        var source = new GitHubSource(config, _httpClient);
+        _sources[key] = (source, now);
+        return source;
     }
 
     /// <summary>
@@ -385,7 +419,7 @@ public sealed class LibraryInfo
     ///     The library's files as the add-in has them now, so the popup can tell whether a
     ///     workbook's copy is out of date (#452). Null only for hand-built test data.
     /// </summary>
-    public FetchedLibrary? Library { get; init; }
+    public FetchedLibrary? Library { get; internal set; }
 
     /// <summary>
     ///     Whether this library comes from a local directory source.

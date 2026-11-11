@@ -138,6 +138,16 @@ public class LibraryFreshnessTests : IDisposable
     }
 
     [Fact]
+    public void Staleness_ExcelsSheetQualifiedRef_IsTheSame()
+    {
+        // Excel stores #REF! in a name as "<active sheet>!#REF!" (VM, 11 Nov: GetVar, SplitState).
+        Assert.Equal(LibraryStaleness.Normalize("=CHOOSE(i, #VALUE!, #REF!, #N/A)"),
+            LibraryStaleness.Normalize("=CHOOSE(i,#VALUE!,Case!#REF!,#N/A)"));
+        Assert.Equal(LibraryStaleness.Normalize("=IF(x, #REF!)"),
+            LibraryStaleness.Normalize("=IF(x, 'My Sheet'!#REF!)"));
+    }
+
+    [Fact]
     public void Staleness_TextInsideStrings_StillMatters()
     {
         Assert.NotEqual(LibraryStaleness.Normalize("=\"a b\""), LibraryStaleness.Normalize("=\"ab\""));

@@ -239,12 +239,11 @@ public class GitHubSource
         var metadata = await FetchLibraryMetadataAsync(libraryName);
         var fileNames = await ListLambdaFilesAsync(libraryName);
 
+        // Raw files don't count against the API limit; fetch them side by side (Maps has 67).
+        var contents = await Task.WhenAll(fileNames.Select(f => FetchFileAsync($"lambdas/{libraryName}/{f}")));
         var files = new Dictionary<string, string>();
-        foreach (var fileName in fileNames)
-        {
-            var content = await FetchFileAsync($"lambdas/{libraryName}/{fileName}");
-            files[fileName] = content;
-        }
+        for (var i = 0; i < fileNames.Count; i++)
+            files[fileNames[i]] = contents[i];
 
         _config.LastFetched = DateTime.UtcNow;
 
