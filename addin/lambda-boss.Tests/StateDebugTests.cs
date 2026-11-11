@@ -204,7 +204,7 @@ public class StateDebugTests
     }
 
     [Fact]
-    public void ADebugOutputInTheMiddle_GoesWithItsOwnSeparator()
+    public void ADebugOutputInTheMiddle_GoesWithTheCommaTypedBeforeIt()
     {
         var book = new Book();
         var debug = book.Toggle(Compact, on: true)

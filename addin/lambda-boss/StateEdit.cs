@@ -651,15 +651,14 @@ public static class StateEdit
 
             if (kept.Count == 0) return null;
 
-            // Each kept pair keeps its own text and the separator that followed it (a kept pair
-            // before the last always had one, since kept is in order).
+            // Each kept pair keeps its own text and the separator typed before it, so a pair added
+            // as ",key,value" goes with the comma it came with. The first kept pair needs none.
             var sb = new StringBuilder(_siteText[_call.Start..args[0].Start]);
             for (var n = 0; n < kept.Count; n++)
             {
                 var pair = kept[n];
+                if (n > 0) sb.Append(_siteText[args[2 * pair - 1].End..args[2 * pair].Start]);
                 sb.Append(_siteText[args[2 * pair].Start..args[2 * pair + 1].End]);
-                if (n < kept.Count - 1)
-                    sb.Append(_siteText[args[2 * pair + 1].End..args[2 * pair + 2].Start]);
             }
 
             sb.Append(_siteText[args[args.Count - 1].End.._call.End]);
