@@ -405,7 +405,9 @@ public class StateStepperTests
     [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, LAMBDA(a, v, a)), k - 1))")] // an inline step
     [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, notDefined), k - 1))")] // not in the workbook
     [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, notALambda), k - 1))")] // a name, but not a LAMBDA
-    [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, moveRobot), k - 1)) + INDEX(SCAN(1, G1:G9, other), 1)")] // two names
+    [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, moveRobot), k - 1)) + IF(j = 1, 0, INDEX(SCAN(1, G1:G9, other), j - 1))")] // two names
+    [InlineData("INDEX(SCAN(0, A1:A9, moveRobot), 3)")] // a SCAN, but not the stepper's shape
+    [InlineData("IF(k = 1, 0, INDEX(SCAN(0, A1:A9, moveRobot), 3))")] // the INDEX isn't k - 1
     public void NoName_WhenThePrototypeDoesNotNameOneLambda(string line)
     {
         var names = Defined(("moveRobot", Robot), ("other", Robot), ("notALambda", "=Sheet1!$A$1"));

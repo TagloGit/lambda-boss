@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 using LambdaBoss.Commands;
 
@@ -208,10 +209,18 @@ public static class StateStepper
             return null;
         }
 
+        // Only the stepper's own shape: IF(k = 1, seed, INDEX(SCAN(seed, inputs, name), k - 1)).
+        static string Bare(FormulaNode n) => string.Concat(n.ToFormula().Where(ch => !char.IsWhiteSpace(ch)));
+
         var names = StateStepParser.Walk(root)
             .OfType<FunctionCallNode>()
-            .Where(c => StateStepParser.IsNamed(c.Name, "INDEX") && c.Arguments.Count >= 1)
-            .Select(c => c.Arguments[0])
+            .Where(c => StateStepParser.IsNamed(c.Name, "IF") && c.Arguments.Count == 3)
+            .Select(c => (Counter: Regex.Match(Bare(c.Arguments[0]), @"^([A-Za-z_][A-Za-z0-9_.]*)=1$"), Else: c.Arguments[2]))
+            .Where(c => c.Counter.Success)
+            .Select(c => (Counter: c.Counter.Groups[1].Value, Index: c.Else as FunctionCallNode))
+            .Where(c => c.Index != null && StateStepParser.IsNamed(c.Index.Name, "INDEX") && c.Index.Arguments.Count == 2
+                && string.Equals(Bare(c.Index.Arguments[1]), c.Counter + "-1", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Index!.Arguments[0])
             .OfType<FunctionCallNode>()
             .Where(s => StateStepParser.IsNamed(s.Name, "SCAN") && s.Arguments.Count == 3)
             .Select(s => s.Arguments[2])

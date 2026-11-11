@@ -214,6 +214,22 @@ public class StateDebugTests
     }
 
     [Fact]
+    public void TheDialogsChange_WithItsBlankNewRow_StillGivesBackTimsExactText()
+    {
+        // StateWindow always sends a trailing blank row for a new variable (review of #448).
+        var book = new Book();
+        StateEngineChange Dialog(StateEngine e, bool on) =>
+            StateDebug.Toggle(e, on, Kinds) with { Rows = e.Rows.Append(new StateEditRow(null, "", "")).ToList() };
+
+        var on = book.Read(Compact);
+        var debug = book.Apply(on, Dialog(on, true)).Formula!;
+        Assert.Equal("=SplitState(" + Compact[1..].Replace("REDUCE(", "SCAN(") + ", 1)", debug);
+
+        var off = book.Read(debug);
+        Assert.Equal(Compact, book.Apply(off, Dialog(off, false)).Formula);
+    }
+
+    [Fact]
     public void AToggleWithAVariableEdit_IsLaidOutAfresh()
     {
         var book = new Book();

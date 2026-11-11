@@ -351,7 +351,7 @@ public static class StateEngines
 
             // A pure debug toggle gives back the cell as Tim wrote it (#447).
             if (change.Fold != null && change.Debug is { } toggled && toggled != engine.IsDebug
-                && string.Equals(name, engine.StepName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(name, engine.StepName, StringComparison.Ordinal)
                 && NoVariableEdits(engine, change.Rows))
                 formula = TogglePreservingText(engine, shaped, change.Fold, callName, debug) ?? formula;
 
@@ -374,9 +374,13 @@ public static class StateEngines
         }
     }
 
-    private static bool NoVariableEdits(StateEngine engine, IReadOnlyList<StateEditRow> rows) =>
-        rows.Count == engine.Rows.Count
-        && rows.All(r => r.OriginalKey != null && string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal));
+    // The dialog always sends a trailing blank row for a new variable: that is no edit.
+    private static bool NoVariableEdits(StateEngine engine, IReadOnlyList<StateEditRow> rows)
+    {
+        var real = rows.Where(r => r.OriginalKey != null || r.Key.Trim().Length > 0).ToList();
+        return real.Count == engine.Rows.Count
+            && real.All(r => r.OriginalKey != null && string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal));
+    }
 
     /// <summary>
     ///     The debug toggle done on the cell's own text (#447): the fold's name swapped for its twin,
