@@ -69,8 +69,14 @@ internal sealed class PopupNavigation
     public string Hint => !CommandsFirst
         ? LibrariesHint
         : Mode == PopupMode.Commands
-            ? "Type to filter · ↑↓ navigate · Enter run · Esc close"
-            : "↑↓ navigate · Enter load · Tab switch · Esc commands";
+            ? CommandsHint
+            : LibraryViewHint;
 
     public const string LibrariesHint = "↑↓ navigate · Enter load · Tab switch · Esc close";
+    public const string CommandsHint = "Type to filter · ↑↓ navigate · Enter run · Esc close";
+    public const string LibraryViewHint = "↑↓ navigate · Enter load · Tab switch · Esc commands";
+
+    /// <summary>True when the status line shows one of the hints, not a note worth keeping.</summary>
+    public static bool IsHint(string? text) =>
+        string.IsNullOrEmpty(text) || text == LibrariesHint || text == CommandsHint || text == LibraryViewHint;
 }

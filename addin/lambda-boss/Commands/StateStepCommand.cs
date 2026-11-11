@@ -45,7 +45,10 @@ internal static class StateStepCommand
             var read = StateEngines.Read(formula, refersTo, folds);
             if (read.Refusal != null || read.IsEmpty || read.Engine == null)
             {
-                ShowError(read.Refusal ?? "Debug toggles a state engine: pick the cell that holds one.");
+                var why = read.Refusal ?? "Debug toggles a state engine: pick the cell that holds one.";
+                if (read.Refusal != null && folds.Count == 0)
+                    why += " (Library folds are known once the popup has read the libraries: open it, wait a moment and try again.)";
+                ShowError(why);
                 return;
             }
 

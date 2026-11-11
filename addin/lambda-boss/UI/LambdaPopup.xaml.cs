@@ -393,6 +393,7 @@ public partial class LambdaPopup
     /// <summary>Back to the commands from the library view (commands-first), with the box cleared.</summary>
     private void ShowCommands()
     {
+        _pendingEnter = false;
         HidePrefixPrompt();
         _nav.Set(PopupMode.Commands);
         SearchBox.Text = "";
@@ -404,6 +405,7 @@ public partial class LambdaPopup
     private void ShowLibraries()
     {
         // The mode first, so clearing the box reads as the library list, not the commands.
+        _pendingEnter = false;
         _nav.Set(PopupMode.Library);
         SearchBox.Text = "";
         SwitchMode(PopupMode.Library);
@@ -422,7 +424,9 @@ public partial class LambdaPopup
         LambdaList.Visibility = _mode == PopupMode.Search ? Visibility.Visible : Visibility.Collapsed;
         CommandsList.Visibility = _mode == PopupMode.Commands ? Visibility.Visible : Visibility.Collapsed;
 
-        if (!_prefixPromptActive)
+        // Only a hint follows the mode: a loading note, a held Enter or a load error stays put,
+        // as it did before spec 0017.
+        if (!_prefixPromptActive && PopupNavigation.IsHint(StatusText.Text))
             ShowIdleStatus();
 
         ApplyFilter(SearchBox.Text);

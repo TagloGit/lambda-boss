@@ -218,6 +218,16 @@ public class CommandsFirstTests : IDisposable
         Assert.Contains("Tab switch", nav.Hint);
     }
 
+    [Fact]
+    public void IsHint_KnowsTheHints_NotNotes()
+    {
+        Assert.True(PopupNavigation.IsHint(PopupNavigation.LibrariesHint));
+        Assert.True(PopupNavigation.IsHint(PopupNavigation.CommandsHint));
+        Assert.True(PopupNavigation.IsHint(PopupNavigation.LibraryViewHint));
+        Assert.False(PopupNavigation.IsHint("Loading libraries..."));
+        Assert.False(PopupNavigation.IsHint("Failed to load libraries — check network"));
+    }
+
     // --- Settings ---
 
     [Fact]
