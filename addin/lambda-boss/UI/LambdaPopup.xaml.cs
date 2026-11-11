@@ -16,6 +16,10 @@ public partial class LambdaPopup
     private Mode _mode = Mode.Library;
     private bool _prefixPromptActive;
 
+    // Set when Enter was pressed on text that names a library exactly; the prefix
+    // prompt then loads this library instead of the selected list item (#449).
+    private LibraryDisplayItem? _exactLibrary;
+
     private List<LibraryDisplayItem> _allLibraries = new();
     private List<LambdaDisplayItem> _allLambdas = new();
     private readonly IReadOnlyList<SlashCommand> _allCommands;
@@ -355,6 +359,17 @@ public partial class LambdaPopup
     private void BeginLoad()
     {
         string? defaultPrefix = null;
+        _exactLibrary = null;
+
+        // Typed a library's name or prefix and pressed Enter in the box: load that
+        // library, whatever the top hit is. Picking a row with the arrows still wins.
+        if (_mode != Mode.Commands && SearchBox.IsFocused
+            && ExactLibraryMatch.Find(_allLibraries, SearchBox.Text) is { } exact)
+        {
+            _exactLibrary = exact;
+            ShowPrefixPrompt(exact.DefaultPrefix);
+            return;
+        }
 
         if (_mode == Mode.Library && LibraryList.SelectedItem is LibraryDisplayItem libItem)
         {
@@ -384,6 +399,7 @@ public partial class LambdaPopup
     private void HidePrefixPrompt()
     {
         _prefixPromptActive = false;
+        _exactLibrary = null;
         PrefixPanel.Visibility = Visibility.Collapsed;
         StatusText.Text = "↑↓ navigate · Enter load · Tab switch · Esc close";
     }
@@ -393,7 +409,13 @@ public partial class LambdaPopup
         LibraryLoadRequest? request = null;
         var prefix = PrefixBox.Text.Trim();
 
-        if (_mode == Mode.Library && LibraryList.SelectedItem is LibraryDisplayItem libItem)
+        if (_exactLibrary is { } exact)
+        {
+            request = exact.IsLocal
+                ? new LibraryLoadRequest(exact.LocalSourceConfig!, exact.FolderName, prefix, exact.DisplayName)
+                : new LibraryLoadRequest(exact.RepoConfig!, exact.FolderName, prefix, exact.DisplayName);
+        }
+        else if (_mode == Mode.Library && LibraryList.SelectedItem is LibraryDisplayItem libItem)
         {
             request = libItem.IsLocal
                 ? new LibraryLoadRequest(libItem.LocalSourceConfig!, libItem.FolderName, prefix, libItem.DisplayName)
