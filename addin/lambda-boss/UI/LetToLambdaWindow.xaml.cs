@@ -202,7 +202,17 @@ public partial class LetToLambdaWindow
         GongSolutions.Wpf.DragDrop.DragDrop.SetDropHandler(InputsList, keepHandler);
 
         if (stateStep != null)
+        {
             ShowFold(parsed, stateStep);
+
+            // An Edit Lambda stepper prototype names its step: offer it, so saving back is one Enter (#447).
+            var stepName = StateStepper.PrototypeStepName(stateStep.StateBinding.RhsText, resolveExistingRefersTo);
+            if (stepName != null)
+            {
+                LambdaNameBox.Text = stepName;
+                LambdaNameBox.SelectAll();
+            }
+        }
 
         LambdaNameBox.Focus();
         UpdateSaveEnabled();

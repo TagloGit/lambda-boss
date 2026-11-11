@@ -371,7 +371,10 @@ public static class StateEdit
         private readonly string _stateName;
         private readonly List<Variable> _variables;
         private readonly Line? _siteLine;
+        private readonly FunctionCallNode _call;
+        private readonly string _siteText;
         private string? _bodyText;
+        private bool _keepOutputText;
         private string _template;
         private bool _sampleChanged;
 
@@ -396,6 +399,8 @@ public static class StateEdit
             _siteLine = site.BindingIndex is { } at ? _lines[at] : null;
             _bodyText = _siteLine == null ? null : parsed.Body;
             _template = site.Text[..site.Call.Start] + Hole + site.Text[site.Call.End..];
+            _call = site.Call;
+            _siteText = site.Text;
 
             _output = ReadChain(site.Call);
             if (_output.Base != null) throw new FormatException("The output is a SetVar chain on the state.");
@@ -479,6 +484,7 @@ public static class StateEdit
         /// <summary>Takes keys out of the output call only; their lines stay.</summary>
         public void DropOutput(IReadOnlyCollection<string> keys)
         {
+            _keepOutputText = true;
             _output.Remove(keys.ToList());
             _variables.RemoveAll(v => keys.Contains(v.Key, StringComparer.OrdinalIgnoreCase));
         }
@@ -601,12 +607,61 @@ public static class StateEdit
         {
             if (_sampleChanged) StateLine.Rhs = _sample.Write(_prefix);
 
-            var written = _template.Replace(Hole, _output.Write(_prefix));
+            var written = _template.Replace(Hole, VerbatimOutput() ?? _output.Write(_prefix));
             if (_siteLine != null) _siteLine.Rhs = written;
 
             var sb = new StringBuilder("=");
             FormulaFormatter.AppendLet(
                 sb, 0, _lines.Select(l => (l.Name, l.Rhs)).ToList(), _siteLine == null ? written : _bodyText!);
+            return sb.ToString();
+        }
+
+        /// <summary>
+        ///     The output call as Tim wrote it, when the debug toggle's way out only took pairs out of
+        ///     it: his spacing stays, character for character (#447). Null otherwise, or when a pair
+        ///     was added, renamed, changed or moved, so the call is written afresh.
+        /// </summary>
+        private string? VerbatimOutput()
+        {
+            var args = _call.Arguments;
+            if (!_keepOutputText || _output.Base != null || args.Count < 2 || args.Count % 2 != 0) return null;
+
+            var original = new List<KeyedText>();
+            for (var i = 0; i < args.Count; i += 2)
+            {
+                if (StringLiteral(args[i]) is not { } key || args[i + 1] is EmptyArgNode) return null;
+                original.Add(new KeyedText(key, args[i + 1].ToFormula().Trim()));
+            }
+
+            if (original.Select(p => p.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() != original.Count)
+                return null;
+
+            // The output, pair by pair, must be the original pairs in order with some left out.
+            var kept = new List<int>();
+            var at = 0;
+            foreach (var pair in _output.Pairs)
+            {
+                while (at < original.Count && !SameKey(original[at].Key, pair.Key)) at++;
+                if (at == original.Count) return null;
+                if (!string.Equals(original[at].Key, pair.Key, StringComparison.Ordinal)
+                    || !string.Equals(original[at].Value, pair.Value, StringComparison.Ordinal))
+                    return null;
+                kept.Add(at++);
+            }
+
+            if (kept.Count == 0) return null;
+
+            // Each kept pair keeps its own text and the separator typed before it, so a pair added
+            // as ",key,value" goes with the comma it came with. The first kept pair needs none.
+            var sb = new StringBuilder(_siteText[_call.Start..args[0].Start]);
+            for (var n = 0; n < kept.Count; n++)
+            {
+                var pair = kept[n];
+                if (n > 0) sb.Append(_siteText[args[2 * pair - 1].End..args[2 * pair].Start]);
+                sb.Append(_siteText[args[2 * pair].Start..args[2 * pair + 1].End]);
+            }
+
+            sb.Append(_siteText[args[args.Count - 1].End.._call.End]);
             return sb.ToString();
         }
 

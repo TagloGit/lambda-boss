@@ -366,4 +366,52 @@ public class StateStepperTests
         }));
         Assert.Empty(asked);
     }
+
+    // ------------------------------------------------------------ LET to LAMBDA's name (#447)
+
+    private static string StateLine(string prototype)
+    {
+        var parsed = LetParser.Parse(prototype);
+        var step = StateStepParser.TryParse(parsed);
+        Assert.NotNull(step);
+        return step!.StateBinding.RhsText;
+    }
+
+    [Fact]
+    public void APrototype_NamesTheStepItCameFrom()
+    {
+        Assert.Equal("moveRobot", StateStepper.PrototypeStepName(StateLine(Prototype("=" + RobotFold)), Names));
+    }
+
+    [Fact]
+    public void APrototype_NamesItsStep_AfterTimRespacesTheStateLine()
+    {
+        var line = "IF(k=1,SetVars(\"p\",0,\"b\",4),INDEX(SCAN(SetVars(\"p\",0,\"b\",4),EXPLODE(G270),moveRobot),k-1))";
+
+        Assert.Equal("moveRobot", StateStepper.PrototypeStepName(line, Names));
+    }
+
+    [Fact]
+    public void APrefixedStepName_IsKept()
+    {
+        var step = "=LAMBDA(a, v, LET(p, loops.GetVar(a, \"p\"), loops.SetVars(\"p\", p + v)))";
+        var prototype = Prototype("=REDUCE(loops.SetVars(\"p\", 0), G1:G9, st.go)", Defined(("st.go", step)));
+
+        Assert.Equal("st.go", StateStepper.PrototypeStepName(StateLine(prototype), Defined(("st.go", step))));
+    }
+
+    [Theory]
+    [InlineData("SetVars(\"p\", 0)")] // an ordinary state step: no SCAN
+    [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, LAMBDA(a, v, a)), k - 1))")] // an inline step
+    [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, notDefined), k - 1))")] // not in the workbook
+    [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, notALambda), k - 1))")] // a name, but not a LAMBDA
+    [InlineData("IF(k = 1, SetVars(\"p\", 0), INDEX(SCAN(SetVars(\"p\", 0), G1:G9, moveRobot), k - 1)) + IF(j = 1, 0, INDEX(SCAN(1, G1:G9, other), j - 1))")] // two names
+    [InlineData("INDEX(SCAN(0, A1:A9, moveRobot), 3)")] // a SCAN, but not the stepper's shape
+    [InlineData("IF(k = 1, 0, INDEX(SCAN(0, A1:A9, moveRobot), 3))")] // the INDEX isn't k - 1
+    public void NoName_WhenThePrototypeDoesNotNameOneLambda(string line)
+    {
+        var names = Defined(("moveRobot", Robot), ("other", Robot), ("notALambda", "=Sheet1!$A$1"));
+
+        Assert.Null(StateStepper.PrototypeStepName(line, names));
+    }
 }

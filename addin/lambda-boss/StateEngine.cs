@@ -122,6 +122,9 @@ public sealed record StateEngine(
     /// </summary>
     public IReadOnlyList<string> StandIns { get; init; } = Array.Empty<string>();
 
+    /// <summary>The fold call exactly as the cell holds it, from its name to its close bracket. Null for the unfolded form.</summary>
+    public string? CallText { get; init; }
+
     /// <summary>The placeholder for a value Tim types over.</summary>
     public const string Placeholder = "\"\"";
 
@@ -346,6 +349,12 @@ public static class StateEngines
                 ? LetStep(shaped)
                 : FoldFormula(shaped, change.Fold, engine, callName, notes, debug);
 
+            // A pure debug toggle gives back the cell as Tim wrote it (#447).
+            if (change.Fold != null && change.Debug is { } toggled && toggled != engine.IsDebug
+                && string.Equals(name, engine.StepName, StringComparison.Ordinal)
+                && NoVariableEdits(engine, change.Rows))
+                formula = TogglePreservingText(engine, shaped, change.Fold, callName, debug) ?? formula;
+
             if (formula.Length > MaxFormulaLength)
                 return Failed($"The cell would be over {MaxFormulaLength:N0} characters, Excel's limit.", notes);
             if (definition != null && definition.Length > MaxFormulaLength)
@@ -363,6 +372,64 @@ public static class StateEngines
         {
             return Failed(ex.Message, notes);
         }
+    }
+
+    // The dialog always sends a trailing blank row for a new variable: that is no edit.
+    private static bool NoVariableEdits(StateEngine engine, IReadOnlyList<StateEditRow> rows)
+    {
+        var real = rows.Where(r => r.OriginalKey != null || r.Key.Trim().Length > 0).ToList();
+        return real.Count == engine.Rows.Count
+            && real.All(r => r.OriginalKey != null && string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    ///     The debug toggle done on the cell's own text (#447): the fold's name swapped for its twin,
+    ///     the <c>SplitState(…, 1)</c> wrapper put on or taken off, and on the way out the debug
+    ///     outputs taken out of the step's text. Everything else stays character for character, so
+    ///     Debug on then off gives back exactly what Tim wrote. Null when anything else changed or
+    ///     the text can't be matched up: the formula is then laid out afresh.
+    /// </summary>
+    private static string? TogglePreservingText(
+        StateEngine engine, StateEngine shaped, StateFoldKind fold, Func<StateFoldKind, string> callName, bool debug)
+    {
+        if (engine.CallText == null || engine.FoldCallName == null || engine.Fold == null) return null;
+        if (!engine.CallText.StartsWith(engine.FoldCallName, StringComparison.Ordinal)) return null;
+        if (!shaped.Parameters.SequenceEqual(engine.Parameters, StringComparer.OrdinalIgnoreCase)) return null;
+        if (shaped.Seed != engine.Seed || shaped.Inputs != engine.Inputs) return null;
+        if (!shaped.OtherArguments.SequenceEqual(engine.OtherArguments)) return null;
+        if (!shaped.Bindings.Select(b => b.Name).SequenceEqual(engine.Bindings.Select(b => b.Name), StringComparer.Ordinal))
+            return null;
+
+        var name = SameKind(engine.Fold, fold) ? engine.FoldCallName : callName(fold);
+        var text = name + engine.CallText[engine.FoldCallName.Length..];
+
+        // An inline step's rules are in the cell; a named step's are in its definition, written as before.
+        if (engine.StepName == null)
+        {
+            var changed = engine.Bindings.Select(b => b.Value).Append(engine.Output)
+                .Zip(shaped.Bindings.Select(b => b.Value).Append(shaped.Output), (old, now) => (Old: old, Now: now))
+                .Where(c => c.Old != c.Now);
+            foreach (var (old, now) in changed)
+            {
+                var at = old.Length == 0 ? -1 : text.IndexOf(old, StringComparison.Ordinal);
+                if (at < 0 || text.IndexOf(old, at + 1, StringComparison.Ordinal) >= 0) return null;
+                text = text[..at] + now + text[(at + old.Length)..];
+            }
+        }
+
+        var before = engine.Before;
+        var after = engine.After;
+        if (engine.IsDebug && !debug)
+        {
+            if (!StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter)) return null;
+            (before, after) = (bare, bareAfter);
+        }
+        else if (!engine.IsDebug && debug && !StateDebug.TryUnwrap(before, after, out _, out _))
+        {
+            (before, after) = StateDebug.Wrap(before, after, shaped.Prefix);
+        }
+
+        return before + text + after;
     }
 
     /// <summary>A formula's tokens without the layout: Excel stores <c>LAMBDA(a, v,</c> as <c>LAMBDA(a,v,</c>.</summary>
@@ -463,7 +530,7 @@ public static class StateEngines
         refusal = CheckStep(engine);
         // A named output (#438) or a guard (#443) leaves no call in the body: take the seed's prefix then.
         var prefix = IsStateCall(engine.Output) ? PrefixOf(engine.Output) : PrefixOf(engine.Seed);
-        return refusal == null ? engine with { Prefix = prefix } : null;
+        return refusal == null ? engine with { Prefix = prefix, CallText = formula[call.Start..call.End] } : null;
     }
 
     /// <summary>

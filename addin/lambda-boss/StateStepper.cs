@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 using LambdaBoss.Commands;
 
@@ -183,6 +184,53 @@ public static class StateStepper
             if (StateStepParser.Walk(call.Arguments[i]).Contains(descendant))
                 return i;
         return -1;
+    }
+
+    /// <summary>
+    ///     The named step a stepper prototype was written from (#447): the name in its state line's
+    ///     <c>INDEX(SCAN(seed, inputs, name), k - 1)</c>, when the workbook holds that name as a
+    ///     LAMBDA. LET to LAMBDA prefills it, so saving the edited step back is one Enter. Null
+    ///     when the line holds no such call, or more than one name.
+    /// </summary>
+    /// <param name="stateRhs">The right-hand side of the step's state binding.</param>
+    /// <param name="refersTo">Looks up a workbook name's definition; null when there's none.</param>
+    public static string? PrototypeStepName(string? stateRhs, Func<string, string?> refersTo)
+    {
+        if (string.IsNullOrWhiteSpace(stateRhs)) return null;
+        if (refersTo is null) throw new ArgumentNullException(nameof(refersTo));
+
+        FormulaNode root;
+        try
+        {
+            root = FormulaParser.Parse(stateRhs!).Root;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        // Only the stepper's own shape: IF(k = 1, seed, INDEX(SCAN(seed, inputs, name), k - 1)).
+        static string Bare(FormulaNode n) => string.Concat(n.ToFormula().Where(ch => !char.IsWhiteSpace(ch)));
+
+        var names = StateStepParser.Walk(root)
+            .OfType<FunctionCallNode>()
+            .Where(c => StateStepParser.IsNamed(c.Name, "IF") && c.Arguments.Count == 3)
+            .Select(c => (Counter: Regex.Match(Bare(c.Arguments[0]), @"^([A-Za-z_][A-Za-z0-9_.]*)=1$"), Else: c.Arguments[2]))
+            .Where(c => c.Counter.Success)
+            .Select(c => (Counter: c.Counter.Groups[1].Value, Index: c.Else as FunctionCallNode))
+            .Where(c => c.Index != null && StateStepParser.IsNamed(c.Index.Name, "INDEX") && c.Index.Arguments.Count == 2
+                && string.Equals(Bare(c.Index.Arguments[1]), c.Counter + "-1", StringComparison.OrdinalIgnoreCase))
+            .Select(c => c.Index!.Arguments[0])
+            .OfType<FunctionCallNode>()
+            .Where(s => StateStepParser.IsNamed(s.Name, "SCAN") && s.Arguments.Count == 3)
+            .Select(s => s.Arguments[2])
+            .OfType<LeafNode>()
+            .Where(l => l.TokenType == FormulaTokenType.Name)
+            .Select(l => l.Text.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return names.Count == 1 && LambdaSignatureParser.IsLambdaFormula(refersTo(names[0])) ? names[0] : null;
     }
 
     private static StepperOutcome BuildPrototype(Fold fold)
