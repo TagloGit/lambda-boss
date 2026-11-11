@@ -290,10 +290,14 @@ them for him:
   line to show.
 - **Every LET intermediate** comes next, under its binding name, in the step's order.
 - **Then Tim's own outputs**, as he wrote them; any debug outputs he had typed stay after them.
-- **Left out:** a LAMBDA line (a helper in the LET: a function isn't a value SetVars can hold);
-  the line that is the output (`out`, #438); a next line already passed as an output's value
-  (`nextCrates` is already the `crates` column); and any key the output already sets (Tim's own
-  `"item", item` stays where he put it).
+- **Left out:** a line that may hold a function (a LAMBDA, a LET ending in one, or a bare name
+  that isn't the step's own, such as a workbook LAMBDA: SetVars can't hold a function); the line
+  that is the output (`out`, #438) and any line after it (a guard held in a later line would read
+  itself); a next line already passed as an output's value (`nextCrates` is already the `crates`
+  column); any key the output already sets (Tim's own `"item", item` stays where he put it); and
+  any key that wouldn't read back as debug-only (a string literal outside the fold, a seed key),
+  since Debug off couldn't take it out again.
+- **A SetVar chain Tim wrote** on his SetVars keeps its text: the pairs go inside the SetVars.
 - **Spacing** follows Tim's: the pairs go in after `SetVars(` with the separator he typed between
   his first key and value (`,` in a compact fold, `, ` otherwise).
 - **Past ten pairs**, the ones that don't fit go round the call as SetVar layers, after the real
@@ -305,6 +309,17 @@ them for him:
 - A **named step** gets them in its definition, so every cell calling it outputs them until Debug
   off; the dialog's "Save updates …" note says so.
 - Debug on saved with a variable edit shows the new variable too (`in.days`).
+- **Doubts.** Debug off drops every debug-only output, including one Tim typed before entering
+  debug (as #440 always has). When the output's text also appears elsewhere in the cell (an
+  output identical to the seed), the toggle lays the cell out afresh rather than keeping Tim's
+  spacing (as #447 does).
+- **VM proof (11 Nov, build of #457, Excel 16 in `taglo-win`).** Driven through the popup
+  (Ctrl+Shift+L, `/State`) and the dialog. On an empty workbook, /State loaded Loops bare
+  (`SetVars` in Name Manager, no `loops.SetVars`) and wrote `=REDUCE(SetVars("crates", "", "cash",
+  ""), …)`. Tim's case: the dialog showed the `""` seed note; Debug on spilled
+  `in.crates | in.cash | qty | bought | crates | cash` over `(blank) | (blank) | 4 | #VALUE! |
+  #VALUE! | #VALUE!`, so the blank seed and the first error on `bought` are in one row. Debug off
+  gave back the cell's text exactly (`Formula2` compared ordinal).
 
 **A `""` seed used in arithmetic.** When a seed value is `""` and a rule adds, subtracts,
 multiplies, divides or raises that variable's GetVar line, the /State dialog says so: "crates and
