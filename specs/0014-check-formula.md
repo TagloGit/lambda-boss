@@ -151,6 +151,22 @@ drops the space after a comma in LAMBDA parameter lists on entry). A cell `=SUM(
 fares" → `=SUM(fares)` → Revert → `=SUM(fare)`. A 5,000-character LET mid-edit: search complete,
 one click, the entered formula is the fix.
 
+## An `@` on a fold's array (#451)
+
+A leading `@` (implicit intersection) keeps only the first value, so a fold over
+`@TEXTSPLIT(G46,,",")` sees one item (`ROWS(@TEXTSPLIT(...))` is 1 where `ROWS(TEXTSPLIT(...))` is
+23). Check Formula reads the cell's Formula2, where a typed `@` shows as typed, and flags an
+argument that a fold needs as an array when its text, trimmed, starts with `@`.
+
+- **Arrays:** REDUCE and SCAN 2nd argument; MAP every argument but the last; BYROW and BYCOL 1st;
+  library REDUCEUNTIL, REDUCEWHILE, SCANUNTIL, SCANWHILE, SCANLEAD 2nd; REDUCE1, SCAN1, FOLDROWS,
+  FINDALL, FINDFIRST 1st. A library prefix (`loops.SCANUNTIL`) is ignored.
+- **Narrow:** an `@` deeper inside the argument (`TAKE(@X, 3)`) or on any other argument is not
+  flagged.
+- **Message:** `@ keeps only the first value, so SCAN sees one item. Remove the @.`
+- **Fix:** one button, "Remove the @", with the usual preview and Revert. It is a warning, not a
+  structural fault: it never starts the bracket repair search.
+
 ## How it's built
 
 - **`FormulaChecker`** (pure, unit-tested): one left-to-right pass over

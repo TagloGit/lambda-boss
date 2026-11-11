@@ -263,7 +263,7 @@ internal sealed class CheckFormulaWindow : Window
             if (fixes is not null && fixes.ByProblem.TryGetValue(p, out var nameFixes))
             {
                 foreach (var fix in nameFixes)
-                    item.Children.Add(FixRow(fix, $"Use {fix.Label[(fix.Label.IndexOf('→') + 2)..]}"));
+                    item.Children.Add(FixRow(fix, p.FixLabel ?? $"Use {fix.Label[(fix.Label.IndexOf('→') + 2)..]}"));
             }
             else if (!string.IsNullOrEmpty(p.Suggestion))
                 item.Children.Add(new TextBlock

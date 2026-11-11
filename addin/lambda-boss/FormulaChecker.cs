@@ -32,6 +32,9 @@ internal enum FormulaProblemKind
     /// <summary>A function called with too few or too many arguments (issue #424).</summary>
     ArgumentCount,
 
+    /// <summary>A warning: a fold's array argument starts with <c>@</c>, which keeps only its first value.</summary>
+    ImplicitIntersection,
+
     /// <summary>Not an error: a LET name that is never used (often the other half of a typo).</summary>
     UnusedName,
 
@@ -63,6 +66,9 @@ internal sealed record FormulaProblem(
     ///     they'd be written), nearest first; at most 3. Empty when there's no safe one-span fix.
     /// </summary>
     public IReadOnlyList<string> Replacements { get; init; } = Array.Empty<string>();
+
+    /// <summary>The fix button's label, when "old → new" would read badly (a deletion).</summary>
+    public string? FixLabel { get; init; }
 
     /// <summary>A bracket, comma, shape or argument-count fault: the kind one misplaced <c>)</c> can cause.</summary>
     public bool IsStructural => Kind is FormulaProblemKind.ExtraCloseBracket or FormulaProblemKind.UnclosedBracket
@@ -252,6 +258,17 @@ internal static class FormulaChecker
     private static readonly HashSet<string> TableSpecials = new(StringComparer.OrdinalIgnoreCase)
     {
         "#All", "#Data", "#Headers", "#Totals", "#This Row", "@", ""
+    };
+
+    /// <summary>
+    ///     Folds and the 0-based position of the argument they iterate over (-1: every argument but
+    ///     the last). The library entries are read from lambdas/loops/*.lambda.
+    /// </summary>
+    private static readonly Dictionary<string, int> FoldArrayArgs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["REDUCE"] = 1, ["SCAN"] = 1, ["MAP"] = -1, ["BYROW"] = 0, ["BYCOL"] = 0,
+        ["REDUCEUNTIL"] = 1, ["REDUCEWHILE"] = 1, ["SCANUNTIL"] = 1, ["SCANWHILE"] = 1, ["SCANLEAD"] = 1,
+        ["REDUCE1"] = 0, ["SCAN1"] = 0, ["FOLDROWS"] = 0, ["FINDALL"] = 0, ["FINDFIRST"] = 0
     };
 
     public static FormulaCheckResult Check(string formula, FormulaNameContext? names = null)
@@ -502,6 +519,7 @@ internal static class FormulaChecker
         FormulaProblemKind.UnclosedBracket => 1,
         FormulaProblemKind.BadShape => 2,
         FormulaProblemKind.ArgumentCount => 2,
+        FormulaProblemKind.ImplicitIntersection => 6,
         FormulaProblemKind.UnusedName => 9,
         FormulaProblemKind.More => 10,
         _ => 5
@@ -633,6 +651,9 @@ internal static class FormulaChecker
         public FormulaToken? ArgSoleName { get; set; }
         public List<Declaration> Declarations { get; } = new();
 
+        /// <summary>Arguments that begin with <c>@</c>: the argument index and the <c>@</c> token.</summary>
+        public List<(int Arg, FormulaToken At)> LeadingAts { get; } = new();
+
         public bool IsLet => Function == "LET";
         public bool IsLambda => Function == "LAMBDA";
 
@@ -710,6 +731,9 @@ internal static class FormulaChecker
                         OnName(i);
                         break;
                     default:
+                        if (!_quick && tok.Type == FormulaTokenType.Operator && tok.Text == "@"
+                            && Top is { NameToken: not null, ArgTokens: 0 } at)
+                            at.LeadingAts.Add((at.ArgIndex, tok));
                         CountArgToken(tok, isSoleNameCandidate: false);
                         break;
                 }
@@ -843,6 +867,8 @@ internal static class FormulaChecker
             if (!empty)
                 FinishArgument(f, isLast: true);
             FinishFrameShape(f, close);
+            if (f.LeadingAts.Count > 0)
+                CheckLeadingAts(f);
             Closers[f.Open] = new ClosedCall(f.Open, f.Start, f.Label, close);
 
             _stack.RemoveAt(_stack.Count - 1);
@@ -855,6 +881,35 @@ internal static class FormulaChecker
             // A call is one operand of the enclosing argument; a later name can't be "the sole name".
             if (Top is { } outer && f.NameToken is not null)
                 outer.ArgSoleName = null;
+        }
+
+        /// <summary>
+        ///     A fold's array argument that starts with <c>@</c> sees one item, not the array. Narrow on
+        ///     purpose: only a leading <c>@</c> on a known fold's array argument.
+        /// </summary>
+        private void CheckLeadingAts(Frame f)
+        {
+            if (f.NameToken is null || f.NameToken.Text.IndexOfAny(RefChars) >= 0 || f.Function is null)
+                return;
+            var name = f.Function;
+            var dot = name.LastIndexOf('.');
+            if (dot >= 0)
+                name = name[(dot + 1)..];
+            if (!FoldArrayArgs.TryGetValue(name, out var pos) || FindInScope(f.Function) is not null)
+                return;
+            var total = f.ArgIndex + 1;
+            foreach (var (arg, at) in f.LeadingAts)
+            {
+                var isArray = pos >= 0 ? arg == pos : arg < total - 1; // pos -1: every argument but the last
+                if (!isArray)
+                    continue;
+                Add(new FormulaProblem(FormulaProblemKind.ImplicitIntersection, at.Start, 1,
+                    $"@ keeps only the first value, so {name} sees one item. Remove the @.")
+                {
+                    Replacements = new[] { "" },
+                    FixLabel = "Remove the @"
+                });
+            }
         }
 
         /// <summary>Records LET names and LAMBDA parameters as their commas arrive.</summary>
