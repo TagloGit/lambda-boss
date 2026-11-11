@@ -504,6 +504,7 @@ internal sealed class CheckFormulaWindow : Window
         FormulaProblemKind.UnknownName => "Unknown name",
         FormulaProblemKind.NotLoaded => "Library LAMBDA not loaded",
         FormulaProblemKind.UnknownReference => "Unknown sheet, table or column",
+        FormulaProblemKind.ImplicitIntersection => "@ on a fold's array",
         FormulaProblemKind.UnusedName => "Note: unused name",
         _ => kind.ToString()
     };
