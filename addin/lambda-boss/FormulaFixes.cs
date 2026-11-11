@@ -84,7 +84,7 @@ internal sealed class FormulaFixes
 
             var current = f.Substring(p.Start, p.Length);
             byProblem[p] = p.Replacements
-                .Select(text => new FormulaFix($"{current} → {text}", f,
+                .Select(text => new FormulaFix(p.FixLabel ?? $"{current} → {text}", f,
                     f[..p.Start] + text + f[(p.Start + p.Length)..],
                     p.Start + text.Length, p.Start, text.Length, p.Start))
                 .ToList();

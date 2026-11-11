@@ -716,4 +716,54 @@ public class FormulaCheckerTests
         Assert.Equal("Odd '[x'] col", Assert.Single(p.Replacements));
         Assert.Equal("=tblFares[Odd '[x'] col]", FormulaFixes.For(r).ByProblem[p][0].After);
     }
+
+    // ------------------------------------------------------------ @ on a fold's array (#451)
+
+    private static IReadOnlyList<FormulaProblem> Ats(string formula) =>
+        FormulaChecker.Check(formula, Workbook()).Problems
+            .Where(p => p.Kind == FormulaProblemKind.ImplicitIntersection).ToList();
+
+    [Fact]
+    public void At_on_scan_array_is_flagged_and_fixable()
+    {
+        const string f = "=SCAN(SetVars(\"cash\",$I$37), @TEXTSPLIT(G46,,\",\"), LAMBDA(a,v, a))";
+        var r = FormulaChecker.Check(f, Workbook());
+        var p = Assert.Single(r.Problems, p => p.Kind == FormulaProblemKind.ImplicitIntersection);
+        Assert.Equal("@", At(f, p));
+        Assert.Equal("@ keeps only the first value, so SCAN sees one item. Remove the @.", p.Message);
+        Assert.False(p.IsStructural);
+        var fix = Assert.Single(FormulaFixes.For(r).ByProblem[p]);
+        Assert.Equal("=SCAN(SetVars(\"cash\",$I$37), TEXTSPLIT(G46,,\",\"), LAMBDA(a,v, a))", fix.After);
+        Assert.Equal(f, fix.Before);
+    }
+
+    [Theory]
+    [InlineData("=REDUCE(0, @A1:A10, LAMBDA(a,v,a+v))", "REDUCE")]
+    [InlineData("=MAP(@B2#, LAMBDA(x,x))", "MAP")]
+    [InlineData("=MAP(A1:A3, @B1:B3, LAMBDA(x,y,x+y))", "MAP")]
+    [InlineData("=BYROW(@A1:B3, LAMBDA(r,SUM(r)))", "BYROW")]
+    [InlineData("=BYCOL( @A1:B3, LAMBDA(r,SUM(r)))", "BYCOL")]
+    [InlineData("=loops.SCANUNTIL(0, @A1:A3, LAMBDA(a,v,i,a+v))", "SCANUNTIL")]
+    [InlineData("=REDUCEWHILE(0, @A1:A3, LAMBDA(a,v,i,a+v), LAMBDA(a,v,i,TRUE))", "REDUCEWHILE")]
+    [InlineData("=SCAN1(@A1:A3, MAX)", "SCAN1")]
+    [InlineData("=FOLDROWS(@A1:A3, LAMBDA(acc,r,i,r))", "FOLDROWS")]
+    public void At_on_a_fold_array_argument_is_flagged(string f, string name)
+    {
+        var p = Assert.Single(Ats(f));
+        Assert.Contains($"so {name} sees one item", p.Message);
+        Assert.Equal("@", At(f, p));
+    }
+
+    [Theory]
+    [InlineData("=SCAN(0, TAKE(@A1:A5, 3), LAMBDA(a,v,a))")]
+    [InlineData("=REDUCE(@A1, A1:A3, LAMBDA(a,v,a+v))")]
+    [InlineData("=MAP(A1:A3, LAMBDA(x,@x))")]
+    [InlineData("=MAP(A1:A3, @LAMBDA(x,x))")]
+    [InlineData("=SCAN(0, A1:A3, LAMBDA(a,v,a))")]
+    [InlineData("=SUM(@A1:A3)")]
+    [InlineData("=SCAN(0, A1:A3 + @B1, LAMBDA(a,v,a))")]
+    public void At_elsewhere_is_not_flagged(string f)
+    {
+        Assert.Empty(Ats(f));
+    }
 }
