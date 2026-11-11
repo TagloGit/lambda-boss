@@ -176,9 +176,19 @@ public static class StateDebug
             var step = StateStepParser.TryParse(parsed);
             if (step?.Site == null) return Array.Empty<(string, string)>();
 
+            // A key that wouldn't read back as debug-only (a literal outside the fold, a seed key)
+            // would become a real variable and stay on Debug off: never add one.
             var taken = new HashSet<string>(step.Variables.Select(v => v.Key), StringComparer.OrdinalIgnoreCase);
+            taken.UnionWith(LiteralsAround(engine));
+            taken.UnionWith(SeedKeys(engine));
+
+            // The output's line and everything after it (a guard held in a later line) can't be
+            // read from inside the output.
             var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (step.Site.BindingIndex is { } outputLine) skip.Add(parsed.Bindings[outputLine].Name);
+            if (step.Site.BindingIndex is { } outputLine)
+                foreach (var b in parsed.Bindings.Skip(outputLine)) skip.Add(b.Name);
+
+            var local = new HashSet<string>(parsed.Bindings.Select(b => b.Name), StringComparer.OrdinalIgnoreCase);
 
             var pairs = new List<(string Key, string Value)>();
             void Add(string key, string value)
@@ -198,7 +208,7 @@ public static class StateDebug
 
             foreach (var (name, value) in engine.Bindings)
             {
-                if (skip.Contains(name) || IsLambda(value)) continue;
+                if (skip.Contains(name) || IsFunction(value, local)) continue;
                 Add(name, name);
             }
 
@@ -262,22 +272,57 @@ public static class StateDebug
             var it = keys.Count == 1 ? "it" : "them";
             return $"{those} as \"\" in the seed, and {string.Join(", ", users)} adds or multiplies with {it}: \"\" + a number is #VALUE!. Seed a number (0) instead.";
         }
-        catch (FormatException)
+        catch (Exception ex) when (ex is FormatException or ArgumentException or InvalidOperationException)
         {
             return null;
         }
     }
 
-    private static bool IsLambda(string value)
+    /// <summary>
+    ///     A line that may hold a function, which SetVars can't store: a LAMBDA, a LET that ends in
+    ///     one, or a bare name that isn't the step's own (a workbook LAMBDA or a range: left out).
+    /// </summary>
+    private static bool IsFunction(string value, HashSet<string> local)
     {
         try
         {
-            return FormulaParser.Parse(value).Root is FunctionCallNode call
-                   && string.Equals(call.Name, "LAMBDA", StringComparison.OrdinalIgnoreCase);
+            return IsFunction(FormulaParser.Parse(value).Root, local);
         }
         catch (FormatException)
         {
-            return false;
+            return true;
+        }
+    }
+
+    private static bool IsFunction(FormulaNode node, HashSet<string> local) => node switch
+    {
+        FunctionCallNode call when string.Equals(call.Name, "LAMBDA", StringComparison.OrdinalIgnoreCase) => true,
+        FunctionCallNode call when string.Equals(call.Name, "LET", StringComparison.OrdinalIgnoreCase)
+                                   && call.Arguments.Count > 0 => IsFunction(call.Arguments[^1], local),
+        LeafNode { TokenType: FormulaTokenType.Name } leaf => !local.Contains(leaf.Text),
+        _ => false
+    };
+
+    private static IEnumerable<string> LiteralsAround(StateEngine engine) =>
+        Literal.Matches(engine.Before + "\n" + engine.After).Cast<Match>()
+            .Select(m => m.Groups[1].Value.Replace("\"\"", "\""));
+
+    private static IEnumerable<string> SeedKeys(StateEngine engine)
+    {
+        if (engine.Seed.Length == 0) yield break;
+        foreach (var call in Calls(engine.Seed))
+        {
+            if (StateStepParser.IsNamed(call.Name, "SetVars"))
+            {
+                for (var i = 0; i < call.Arguments.Count; i += 2)
+                    if (StringLiteral(call.Arguments[i]) is { } key)
+                        yield return key;
+            }
+            else if (StateStepParser.IsNamed(call.Name, "SetVar") && call.Arguments.Count == 3
+                     && StringLiteral(call.Arguments[1]) is { } chained)
+            {
+                yield return chained;
+            }
         }
     }
 

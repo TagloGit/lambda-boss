@@ -170,6 +170,71 @@ public class StateDebugShowsAllTests
         Assert.Contains("\"days\", nextDays)", result.Formula);
     }
 
+    // ------------------------------------------------------------ review of #457
+
+    private static readonly string Counter = Lines(
+        "=REDUCE(SetVars(\"n\", 0, \"m\", 0), SEQUENCE(3), LAMBDA(a, v, LET(",
+        "    n, GetVar(a, \"n\"),",
+        "    m, GetVar(a, \"m\"),",
+        "    nn, n + v,",
+        "    mm, m * 2,",
+        "    SetVar(SetVars(\"n\", nn), \"m\", mm)",
+        ")))");
+
+    [Fact]
+    public void ASetVarChainTimWrote_KeepsItsTextBothWays()
+    {
+        var debug = Toggle(Counter, on: true).Formula!;
+
+        Assert.Contains("    SetVar(SetVars(\"in.n\", n, \"in.m\", m, \"n\", nn), \"m\", mm)\n", debug);
+        Assert.Equal(Counter, Toggle(debug, on: false).Formula);
+    }
+
+    [Fact]
+    public void AGuardHeldInALaterLine_IsNotPutInsideTheOutput()
+    {
+        var guarded = Lines(
+            "=REDUCE(SetVars(\"n\", 0), SEQUENCE(3), LAMBDA(a, v, LET(",
+            "    n, GetVar(a, \"n\"),",
+            "    nn, n + v,",
+            "    out, SetVars(\"n\", nn),",
+            "    res, IF(v = \"\", a, out),",
+            "    res",
+            ")))");
+
+        var debug = Toggle(guarded, on: true).Formula!;
+
+        Assert.Contains("    out, SetVars(\"in.n\", n, \"n\", nn),\n", debug);
+        Assert.DoesNotContain("\"res\"", debug);
+        Assert.Equal(guarded, Toggle(debug, on: false).Formula);
+    }
+
+    [Fact]
+    public void ALetEndingInALambda_OrANameFromTheWorkbook_IsNotShown()
+    {
+        var helpers = Counter
+            .Replace("    nn, n + v,", "    step, LET(k, 2, LAMBDA(x, x * k)),\n    inc, MyInc,\n    nn, n + step(v),");
+
+        var debug = Toggle(helpers, on: true).Formula!;
+
+        Assert.DoesNotContain("\"step\"", debug);
+        Assert.DoesNotContain("\"inc\"", debug);
+        Assert.Equal(helpers, Toggle(debug, on: false).Formula);
+    }
+
+    [Fact]
+    public void AKeyReadFromOutsideTheFold_IsNotAddedAsADebugOutput()
+    {
+        var outside = "=LET(r, REDUCE(SetVars(\"n\", 0), SEQUENCE(3), LAMBDA(a, v, LET(\n"
+            + "    n, GetVar(a, \"n\"),\n    x, v * 2,\n    SetVars(\"n\", n + x)\n))), IF(GetVar(r, \"n\") > 5, \"x\", \"y\"))";
+
+        var debug = Toggle(outside, on: true).Formula!;
+
+        Assert.DoesNotContain("\"x\", x", debug);
+        Assert.Equal(new[] { "n" }, Read(debug).Rows.Select(r => r.Key));
+        Assert.Equal(outside, Toggle(debug, on: false).Formula);
+    }
+
     // ------------------------------------------------------------ a "" seed used in arithmetic
 
     [Fact]

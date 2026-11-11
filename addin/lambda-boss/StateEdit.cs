@@ -526,8 +526,12 @@ public static class StateEdit
         private string? InsertedOutput()
         {
             if (_addedFirst == null) return null;
-            var args = _call.Arguments;
-            if (!StateStepParser.IsNamed(_call.Name, "SetVars") || args.Count < 2 || args.Count % 2 != 0) return null;
+
+            // A SetVar chain Tim wrote on his SetVars keeps its text: the pairs go in the SetVars.
+            var call = Innermost(_call, out _);
+            if (call == null) return null;
+            var args = call.Arguments;
+            if (args.Count < 2 || args.Count % 2 != 0) return null;
             for (var i = 0; i < args.Count; i += 2)
                 if (StringLiteral(args[i]) == null || args[i + 1] is EmptyArgNode) return null;
 
@@ -687,8 +691,18 @@ public static class StateEdit
                    && call.Arguments[0] is FunctionCallNode under)
                 call = under;
 
+            // Layers Tim wrote himself stay as they are; only the SetVars under them is rewritten.
+            var outer = call;
+            var inner = Innermost(outer, out var layers);
+            if (inner == null) return null;
+            foreach (var (key, value) in layers)
+                if (!_output.Pairs.Any(p => string.Equals(p.Key, key, StringComparison.Ordinal)
+                                            && string.Equals(p.Value, value, StringComparison.Ordinal)))
+                    return null;
+            call = inner;
+
             var args = call.Arguments;
-            if (!StateStepParser.IsNamed(call.Name, "SetVars") || args.Count < 2 || args.Count % 2 != 0) return null;
+            if (args.Count < 2 || args.Count % 2 != 0) return null;
 
             var original = new List<KeyedText>();
             for (var i = 0; i < args.Count; i += 2)
@@ -697,13 +711,14 @@ public static class StateEdit
                 original.Add(new KeyedText(key, args[i + 1].ToFormula().Trim()));
             }
 
-            if (original.Select(p => p.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() != original.Count)
+            if (original.Select(p => p.Key).Distinct(StringComparer.OrdinalIgnoreCase).Count() != original.Count
+                || original.Any(p => layers.Any(l => SameKey(l.Key, p.Key))))
                 return null;
 
             // The output, pair by pair, must be the original pairs in order with some left out.
             var kept = new List<int>();
             var at = 0;
-            foreach (var pair in _output.Pairs)
+            foreach (var pair in _output.Pairs.Where(p => !layers.Any(l => SameKey(l.Key, p.Key))))
             {
                 while (at < original.Count && !SameKey(original[at].Key, pair.Key)) at++;
                 if (at == original.Count) return null;
@@ -726,7 +741,28 @@ public static class StateEdit
             }
 
             sb.Append(_siteText[args[args.Count - 1].End..call.End]);
-            return sb.ToString();
+            return _siteText[outer.Start..call.Start] + sb + _siteText[call.End..outer.End];
+        }
+
+        /// <summary>
+        ///     The SetVars call under any <c>SetVar(state, "key", value)</c> layers on it, with the
+        ///     layers' keys and values from the inside out. Null when the chain isn't that shape.
+        /// </summary>
+        private FunctionCallNode? Innermost(FunctionCallNode call, out List<(string Key, string Value)> layers)
+        {
+            layers = new List<(string Key, string Value)>();
+            while (StateStepParser.IsNamed(call.Name, "SetVar"))
+            {
+                if (call.Arguments.Count != 3 || StringLiteral(call.Arguments[1]) is not { } key
+                    || call.Arguments[0] is not FunctionCallNode under) return null;
+                layers.Insert(0, (key, call.Arguments[2].ToFormula().Trim()));
+                call = under;
+            }
+
+            if (!StateStepParser.IsNamed(call.Name, "SetVars")) return null;
+            for (var i = 0; i + 1 < call.Arguments.Count; i += 2)
+                if (StringLiteral(call.Arguments[i]) == null || call.Arguments[i + 1] is EmptyArgNode) return null;
+            return call;
         }
 
         /// <summary>The text around the output call, and the body when the output is in a binding.</summary>

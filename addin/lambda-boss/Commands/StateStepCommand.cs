@@ -49,7 +49,10 @@ internal static class StateStepCommand
             string? prefix = StateScaffold.FindPrefix(names);
             // A missing Loops loads bare, so the cell reads SetVars, not loops.SetVars (spec 0015).
             var engine = read.IsEmpty ? StateEngine.New(prefix ?? "") : read.Engine!;
-            Func<StateFoldKind, string> callName = k => CallName(k, names, prefix);
+
+            // With no Loops in the workbook, a cell already spelled loops.SetVars keeps that spelling.
+            var loadAs = prefix ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
+            Func<StateFoldKind, string> callName = k => CallName(k, names, loadAs);
 
             string? note = null;
             if (read.IsEmpty && prefix == null)
@@ -76,14 +79,14 @@ internal static class StateStepCommand
             });
             if (change == null) return;
 
-            var load = LibrariesToLoad(engine, change, prefix, names);
+            var load = LibrariesToLoad(engine, change, prefix, loadAs, names);
             if (load.Count == 0)
             {
                 Save(sheet, address, formula, engine, change, names);
                 return;
             }
 
-            LoadThenSave(sheet, address, formula, engine, change, load, prefix);
+            LoadThenSave(sheet, address, formula, engine, change, load, loadAs);
         }
         catch (Exception ex)
         {
@@ -120,14 +123,14 @@ internal static class StateStepCommand
     ///     library fold's own library when the workbook doesn't have that fold yet.
     /// </summary>
     private static List<string> LibrariesToLoad(
-        StateEngine engine, StateEngineChange change, string? prefix, IReadOnlyDictionary<string, string> names)
+        StateEngine engine, StateEngineChange change, string? prefix, string? loadAs, IReadOnlyDictionary<string, string> names)
     {
         var load = new List<string>();
         if (engine.IsNew && prefix == null) load.Add(StateScaffold.LibraryFolder);
 
         var fold = change.Fold;
         if (fold is { IsNative: false } && !string.IsNullOrEmpty(fold.Library)
-            && !IsLambda(names, CallName(fold, names, prefix))
+            && !IsLambda(names, CallName(fold, names, loadAs))
             && !load.Contains(fold.Library!, StringComparer.OrdinalIgnoreCase))
             load.Add(fold.Library!);
 
@@ -139,7 +142,7 @@ internal static class StateStepCommand
         dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change,
         IReadOnlyDictionary<string, string> names)
     {
-        var prefix = StateScaffold.FindPrefix(names);
+        var prefix = StateScaffold.FindPrefix(names) ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
         var result = StateEngines.Apply(
             engine, change, n => names.TryGetValue(n, out var r) ? r : null, k => CallName(k, names, prefix));
         if (result.Formula == null)
