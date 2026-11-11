@@ -47,14 +47,20 @@ internal static class StateStepCommand
             }
 
             string? prefix = StateScaffold.FindPrefix(names);
-            var engine = read.IsEmpty ? StateEngine.New(prefix ?? StateScaffold.LibraryFolder + ".") : read.Engine!;
-            Func<StateFoldKind, string> callName = k => CallName(k, names);
+            // A missing Loops loads bare, so the cell reads SetVars, not loops.SetVars (spec 0015).
+            var engine = read.IsEmpty ? StateEngine.New(prefix ?? "") : read.Engine!;
+
+            // With no Loops in the workbook, a cell already spelled loops.SetVars keeps that spelling.
+            var loadAs = prefix ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
+            Func<StateFoldKind, string> callName = k => CallName(k, names, loadAs);
 
             string? note = null;
             if (read.IsEmpty && prefix == null)
-                note = $"The Loops library isn't loaded: Save loads it with the prefix {StateScaffold.LibraryFolder}.";
+                note = "The Loops library isn't loaded: Save loads it, with no prefix.";
             if (folds.Count == 0)
                 note = (note == null ? "" : note + " ") + "Library folds show once the popup has read the libraries.";
+            if (!read.IsEmpty && StateDebug.BlankSeedNote(engine) is { } blankSeed)
+                note = (note == null ? "" : note + " ") + blankSeed;
 
             string address = cell.Address(false, false);
             dynamic sheet = cell.Worksheet;
@@ -73,14 +79,14 @@ internal static class StateStepCommand
             });
             if (change == null) return;
 
-            var load = LibrariesToLoad(engine, change, prefix, names);
+            var load = LibrariesToLoad(engine, change, prefix, loadAs, names);
             if (load.Count == 0)
             {
                 Save(sheet, address, formula, engine, change, names);
                 return;
             }
 
-            LoadThenSave(sheet, address, formula, engine, change, load);
+            LoadThenSave(sheet, address, formula, engine, change, load, loadAs);
         }
         catch (Exception ex)
         {
@@ -93,7 +99,7 @@ internal static class StateStepCommand
     ///     How the workbook spells a fold: bare, with the prefix it was loaded under, or with the
     ///     library's folder as the prefix it will be loaded with.
     /// </summary>
-    private static string CallName(StateFoldKind kind, IReadOnlyDictionary<string, string> names)
+    private static string CallName(StateFoldKind kind, IReadOnlyDictionary<string, string> names, string? statePrefix)
     {
         if (kind.IsNative) return kind.Name;
         if (IsLambda(names, kind.Name)) return kind.Name;
@@ -104,7 +110,9 @@ internal static class StateStepCommand
             .FirstOrDefault();
         if (prefixed != null) return prefixed;
 
-        return string.IsNullOrEmpty(kind.Library) ? kind.Name : $"{kind.Library}.{kind.Name}";
+        return string.IsNullOrEmpty(kind.Library)
+            ? kind.Name
+            : StateScaffold.NameToLoad(kind.Library!, statePrefix, kind.Library!, kind.Name);
     }
 
     private static bool IsLambda(IReadOnlyDictionary<string, string> names, string name) =>
@@ -115,14 +123,14 @@ internal static class StateStepCommand
     ///     library fold's own library when the workbook doesn't have that fold yet.
     /// </summary>
     private static List<string> LibrariesToLoad(
-        StateEngine engine, StateEngineChange change, string? prefix, IReadOnlyDictionary<string, string> names)
+        StateEngine engine, StateEngineChange change, string? prefix, string? loadAs, IReadOnlyDictionary<string, string> names)
     {
         var load = new List<string>();
         if (engine.IsNew && prefix == null) load.Add(StateScaffold.LibraryFolder);
 
         var fold = change.Fold;
         if (fold is { IsNative: false } && !string.IsNullOrEmpty(fold.Library)
-            && !IsLambda(names, CallName(fold, names))
+            && !IsLambda(names, CallName(fold, names, loadAs))
             && !load.Contains(fold.Library!, StringComparer.OrdinalIgnoreCase))
             load.Add(fold.Library!);
 
@@ -134,8 +142,9 @@ internal static class StateStepCommand
         dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change,
         IReadOnlyDictionary<string, string> names)
     {
+        var prefix = StateScaffold.FindPrefix(names) ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
         var result = StateEngines.Apply(
-            engine, change, n => names.TryGetValue(n, out var r) ? r : null, k => CallName(k, names));
+            engine, change, n => names.TryGetValue(n, out var r) ? r : null, k => CallName(k, names, prefix));
         if (result.Formula == null)
         {
             ShowError(result.Error ?? "Nothing was changed.");
@@ -185,7 +194,8 @@ internal static class StateStepCommand
     ///     the fetch, so the workbook and the cell are checked again before anything changes.
     /// </summary>
     private static void LoadThenSave(
-        dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change, List<string> folders)
+        dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change, List<string> folders,
+        string? statePrefix)
     {
         Task.Run(async () =>
         {
@@ -205,11 +215,12 @@ internal static class StateStepCommand
                         return;
                     }
 
+                    var loadPrefix = StateScaffold.LoadPrefix(info.FolderName, statePrefix, info.DefaultPrefix);
                     var lambdas = info.IsLocal
-                        ? provider.LoadLocalLibrary(info.LocalSourceConfig!, info.FolderName, info.DefaultPrefix)
-                        : await provider.LoadLibraryAsync(info.RepoConfig, info.FolderName, info.DefaultPrefix);
+                        ? provider.LoadLocalLibrary(info.LocalSourceConfig!, info.FolderName, loadPrefix)
+                        : await provider.LoadLibraryAsync(info.RepoConfig, info.FolderName, loadPrefix);
                     var source = info.IsLocal ? info.LocalSourceConfig!.Path : info.RepoConfig.Url;
-                    loads.Add((lambdas, LambdaLoader.BuildComment(source, info.FolderName, info.DefaultPrefix)));
+                    loads.Add((lambdas, LambdaLoader.BuildComment(source, info.FolderName, loadPrefix)));
                 }
 
                 ExcelAsyncUtil.QueueAsMacro(() =>
