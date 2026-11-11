@@ -16,6 +16,61 @@ namespace LambdaBoss.Commands;
 /// </summary>
 internal static class StateStepCommand
 {
+    /// <summary>
+    ///     The popup's <c>Debug</c> command (spec 0017): the /State dialog's Debug box toggled and
+    ///     saved, with no dialog. On turns the fold into its SCAN twin inside the debug wrapper; off
+    ///     gives back the exact text it had before (#447).
+    /// </summary>
+    public static void ToggleDebug()
+    {
+        try
+        {
+            dynamic app = ExcelDnaUtil.Application;
+            dynamic workbook = app.ActiveWorkbook;
+            if (workbook == null)
+                return;
+
+            dynamic cell = app.ActiveCell;
+            string formula = Convert.ToString(cell.Formula2) ?? "";
+            if (formula.Length == 0)
+            {
+                ShowError("Debug toggles a state engine: pick the cell that holds one.");
+                return;
+            }
+
+            Dictionary<string, string> names = ConvertLetToLambdaCommand.GetExistingNames(workbook);
+            Func<string, string?> refersTo = n => names.TryGetValue(n, out var r) ? r : null;
+            var folds = LambdaHints.Catalog.StateFolds();
+
+            var read = StateEngines.Read(formula, refersTo, folds);
+            if (read.Refusal != null || read.IsEmpty || read.Engine == null)
+            {
+                ShowError(read.Refusal ?? "Debug toggles a state engine: pick the cell that holds one.");
+                return;
+            }
+
+            var engine = read.Engine;
+
+            var change = StateDebug.Toggle(engine, !engine.IsDebug, folds);
+            string? prefix = StateScaffold.FindPrefix(names);
+            var loadAs = prefix ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
+            string address = cell.Address(false, false);
+            dynamic sheet = cell.Worksheet;
+
+            Logger.Info($"State: Debug {(change.Debug == true ? "on" : "off")} at {address}");
+            var load = LibrariesToLoad(engine, change, prefix, loadAs, names);
+            if (load.Count == 0)
+                Save(sheet, address, formula, engine, change, names);
+            else
+                LoadThenSave(sheet, address, formula, engine, change, load, loadAs);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("State/Debug", ex);
+            ShowError($"Unexpected error: {ex.Message}");
+        }
+    }
+
     public static void Run()
     {
         try

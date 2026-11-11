@@ -152,6 +152,8 @@ public partial class SettingsWindow
         ChannelStableRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Stable;
         ChannelLabsRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Labs;
         ArgumentHintsCheckbox.IsChecked = settings.ArgumentHints;
+        OpensOnCommandsRadio.IsChecked = settings.PopupOpensOn == PopupOpensOn.Commands;
+        OpensOnLibrariesRadio.IsChecked = settings.PopupOpensOn == PopupOpensOn.Libraries;
 
         LabsSwitchList.ItemsSource = Labs.All
             .Select(s => new LabsSwitchDisplayItem
@@ -175,6 +177,19 @@ public partial class SettingsWindow
         settings.Save();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         StatusText.Text = $"Library channel: {Labs.ChannelLabel(channel)}";
+    }
+
+    private void OpensOnRadio_Click(object sender, RoutedEventArgs e)
+    {
+        var opensOn = OpensOnLibrariesRadio.IsChecked == true ? PopupOpensOn.Libraries : PopupOpensOn.Commands;
+        var settings = Settings.Current;
+        if (settings.PopupOpensOn == opensOn)
+            return;
+
+        // Read each time the popup opens, so it needs no reload.
+        settings.PopupOpensOn = opensOn;
+        settings.Save();
+        StatusText.Text = $"Popup opens on: {opensOn}";
     }
 
     private void ArgumentHints_Click(object sender, RoutedEventArgs e)
