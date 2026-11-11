@@ -185,6 +185,45 @@ public static class StateStepper
         return -1;
     }
 
+    /// <summary>
+    ///     The named step a stepper prototype was written from (#447): the name in its state line's
+    ///     <c>INDEX(SCAN(seed, inputs, name), k - 1)</c>, when the workbook holds that name as a
+    ///     LAMBDA. LET to LAMBDA prefills it, so saving the edited step back is one Enter. Null
+    ///     when the line holds no such call, or more than one name.
+    /// </summary>
+    /// <param name="stateRhs">The right-hand side of the step's state binding.</param>
+    /// <param name="refersTo">Looks up a workbook name's definition; null when there's none.</param>
+    public static string? PrototypeStepName(string? stateRhs, Func<string, string?> refersTo)
+    {
+        if (string.IsNullOrWhiteSpace(stateRhs)) return null;
+        if (refersTo is null) throw new ArgumentNullException(nameof(refersTo));
+
+        FormulaNode root;
+        try
+        {
+            root = FormulaParser.Parse(stateRhs!).Root;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        var names = StateStepParser.Walk(root)
+            .OfType<FunctionCallNode>()
+            .Where(c => StateStepParser.IsNamed(c.Name, "INDEX") && c.Arguments.Count >= 1)
+            .Select(c => c.Arguments[0])
+            .OfType<FunctionCallNode>()
+            .Where(s => StateStepParser.IsNamed(s.Name, "SCAN") && s.Arguments.Count == 3)
+            .Select(s => s.Arguments[2])
+            .OfType<LeafNode>()
+            .Where(l => l.TokenType == FormulaTokenType.Name)
+            .Select(l => l.Text.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return names.Count == 1 && LambdaSignatureParser.IsLambdaFormula(refersTo(names[0])) ? names[0] : null;
+    }
+
     private static StepperOutcome BuildPrototype(Fold fold)
     {
         if (fold.Call.Arguments[0] is EmptyArgNode || fold.Call.Arguments[1] is EmptyArgNode)

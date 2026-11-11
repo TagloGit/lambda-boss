@@ -197,6 +197,10 @@ Tim debugs an inline fold by switching `REDUCE` to `SCAN` (`REDUCEUNTIL` to `SCA
 outputs to the final SetVars (`"item", item, "c", c, "w", w`). The dialog does it in one go, both
 ways. Logic is `StateDebug.cs` and `StateEngines.Apply`; the window only wires it.
 
+A toggle with no other change works on the cell's own text (#447): only the fold's name, the
+wrapper and the dropped debug pairs change, so Debug on then off gives back Tim's exact text,
+spacing included. A toggle saved together with a variable, name or form edit is laid out afresh.
+
 ```excel
 =SplitState(SCAN(SetVars("visited", G150, "p", G150), SEQUENCE(5), LAMBDA(a, v, LET(
     …rules…,

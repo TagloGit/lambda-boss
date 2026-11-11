@@ -160,9 +160,69 @@ public class StateDebugTests
         var engine = book.Read(TimDebug);
         var result = book.Apply(engine, StateDebug.Toggle(engine, false, Kinds));
 
+        // Tim's own spacing (LAMBDA(a,v,) stays: only the fold, the wrapper and the outputs change (#447).
         Assert.Null(result.Error);
-        Assert.Equal(Normal, result.Formula);
+        Assert.Equal(Fold("=REDUCE(", "LAMBDA(a,v, ", "", "    " + NormalOutput), result.Formula);
         Assert.Contains(result.Notes, n => n.Contains("item, c, w"));
+    }
+
+    // ------------------------------------------------------------ Tim's exact text (#447)
+
+    // The S6 rep's fold (International Women's Day L6), as Tim types it: no spaces anywhere.
+    private static readonly string Compact =
+        "=REDUCE(SetVars(\"x\",$A$12,\"seen\",$A$12),SEQUENCE(15),LAMBDA(a,v,LET(\n"
+        + "    x,GetVar(a,\"x\"),\n"
+        + "    seen,GetVar(a,\"seen\"),\n"
+        + "    try,x-v,\n"
+        + "    nextX,IF(OR(try<=0,ISNUMBER(XMATCH(try,seen))),x+v,try),\n"
+        + "    nextSeen,VSTACK(seen,nextX),\n"
+        + "    SetVars(\"x\",nextX,\"seen\",nextSeen))))";
+
+    [Fact]
+    public void CompactFold_OnThenOff_GivesBackTimsExactText()
+    {
+        var book = new Book();
+
+        var debug = book.Toggle(Compact, on: true);
+        Assert.Equal("=SplitState(" + Compact[1..].Replace("REDUCE(", "SCAN(") + ", 1)", debug);
+        Assert.Equal(Compact, book.Toggle(debug, on: false));
+    }
+
+    [Fact]
+    public void CompactFold_WithADebugOutputTypedIn_DropsItAndGivesBackTimsExactText()
+    {
+        var book = new Book();
+
+        var debug = book.Toggle(Compact, on: true)
+            .Replace("SetVars(\"x\",nextX,\"seen\",nextSeen)", "SetVars(\"x\",nextX,\"seen\",nextSeen,\"try\",try)");
+        Assert.Equal(new[] { "try" }, book.Read(debug).DebugKeys);
+
+        var result = book.Apply(book.Read(debug), StateDebug.Toggle(book.Read(debug), false, Kinds));
+        Assert.Null(result.Error);
+        Assert.Equal(Compact, result.Formula);
+        Assert.Contains(result.Notes, n => n.Contains("try"));
+    }
+
+    [Fact]
+    public void ADebugOutputInTheMiddle_GoesWithItsOwnSeparator()
+    {
+        var book = new Book();
+        var debug = book.Toggle(Compact, on: true)
+            .Replace("SetVars(\"x\",nextX,\"seen\",nextSeen)", "SetVars(\"x\",nextX, \"try\" , try,\"seen\",nextSeen)");
+
+        Assert.Equal(Compact, book.Toggle(debug, on: false));
+    }
+
+    [Fact]
+    public void AToggleWithAVariableEdit_IsLaidOutAfresh()
+    {
+        var book = new Book();
+        var engine = book.Read(Compact);
+        var change = StateDebug.Toggle(engine, true, Kinds) with { Rows = Add(engine.Rows, "n", "0") };
+        var result = book.Apply(engine, change);
+
+        Assert.Null(result.Error);
+        Assert.StartsWith("=SplitState(SCAN(SetVars(\"x\", $A$12, \"seen\", $A$12, \"n\", 0), SEQUENCE(15), LAMBDA(a, v, LET(", result.Formula);
     }
 
     [Fact]
