@@ -694,6 +694,15 @@ public partial class LambdaPopup
             },
             () => Labs.IsOn(Labs.State)),
         new SlashCommand(
+            PopupCommands.Guard,
+            "Toggle the st guard on the active cell's state step (the /State dialog's Guard box, with no dialog)",
+            () =>
+            {
+                Hide();
+                ExcelAsyncUtil.QueueAsMacro(() => StateStepCommand.ToggleGuard());
+            },
+            () => Labs.IsOn(Labs.State)),
+        new SlashCommand(
             PopupCommands.Library,
             "Load one library, or search the lambdas (Tab switches; Esc comes back here)",
             ShowLibraries),

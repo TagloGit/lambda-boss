@@ -75,6 +75,7 @@ public partial class StateWindow
             : 1 + folds.FindIndex(f => Same(f, engine.Fold));
         NameBox.Text = engine.StepName ?? "";
         DebugBox.IsChecked = engine.IsDebug;
+        GuardBox.IsChecked = engine.IsGuarded;
         _openedAnswer = AnswerKeys();
 
         _loaded = true;
@@ -99,7 +100,8 @@ public partial class StateWindow
         SelectedFold,
         NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
         DebugBox.IsChecked == true,
-        AnswerChanged() ? AnswerKeys() : null);
+        AnswerChanged() ? AnswerKeys() : null,
+        GuardBox.IsChecked == true);
 
     private bool AnswerChanged() => !AnswerKeys().SequenceEqual(_openedAnswer, StringComparer.OrdinalIgnoreCase);
 
@@ -266,6 +268,8 @@ public partial class StateWindow
         Refresh();
     }
 
+    private void Guard_Changed(object sender, RoutedEventArgs e) => Refresh();
+
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
@@ -278,6 +282,14 @@ public partial class StateWindow
             // Alt+D (spec 0017): flip Debug and save in one press. Debug_Changed has switched the
             // form and refreshed the preview by the time IsChecked returns.
             DebugBox.IsChecked = DebugBox.IsChecked != true;
+            if (SaveButton.IsEnabled)
+                SaveButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
+        else if (IsToggleGuardKey(e.Key, e.SystemKey, Keyboard.Modifiers))
+        {
+            // Alt+G (spec 0015, "Guard toggle"): flip Guard and save in one press, as Alt+D does Debug.
+            GuardBox.IsChecked = GuardBox.IsChecked != true;
             if (SaveButton.IsEnabled)
                 SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
@@ -302,6 +314,10 @@ public partial class StateWindow
     /// <summary>Alt+D, the Debug box's access key: WPF reports Alt combinations as Key.System.</summary>
     internal static bool IsToggleDebugKey(Key key, Key systemKey, ModifierKeys modifiers) =>
         key == Key.System && systemKey == Key.D && modifiers == ModifierKeys.Alt;
+
+    /// <summary>Alt+G, the Guard box's access key.</summary>
+    internal static bool IsToggleGuardKey(Key key, Key systemKey, ModifierKeys modifiers) =>
+        key == Key.System && systemKey == Key.G && modifiers == ModifierKeys.Alt;
 
     /// <summary>Alt+Up moves the focused row up (-1), Alt+Down down (+1): the move-line keys of code editors.</summary>
     internal static int? MoveRowKey(Key key, Key systemKey, ModifierKeys modifiers) =>

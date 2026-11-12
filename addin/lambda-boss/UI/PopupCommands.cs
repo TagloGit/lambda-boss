@@ -9,6 +9,7 @@ internal static class PopupCommands
     public const string ImportAllBare = "Import All Lambdas (no prefix)";
     public const string State = "State";
     public const string Debug = "Debug";
+    public const string Guard = "Guard";
     public const string EditLambda = "Edit Lambda";
     public const string LetToLambda = "LET to LAMBDA";
     public const string Gather = "Gather";
@@ -23,6 +24,7 @@ internal static class PopupCommands
         ImportAllBare,
         State,
         Debug,
+        Guard,
         EditLambda,
         LetToLambda,
         Gather,

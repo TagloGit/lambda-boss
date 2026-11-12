@@ -157,6 +157,9 @@ public sealed record StateEngine(
     public bool IsDebug =>
         StateDebug.IsScan(Fold) && StateDebug.TryUnwrap(Before, After, out _, out _);
 
+    /// <summary>The body is a guard, <c>IF(cond, a, …)</c>: the walk stops once it fires (spec 0015, "Guard toggle").</summary>
+    public bool IsGuarded => StateGuard.IsGuarded(this);
+
     /// <summary>The answer outputs, in order: the keys of a <c>GetVars</c> round the fold (spec 0018). Empty when none.</summary>
     public IReadOnlyList<string> Answer => StateAnswer.Read(Before, After);
 
@@ -174,16 +177,17 @@ public sealed record StateEngineRead(StateEngine? Engine, bool IsEmpty, string? 
 
 /// <summary>
 ///     What the dialog asks for: the variables, the form (null = LET step), the name (null =
-///     inline), the debug state (null = leave as it is; spec 0015, "Debug toggle") and the
+///     inline), the debug state (null = leave as it is; spec 0015, "Debug toggle"), the
 ///     answer outputs in order (null = leave as they are, empty = none; spec 0018), named as the
-///     rows now name them.
+///     rows now name them, and the guard (null = leave as it is; spec 0015, "Guard toggle").
 /// </summary>
 public sealed record StateEngineChange(
     IReadOnlyList<StateEditRow> Rows,
     StateFoldKind? Fold,
     string? StepName,
     bool? Debug = null,
-    IReadOnlyList<string>? Answer = null);
+    IReadOnlyList<string>? Answer = null,
+    bool? Guard = null);
 
 /// <summary>
 ///     The cell after a change, and the named LAMBDA to store when the step is named. Null
@@ -321,13 +325,52 @@ public static class StateEngines
                     return Failed($"{clash.Key.Trim()} is already a debug output of this step. Pick another name.", notes);
             }
 
-            // 1. Variables.
+            // 0b. Guard on needs st, read on every step: add it, seeded "go", when it isn't a variable.
+            // An st Tim has just typed starts "go" too: "" would stop the walk before step 1.
+            var rows = change.Rows;
+            if (change.Guard == true && !engine.IsGuarded)
+                rows = rows.Select(r => r.OriginalKey == null && r.Value.Trim().Length == 0
+                    && string.Equals(r.Key.Trim(), StateGuard.StatusKey, StringComparison.OrdinalIgnoreCase)
+                        ? r with { Value = StateGuard.GoValue }
+                        : r).ToList();
+            // A new engine gets it once a variable is typed: st alone is no engine.
+            if (change.Guard == true && !engine.IsGuarded
+                && (!engine.IsNew || rows.Any(r => r.Key.Trim().Length > 0))
+                && !rows.Any(r => string.Equals(r.Key.Trim(), StateGuard.StatusKey, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (rows.Any(r => r.OriginalKey != null && string.Equals(r.OriginalKey, StateGuard.StatusKey, StringComparison.OrdinalIgnoreCase)))
+                    return Failed($"The guard reads {StateGuard.StatusKey}: keep it as a state variable.", notes);
+                if (!engine.IsNew && engine.DebugKeys.Contains(StateGuard.StatusKey, StringComparer.OrdinalIgnoreCase))
+                    return Failed($"{StateGuard.StatusKey} is a debug output of this step. Make it a state variable (read it with GetVar) first.", notes);
+
+                // Before the dialog's trailing blank row, so the new variable goes last.
+                var list = rows.ToList();
+                var at = list.FindLastIndex(r => r.OriginalKey != null || r.Key.Trim().Length > 0) + 1;
+                list.Insert(at, new StateEditRow(null, StateGuard.StatusKey, StateGuard.GoValue));
+                rows = list;
+                notes.Add($"Guard on: {StateGuard.StatusKey} is a new state variable, seeded {StateGuard.GoValue}. Set its next line to an ending's label to stop the walk.");
+            }
+
+            // Guard on needs a seed to start st at "go" (a fold that leaves its seed out has none).
+            if (change.Guard == true && !engine.IsGuarded && !engine.IsNew && engine.Seed.Length == 0)
+                return Failed("The guard needs st seeded \"go\", and this fold has no seed. Give it one first.", notes);
+
+            // 1. Variables. Guard off comes first, so st can be removed in the same save.
             string? editError;
             IReadOnlyList<string> blockers = Array.Empty<string>();
+            var source = change.Guard == false && engine.IsGuarded && StateGuard.TryUnwrap(engine.Output, engine.Parameters[0], out var unguarded)
+                ? engine with { Output = unguarded }
+                : engine;
             var edited = engine.IsNew
-                ? Create(engine, change.Rows, out editError)
-                : Edit(engine, change.Rows, out editError, out blockers);
+                ? Create(engine, rows, out editError)
+                : Edit(source, rows, out editError, out blockers);
             if (edited == null) return Failed(editError ?? "Can't apply the variables.", notes, blockers);
+
+            // 1a. Guard on wraps the body in the fixed guard (off took the outer guard off above,
+            // the body exactly as it was). The rules are never touched.
+            var state = edited.Parameters[0];
+            if (change.Guard == true && !StateGuard.TryUnwrap(edited.Output, state, out _))
+                edited = edited with { Output = StateGuard.Wrap(edited.Output, edited.Prefix, state) };
 
             if (change.Answer is { Count: > 0 } answer)
             {
@@ -415,10 +458,11 @@ public static class StateEngines
                 ? LetStep(shaped)
                 : FoldFormula(shaped, change.Fold, engine, callName, notes, debug);
 
-            // A pure debug toggle gives back the cell as Tim wrote it (#447).
-            if (change.Fold != null && change.Debug is { } toggled && toggled != engine.IsDebug
+            // A pure debug or guard toggle gives back the cell as Tim wrote it (#447, #464).
+            var toggled = (change.Debug is { } d && d != engine.IsDebug) || (change.Guard is { } g && g != engine.IsGuarded);
+            if (change.Fold != null && toggled
                 && string.Equals(name, engine.StepName, StringComparison.Ordinal)
-                && NoVariableEdits(engine, change.Rows))
+                && NoVariableEdits(engine, rows))
                 formula = TogglePreservingText(engine, shaped, change.Fold, callName, debug) ?? formula;
 
             if (formula.Length > MaxFormulaLength)
@@ -472,8 +516,24 @@ public static class StateEngines
         // An inline step's rules are in the cell; a named step's are in its definition, written as before.
         if (engine.StepName == null)
         {
-            var changed = engine.Bindings.Select(b => b.Value).Append(engine.Output)
-                .Zip(shaped.Bindings.Select(b => b.Value).Append(shaped.Output), (old, now) => (Old: old, Now: now))
+            // The output is the step LET's last argument: found by position, since a bare `out`
+            // (#438) also names its own binding (#464).
+            if (engine.Output != shaped.Output)
+            {
+                if (OutputSpan(text, engine.Fold) is { } span && text[span.Start..span.End] == engine.Output)
+                {
+                    text = text[..span.Start] + shaped.Output + text[span.End..];
+                }
+                else
+                {
+                    var at = engine.Output.Length == 0 ? -1 : text.IndexOf(engine.Output, StringComparison.Ordinal);
+                    if (at < 0 || text.IndexOf(engine.Output, at + 1, StringComparison.Ordinal) >= 0) return null;
+                    text = text[..at] + shaped.Output + text[(at + engine.Output.Length)..];
+                }
+            }
+
+            var changed = engine.Bindings.Select(b => b.Value)
+                .Zip(shaped.Bindings.Select(b => b.Value), (old, now) => (Old: old, Now: now))
                 .Where(c => c.Old != c.Now);
             foreach (var (old, now) in changed)
             {
@@ -496,6 +556,24 @@ public static class StateEngines
         }
 
         return before + text + after;
+    }
+
+    /// <summary>Where the inline step's output (its LET's last argument) sits in a fold call's text.</summary>
+    private static (int Start, int End)? OutputSpan(string callText, StateFoldKind fold)
+    {
+        try
+        {
+            if (FormulaParser.Parse(callText).Root is not FunctionCallNode call || call.Arguments.Count <= fold.StepIndex
+                || call.Arguments[fold.StepIndex] is not FunctionCallNode lambda || !StateStepParser.IsNamed(lambda.Name, "LAMBDA")
+                || lambda.Arguments.Count == 0 || lambda.Arguments[^1] is not FunctionCallNode let
+                || !StateStepParser.IsNamed(let.Name, "LET") || let.Arguments.Count == 0) return null;
+            var body = let.Arguments[^1];
+            return (body.Start, body.End);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     /// <summary>A formula's tokens without the layout: Excel stores <c>LAMBDA(a, v,</c> as <c>LAMBDA(a,v,</c>.</summary>
@@ -893,14 +971,17 @@ public static class StateEngines
     /// <summary>A new engine's shape from the names typed, every value a placeholder (spec 0015).</summary>
     private static StateEngine? Create(StateEngine engine, IReadOnlyList<StateEditRow> rows, out string? error)
     {
-        var keys = rows.Select(r => r.Key.Trim()).Where(k => k.Length > 0).ToList();
+        // The dialog sends names only; a value given (the guard's st, "go") seeds that variable.
+        var keys = rows.Where(r => r.Key.Trim().Length > 0)
+            .Select(r => (Key: r.Key.Trim(), Value: r.Value.Trim().Length > 0 ? r.Value.Trim() : StateEngine.Placeholder))
+            .ToList();
         if (keys.Count == 0)
         {
             error = "Type a variable name.";
             return null;
         }
 
-        var state = string.Join(", ", keys.Select(k => $"{k} {StateEngine.Placeholder}"));
+        var state = string.Join(", ", keys.Select(k => $"{k.Key} {k.Value}"));
         var parsedState = StateScaffold.ParseState(state);
         if (parsedState.Error != null)
         {
@@ -915,7 +996,7 @@ public static class StateEngines
         error = null;
         return engine with
         {
-            Seed = StateScaffold.StateCall(engine.Prefix, variables.Select(v => (v.Key, StateEngine.Placeholder)).ToList()),
+            Seed = StateScaffold.StateCall(engine.Prefix, variables.Select(v => (v.Key, v.Value)).ToList()),
             Bindings = bindings,
             Output = StateScaffold.StateCall(engine.Prefix, variables.Select(v => (v.Key, v.Next)).ToList())
         };
