@@ -38,6 +38,7 @@ public class CommandsFirstTests : IDisposable
         Cmd("Unnest"),
         Cmd("State"),
         Cmd("Debug"),
+        Cmd("Guard"),
         Cmd("Library"),
         Cmd("Import All Lambdas"),
         Cmd("Import All Lambdas (no prefix)"),
@@ -53,7 +54,7 @@ public class CommandsFirstTests : IDisposable
 
         Assert.Equal(new[]
         {
-            "Import All Lambdas (no prefix)", "State", "Debug", "Edit Lambda", "LET to LAMBDA",
+            "Import All Lambdas (no prefix)", "State", "Debug", "Guard", "Edit Lambda", "LET to LAMBDA",
             "Gather", "Refactor", "Unnest", "Library", "Import All Lambdas", "Settings"
         }, names);
     }
@@ -64,6 +65,7 @@ public class CommandsFirstTests : IDisposable
         var order = PopupCommands.Order.ToList();
 
         Assert.Equal(order.IndexOf(PopupCommands.State) + 1, order.IndexOf(PopupCommands.Debug));
+        Assert.Equal(order.IndexOf(PopupCommands.Debug) + 1, order.IndexOf(PopupCommands.Guard));
         Assert.Equal(order.IndexOf(PopupCommands.Library) + 1, order.IndexOf(PopupCommands.ImportAllPrefixed));
         Assert.Equal(PopupCommands.ImportAllBare, order[0]);
     }
@@ -100,6 +102,8 @@ public class CommandsFirstTests : IDisposable
     [Theory]
     [InlineData("deb", "Debug")]
     [InlineData("/deb", "Debug")]
+    [InlineData("gu", "Guard")]
+    [InlineData("ga", "Gather")]
     [InlineData("lib", "Library")]
     [InlineData("/lib", "Library")]
     [InlineData("edit", "Edit Lambda")]

@@ -21,7 +21,21 @@ internal static class StateStepCommand
     ///     saved, with no dialog. On turns the fold into its SCAN twin inside the debug wrapper; off
     ///     gives back the exact text it had before (#447).
     /// </summary>
-    public static void ToggleDebug()
+    public static void ToggleDebug() =>
+        Toggle("Debug", (engine, folds) => StateDebug.Toggle(engine, !engine.IsDebug, folds),
+            change => change.Debug == true);
+
+    /// <summary>
+    ///     The popup's <c>Guard</c> command (spec 0015, "Guard toggle"): the /State dialog's Guard
+    ///     box toggled and saved, with no dialog. On wraps the step's body in
+    ///     <c>IF(GetVar(a, "st") &lt;&gt; "go", a, …)</c>, adding <c>st</c> seeded "go" if it's missing;
+    ///     off gives back the body exactly.
+    /// </summary>
+    public static void ToggleGuard() =>
+        Toggle("Guard", (engine, _) => StateGuard.Toggle(engine), change => change.Guard == true);
+
+    private static void Toggle(
+        string what, Func<StateEngine, IReadOnlyList<StateFoldKind>, StateEngineChange> toggle, Func<StateEngineChange, bool> isOn)
     {
         try
         {
@@ -34,7 +48,7 @@ internal static class StateStepCommand
             string formula = Convert.ToString(cell.Formula2) ?? "";
             if (formula.Length == 0)
             {
-                ShowError("Debug toggles a state engine: pick the cell that holds one.");
+                ShowError($"{what} toggles a state engine: pick the cell that holds one.");
                 return;
             }
 
@@ -45,7 +59,7 @@ internal static class StateStepCommand
             var read = StateEngines.Read(formula, refersTo, folds);
             if (read.Refusal != null || read.IsEmpty || read.Engine == null)
             {
-                var why = read.Refusal ?? "Debug toggles a state engine: pick the cell that holds one.";
+                var why = read.Refusal ?? $"{what} toggles a state engine: pick the cell that holds one.";
                 if (read.Refusal != null && folds.Count == 0)
                     why += " (Library folds are known once the popup has read the libraries: open it, wait a moment and try again.)";
                 ShowError(why);
@@ -54,13 +68,13 @@ internal static class StateStepCommand
 
             var engine = read.Engine;
 
-            var change = StateDebug.Toggle(engine, !engine.IsDebug, folds);
+            var change = toggle(engine, folds);
             string? prefix = StateScaffold.FindPrefix(names);
             var loadAs = prefix ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
             string address = cell.Address(false, false);
             dynamic sheet = cell.Worksheet;
 
-            Logger.Info($"State: Debug {(change.Debug == true ? "on" : "off")} at {address}");
+            Logger.Info($"State: {what} {(isOn(change) ? "on" : "off")} at {address}");
             var load = LibrariesToLoad(engine, change, prefix, loadAs, names);
             if (load.Count == 0)
                 Save(sheet, address, formula, engine, change, names);
@@ -69,7 +83,7 @@ internal static class StateStepCommand
         }
         catch (Exception ex)
         {
-            Logger.Error("State/Debug", ex);
+            Logger.Error($"State/{what}", ex);
             ShowError($"Unexpected error: {ex.Message}");
         }
     }

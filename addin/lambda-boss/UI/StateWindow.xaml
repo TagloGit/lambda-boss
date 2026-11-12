@@ -71,6 +71,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <TextBlock Grid.Column="0" Text="Form" Style="{StaticResource FieldLabel}" Margin="0,0,8,0" />
             <ComboBox x:Name="FormBox"
@@ -93,6 +94,16 @@
                       ToolTip="Alt+D toggles and saves. On: the fold runs as a SCAN inside SplitState(…, 1), so every step shows. Off: back to the REDUCE, and the debug-only outputs are dropped"
                       Checked="Debug_Changed"
                       Unchecked="Debug_Changed" />
+            <CheckBox x:Name="GuardBox"
+                      Grid.Column="5"
+                      Content="_Guard"
+                      Foreground="#dcdcaa"
+                      FontSize="13"
+                      VerticalAlignment="Center"
+                      Margin="16,0,0,0"
+                      ToolTip="Alt+G toggles and saves. On: the step's body goes inside IF(GetVar(a, &quot;st&quot;) &lt;&gt; &quot;go&quot;, a, …), so any status but &quot;go&quot; ends the walk; st is added, seeded &quot;go&quot;, if it's missing. Off: the guard comes off; st stays"
+                      Checked="Guard_Changed"
+                      Unchecked="Guard_Changed" />
         </Grid>
 
         <TextBlock x:Name="MessageText"
@@ -138,7 +149,7 @@
                        FontSize="11"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"
-                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Tick the answer's variables (Alt+A) and set their order with Alt+Up/Down. Alt+D toggles Debug and saves." />
+                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Tick the answer's variables (Alt+A) and set their order with Alt+Up/Down. Alt+D toggles Debug and saves; Alt+G toggles Guard and saves." />
         </DockPanel>
     </Grid>
 </Window>

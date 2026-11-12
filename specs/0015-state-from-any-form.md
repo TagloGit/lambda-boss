@@ -326,6 +326,50 @@ multiplies, divides or raises that variable's GetVar line, the /State dialog say
 cash start as "" in the seed, and bought, nextCash adds or multiplies with them: "" + a number is
 #VALUE!. Seed a number (0) instead." Read-only. A fresh scaffold (`nextP, p`) never trips it.
 
+## Guard toggle (#464)
+
+Tim, 12 Nov: he builds every walk with an end status `st` and a guarded step (#443; excel-esports
+syllabus, "How EDGE fits the single-cell /State workflow"), and types the guard by hand. "We could
+just call it `guard` and get it to toggle (without affecting the body), a bit like `debug`." Each new
+ending only changes `st` in the rules, which he does himself; the guard line never changes.
+
+```excel
+=REDUCE(SetVars("pos", "BA31", "st", "go"), SEQUENCE(30), LAMBDA(a, v, LET(
+    pos, GetVar(a, "pos"),
+    st, GetVar(a, "st"),
+    nextPos, …,
+    nextSt, IF(…, "DONE", st),
+    IF(GetVar(a, "st") <> "go", a, SetVars("pos", nextPos, "st", nextSt))
+)))
+```
+
+- **One fixed guard:** `IF(GetVar(a, "st") <> "go", a, body)`, with the step's own state name and
+  the Loops prefix (`loops.GetVar` when the step uses `loops.SetVars`). Any status but `"go"` stops
+  the walk, so a new ending's label never needs the guard edited.
+- **On** wraps the step's body (the SetVars call, or the bare `out` of a named output) and nothing
+  else. When `st` isn't a state variable it is added as one, seeded `"go"`: its GetVar line, its
+  next line (`nextSt, st`) and its output pair, as any new variable. *Default taken:* the brief
+  said seed only, but SetVars builds a fresh state each step, so a seed-only `st` is gone by step 2
+  and `GetVar` gives #N/A there. The next line is where Tim writes each ending. A note says so. An
+  `st` typed in the dialog's blank row with the box ticked is seeded `"go"` too, not `""` (which
+  stops the walk before step 1).
+- **Off** takes the outer guard off and gives back the body's text exactly; `st` stays.
+- **Recognised as guarded:** any body `IF(cond, a, X)` or `IF(cond, X, a)` (#443), so Tim's own
+  `IF(OR(GetVar(a,"st")="DONE", LEFT(GetVar(a,"st"),4)="EDGE"), a, …)` ticks the box too. Off takes
+  his guard off as well; on puts back the fixed one, not his. Only the outer guard is touched.
+- **Exact text.** A toggle with no other change works on the cell's own text, as Debug does
+  (#447): on then off, and off then on, give back the cell character for character. It composes with
+  Debug in either order, with an outer LET and with the answer ticks (#462). Adding `st` is a
+  variable edit, so that save lays the cell out afresh, as any variable edit does.
+- A named step gets the guard in its definition; the cell is unchanged.
+- **Entry points**, as for Debug: the popup command `Guard` (right after Debug: `gu`; `g` alone now
+  finds Guard before Gather), and a **Guard** checkbox in the /State dialog. **Alt+G** flips it and
+  saves, as Alt+D does Debug (G is free in the dialog's key map). Ticking it on an empty cell with
+  the variables typed gives a new engine that starts guarded. Under the `state-any-form` switch.
+- Removing `st` while guarded is blocked, as for any key a guard reads.
+- Not built: Debug marking the rows after the guard fires (they repeat the last real step; the
+  lesson already says to read them as copies).
+
 ## Loops loads bare (#456)
 
 /State on a workbook without Loops loads it with no prefix and writes bare calls (`SetVars`,
