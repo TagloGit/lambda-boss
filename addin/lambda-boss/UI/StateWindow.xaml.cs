@@ -22,6 +22,10 @@ public partial class StateWindow
     private readonly List<StateFoldKind> _folds = new();
     private readonly bool _loaded;
 
+    // The ticks as the dialog opened: while they stand, the answer is left as the cell has it
+    // (a key with no row to tick, Tim's own spacing).
+    private readonly List<string> _openedAnswer;
+
     public StateWindow(
         StateEngine engine,
         IReadOnlyList<StateFoldKind> libraryFolds,
@@ -71,6 +75,7 @@ public partial class StateWindow
             : 1 + folds.FindIndex(f => Same(f, engine.Fold));
         NameBox.Text = engine.StepName ?? "";
         DebugBox.IsChecked = engine.IsDebug;
+        _openedAnswer = AnswerKeys();
 
         _loaded = true;
         Refresh();
@@ -94,7 +99,9 @@ public partial class StateWindow
         SelectedFold,
         NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
         DebugBox.IsChecked == true,
-        AnswerKeys());
+        AnswerChanged() ? AnswerKeys() : null);
+
+    private bool AnswerChanged() => !AnswerKeys().SequenceEqual(_openedAnswer, StringComparer.OrdinalIgnoreCase);
 
     private List<string> AnswerKeys() =>
         _rows.Where(r => r.Answer.IsChecked == true && r.Name.Text.Trim().Length > 0)
@@ -172,6 +179,9 @@ public partial class StateWindow
         row.Name.Focus();
         Refresh();
     }
+
+    // Alt+Up/Down and Alt+A act on a variable row only: elsewhere (the Form box) they keep their own meaning.
+    private bool RowHasFocus() => _rows.Any(r => r.Name.IsKeyboardFocusWithin);
 
     private void ToggleFocusedAnswer()
     {
@@ -272,12 +282,12 @@ public partial class StateWindow
                 SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
-        else if (MoveRowKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } by)
+        else if (MoveRowKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } by && RowHasFocus())
         {
             MoveFocusedRow(by);
             e.Handled = true;
         }
-        else if (IsAnswerKey(e.Key, e.SystemKey, Keyboard.Modifiers))
+        else if (IsAnswerKey(e.Key, e.SystemKey, Keyboard.Modifiers) && RowHasFocus())
         {
             ToggleFocusedAnswer();
             e.Handled = true;

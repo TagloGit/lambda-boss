@@ -91,6 +91,13 @@ round trip Tim uses), Debug on a fold bound to a name, and a seed defined outsid
 - A rename follows every `GetVar`/`GetVars` key outside the fold, including one reading a second
   fold's state with the same key. Rare (one engine a cell), and the alternative is following none.
 - `GetVars` pads an array-valued variable with #N/A, as HSTACK does. Answers are scalars.
+- The dialog sends the answer only when the ticks change, so a key with no row to tick (typed by
+  hand) survives a plain save or Debug toggle. Changing the ticks rewrites the array from the
+  ticked rows, and such a key goes.
+- The outer-name check is coarse: a LAMBDA parameter or LET name nested deeper in the step that
+  shadows an outer name still counts, so naming is refused. The safe direction.
+- `GetVars` tells a debug table from states by its first cell: a state always holds `CHAR(30)`. An
+  empty state passes through as `""`.
 
 ## Acceptance
 

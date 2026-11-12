@@ -292,7 +292,8 @@ public static class StateEngines
                 .ToDictionary(g => g.Key, g => g.First().Key.Trim(), StringComparer.OrdinalIgnoreCase);
             engine = StateAnswer.RenameReads(engine, renames);
 
-            if (change.Answer != null && !change.Answer.SequenceEqual(engine.Answer, StringComparer.Ordinal))
+            // Keys match ignoring case, as GetVar reads them: a case-only difference is no change.
+            if (change.Answer != null && !change.Answer.SequenceEqual(engine.Answer, StringComparer.OrdinalIgnoreCase))
             {
                 var (answerBefore, answerAfter) = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, change.Answer);
                 engine = engine with { Before = answerBefore, After = answerAfter };

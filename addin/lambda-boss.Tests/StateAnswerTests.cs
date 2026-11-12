@@ -86,6 +86,19 @@ public class StateAnswerTests
     }
 
     [Fact]
+    public void ACaseOnlyDifference_IsNoChange()
+    {
+        var typed = OuterAnswered.Replace("{\"cash\",\"crates\"}", "{ \"CASH\" ; \"crates\" }");
+        var engine = Read(typed);
+        Assert.Equal(typed, Apply(engine, Same(engine, new[] { "cash", "crates" })).Formula);
+
+        var on = Apply(engine, new StateEngineChange(engine.Rows, StateFoldKind.Scan, null, true, new[] { "cash", "crates" }));
+        var debug = Read(on.Formula!);
+        var off = Apply(debug, new StateEngineChange(debug.Rows, StateFoldKind.Reduce, null, false, new[] { "cash", "crates" }));
+        Assert.Equal(typed, off.Formula);
+    }
+
+    [Fact]
     public void NewEngine_CanStartWithAnAnswer()
     {
         var rows = new[] { new StateEditRow(null, "crates", ""), new StateEditRow(null, "cash", "") };
