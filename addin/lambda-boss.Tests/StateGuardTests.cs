@@ -212,6 +212,31 @@ public class StateGuardTests
     }
 
     [Fact]
+    public void ANamedOutput_RoundTripsExactly()
+    {
+        // `out` also names its own binding: the body is found by position, not by text.
+        var named = Walk("out, " + Output + ",\n    out");
+
+        var on = Guard_(named, true);
+        Assert.Equal(Walk("out, " + Output + ",\n    " + Guard + "out)"), on);
+        Assert.Equal(named, Guard_(on, false));
+    }
+
+    [Fact]
+    public void GuardOff_AndRemovingSt_InOneSave_Works()
+    {
+        // On adds st with a plain next line; untick the box and clear st in the same save.
+        var engine = Read(Guard_(NoStatus, true));
+        var rows = engine.Rows.Select(r => r.Key == "st" ? r with { Key = "" } : r).ToList();
+        var result = Apply(engine, new StateEngineChange(rows, engine.Fold, engine.StepName, Guard: false));
+
+        Assert.Null(result.Error);
+        Assert.False(Read(result.Formula!).IsGuarded);
+        Assert.DoesNotContain("\"st\"", result.Formula);
+        Assert.DoesNotContain("<> \"go\"", result.Formula);
+    }
+
+    [Fact]
     public void RemovingSt_WhileGuarded_IsBlocked()
     {
         var engine = Read(Guarded);

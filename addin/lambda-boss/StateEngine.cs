@@ -351,21 +351,26 @@ public static class StateEngines
                 notes.Add($"Guard on: {StateGuard.StatusKey} is a new state variable, seeded {StateGuard.GoValue}. Set its next line to an ending's label to stop the walk.");
             }
 
-            // 1. Variables.
+            // Guard on needs a seed to start st at "go" (a fold that leaves its seed out has none).
+            if (change.Guard == true && !engine.IsGuarded && !engine.IsNew && engine.Seed.Length == 0)
+                return Failed("The guard needs st seeded \"go\", and this fold has no seed. Give it one first.", notes);
+
+            // 1. Variables. Guard off comes first, so st can be removed in the same save.
             string? editError;
             IReadOnlyList<string> blockers = Array.Empty<string>();
+            var source = change.Guard == false && engine.IsGuarded && StateGuard.TryUnwrap(engine.Output, engine.Parameters[0], out var unguarded)
+                ? engine with { Output = unguarded }
+                : engine;
             var edited = engine.IsNew
                 ? Create(engine, rows, out editError)
-                : Edit(engine, rows, out editError, out blockers);
+                : Edit(source, rows, out editError, out blockers);
             if (edited == null) return Failed(editError ?? "Can't apply the variables.", notes, blockers);
 
-            // 1a. Guard: on wraps the body in the fixed guard; off takes the outer guard off, the
-            // body exactly as it was. The rules are never touched.
+            // 1a. Guard on wraps the body in the fixed guard (off took the outer guard off above,
+            // the body exactly as it was). The rules are never touched.
             var state = edited.Parameters[0];
             if (change.Guard == true && !StateGuard.TryUnwrap(edited.Output, state, out _))
                 edited = edited with { Output = StateGuard.Wrap(edited.Output, edited.Prefix, state) };
-            else if (change.Guard == false && StateGuard.TryUnwrap(edited.Output, state, out var unguarded))
-                edited = edited with { Output = unguarded };
 
             if (change.Answer is { Count: > 0 } answer)
             {
@@ -511,8 +516,24 @@ public static class StateEngines
         // An inline step's rules are in the cell; a named step's are in its definition, written as before.
         if (engine.StepName == null)
         {
-            var changed = engine.Bindings.Select(b => b.Value).Append(engine.Output)
-                .Zip(shaped.Bindings.Select(b => b.Value).Append(shaped.Output), (old, now) => (Old: old, Now: now))
+            // The output is the step LET's last argument: found by position, since a bare `out`
+            // (#438) also names its own binding (#464).
+            if (engine.Output != shaped.Output)
+            {
+                if (OutputSpan(text, fold) is { } span && text[span.Start..span.End] == engine.Output)
+                {
+                    text = text[..span.Start] + shaped.Output + text[span.End..];
+                }
+                else
+                {
+                    var at = engine.Output.Length == 0 ? -1 : text.IndexOf(engine.Output, StringComparison.Ordinal);
+                    if (at < 0 || text.IndexOf(engine.Output, at + 1, StringComparison.Ordinal) >= 0) return null;
+                    text = text[..at] + shaped.Output + text[(at + engine.Output.Length)..];
+                }
+            }
+
+            var changed = engine.Bindings.Select(b => b.Value)
+                .Zip(shaped.Bindings.Select(b => b.Value), (old, now) => (Old: old, Now: now))
                 .Where(c => c.Old != c.Now);
             foreach (var (old, now) in changed)
             {
@@ -535,6 +556,24 @@ public static class StateEngines
         }
 
         return before + text + after;
+    }
+
+    /// <summary>Where the inline step's output (its LET's last argument) sits in a fold call's text.</summary>
+    private static (int Start, int End)? OutputSpan(string callText, StateFoldKind fold)
+    {
+        try
+        {
+            if (FormulaParser.Parse(callText).Root is not FunctionCallNode call || call.Arguments.Count <= fold.StepIndex
+                || call.Arguments[fold.StepIndex] is not FunctionCallNode lambda || !StateStepParser.IsNamed(lambda.Name, "LAMBDA")
+                || lambda.Arguments.Count == 0 || lambda.Arguments[^1] is not FunctionCallNode let
+                || !StateStepParser.IsNamed(let.Name, "LET") || let.Arguments.Count == 0) return null;
+            var body = let.Arguments[^1];
+            return (body.Start, body.End);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
     }
 
     /// <summary>A formula's tokens without the layout: Excel stores <c>LAMBDA(a, v,</c> as <c>LAMBDA(a,v,</c>.</summary>
@@ -957,7 +996,7 @@ public static class StateEngines
         error = null;
         return engine with
         {
-            Seed = StateScaffold.StateCall(engine.Prefix, variables.Select(v => (v.Key, StateEngine.Placeholder)).ToList()),
+            Seed = StateScaffold.StateCall(engine.Prefix, variables.Select(v => (v.Key, v.Value)).ToList()),
             Bindings = bindings,
             Output = StateScaffold.StateCall(engine.Prefix, variables.Select(v => (v.Key, v.Next)).ToList())
         };

@@ -366,7 +366,13 @@ ending only changes `st` in the rules, which he does himself; the guard line nev
   finds Guard before Gather), and a **Guard** checkbox in the /State dialog. **Alt+G** flips it and
   saves, as Alt+D does Debug (G is free in the dialog's key map). Ticking it on an empty cell with
   the variables typed gives a new engine that starts guarded. Under the `state-any-form` switch.
-- Removing `st` while guarded is blocked, as for any key a guard reads.
+- Removing `st` while guarded is blocked, as for any key a guard reads. Unticking Guard and clearing
+  `st` in one save works: the guard comes off first.
+- A fold with no seed (FOLDROWS left without one) can't start `st` at "go": Guard on is refused.
+- **Doubts.** Any `IF(cond, a, X)` body reads as guarded, so a skip rule written that way
+  (`IF(v = "", a, SetVars(…))`) ticks the box, and Guard off would remove it. On the unfolded LET
+  step the toggle lays the cell out afresh rather than keeping Tim's spacing (Debug has no LET
+  form, so nothing regresses).
 - Not built: Debug marking the rows after the guard fires (they repeat the last real step; the
   lesson already says to read them as copies).
 
