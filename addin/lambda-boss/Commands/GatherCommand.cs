@@ -111,9 +111,9 @@ internal static class GatherCommand
                     Func<string, string?>? resolveExisting = null;
                     if (gatherNext)
                     {
-                        var existingNames = ConvertLetToLambdaCommand.GetExistingNames(workbook);
+                        Dictionary<string, string> existingNames = ConvertLetToLambdaCommand.GetExistingNames(workbook);
                         resolveExisting = name =>
-                            existingNames.TryGetValue(name, out var refersTo) ? refersTo : null;
+                            existingNames.TryGetValue(name, out string? refersTo) ? refersTo : null;
                     }
 
                     var window = new GatherWindow(result, Recompute, gatherNext, resolveExisting);
