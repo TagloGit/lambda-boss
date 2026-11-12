@@ -332,7 +332,9 @@ public static class GatherEngine
         var hasExclusion = excludedCells != null && excludedCells.Count > 0;
         var hasDemotion = demotedCells != null && demotedCells.Count > 0;
         var hasPromotion = promotedCells != null && promotedCells.Count > 0;
-        if (hasRestriction || hasExclusion || hasDemotion || hasPromotion)
+        // Spec 0019: an excluded range only matters to a walk that would expand it.
+        var hasRangeExclusion = next && excludedRanges is { Count: > 0 };
+        if (hasRestriction || hasExclusion || hasDemotion || hasPromotion || hasRangeExclusion)
         {
             HashSet<CellRef>? restrictTo = null;
             if (hasRestriction)
