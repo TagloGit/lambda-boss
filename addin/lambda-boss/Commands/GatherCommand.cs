@@ -83,6 +83,11 @@ internal static class GatherCommand
 
             var excelHwnd = new IntPtr(app.Hwnd);
 
+            // Read on Excel's thread, before the dialog's own thread starts.
+            Dictionary<string, string>? existingNames = gatherNext
+                ? ConvertLetToLambdaCommand.GetExistingNames(workbook)
+                : null;
+
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
                 string? saved = null;
@@ -109,9 +114,8 @@ internal static class GatherCommand
                     }
 
                     Func<string, string?>? resolveExisting = null;
-                    if (gatherNext)
+                    if (existingNames != null)
                     {
-                        Dictionary<string, string> existingNames = ConvertLetToLambdaCommand.GetExistingNames(workbook);
                         resolveExisting = name =>
                             existingNames.TryGetValue(name, out string? refersTo) ? refersTo : null;
                     }

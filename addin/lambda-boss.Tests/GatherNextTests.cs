@@ -162,6 +162,8 @@ public class GatherNextTests
             .WithLiteral("B1")
             .WithFormula("A1", "=B1")
             .WithFormula("C1", "=SUM(A1:A64)");
+        for (var row = 2; row <= 64; row++)
+            source.WithLiteral("A" + row);
 
         var result = GatherOn(source, "C1");
 
@@ -495,5 +497,185 @@ public class GatherNextTests
         Assert.Contains("step_1_s, VSTACK(step_1, step_2),", lambda.Formula);
         Assert.Contains("MAX(step_1_s)", lambda.Formula);
         Assert.StartsWith("=LAMBDA(\n    input_1,\n", lambda.Formula);
+    }
+
+    // -- review fixes ---------------------------------------------------------------------
+
+    [Fact]
+    public void Range_InAFunctionThatNeedsAReference_IsPromotedNotStacked()
+    {
+        var source = new StubCellSource()
+            .WithLiteral("B1")
+            .WithFormula("A1", "=B1*2")
+            .WithFormula("A2", "=B1*3")
+            .WithFormula("C1", "=COUNTIF(A1:A2,\">1\")");
+
+        var result = GatherOn(source, "C1");
+
+        Assert.DoesNotContain("STACK", result.SynthesisedLet);
+        var only = Assert.Single(result.Bindings);
+        Assert.Equal("A1:A2", only.Rhs);
+    }
+
+    [Fact]
+    public void Range_ReadByAReferenceFunctionAndAnotherReader_IsPromotedForBoth()
+    {
+        // D1 reads A1:A2 through COUNTIF, so the MAX in C1 must not get a stack either.
+        var source = new StubCellSource()
+            .WithLiteral("B1")
+            .WithFormula("A1", "=B1*2")
+            .WithFormula("A2", "=B1*3")
+            .WithFormula("D1", "=COUNTIF(A1:A2,1)")
+            .WithFormula("C1", "=MAX(A1:A2)+D1");
+
+        var result = GatherOn(source, "C1");
+
+        Assert.DoesNotContain("STACK", result.SynthesisedLet);
+        Assert.Contains(result.Bindings, b => b.Source.IsRange && b.Rhs == "A1:A2");
+        // No orphaned rows for the cells that were walked on the first try.
+        Assert.DoesNotContain(result.Bindings, b => b.Rhs == "input_1*2");
+    }
+
+    [Fact]
+    public void Range_WithABlankCell_IsPromotedAsBefore()
+    {
+        var source = new StubCellSource()
+            .WithLiteral("B1")
+            .WithFormula("A1", "=B1")
+            .WithFormula("C1", "=MIN(A1:A10)");
+
+        var result = GatherOn(source, "C1");
+
+        var only = Assert.Single(result.Bindings);
+        Assert.Equal("A1:A10", only.Rhs);
+        Assert.DoesNotContain("STACK", result.SynthesisedLet);
+    }
+
+    [Fact]
+    public void Range_OutsideASelectionRestrictedWalk_StaysOpaque()
+    {
+        var source = new StubCellSource()
+            .WithLiteral("B1")
+            .WithFormula("A1", "=B1*2")
+            .WithFormula("A2", "=B1*3")
+            .WithFormula("C1", "=MAX(A1:A2)");
+
+        var result = GatherEngine.Recompute(
+            source.Ref("C1"),
+            new[] { source.Ref("C1"), source.Ref("B1") },
+            source,
+            new List<RowState>(),
+            On)!;
+
+        Assert.DoesNotContain("STACK", result.SynthesisedLet);
+        Assert.Contains(result.Bindings, b => b.Source.IsRange && b.Rhs == "A1:A2");
+    }
+
+    [Fact]
+    public void Range_OverlappingAPromotedRange_IsNotStacked()
+    {
+        // A1:A5 are all formulas, but A5:B5 (B5 blank) stays a promoted input that covers A5.
+        var source = new StubCellSource()
+            .WithLiteral("D1")
+            .WithFormula("A1", "=D1")
+            .WithFormula("A2", "=D1")
+            .WithFormula("A3", "=D1")
+            .WithFormula("A4", "=D1")
+            .WithFormula("A5", "=D1")
+            .WithFormula("C1", "=SUM(A1:A5)+SUM(A5:B5)");
+
+        var result = GatherOn(source, "C1");
+
+        Assert.DoesNotContain("STACK", result.SynthesisedLet);
+        Assert.Contains(result.Bindings, b => b.Source.IsRange && b.Rhs == "A1:A5");
+        Assert.Contains(result.Bindings, b => b.Source.IsRange && b.Rhs == "A5:B5");
+    }
+
+    [Fact]
+    public void Label_OnAnExcludedCell_IsStillPartOfTheCalculation()
+    {
+        var source = new StubCellSource()
+            .WithFormula("A1", "=\"x\"")
+            .WithLabel("A1", "x")
+            .WithFormula("A2", "=A1&\"!\"")
+            .WithFormula("A3", "=A2&\"?\"");
+
+        var result = GatherEngine.Recompute(
+            source.Ref("A3"),
+            new[] { source.Ref("A3") },
+            source,
+            new[] { new RowState(new FormulaRef(source.Ref("A1")), Include: false) },
+            On)!;
+
+        Assert.Equal("step_1", Assert.Single(result.Bindings).Name);
+    }
+
+    [Fact]
+    public void ReadCell_IsAskedOncePerCellInAGather()
+    {
+        var counting = new CountingSource()
+            .WithLiteral("B1")
+            .WithFormula("A1", "=B1*2")
+            .WithFormula("A2", "=B1*3")
+            .WithFormula("C1", "=MAX(A1:A2)+MIN(A1:A2)");
+
+        GatherEngine.Gather(counting.Ref("C1"), new[] { counting.Ref("C1") }, counting, On);
+
+        Assert.NotEmpty(counting.Reads);
+        Assert.All(counting.Reads.Values, n => Assert.Equal(1, n));
+    }
+
+    private sealed class CountingSource : ICellSource
+    {
+        private readonly StubCellSource _inner = new();
+        public Dictionary<CellRef, int> Reads { get; } = new();
+        public CountingSource WithLiteral(string a1) { _inner.WithLiteral(a1); return this; }
+        public CountingSource WithFormula(string a1, string f) { _inner.WithFormula(a1, f); return this; }
+        public CellRef Ref(string a1) => _inner.Ref(a1);
+        public string SinkSheet => _inner.SinkSheet;
+        public string? GetFormula(CellRef cell) => _inner.GetFormula(cell);
+        public string? GetCellAboveText(CellRef cell) => _inner.GetCellAboveText(cell);
+        public string? GetCellLeftText(CellRef cell) => _inner.GetCellLeftText(cell);
+        public SpillInfo? GetSpill(CellRef cell) => _inner.GetSpill(cell);
+        public bool IsLambdaName(string name) => _inner.IsLambdaName(name);
+
+        public CellContent ReadCell(CellRef cell)
+        {
+            Reads[cell] = Reads.TryGetValue(cell, out var n) ? n + 1 : 1;
+            return _inner.ReadCell(cell);
+        }
+    }
+
+    [Fact]
+    public void ValidateName_NoInputRow_BlocksEvenWhenTheNameIsAnExistingLambda()
+    {
+        var steps = new[] { Step("step_1", "1+1") };
+
+        var (ok, message, _) = GatherLambdaBuilder.ValidateName(
+            "calc", steps, _ => "=LAMBDA(x, x)");
+
+        Assert.False(ok);
+        Assert.Contains("at least one input", message);
+    }
+
+    [Fact]
+    public void ValidateName_ExistingLambdaWarns_ExistingNonLambdaBlocks_BadNameBlocks()
+    {
+        var bindings = new[] { Input("input_1", "B1") };
+
+        var overwrite = GatherLambdaBuilder.ValidateName("calc", bindings, _ => "=LAMBDA(x, x)");
+        var clash = GatherLambdaBuilder.ValidateName("calc", bindings, _ => "=Sheet1!$A$1");
+        var bad = GatherLambdaBuilder.ValidateName("a1", bindings, _ => null);
+        var empty = GatherLambdaBuilder.ValidateName("", bindings, _ => null);
+        var fresh = GatherLambdaBuilder.ValidateName("calc", bindings, _ => null);
+
+        Assert.True(overwrite.Ok);
+        Assert.True(overwrite.IsWarning);
+        Assert.False(clash.Ok);
+        Assert.False(bad.Ok);
+        Assert.True(empty.Ok);
+        Assert.Null(empty.Message);
+        Assert.True(fresh.Ok);
+        Assert.Null(fresh.Message);
     }
 }

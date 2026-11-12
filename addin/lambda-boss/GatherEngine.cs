@@ -150,6 +150,8 @@ public static class GatherEngine
         if (sink is null) throw new ArgumentNullException(nameof(sink));
         if (selection is null) throw new ArgumentNullException(nameof(selection));
         if (source is null) throw new ArgumentNullException(nameof(source));
+        if (next)
+            source = new ReadCellMemoSource(source);
 
         // Spill-child sink (spec 0010). A child has no formula of its own,
         // so without this check it would fall straight through the
@@ -569,7 +571,9 @@ public static class GatherEngine
             bool InCalc(CellRef c) =>
                 calcCells.Contains(c)
                 || spillRects.Any(r => r.Contains(c))
-                || ranges.Any(r => r.Covers(c));
+                || ranges.Any(r => r.Covers(c))
+                // A cell the user unticked is still part of what is being gathered.
+                || (excludedCells != null && excludedCells.Contains(c));
 
             nameByRef = AssignNamesNext(
                 ranges, nonSink, slices, expandedRanges.Keys.ToList(), source, nameOverrides,
@@ -1220,6 +1224,7 @@ public static class GatherEngine
             }
         }
 
+        var anchorLabels = new Dictionary<CellRef, (string Name, CellRef At)?>();
         foreach (var slice in slices)
         {
             if (nameByRef.ContainsKey(slice.Ref)) continue;
@@ -1228,7 +1233,8 @@ public static class GatherEngine
             // anchor; it takes the anchor-derived name instead.
             if (label != null)
             {
-                var anchorLabel = FindLabel(slice.Anchor, source, inCalc);
+                if (!anchorLabels.TryGetValue(slice.Anchor, out var anchorLabel))
+                    anchorLabels[slice.Anchor] = anchorLabel = FindLabel(slice.Anchor, source, inCalc);
                 if (anchorLabel != null && anchorLabel.Value.At.Equals(label.Value.At))
                     label = null;
             }

@@ -50,7 +50,7 @@ and the reference is rewritten to a stack of the cells' bindings:
 - one row → `HSTACK(a, b, c)`; one column → `VSTACK(a, b, c)`;
 - a block → `VSTACK(HSTACK(r1c1, r1c2), HSTACK(r2c1, r2c2))`.
 
-The stack is its own binding row (named like a slice: label, else `<first cell's name>_s`), so
+The stack is its own binding row, always named `<first cell's name>_s` (its label would be its first cell's own label, which only collides), so
 step formulas still receive bare names. Limit: 64 cells; beyond that the range promotes as today.
 A range whose cells are all literals promotes exactly as today (data stays a range input).
 

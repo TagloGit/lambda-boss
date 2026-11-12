@@ -24,6 +24,37 @@ public static class GatherLambdaBuilder
         row.Role == BindingRole.Input && !row.IsExpansion && row.SliceOf == null;
 
     /// <summary>
+    ///     The Lambda name's state for the dialog: null message when it is empty or fine, else
+    ///     the text to show. <c>Ok</c> false blocks Save. The checks run in order: Excel name rules,
+    ///     at least one input row (a LAMBDA without one can't be built, so Save would silently do
+    ///     nothing), then the workbook: an existing LAMBDA of that name is overwritten with a
+    ///     warning, any other existing name is refused, as in /LET to LAMBDA.
+    /// </summary>
+    public static (bool Ok, string? Message, bool IsWarning) ValidateName(
+        string name, IReadOnlyList<BindingRow> bindings, Func<string, string?> resolveExistingRefersTo)
+    {
+        if (name.Length == 0)
+            return (true, null, false);
+
+        var validation = ExcelNameValidator.Validate(name);
+        if (!validation.IsValid)
+            return (false, validation.Error, false);
+
+        if (!bindings.Any(IsParameter))
+            return (false, "A LAMBDA needs at least one input row.", false);
+
+        var existing = resolveExistingRefersTo(name);
+        if (existing != null)
+        {
+            if (!LambdaSignatureParser.IsLambdaFormula(existing))
+                return (false, $"'{name}' already exists in this workbook and is not a LAMBDA. Choose another name.", false);
+            return (true, $"'{name}' already exists — Save will overwrite the existing LAMBDA.", true);
+        }
+
+        return (true, null, false);
+    }
+
+    /// <summary>
     ///     Returns null when there is no input to make a parameter (a LAMBDA with no
     ///     parameters would just be the formula).
     /// </summary>

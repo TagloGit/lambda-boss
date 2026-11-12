@@ -234,29 +234,9 @@ public partial class GatherWindow
     ///     blocks Save. An existing LAMBDA of that name is overwritten, with a warning;
     ///     any other existing name is refused, as in /LET to LAMBDA.
     /// </summary>
-    private (bool Ok, string? Message, bool IsWarning) EvaluateLambdaName()
-    {
-        var name = CurrentLambdaName();
-        if (name.Length == 0)
-            return (true, null, false);
-
-        var validation = ExcelNameValidator.Validate(name);
-        if (!validation.IsValid)
-            return (false, validation.Error, false);
-
-        var existing = _resolveExistingRefersTo(name);
-        if (existing != null)
-        {
-            if (!LambdaSignatureParser.IsLambdaFormula(existing))
-                return (false, $"'{name}' already exists in this workbook and is not a LAMBDA. Choose another name.", false);
-            return (true, $"'{name}' already exists — Save will overwrite the existing LAMBDA.", true);
-        }
-
-        if (!_result.Bindings.Any(GatherLambdaBuilder.IsParameter))
-            return (false, "A LAMBDA needs at least one input row.", false);
-
-        return (true, null, false);
-    }
+    private (bool Ok, string? Message, bool IsWarning) EvaluateLambdaName() =>
+        GatherLambdaBuilder.ValidateName(
+            CurrentLambdaName(), _result.Bindings, _resolveExistingRefersTo);
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
@@ -399,8 +379,14 @@ public partial class GatherWindow
                 {
                     if (row.IsExpansion || !Equals(row.Source, source))
                         continue;
-                    if (BindingsList.ItemContainerGenerator.ContainerFromItem(row) is DependencyObject container)
-                        FindFirstTextBox(container)?.Focus();
+                    if (BindingsList.ItemContainerGenerator.ContainerFromItem(row) is DependencyObject container
+                        && FindFirstTextBox(container) is { } box)
+                    {
+                        box.Focus();
+                        // Focusing selects the whole name; a keyboard flip or move should
+                        // leave the caret where typing continues.
+                        box.Select(box.Text.Length, 0);
+                    }
                     return;
                 }
             }),
