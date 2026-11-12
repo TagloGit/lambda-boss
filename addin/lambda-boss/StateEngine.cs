@@ -520,7 +520,7 @@ public static class StateEngines
             // (#438) also names its own binding (#464).
             if (engine.Output != shaped.Output)
             {
-                if (OutputSpan(text, fold) is { } span && text[span.Start..span.End] == engine.Output)
+                if (OutputSpan(text, engine.Fold) is { } span && text[span.Start..span.End] == engine.Output)
                 {
                     text = text[..span.Start] + shaped.Output + text[span.End..];
                 }
