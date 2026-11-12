@@ -114,3 +114,26 @@ On a focused row, **Alt+I** toggles input/step (the existing toggle, where the r
 - **Regenerate after a fix.** Dim regenerates the LET three times while debugging (helpers stay
   live). Gather overwrites its sink. Options: (a) as today, Ctrl+Z then re-gather; (b) a
   "Write to" box defaulting to the sink. Default (a) unless the trials show (b) saves real time.
+
+  **Trial result (13 Nov, VM, PR #467 at 7d527c1):** Ctrl+Z does **not** undo Gather's write
+  (with or without the switch; the COM write leaves nothing on Excel's undo stack), so (a) does not
+  exist. Not built: the habit covers it at no cost. Keep the last helper step in its own cell
+  and put `=<that cell>` in the answer cell; Gather the answer cell. The helpers stay live, and
+  regenerating after a fix is retyping `=aq83` and re-gathering (about 10 keys, against Dim's
+  re-run, copy, Esc, paste). Build (b) only if Tim finds the habit awkward.
+
+## Trials with the switch on (13 Nov, VM `taglo-win`, Excel 365, PR #467 at 7d527c1)
+
+Five of Dim's uses, rebuilt with synthetic data (excel-esports
+`analysis/2026-11-13-oa-robot-generate-let.md`), all correct:
+
+| Use | Keys after the sink is selected | Result |
+|---|---|---|
+| Fan S1 LET, Dim's own `=MAX(AO83:AP83)` | `Ctrl+Shift+J g a Enter Ctrl+Enter` | full 16-binding LET (`cards`, `trumpSuit`, stack `HSTACK(step_5, step_8)`); filled down 20 rows, 20/20 match |
+| Origami `refFromGrid` | same + `refFromGrid` before `Ctrl+Enter` | `=refFromGrid(Q57:T60, V57)` → 7; slices `coords_1`, `coords_2` |
+| Origami `flipRight`, formula-cell input | + Tab to the `X119#` row, `Alt+I`, name | `=flipRight(X119#)`, same values |
+| Vending `vend` | + name | `=vend(K287#, L287)`; REDUCE over it correct |
+| Shuffling `shCut` | + name (`Alt+Down`/`Alt+Up` reorder checked) | `=shCut(AB111#, H111)`; REDUCE correct |
+
+Switch off: the Fan LET is character-for-character today's (`step_N`, `kH`), and the dialog looks
+the same.
