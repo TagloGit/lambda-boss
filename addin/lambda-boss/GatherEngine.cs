@@ -57,9 +57,13 @@ public static class GatherEngine
     ///     render the header hint (free: <c>Walking N cells from &lt;addr&gt;</c>;
     ///     restricted: <c>Walking M of N cells from &lt;addr&gt; — restricted by selection</c>).
     /// </summary>
-    public static GatherResult? Gather(CellRef sink, IReadOnlyList<CellRef> selection, ICellSource source)
+    public static GatherResult? Gather(
+        CellRef sink,
+        IReadOnlyList<CellRef> selection,
+        ICellSource source,
+        GatherOptions? options = null)
     {
-        return GatherInternal(sink, selection, source, excluded: null);
+        return GatherInternal(sink, selection, source, excluded: null, options: options);
     }
 
     /// <summary>
@@ -97,7 +101,8 @@ public static class GatherEngine
         CellRef sink,
         IReadOnlyList<CellRef> selection,
         ICellSource source,
-        IReadOnlyList<RowState> rows)
+        IReadOnlyList<RowState> rows,
+        GatherOptions? options = null)
     {
         if (rows is null) throw new ArgumentNullException(nameof(rows));
         var excluded = new HashSet<FormulaRef>();
@@ -118,7 +123,17 @@ public static class GatherEngine
                 nameOverrides[r.Source] = nameOverride;
             }
         }
-        return GatherInternal(sink, selection, source, excluded, roleOverrides, nameOverrides);
+        // Spec 0019: the dialog's row order is the input (= parameter) order.
+        List<FormulaRef>? inputOrder = null;
+        if (options is { Next: true })
+        {
+            inputOrder = new List<FormulaRef>(rows.Count);
+            foreach (var r in rows)
+                inputOrder.Add(r.Source);
+        }
+
+        return GatherInternal(
+            sink, selection, source, excluded, roleOverrides, nameOverrides, options, inputOrder);
     }
 
     private static GatherResult? GatherInternal(
@@ -127,8 +142,11 @@ public static class GatherEngine
         ICellSource source,
         ISet<FormulaRef>? excluded,
         IReadOnlyDictionary<FormulaRef, BindingRole>? roleOverrides = null,
-        IReadOnlyDictionary<FormulaRef, string>? nameOverrides = null)
+        IReadOnlyDictionary<FormulaRef, string>? nameOverrides = null,
+        GatherOptions? options = null,
+        IReadOnlyList<FormulaRef>? inputOrder = null)
     {
+        var next = options is { Next: true };
         if (sink is null) throw new ArgumentNullException(nameof(sink));
         if (selection is null) throw new ArgumentNullException(nameof(selection));
         if (source is null) throw new ArgumentNullException(nameof(source));
@@ -276,7 +294,7 @@ public static class GatherEngine
             // first — cycles are an unconditional refusal, while multi-sink
             // is selection-shape dependent.
             var multiSinkDiagnostic = CheckMultipleSinks(
-                sink, effectiveSelection, sinkFormula, source);
+                sink, effectiveSelection, sinkFormula, source, next);
             if (multiSinkDiagnostic != null)
                 return multiSinkDiagnostic;
         }
@@ -290,7 +308,9 @@ public static class GatherEngine
         // a count of "what the walker would visit on a fresh open", which
         // stays stable across Include toggles so the user sees one
         // anchor count rather than a number that drifts on every click.
-        var freeOutcome = CellGraphWalker.Walk(sink, source);
+        var freeOutcome = next
+            ? CellGraphWalker.Walk(sink, source, null, null, null, true, null)
+            : CellGraphWalker.Walk(sink, source);
         if (freeOutcome.IsCycle)
             return RefusedWithCycle(sink, sinkFormula, freeOutcome.Cycle!);
 
@@ -325,8 +345,11 @@ public static class GatherEngine
                 if (hasPromotion)
                     restrictTo.UnionWith(promotedCells!);
             }
-            outcome = CellGraphWalker.Walk(
-                sink, source, restrictTo, excludedCells, demotedCells);
+            outcome = next
+                ? CellGraphWalker.Walk(
+                    sink, source, restrictTo, excludedCells, demotedCells, true, excludedRanges)
+                : CellGraphWalker.Walk(
+                    sink, source, restrictTo, excludedCells, demotedCells);
         }
         else
         {
@@ -335,6 +358,9 @@ public static class GatherEngine
 
         var walked = outcome.Cells!;
         var walkedCount = walked.Count - outcome.LeafRestrictedCount;
+        // Spec 0019 §1: ranges the walk expanded into their cells. Never promoted,
+        // never sliced; each is stacked into one binding row. Empty with the switch off.
+        var expandedRanges = outcome.ExpandedRanges;
 
         // Collect unique range refs encountered anywhere in the walk. Order
         // is by first-encountered; that becomes the binding order for
@@ -356,6 +382,7 @@ public static class GatherEngine
             {
                 if (!p.IsRange) continue;
                 if (excludedRanges != null && excludedRanges.Contains(p)) continue;
+                if (expandedRanges.ContainsKey(p)) continue;
                 // Spec 0010, range-promotion precedence: a range lying wholly
                 // inside a spill takes the slice path below and never promotes
                 // to a range input — whether it is a degenerate single cell
@@ -438,6 +465,7 @@ public static class GatherEngine
             foreach (var p in cell.Precedents)
             {
                 if (p.IsSpilled) continue;
+                if (p.IsRange && expandedRanges.ContainsKey(p)) continue;
                 if (p.Start.Equals(sink)) continue;
                 if (coveredByRange.Contains(p.Start)) continue;
                 var spill = WhollyInsideSpill(p, source);
@@ -518,14 +546,59 @@ public static class GatherEngine
         // PR 12: user name overrides are claimed first so auto-derived
         // names suffix around them (<c>x_2</c>) rather than the other way
         // around — an override is the user's authoritative choice.
-        var nameByRef = AssignNames(ranges, nonSink, slices, source, nameOverrides);
+        // Spec 0019: with the switch on, an unlabelled row's `input_N` / `step_N`
+        // name needs its final role, which only the emission loop below knows (an
+        // aliased step is dropped and must not burn a number). Those rows hold
+        // PendingName until the loop reaches them.
+        var pending = new HashSet<FormulaRef>();
+        var counters = new FallbackCounters();
+        Dictionary<FormulaRef, string> nameByRef;
+        if (next)
+        {
+            var calcCells = new HashSet<CellRef>(walked.Select(w => w.Ref));
+            var spillRects = new List<SpillInfo>();
+            foreach (var w in walked)
+            {
+                if (!w.HasSpill) continue;
+                var rect = source.GetSpill(w.Ref);
+                if (rect != null) spillRects.Add(rect);
+            }
+
+            bool InCalc(CellRef c) =>
+                calcCells.Contains(c)
+                || spillRects.Any(r => r.Contains(c))
+                || ranges.Any(r => r.Covers(c));
+
+            nameByRef = AssignNamesNext(
+                ranges, nonSink, slices, expandedRanges.Keys.ToList(), source, nameOverrides,
+                InCalc, pending, counters);
+        }
+        else
+        {
+            nameByRef = AssignNames(ranges, nonSink, slices, source, nameOverrides);
+        }
 
         // A range spanning the whole spill has no row; it simply resolves to
         // the anchor's binding name, so the rewriter collapses the `A2:B4`
         // token to `extracted` the same way it collapses `A2#`.
         foreach (var (wholeRef, anchorRowRef) in wholeArrayRefs)
             if (nameByRef.TryGetValue(anchorRowRef, out var anchorName))
+            {
                 nameByRef[wholeRef] = anchorName;
+                if (pending.Contains(anchorRowRef))
+                    pending.Add(wholeRef);
+            }
+
+        // Resolves the names that were copied from a still-pending anchor.
+        void ResolveAnchorDependents(FormulaRef anchorRowRef)
+        {
+            foreach (var (wholeRef, whole) in wholeArrayRefs)
+                if (whole.Equals(anchorRowRef))
+                {
+                    nameByRef[wholeRef] = nameByRef[anchorRowRef];
+                    pending.Remove(wholeRef);
+                }
+        }
 
         // Build the in-scope set used to classify each cell as input vs
         // step. A cell is a step iff at least one of its precedents has a
@@ -548,9 +621,67 @@ public static class GatherEngine
         // — used as the collision baseline when splicing inner-LET binding
         // names. Inner expansions add to this set as they go so a second
         // nested LET sees the first's names.
-        var used = new HashSet<string>(nameByRef.Values, StringComparer.OrdinalIgnoreCase);
+        var used = new HashSet<string>(
+            nameByRef.Values.Where(v => v != PendingName), StringComparer.OrdinalIgnoreCase);
+
+        string ResolvePending(FormulaRef key, string kind)
+        {
+            var resolved = NextFallbackName(kind, used, counters);
+            nameByRef[key] = resolved;
+            used.Add(resolved);
+            pending.Remove(key);
+            ResolveAnchorDependents(key);
+            return resolved;
+        }
 
         var stepRows = new List<BindingRow>();
+
+        // Spec 0019 §1: the stack row for an expanded range lands just before the
+        // first step that reads it (its cells all precede that step in topo order).
+        var emittedStacks = new HashSet<FormulaRef>();
+        void EmitStacksFor(IReadOnlyList<FormulaRef> precedents)
+        {
+            foreach (var p in precedents)
+            {
+                if (!p.IsRange || !expandedRanges.TryGetValue(p, out var rangeCells)) continue;
+                if (!emittedStacks.Add(p)) continue;
+
+                string CellName(CellRef c) =>
+                    nameByRef.TryGetValue(new FormulaRef(c), out var n) && n != PendingName
+                        ? n
+                        : c.DisplayAddress(source.SinkSheet);
+
+                var rows = p.End!.Row - p.Start.Row + 1;
+                var cols = p.End.Column - p.Start.Column + 1;
+                var rhs = BuildStackRhs(rows, cols, (r, c) => CellName(rangeCells[r * cols + c]));
+
+                string stackName;
+                if (pending.Contains(p))
+                {
+                    var firstName = nameByRef.TryGetValue(new FormulaRef(rangeCells[0]), out var fn)
+                                    && fn != PendingName
+                        ? fn
+                        : null;
+                    if (firstName == null)
+                    {
+                        stackName = ResolvePending(p, "step");
+                    }
+                    else
+                    {
+                        stackName = ResolveCollision($"{firstName}_s", used);
+                        nameByRef[p] = stackName;
+                        used.Add(stackName);
+                        pending.Remove(p);
+                    }
+                }
+                else
+                {
+                    stackName = nameByRef[p];
+                }
+
+                stepRows.Add(new BindingRow(p, BindingRole.Step, stackName, rhs));
+            }
+        }
 
         // Slice rows are emitted immediately after their anchor's own row,
         // into whichever list that row landed in — so the concatenation of
@@ -561,6 +692,16 @@ public static class GatherEngine
             if (!slicesByAnchor.TryGetValue(anchorCell.Ref, out var forAnchor)) return;
             var anchorName = nameByRef[anchorRowRef];
             foreach (var slice in forAnchor)
+            {
+                // Spec 0019: a slice with no label of its own takes `<anchor>_<n>`.
+                if (pending.Contains(slice.Ref))
+                {
+                    var sliceName = ResolveCollision($"{anchorName}_{slice.RowMajorIndex}", used);
+                    nameByRef[slice.Ref] = sliceName;
+                    used.Add(sliceName);
+                    pending.Remove(slice.Ref);
+                }
+
                 target.Add(new BindingRow(
                     slice.Ref,
                     BindingRole.Input,
@@ -572,15 +713,21 @@ public static class GatherEngine
                     // role toggle is meaningless on a slice row.
                     CanToggleRole: false,
                     SliceOf: anchorRowRef));
+            }
         }
 
         foreach (var cell in nonSink)
         {
+            if (next)
+                EmitStacksFor(cell.Precedents);
             var cellFormulaRef = RowRef(cell);
             var name = nameByRef[cellFormulaRef];
+            var isPending = pending.Contains(cellFormulaRef);
             var role = ClassifyRole(cell, nameByRef, excluded, revertedSliceRefs, roleOverrides);
             if (role == BindingRole.Input)
             {
+                if (isPending)
+                    name = ResolvePending(cellFormulaRef, "input");
                 // Bare A1 for in-sheet refs, sheet-qualified otherwise,
                 // workbook-qualified for externals — DisplayAddress handles
                 // the quoting rules so the RHS round-trips cleanly. A
@@ -631,7 +778,7 @@ public static class GatherEngine
                 // that are calculations (`y+1`, `f(y)`) take the
                 // original PR 6 path: outer name stays reserved, inner
                 // collisions suffix.
-                if (TryGetBareIdentifier(LetParser.Parse(formulaText).Body) != null)
+                if (!isPending && TryGetBareIdentifier(LetParser.Parse(formulaText).Body) != null)
                 {
                     used.Remove(name);
                     freedOuterName = true;
@@ -658,6 +805,12 @@ public static class GatherEngine
             if (stepAlias != null && used.Contains(stepAlias))
             {
                 nameByRef[cellFormulaRef] = stepAlias;
+                if (isPending)
+                {
+                    pending.Remove(cellFormulaRef);
+                    ResolveAnchorDependents(cellFormulaRef);
+                }
+
                 // The row is gone but its slices aren't — they index into
                 // the alias target, which is an existing binding declared
                 // earlier in the LET.
@@ -668,7 +821,11 @@ public static class GatherEngine
             // Not aliased after all — re-reserve the cell's name we
             // tentatively freed. If an inner binding has since claimed
             // it, suffix.
-            if (freedOuterName)
+            if (isPending)
+            {
+                name = ResolvePending(cellFormulaRef, "step");
+            }
+            else if (freedOuterName)
             {
                 if (used.Contains(name))
                 {
@@ -687,6 +844,20 @@ public static class GatherEngine
                 cellFormulaRef, BindingRole.Step, name, stepRhs,
                 CanToggleRole: true));
             AppendSlices(cell, cellFormulaRef, stepRows);
+        }
+
+        // Spec 0019: stacks only the sink reads, and the input (= parameter) order
+        // the dialog asked for. Slices travel with the anchor they slice.
+        if (next)
+        {
+            var sinkCell = walked.First(w => w.Ref.Equals(sink));
+            EmitStacksFor(sinkCell.Precedents);
+            if (inputOrder != null)
+            {
+                var reordered = ReorderInputs(bindings, inputOrder);
+                bindings.Clear();
+                bindings.AddRange(reordered);
+            }
         }
 
         // Range and cell inputs first, then steps in topo order — matches
@@ -737,7 +908,7 @@ public static class GatherEngine
 
         return new GatherResult(
             sink, sinkFormula, bindings, sb.ToString(),
-            WalkedCount: walkedCount, FreeWalkCount: freeWalkCount);
+            WalkedCount: walkedCount, FreeWalkCount: freeWalkCount, Body: bodyText);
     }
 
     /// <summary>
@@ -854,7 +1025,8 @@ public static class GatherEngine
     ///     author always sees the more fundamental error first.
     /// </summary>
     private static GatherResult? CheckMultipleSinks(
-        CellRef sink, IReadOnlyList<CellRef> selection, string sinkFormula, ICellSource source)
+        CellRef sink, IReadOnlyList<CellRef> selection, string sinkFormula, ICellSource source,
+        bool walkFormulaRanges = false)
     {
         if (selection.Count <= 1)
             return null;
@@ -863,7 +1035,9 @@ public static class GatherEngine
         var covered = new HashSet<CellRef>();
         foreach (var cell in selection)
         {
-            var outcome = CellGraphWalker.Walk(cell, source);
+            var outcome = walkFormulaRanges
+                ? CellGraphWalker.Walk(cell, source, null, null, null, true, null)
+                : CellGraphWalker.Walk(cell, source);
             if (outcome.IsCycle)
                 return RefusedWithCycle(sink, sinkFormula, outcome.Cycle!);
 
@@ -913,6 +1087,219 @@ public static class GatherEngine
     }
 
     private static string FormatCell(CellRef cell) => $"{cell.Sheet}!{cell.A1Address}";
+
+    /// <summary>Stands in nameByRef for a row whose `input_N` / `step_N` name is settled at emission.</summary>
+    private const string PendingName = "\u0001pending";
+
+    private sealed class FallbackCounters
+    {
+        public int Input;
+        public int Step;
+    }
+
+    private static string NextFallbackName(string kind, HashSet<string> used, FallbackCounters counters)
+    {
+        string candidate;
+        do
+        {
+            var n = kind == "input" ? ++counters.Input : ++counters.Step;
+            candidate = $"{kind}_{n}";
+        } while (used.Contains(candidate));
+
+        return candidate;
+    }
+
+    /// <summary>
+    ///     Spec 0019 §2. The label for a cell: the nearest non-empty cell above, up to
+    ///     three rows up (so two blank rows may sit between), when it is text and not
+    ///     part of the calculation; else the cell to the left under the same rule.
+    ///     Returns the sanitised name and the cell it came from, or null. A non-text
+    ///     cell above (a number) ends the search upward rather than being read past.
+    /// </summary>
+    internal static (string Name, CellRef At)? FindLabel(
+        CellRef cell, ICellSource source, Func<CellRef, bool> inCalc)
+    {
+        if (cell.IsExternal)
+            return null;
+
+        for (var k = 1; k <= 3; k++)
+        {
+            var row = cell.Row - k;
+            if (row < 1) break;
+            var above = new CellRef(cell.Sheet, cell.Column, row);
+            var content = source.ReadCell(above);
+            if (content.IsEmpty) continue;
+            if (content.Text != null && !inCalc(above))
+            {
+                var name = LetNameSanitizer.Sanitize(content.Text);
+                if (name != null) return (name, above);
+            }
+
+            break;
+        }
+
+        if (cell.Column > 1)
+        {
+            var left = new CellRef(cell.Sheet, cell.Column - 1, cell.Row);
+            var content = source.ReadCell(left);
+            if (content.Text != null && !inCalc(left))
+            {
+                var name = LetNameSanitizer.Sanitize(content.Text);
+                if (name != null) return (name, left);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     Spec 0019 naming. Same claim order as <see cref="AssignNames" /> (overrides,
+    ///     ranges, cells, slices, then stacks), but the label is found by
+    ///     <see cref="FindLabel" />, and a row with no label of its own is not named
+    ///     here: it goes in <paramref name="pending" /> holding <see cref="PendingName" />
+    ///     so the emission loop can number `input_N` / `step_N` by final role. Promoted
+    ///     range inputs are always inputs, so they number now.
+    /// </summary>
+    private static Dictionary<FormulaRef, string> AssignNamesNext(
+        IReadOnlyList<FormulaRef> ranges,
+        IReadOnlyList<WalkedCell> nonSink,
+        IReadOnlyList<SpillSlice> slices,
+        IReadOnlyList<FormulaRef> stacks,
+        ICellSource source,
+        IReadOnlyDictionary<FormulaRef, string>? nameOverrides,
+        Func<CellRef, bool> inCalc,
+        HashSet<FormulaRef> pending,
+        FallbackCounters counters)
+    {
+        var nameByRef = new Dictionary<FormulaRef, string>();
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Claim(FormulaRef key, string baseName)
+        {
+            var resolved = ResolveCollision(baseName, used);
+            nameByRef[key] = resolved;
+            used.Add(resolved);
+        }
+
+        if (nameOverrides != null && nameOverrides.Count > 0)
+        {
+            var keys = new List<FormulaRef>(ranges);
+            foreach (var cell in nonSink) keys.Add(RowRef(cell));
+            foreach (var slice in slices) keys.Add(slice.Ref);
+            keys.AddRange(stacks);
+            foreach (var key in keys)
+                if (nameOverrides.TryGetValue(key, out var overrideName))
+                    Claim(key, overrideName);
+        }
+
+        foreach (var range in ranges)
+        {
+            if (nameByRef.ContainsKey(range)) continue;
+            var label = FindLabel(range.Start, source, inCalc);
+            if (label != null)
+                Claim(range, label.Value.Name);
+            else
+                Claim(range, NextFallbackName("input", used, counters));
+        }
+
+        foreach (var cell in nonSink)
+        {
+            var key = RowRef(cell);
+            if (nameByRef.ContainsKey(key)) continue;
+            var label = FindLabel(cell.Ref, source, inCalc);
+            if (label != null)
+            {
+                Claim(key, label.Value.Name);
+            }
+            else
+            {
+                nameByRef[key] = PendingName;
+                pending.Add(key);
+            }
+        }
+
+        foreach (var slice in slices)
+        {
+            if (nameByRef.ContainsKey(slice.Ref)) continue;
+            var label = FindLabel(slice.Ref.Start, source, inCalc);
+            // A slice under its anchor's own label would only collide with the
+            // anchor; it takes the anchor-derived name instead.
+            if (label != null)
+            {
+                var anchorLabel = FindLabel(slice.Anchor, source, inCalc);
+                if (anchorLabel != null && anchorLabel.Value.At.Equals(label.Value.At))
+                    label = null;
+            }
+
+            if (label != null)
+            {
+                Claim(slice.Ref, label.Value.Name);
+            }
+            else
+            {
+                nameByRef[slice.Ref] = PendingName;
+                pending.Add(slice.Ref);
+            }
+        }
+
+        // A stack's label would be its first cell's own label (the same search from
+        // the same cell), which only collides; it settles at emission as
+        // `<first cell's name>_s`.
+        foreach (var stack in stacks)
+        {
+            if (nameByRef.ContainsKey(stack)) continue;
+            nameByRef[stack] = PendingName;
+            pending.Add(stack);
+        }
+
+        return nameByRef;
+    }
+
+    /// <summary>
+    ///     The `HSTACK` / `VSTACK` that rebuilds a walked range's shape from its cells'
+    ///     bindings (spec 0019 §1): one row is `HSTACK`, one column `VSTACK`, a block is
+    ///     `VSTACK` of `HSTACK` rows.
+    /// </summary>
+    internal static string BuildStackRhs(int rows, int cols, Func<int, int, string> nameAt)
+    {
+        string Row(int r) => "HSTACK(" + string.Join(", ", Enumerable.Range(0, cols).Select(c => nameAt(r, c))) + ")";
+
+        if (rows == 1)
+            return Row(0);
+        if (cols == 1)
+            return "VSTACK(" + string.Join(", ", Enumerable.Range(0, rows).Select(r => nameAt(r, 0))) + ")";
+        return "VSTACK(" + string.Join(", ", Enumerable.Range(0, rows).Select(Row)) + ")";
+    }
+
+    /// <summary>
+    ///     Orders the input rows by where their source sits in <paramref name="order" />
+    ///     (the dialog's row order); rows it doesn't list keep their place after the
+    ///     listed ones. A slice row stays directly under its anchor.
+    /// </summary>
+    private static List<BindingRow> ReorderInputs(
+        IReadOnlyList<BindingRow> inputs, IReadOnlyList<FormulaRef> order)
+    {
+        var groups = new List<List<BindingRow>>();
+        foreach (var row in inputs)
+        {
+            if (row.SliceOf != null && groups.Count > 0)
+                groups[groups.Count - 1].Add(row);
+            else
+                groups.Add(new List<BindingRow> { row });
+        }
+
+        var position = new Dictionary<FormulaRef, int>();
+        for (var i = 0; i < order.Count; i++)
+            if (!position.ContainsKey(order[i]))
+                position[order[i]] = i;
+
+        return groups
+            .Select((g, index) => (Group: g, Index: index))
+            .OrderBy(x => position.TryGetValue(x.Group[0].Source, out var pos) ? pos : int.MaxValue)
+            .ThenBy(x => x.Index)
+            .SelectMany(x => x.Group)
+            .ToList();
+    }
 
     /// <summary>
     ///     Picks a binding name for each range and each non-sink cell.

@@ -56,11 +56,13 @@ internal static class GatherCommand
             }
 
             var selection = ReadSelection(app, sheetName, sink);
+            var gatherNext = Labs.IsOn(Labs.GatherNext);
+            var options = new GatherOptions(gatherNext);
 
             GatherResult? result;
             try
             {
-                result = GatherEngine.Gather(sink, selection, source);
+                result = GatherEngine.Gather(sink, selection, source, options);
             }
             catch (Exception ex)
             {
@@ -84,6 +86,7 @@ internal static class GatherCommand
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
                 string? saved = null;
+                GatherLambda? savedLambda = null;
 
                 dispatcher.Invoke(() =>
                 {
@@ -96,7 +99,7 @@ internal static class GatherCommand
                     {
                         try
                         {
-                            return GatherEngine.Recompute(sink, selection, source, rows);
+                            return GatherEngine.Recompute(sink, selection, source, rows, options);
                         }
                         catch (Exception ex)
                         {
@@ -105,24 +108,43 @@ internal static class GatherCommand
                         }
                     }
 
-                    var window = new GatherWindow(result, Recompute);
+                    Func<string, string?>? resolveExisting = null;
+                    if (gatherNext)
+                    {
+                        var existingNames = ConvertLetToLambdaCommand.GetExistingNames(workbook);
+                        resolveExisting = name =>
+                            existingNames.TryGetValue(name, out var refersTo) ? refersTo : null;
+                    }
+
+                    var window = new GatherWindow(result, Recompute, gatherNext, resolveExisting);
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
 
                     if (window.ShowDialog() == true)
+                    {
                         saved = window.SavedFormula;
+                        savedLambda = window.SavedLambda;
+                    }
                 });
 
                 if (saved == null) return;
 
                 try
                 {
+                    // Spec 0019: a named gather registers the LAMBDA first, so the
+                    // call written below evaluates at once.
+                    if (savedLambda != null)
+                    {
+                        LambdaLoader.InjectLambda(savedLambda.Name, savedLambda.Formula);
+                        Logger.Info($"Gather: Registered LAMBDA '{savedLambda.Name}'");
+                    }
+
                     // Formula2 is the dynamic-array-aware setter — the
                     // legacy Formula property silently wraps array refs
                     // like `A1#` with the implicit-intersection `@`
                     // operator on write, which would scalarise our LET.
                     activeCell.Formula2 = saved;
-                    Logger.Info($"Gather: Wrote LET into {sink.A1Address}");
+                    Logger.Info($"Gather: Wrote {(savedLambda != null ? "LAMBDA call" : "LET")} into {sink.A1Address}");
                 }
                 catch (Exception ex)
                 {
@@ -320,6 +342,30 @@ internal static class GatherCommand
                 // the Names collection so they land here as "not a LAMBDA",
                 // which is exactly what PR 8 needs.
                 return false;
+            }
+        }
+
+        public CellContent ReadCell(CellRef cell)
+        {
+            if (cell.IsExternal)
+                return new CellContent(true, null);
+            var sheet = TryGetWorksheet(cell.Sheet);
+            if (sheet == null)
+                return new CellContent(true, null);
+            try
+            {
+                dynamic range = sheet.Cells[cell.Row, cell.Column];
+                var value = range.Value2;
+                if (value == null)
+                    return new CellContent(true, null);
+                if (value is string s)
+                    return s.Length == 0 ? new CellContent(true, null) : new CellContent(false, s);
+                return new CellContent(false, null);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Gather/ReadCell({cell.Sheet}!{cell.A1Address})", ex);
+                return new CellContent(true, null);
             }
         }
 
