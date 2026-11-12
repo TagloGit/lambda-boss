@@ -177,14 +177,20 @@ internal static class StateStepCommand
         names.TryGetValue(name, out var refersTo) && LambdaSignatureParser.IsLambdaFormula(refersTo);
 
     /// <summary>
-    ///     The libraries Save loads first: Loops when a new engine has no SetVars/GetVar, and a
-    ///     library fold's own library when the workbook doesn't have that fold yet.
+    ///     The libraries Save loads first: Loops when a new engine has no SetVars/GetVar or an
+    ///     answer needs GetVars, and a library fold's own library when the workbook doesn't have
+    ///     that fold yet.
     /// </summary>
     private static List<string> LibrariesToLoad(
         StateEngine engine, StateEngineChange change, string? prefix, string? loadAs, IReadOnlyDictionary<string, string> names)
     {
         var load = new List<string>();
         if (engine.IsNew && prefix == null) load.Add(StateScaffold.LibraryFolder);
+
+        // Answer outputs need GetVars, which an older copy of Loops doesn't have (spec 0018).
+        if (change.Answer is { Count: > 0 } && !IsLambda(names, engine.Prefix + "GetVars")
+            && !load.Contains(StateScaffold.LibraryFolder, StringComparer.OrdinalIgnoreCase))
+            load.Add(StateScaffold.LibraryFolder);
 
         var fold = change.Fold;
         if (fold is { IsNative: false } && !string.IsNullOrEmpty(fold.Library)

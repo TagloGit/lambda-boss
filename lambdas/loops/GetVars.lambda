@@ -1,0 +1,25 @@
+/*  FUNCTION NAME:      GetVars
+    DESCRIPTION:*//**Reads several named variables from a state as one row, in the order asked. Over a column of states, one row per state. A table (SplitState's debug view) passes through unchanged.*/
+/*  RETURNS:            array: one row of the named variables' values (native types), or one row per state for a column of states
+    PARAMETERS:
+        state           (Required) Single state string, or a vertical column of states (e.g. a SCAN result).
+        names           (Required) The variable names, in answer order: an array constant such as {"cash","crates"}, or a range of names.
+    EXAMPLE:            =GetVars(SetVars("crates", 5, "cash", 25), {"cash","crates"}) -> {25, 5}
+    NOTE:               What /State writes round a fold when answer outputs are ticked (spec 0018). A state is one column, so an input with more than one column is taken to be SplitState(..., 1)'s debug table and returned as it is: the debug toggle works inside GetVars. Scalar variables only: an array value is padded with #N/A.
+    REVISIONS:          Date        Developer   Description
+                        2026-11-12  Claude      Initial version (#461)
+*/
+GetVars = LAMBDA(
+//  Parameter Declarations
+    [state],
+    [names],
+    LET(
+    //  Procedure
+        keys, TOROW(names),
+        table?, COLUMNS(state) > 1,
+        result, IF(table?, state,
+                DROP(REDUCE("", keys, LAMBDA(acc, key, HSTACK(acc, GetVar(state, key)))), , 1)
+            ),
+        result
+)
+);

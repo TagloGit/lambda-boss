@@ -47,7 +47,10 @@
                    TextWrapping="Wrap"
                    Margin="0,0,0,8" />
 
-        <TextBlock Grid.Row="1" Text="Variables" Style="{StaticResource FieldLabel}" />
+        <TextBlock Grid.Row="1" Style="{StaticResource FieldLabel}">
+            <Run Text="Variables" />
+            <Run Text="   ticked = the answer, top to bottom" FontWeight="Normal" FontSize="11" Foreground="#808080" />
+        </TextBlock>
 
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
             <StackPanel>
@@ -135,7 +138,7 @@
                        FontSize="11"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"
-                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Alt+D toggles Debug and saves." />
+                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Tick the answer's variables (Alt+A) and set their order with Alt+Up/Down. Alt+D toggles Debug and saves." />
         </DockPanel>
     </Grid>
 </Window>

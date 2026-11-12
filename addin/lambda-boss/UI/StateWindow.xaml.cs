@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -36,7 +37,13 @@ public partial class StateWindow
 
         HeaderText.Text = StateEngines.Describe(engine) + (note == null ? "" : " " + note);
 
-        foreach (var row in engine.Rows) AddRow(row);
+        // The answer's variables come first, in its order (spec 0018); then the rest in state order.
+        var answer = engine.Answer;
+        var rows = engine.Rows.Select((r, i) => (Row: r, State: i,
+                At: answer.ToList().FindIndex(k => string.Equals(k, r.Key, StringComparison.OrdinalIgnoreCase))))
+            .OrderBy(r => r.At < 0 ? answer.Count + r.State : r.At)
+            .ToList();
+        foreach (var (row, state, at) in rows) AddRow(row, state, at >= 0);
         EnsureBlankRow();
 
         var folds = new List<StateFoldKind> { StateFoldKind.Reduce, StateFoldKind.Scan };
@@ -80,23 +87,48 @@ public partial class StateWindow
 
     private StateFoldKind? SelectedFold => (FormBox.SelectedItem as ComboBoxItem)?.Tag as StateFoldKind;
 
+    // The rows go to the engine in state order (new ones last, as typed); the answer is the
+    // ticked rows top to bottom, by the names they now have.
     private StateEngineChange CurrentChange() => new(
-        _rows.Select(r => r.ToRow()).ToList(),
+        _rows.OrderBy(r => r.State).Select(r => r.ToRow()).ToList(),
         SelectedFold,
         NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
-        DebugBox.IsChecked == true);
+        DebugBox.IsChecked == true,
+        AnswerKeys());
+
+    private List<string> AnswerKeys() =>
+        _rows.Where(r => r.Answer.IsChecked == true && r.Name.Text.Trim().Length > 0)
+            .Select(r => r.Name.Text.Trim())
+            .ToList();
 
     private static bool Same(StateFoldKind a, StateFoldKind b) =>
         string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
 
-    private void AddRow(StateEditRow row)
+    private int _nextNewRow = int.MaxValue / 2;
+
+    private void AddRow(StateEditRow row, int? state = null, bool answer = false)
     {
         var grid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(32) });
 
+        // Ticked: part of the answer; its number is its place in the answer (spec 0018).
+        var tick = new CheckBox
+        {
+            IsChecked = answer,
+            IsTabStop = false,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xdc, 0xdc, 0xaa)),
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "In the answer (Alt+A). Alt+Up/Down sets its place."
+        };
+        tick.Checked += Answer_Changed;
+        tick.Unchecked += Answer_Changed;
+        grid.Children.Add(tick);
+
         var name = new TextBox { Text = row.Key };
         name.TextChanged += Field_TextChanged;
+        Grid.SetColumn(name, 1);
         grid.Children.Add(name);
 
         if (row.OriginalKey != null)
@@ -112,12 +144,39 @@ public partial class StateWindow
                 ToolTip = $"Remove {row.OriginalKey}"
             };
             remove.Click += (_, _) => name.Text = "";
-            Grid.SetColumn(remove, 1);
+            Grid.SetColumn(remove, 2);
             grid.Children.Add(remove);
         }
 
         RowsPanel.Children.Add(grid);
-        _rows.Add(new RowBox(row.OriginalKey, name));
+        _rows.Add(new RowBox(row.OriginalKey, name, tick, grid, state ?? _nextNewRow++));
+    }
+
+    private void Answer_Changed(object sender, RoutedEventArgs e) => Refresh();
+
+    // A row Tim can tick or move: a variable, or a new one he has typed.
+    private static bool IsReal(RowBox row) => row.OriginalKey != null || row.Name.Text.Length > 0;
+
+    /// <summary>Alt+Up and Alt+Down move the focused row; the ticked rows' order is the answer's.</summary>
+    private void MoveFocusedRow(int by)
+    {
+        var at = _rows.FindIndex(r => r.Name.IsKeyboardFocusWithin);
+        var to = at + by;
+        if (at < 0 || to < 0 || to >= _rows.Count || !IsReal(_rows[at]) || !IsReal(_rows[to])) return;
+
+        var row = _rows[at];
+        _rows.RemoveAt(at);
+        _rows.Insert(to, row);
+        RowsPanel.Children.Remove(row.Grid);
+        RowsPanel.Children.Insert(to, row.Grid);
+        row.Name.Focus();
+        Refresh();
+    }
+
+    private void ToggleFocusedAnswer()
+    {
+        var row = _rows.FirstOrDefault(r => r.Name.IsKeyboardFocusWithin);
+        if (row != null && IsReal(row)) row.Answer.IsChecked = row.Answer.IsChecked != true;
     }
 
     private void EnsureBlankRow()
@@ -130,6 +189,10 @@ public partial class StateWindow
     private void Refresh()
     {
         if (!_loaded) return;
+
+        var place = 0;
+        foreach (var row in _rows)
+            row.Answer.Content = row.Answer.IsChecked == true && row.Name.Text.Trim().Length > 0 ? (++place).ToString(CultureInfo.InvariantCulture) : "";
 
         var result = StateEngines.Apply(_engine, CurrentChange(), _refersTo, _callName);
 
@@ -209,6 +272,16 @@ public partial class StateWindow
                 SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
+        else if (MoveRowKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } by)
+        {
+            MoveFocusedRow(by);
+            e.Handled = true;
+        }
+        else if (IsAnswerKey(e.Key, e.SystemKey, Keyboard.Modifiers))
+        {
+            ToggleFocusedAnswer();
+            e.Handled = true;
+        }
         else if (e.Key == Key.Enter && SaveButton.IsEnabled && !CancelButton.IsKeyboardFocused && !FormBox.IsDropDownOpen)
         {
             SaveButton_Click(this, new RoutedEventArgs());
@@ -219,6 +292,17 @@ public partial class StateWindow
     /// <summary>Alt+D, the Debug box's access key: WPF reports Alt combinations as Key.System.</summary>
     internal static bool IsToggleDebugKey(Key key, Key systemKey, ModifierKeys modifiers) =>
         key == Key.System && systemKey == Key.D && modifiers == ModifierKeys.Alt;
+
+    /// <summary>Alt+Up moves the focused row up (-1), Alt+Down down (+1): the move-line keys of code editors.</summary>
+    internal static int? MoveRowKey(Key key, Key systemKey, ModifierKeys modifiers) =>
+        key != Key.System || modifiers != ModifierKeys.Alt ? null
+        : systemKey == Key.Up ? -1
+        : systemKey == Key.Down ? 1
+        : null;
+
+    /// <summary>Alt+A ticks or unticks the focused row for the answer.</summary>
+    internal static bool IsAnswerKey(Key key, Key systemKey, ModifierKeys modifiers) =>
+        key == Key.System && systemKey == Key.A && modifiers == ModifierKeys.Alt;
 
     private static bool IsToggleDebugKey(KeyEventArgs e) =>
         IsToggleDebugKey(e.Key, e.SystemKey, Keyboard.Modifiers);
@@ -234,7 +318,7 @@ public partial class StateWindow
         DialogResult = false;
     }
 
-    private sealed record RowBox(string? OriginalKey, TextBox Name)
+    private sealed record RowBox(string? OriginalKey, TextBox Name, CheckBox Answer, Grid Grid, int State)
     {
         public StateEditRow ToRow() => new(OriginalKey, Name.Text, "");
     }
