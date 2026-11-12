@@ -106,5 +106,34 @@ round trip Tim uses), Debug on a fold bound to a name, and a seed defined outsid
 - [x] Outer LET: naming refused when the step reads outer names (LET and LAMBDA parameter), not
       when a step binding shadows them; rename follows and remove blocks on reads outside.
 - [x] `GetVars` harness cases, including the debug table passing through.
-- [ ] VM: R4 v2 L1 and L2 single-cell with an outer LET for the constants, answer ticked and
+- [x] VM: R4 v2 L1 and L2 single-cell with an outer LET for the constants, answer ticked and
       reordered in the dialog, matching the key; Debug on and off give the text back exactly.
+
+## VM proof (12 Nov 2026)
+
+Excel 16.0 build 20527 in `taglo-win`, the PR's CI XLL (after the review fixes), Labs channel,
+driven through the popup (Ctrl+Shift+J, `State`) and the dialog by keys (UI Automation focus,
+SendKeys). A copy of `R4 State Reps v2.xlsx`, a new sheet. Develop's Loops has no `GetVars` yet, so
+the branch's definition was added by hand after /State loaded Loops bare.
+
+- **L1.** /State on an empty cell, `crates` then `cash`: Loops loaded bare, the REDUCE scaffold
+  written. The rules typed over it with `cost, 3` and `price, 5` in an outer LET. /State again:
+  Alt+A on both rows, Alt+Up on `cash` ([01](assets/0018-01-l1-ticked-reordered.png)). Save wrote
+  `GetVars(REDUCE(…), {"cash","crates"})` inside the LET; the cell spills `1 | 19`. Wrapped as
+  `TEXTJOIN(" ", , {"C","S"} & …)` for games 1–6: **6/6 match the key**. Alt+D: the debug table
+  inside GetVars ([02](assets/0018-02-l1-debug-inside-getvars.png)); Alt+D again: the text back,
+  ordinal equal.
+- **L2.** Same route, `crates, cash, pitch, count`; outer LET `cost, 3`, `prices, {5,8,6}`,
+  `moveCost, 2`. Ticked crates, cash and pitch, `cash` moved up
+  ([03](assets/0018-03-l2-ticked-reordered.png)): `{"cash","crates","pitch"}`, `77 | 7 | 1` for game
+  7. Games 7–12: **6/6 match the key**. Debug on through the dialog, off through the popup's `Debug`
+  command: the text back, ordinal equal.
+- **Name refused** in the dialog: "The step reads cost, moveCost and prices from the LET around the
+  fold…".
+- `GetVars` cases in Excel: all as the harness file says, the one-column debug table included. A
+  missing name gives `#N/A` for the whole row: GetVar's `#N/A` spreads through HSTACK (even
+  `HSTACK(1, GetVar(s, "zz"))` is one `#N/A`).
+
+**Found, not from this change:** with `TEXTSPLIT(log, ",")` as the inputs (a row), SCAN gives a row
+of states and SplitState reads only the first, so the debug table shows step 1 only (screenshot
+02). Filed as #463.

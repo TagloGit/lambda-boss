@@ -23,9 +23,9 @@ tests:
     args: ['=VSTACK(SetVars("a", 1, "b", 2), SetVars("a", 3, "b", 4))', '={"b","a"}']
     expected: [[2, 1], [4, 3]]
 
-  - name: a missing name reads as NA
+  - name: a missing name makes the row NA (GetVar's NA spreads through HSTACK, VM 12 Nov)
     args: ['=SetVars("a", 1)', '={"a","zz"}']
-    expected: [[1, -2146826246]]
+    expected: -2146826246
 
   - name: a one-variable debug table (one column, header first) passes through
     args: ['=SplitState(VSTACK(SetVars("n", 1), SetVars("n", 2)), 1)', '={"n"}']
