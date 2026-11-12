@@ -33,8 +33,13 @@ public static class Labs
         "Check Formula (Ctrl+Shift+C)",
         "Points at unmatched or misplaced brackets and unknown names in the active cell's formula, or in the formula being edited. Also a ribbon button. The key is the CheckFormulaShortcut setting in settings.json, read when Excel starts.");
 
+    public static readonly LabsSwitch GatherNext = new(
+        "gather-next",
+        "Gather next",
+        "Gather walks ranges over formula cells, names inputs and steps from the nearest label, and can save the gathered LET as a named LAMBDA from its own dialog (Lambda name box, Alt+Up/Down to reorder inputs, Alt+I to toggle a row's role).");
+
     public static readonly IReadOnlyList<LabsSwitch> All =
-        new[] { PopupChannelBadge, State, CheckFormula };
+        new[] { PopupChannelBadge, State, CheckFormula, GatherNext };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

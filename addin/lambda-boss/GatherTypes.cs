@@ -375,7 +375,26 @@ public sealed record GatherResult(
     string SynthesisedLet,
     GatherDiagnostic? Diagnostic = null,
     int WalkedCount = 0,
-    int FreeWalkCount = 0);
+    int FreeWalkCount = 0,
+    string? Body = null);
+
+/// <summary>
+///     Switches for <see cref="GatherEngine" />, passed in rather than read from
+///     Settings so the pure engine stays testable. <see cref="Next" /> is the
+///     <c>gather-next</c> Labs switch (spec 0019): ranges over formula cells are
+///     walked, names come from the nearest label with <c>input_N</c>/<c>step_N</c>
+///     fallbacks, and the inputs follow the order of the rows passed to
+///     <see cref="GatherEngine.Recompute" />. Off, the engine is exactly as specs 0005
+///     and 0010 left it.
+/// </summary>
+public sealed record GatherOptions(bool Next = false);
+
+/// <summary>
+///     What a cell holds, as far as naming needs to know: <see cref="IsEmpty" /> for a
+///     blank cell, <see cref="Text" /> for a text cell, and neither (a non-empty cell
+///     with null text) for a number, error or any other value.
+/// </summary>
+public readonly record struct CellContent(bool IsEmpty, string? Text);
 
 /// <summary>
 ///     A reason the engine refused to synthesise a LET. Surfaced by
@@ -516,4 +535,12 @@ public interface ICellSource
     ///     ordinary expressions and walks them normally.
     /// </summary>
     bool IsLambdaName(string name);
+
+    /// <summary>
+    ///     What <paramref name="cell" /> holds (spec 0019). Blank, external and
+    ///     unreachable cells read as empty. A text cell carries its text; any other
+    ///     non-empty value (a number, an error) is non-empty with null text. Lets
+    ///     the label search skip blank rows without reading past a real value.
+    /// </summary>
+    CellContent ReadCell(CellRef cell);
 }

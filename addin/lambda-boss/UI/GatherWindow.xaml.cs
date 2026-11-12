@@ -108,6 +108,14 @@ public partial class GatherWindow
 
     private GatherResult _result;
 
+    // Spec 0019 (gather-next). Off: none of this exists, and the dialog is as it was.
+    private readonly bool _gatherNext;
+    private readonly Func<string, string?> _resolveExistingRefersTo;
+
+    // Whether every row's name is canonical, as last computed — Save needs it
+    // again when only the Lambda name changes.
+    private bool _rowNamesValid = true;
+
     // Reentrancy guard: rebuilding the row list during a Recompute fires
     // INotifyPropertyChanged on each VM, which would re-enter the change
     // handler and trigger another Recompute. The guard short-circuits the
@@ -116,11 +124,15 @@ public partial class GatherWindow
 
     public GatherWindow(
         GatherResult initial,
-        Func<IReadOnlyList<RowState>, GatherResult?> recompute)
+        Func<IReadOnlyList<RowState>, GatherResult?> recompute,
+        bool gatherNext = false,
+        Func<string, string?>? resolveExistingRefersTo = null)
     {
         InitializeComponent();
         _result = initial;
         _recompute = recompute;
+        _gatherNext = gatherNext;
+        _resolveExistingRefersTo = resolveExistingRefersTo ?? (_ => null);
         _previewDebounce = new DebouncedAction(PreviewDebounceDelay, RecomputeForNameOnly);
 
         WalkHintText.Text = BuildWalkHint(initial);
@@ -131,10 +143,25 @@ public partial class GatherWindow
         BuildRowsFromBindings(initial.Bindings);
         BindingsList.ItemsSource = _rows;
         OrphansList.ItemsSource = _orphans;
+
+        if (_gatherNext)
+        {
+            LambdaNamePanel.Visibility = Visibility.Visible;
+            Loaded += (_, _) => LambdaNameBox.Focus();
+        }
     }
 
-    /// <summary>Populated on Save; null when cancelled.</summary>
+    /// <summary>
+    ///     Populated on Save; null when cancelled. The LET to write into the sink or,
+    ///     when a Lambda name was given, the call <c>=name(args)</c> to write there.
+    /// </summary>
     public string? SavedFormula { get; private set; }
+
+    /// <summary>
+    ///     Spec 0019: the LAMBDA to register when Save was pressed with a Lambda name;
+    ///     null for a plain LET save.
+    /// </summary>
+    public GatherLambda? SavedLambda { get; private set; }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
@@ -142,10 +169,74 @@ public partial class GatherWindow
         // engine yet — flush before reading _result so Save can never
         // commit a LET built from stale names.
         _previewDebounce.Flush();
+
+        if (_gatherNext)
+        {
+            // Ctrl+Enter reaches here without going through the button, so the
+            // Lambda name has to be re-checked.
+            if (!SaveButton.IsEnabled)
+                return;
+            var lambdaName = CurrentLambdaName();
+            if (lambdaName.Length > 0)
+            {
+                var lambda = BuildLambda(lambdaName);
+                if (lambda == null)
+                    return;
+                SavedLambda = lambda;
+                SavedFormula = lambda.Call;
+                DialogResult = true;
+                Close();
+                return;
+            }
+        }
+
         SavedFormula = _result.SynthesisedLet;
         DialogResult = true;
         Close();
     }
+
+    private string CurrentLambdaName() =>
+        _gatherNext ? LambdaNameBox.Text.Trim() : "";
+
+    private GatherLambda? BuildLambda(string lambdaName) =>
+        _result.Body == null
+            ? null
+            : GatherLambdaBuilder.Build(lambdaName, _result.Bindings, _result.Body);
+
+    private void LambdaNameBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateSaveButtonEnabled(_rowNamesValid);
+        RefreshPreview();
+    }
+
+    /// <summary>
+    ///     The preview: the LET, or with a Lambda name typed the LAMBDA it registers and
+    ///     the call that goes in the sink.
+    /// </summary>
+    private void RefreshPreview()
+    {
+        var lambdaName = CurrentLambdaName();
+        if (lambdaName.Length > 0 && ExcelNameValidator.Validate(lambdaName).IsValid)
+        {
+            var lambda = BuildLambda(lambdaName);
+            if (lambda != null)
+            {
+                PreviewText.Text = lambda.Formula + "\n\nSink: " + lambda.Call;
+                return;
+            }
+        }
+
+        PreviewText.Text = _result.SynthesisedLet;
+    }
+
+    /// <summary>
+    ///     The Lambda name's state: null when it is empty or fine, else the message that
+    ///     blocks Save. An existing LAMBDA of that name is overwritten, with a warning;
+    ///     any other existing name is refused, as in /LET to LAMBDA.
+    /// </summary>
+    private (bool Ok, string? Message, bool IsWarning) EvaluateLambdaName() =>
+        GatherLambdaBuilder.ValidateName(
+            CurrentLambdaName(), _result.Bindings, _resolveExistingRefersTo);
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
@@ -194,6 +285,15 @@ public partial class GatherWindow
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Alt+key arrives as Key.System with the real key in SystemKey.
+        if (_gatherNext
+            && (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt
+            && HandleAltKey(e.Key == Key.System ? e.SystemKey : e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.Escape)
         {
             CancelButton_Click(this, new RoutedEventArgs());
@@ -207,6 +307,105 @@ public partial class GatherWindow
             SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    ///     Spec 0019 §3 and §4. Alt+Up / Alt+Down move the focused input row among the
+    ///     inputs (the order is the LAMBDA's parameter order); Alt+I flips the focused
+    ///     row between input and step where the row allows it. True when the key was
+    ///     one of these and the focused element is a row.
+    /// </summary>
+    private bool HandleAltKey(Key key)
+    {
+        if (key != Key.Up && key != Key.Down && key != Key.I)
+            return false;
+        if ((Keyboard.FocusedElement as FrameworkElement)?.DataContext is not GatherRowVm vm
+            || !_rows.Contains(vm))
+            return false;
+
+        if (key == Key.I)
+        {
+            if (!vm.CanToggleRole || vm.IsOrphan || !vm.Include)
+                return true;
+            vm.IsStep = !vm.IsStep;
+            FocusRowName(vm.Source);
+            return true;
+        }
+
+        MoveInputRow(vm, key == Key.Up ? -1 : 1);
+        return true;
+    }
+
+    /// <summary>
+    ///     A row that is a LAMBDA parameter: a plain included input (not a slice, an
+    ///     inner-LET binding or an orphan).
+    /// </summary>
+    private static bool IsParameterRow(GatherRowVm vm) =>
+        vm.Include && !vm.IsOrphan && !vm.IsExpansion && !vm.IsSlice
+        && vm.RoleEnum == BindingRole.Input && !vm.IsStep;
+
+    /// <summary>
+    ///     Moves an input row past the next input row in <paramref name="delta" />'s
+    ///     direction, then recomputes: the engine takes the input order from the order of
+    ///     the rows it is given, and keeps each slice under its anchor.
+    /// </summary>
+    private void MoveInputRow(GatherRowVm vm, int delta)
+    {
+        if (!IsParameterRow(vm))
+            return;
+        var index = _rows.IndexOf(vm);
+        var target = index + delta;
+        while (target >= 0 && target < _rows.Count && !IsParameterRow(_rows[target]))
+            target += delta;
+        if (target < 0 || target >= _rows.Count)
+            return;
+
+        _rows.Move(index, target);
+        Recompute(null);
+        FocusRowName(vm.Source);
+    }
+
+    /// <summary>
+    ///     The rebuild a role flip or a move triggers replaces every row, which drops
+    ///     keyboard focus; put it back on the row's name box once the new rows are laid out.
+    /// </summary>
+    private void FocusRowName(FormulaRef source)
+    {
+        Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                BindingsList.UpdateLayout();
+                foreach (var row in _rows)
+                {
+                    if (row.IsExpansion || !Equals(row.Source, source))
+                        continue;
+                    if (BindingsList.ItemContainerGenerator.ContainerFromItem(row) is DependencyObject container
+                        && FindFirstTextBox(container) is { } box)
+                    {
+                        box.Focus();
+                        // Focusing selects the whole name; a keyboard flip or move should
+                        // leave the caret where typing continues.
+                        box.Select(box.Text.Length, 0);
+                    }
+                    return;
+                }
+            }),
+            System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    private static TextBox? FindFirstTextBox(DependencyObject parent)
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is TextBox tb)
+                return tb;
+            var nested = FindFirstTextBox(child);
+            if (nested != null)
+                return nested;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -572,7 +771,7 @@ public partial class GatherWindow
             causedBy);
 
         _result = newResult;
-        PreviewText.Text = newResult.SynthesisedLet;
+        RefreshPreview();
         BuildRowsFromBindings(newResult.Bindings);
     }
 
@@ -653,7 +852,7 @@ public partial class GatherWindow
         try
         {
             _result = newResult;
-            PreviewText.Text = newResult.SynthesisedLet;
+            RefreshPreview();
 
             var bindings = newResult.Bindings;
             var n = Math.Min(bindings.Count, _rows.Count);
@@ -716,9 +915,43 @@ public partial class GatherWindow
 
     private void UpdateSaveButtonEnabled(bool allValid)
     {
-        SaveButton.IsEnabled = allValid;
-        StatusText.Text = allValid ? DefaultStatusText : InvalidNameStatusText;
+        _rowNamesValid = allValid;
+        if (!_gatherNext)
+        {
+            SaveButton.IsEnabled = allValid;
+            StatusText.Text = allValid ? DefaultStatusText : InvalidNameStatusText;
+            return;
+        }
+
+        var (lambdaOk, lambdaMessage, isWarning) = EvaluateLambdaName();
+        SaveButton.IsEnabled = allValid && lambdaOk;
+        SaveButton.Content = CurrentLambdaName().Length > 0 ? "Save LAMBDA" : "Save";
+
+        if (lambdaMessage == null)
+        {
+            LambdaNameStatus.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            LambdaNameStatus.Text = lambdaMessage;
+            LambdaNameStatus.Foreground = isWarning ? InfoBrush : ErrorBrush;
+            LambdaNameStatus.Visibility = Visibility.Visible;
+        }
+
+        StatusText.Text = !allValid
+            ? InvalidNameStatusText
+            : !lambdaOk
+                ? "Fix the Lambda name before saving"
+                : CurrentLambdaName().Length > 0
+                    ? "Save registers the LAMBDA and writes a call to it into the sink cell · Esc to cancel"
+                    : DefaultStatusText;
     }
+
+    private static readonly Brush ErrorBrush =
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#f48771"));
+
+    private static readonly Brush InfoBrush =
+        new SolidColorBrush((Color)ColorConverter.ConvertFromString("#d7ba7d"));
 }
 
 /// <summary>
