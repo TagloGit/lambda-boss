@@ -157,6 +157,9 @@ public sealed record StateEngine(
     public bool IsDebug =>
         StateDebug.IsScan(Fold) && StateDebug.TryUnwrap(Before, After, out _, out _);
 
+    /// <summary>The answer outputs, in order: the keys of a <c>GetVars</c> round the fold (spec 0018). Empty when none.</summary>
+    public IReadOnlyList<string> Answer => StateAnswer.Read(Before, After);
+
     /// <summary>A new engine for an empty cell: no variables yet, a REDUCE with placeholders.</summary>
     public static StateEngine New(string prefix) => new(
         StateFoldKind.Reduce, "REDUCE", null, "", NewInputs,
@@ -171,13 +174,16 @@ public sealed record StateEngineRead(StateEngine? Engine, bool IsEmpty, string? 
 
 /// <summary>
 ///     What the dialog asks for: the variables, the form (null = LET step), the name (null =
-///     inline) and the debug state (null = leave as it is; spec 0015, "Debug toggle").
+///     inline), the debug state (null = leave as it is; spec 0015, "Debug toggle") and the
+///     answer outputs in order (null = leave as they are, empty = none; spec 0018), named as the
+///     rows now name them.
 /// </summary>
 public sealed record StateEngineChange(
     IReadOnlyList<StateEditRow> Rows,
     StateFoldKind? Fold,
     string? StepName,
-    bool? Debug = null);
+    bool? Debug = null,
+    IReadOnlyList<string>? Answer = null);
 
 /// <summary>
 ///     The cell after a change, and the named LAMBDA to store when the step is named. Null
@@ -277,6 +283,33 @@ public static class StateEngines
 
         try
         {
+            // 0a. The text around the fold (spec 0018): a key the cell reads from the result
+            // outside the step follows its rename, and the answer outputs are set.
+            var renames = change.Rows
+                .Where(r => r.OriginalKey != null && r.Key.Trim().Length > 0
+                    && !string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal))
+                .GroupBy(r => r.OriginalKey!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Key.Trim(), StringComparer.OrdinalIgnoreCase);
+            engine = StateAnswer.RenameReads(engine, renames);
+
+            // Keys match ignoring case, as GetVar reads them: a case-only difference is no change.
+            if (change.Answer != null && !change.Answer.SequenceEqual(engine.Answer, StringComparer.OrdinalIgnoreCase))
+            {
+                var (answerBefore, answerAfter) = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, change.Answer);
+                engine = engine with { Before = answerBefore, After = answerAfter };
+            }
+
+            var removed = change.Rows
+                .Where(r => r.OriginalKey != null && r.Key.Trim().Length == 0)
+                .Select(r => r.OriginalKey!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var readOutside = StateAnswer.ReadsAround(engine).Select(r => r.Key)
+                .Where(removed.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (readOutside.Count > 0)
+                return Failed(
+                    $"The formula reads {StateAnswer.List(readOutside)} from the fold's result, outside the step. Take that read out first.",
+                    notes);
+
             // 0. A name can't be a debug output's: it would be set twice in the output.
             if (!engine.IsNew)
             {
@@ -295,6 +328,14 @@ public static class StateEngines
                 ? Create(engine, change.Rows, out editError)
                 : Edit(engine, change.Rows, out editError, out blockers);
             if (edited == null) return Failed(editError ?? "Can't apply the variables.", notes, blockers);
+
+            if (change.Answer is { Count: > 0 } answer)
+            {
+                var variables = edited.Rows.Select(r => r.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var unknown = answer.Where(k => !variables.Contains(k)).ToList();
+                if (unknown.Count > 0)
+                    return Failed($"{StateAnswer.List(unknown)} isn't a state variable, so it can't be in the answer.", notes);
+            }
 
             // 1b. Debug: in or out. Out drops the outputs only the debug form needed.
             var debug = change.Debug ?? engine.IsDebug;
@@ -331,6 +372,13 @@ public static class StateEngines
             {
                 var nameError = CheckName(name, edited.StepName, refersTo, notes);
                 if (nameError != null) return Failed(nameError, notes);
+
+                // A named LAMBDA can't see the LET round the fold (#460).
+                var outer = StateAnswer.OuterNamesRead(edited);
+                if (outer.Count > 0)
+                    return Failed(
+                        $"The step reads {StateAnswer.List(outer)} from the LET around the fold. A named step can't see {(outer.Count == 1 ? "it" : "them")}, so every cell calling {name} would show #NAME?. Keep the step inline, or move {StateAnswer.List(outer)} into the step first.",
+                        notes);
             }
             else if (edited.StepName != null)
             {
@@ -339,7 +387,14 @@ public static class StateEngines
 
             // 3. Form.
             if (change.Fold == null && !engine.IsWholeFormula)
-                return Failed("The fold sits inside a larger formula, so it can't unfold here. Put the fold in a cell of its own first.", notes);
+            {
+                var bare = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, Array.Empty<string>());
+                return Failed(
+                    engine.Answer.Count > 0 && bare.Before.Trim() == "=" && bare.After.Trim().Length == 0
+                        ? "The LET step can't carry answer outputs. Untick them, or pick a fold."
+                        : "The fold sits inside a larger formula, so it can't unfold here. Put the fold in a cell of its own first.",
+                    notes);
+            }
 
             var parameters = ParametersFor(edited, change.Fold, out var bindings, out var paramError);
             if (paramError != null) return Failed(paramError, notes);
@@ -1051,8 +1106,9 @@ public static class StateEngines
             written--;
 
         var call = $"{name}({string.Join(", ", args.Take(written))})";
-        var before = original.IsNew || original.Fold == null ? "=" : original.Before;
-        var after = original.IsNew || original.Fold == null ? "" : original.After;
+        // A new engine and the LET step start as "=" and "", plus any answer wrapper (spec 0018).
+        var before = original.Before;
+        var after = original.After;
 
         // The debug wrapper goes on or comes off; every other wrapper is left as it was.
         if (original.IsDebug && !debug && StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter))

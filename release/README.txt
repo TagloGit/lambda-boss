@@ -67,6 +67,27 @@ Using it
   Ctrl+Shift+C   Check Formula (a Labs switch), in a cell or while
                  editing a formula.
 
+/State (a Labs switch)
+----------------------
+
+/State edits the state engine in the active cell. Tick a variable's row
+(Alt+A) to make it part of the answer, and set the order with Alt+Up/Down:
+the cell then reads GetVars(fold, {"cash","crates"}), one row per state.
+
+Constants can sit in a LET around the fold:
+
+  =LET(cost, 3, price, 5, REDUCE(SetVars(...), ..., LAMBDA(a, v, LET(...))))
+
+  Safe:           constants, ranges, a LAMBDA defined outside, LETs nested
+                  any depth; add, rename, remove; Debug on and off (the text
+                  comes back exactly); ticked answer outputs.
+  Works with care: the fold bound to a name (s, REDUCE(...), ...): Debug
+                  puts the debug table in s, so tick answer outputs instead;
+                  a seed defined outside; two folds (the first is edited).
+  Not supported:  naming the step while it reads a name from the outer LET
+                  (refused: a named LAMBDA can't see it); unfolding to the
+                  LET step inside a bigger formula; Debug inside MAP/BYROW.
+
 Settings (the ribbon's Settings button) has "Popup opens on: Commands |
 Libraries"; Libraries gives the older popup that opens on the library
 list. Both keys are settings in %APPDATA%\LambdaBoss\settings.json
