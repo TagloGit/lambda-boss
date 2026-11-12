@@ -31,6 +31,30 @@ internal sealed class LibraryChannelConverter : JsonConverter<LibraryChannel>
 }
 
 /// <summary>
+///     What the popup shows when it opens (spec 0017): its commands, or the library list as before.
+/// </summary>
+public enum PopupOpensOn
+{
+    Commands,
+    Libraries
+}
+
+/// <summary>
+///     Saves the choice by name and reads anything unknown as Commands, the default.
+/// </summary>
+internal sealed class PopupOpensOnConverter : JsonConverter<PopupOpensOn>
+{
+    public override PopupOpensOn Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
+        reader.TokenType == JsonTokenType.String
+        && string.Equals(reader.GetString(), nameof(PopupOpensOn.Libraries), StringComparison.OrdinalIgnoreCase)
+            ? PopupOpensOn.Libraries
+            : PopupOpensOn.Commands;
+
+    public override void Write(Utf8JsonWriter writer, PopupOpensOn value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value.ToString());
+}
+
+/// <summary>
 ///     Persists user settings to %APPDATA%\LambdaBoss\settings.json.
 /// </summary>
 public sealed class Settings
@@ -47,7 +71,7 @@ public sealed class Settings
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new LibraryChannelConverter() }
+        Converters = { new LibraryChannelConverter(), new PopupOpensOnConverter() }
     };
 
     private static Settings? _current;
@@ -63,9 +87,31 @@ public sealed class Settings
     public List<LocalSourceConfig> LocalSources { get; set; } = new();
 
     /// <summary>
-    ///     Excel keyboard shortcut string (ExcelDNA format). Default: Ctrl+Shift+L.
+    ///     The popup's Excel shortcut (OnKey format). Default: Ctrl+Shift+J. It was Ctrl+Shift+L until
+    ///     spec 0017; Tim's competition macros use K and L, so a user still on <c>^+L</c> moves once.
     /// </summary>
-    public string KeyboardShortcut { get; set; } = "^+L";
+    public string KeyboardShortcut { get; set; } = DefaultPopupShortcut;
+
+    public const string DefaultPopupShortcut = "^+J";
+    internal const string OldPopupShortcut = "^+L";
+
+    /// <summary>
+    ///     Set once the one-time move off <c>^+L</c> has run, so a user who chooses <c>^+L</c> again keeps it.
+    ///     A settings file written before spec 0017 has no value here, so it reads as false and moves.
+    /// </summary>
+    public bool PopupShortcutMoved { get; set; }
+
+    /// <summary>
+    ///     Check Formula's shortcut (OnKey format), in a cell and while editing. Default: Ctrl+Shift+C.
+    /// </summary>
+    public string CheckFormulaShortcut { get; set; } = DefaultCheckFormulaShortcut;
+
+    public const string DefaultCheckFormulaShortcut = "^+C";
+
+    /// <summary>
+    ///     What the popup opens on (spec 0017). Commands by default; Libraries is the old behaviour.
+    /// </summary>
+    public PopupOpensOn PopupOpensOn { get; set; } = PopupOpensOn.Commands;
 
     /// <summary>
     ///     How long cached library data remains valid, in minutes. 0 = no expiry.
@@ -110,13 +156,16 @@ public sealed class Settings
         try
         {
             if (!File.Exists(filePath))
-                return new Settings();
+                return Fresh();
 
             var json = File.ReadAllText(filePath);
             var settings = JsonSerializer.Deserialize<Settings>(json, JsonOptions);
 
             if (settings == null)
-                return new Settings();
+                return Fresh();
+
+            if (MovePopupShortcut(settings))
+                settings.Save(filePath);
 
             // The four 0011 state switches became one (spec 0015): whoever had any keeps the feature.
             var legacy = new[] { "state-let-to-lambda", "state-scaffold", "state-edit-lambda", "state-edit" };
@@ -134,6 +183,23 @@ public sealed class Settings
             Logger.Error("Settings.Load", ex);
             return new Settings();
         }
+    }
+
+    private static Settings Fresh() => new() { PopupShortcutMoved = true };
+
+    /// <summary>
+    ///     The one-time move of the popup's shortcut off Ctrl+Shift+L (spec 0017). True when the
+    ///     settings changed and need saving.
+    /// </summary>
+    internal static bool MovePopupShortcut(Settings settings)
+    {
+        if (settings.PopupShortcutMoved)
+            return false;
+
+        if (string.Equals(settings.KeyboardShortcut?.Trim(), OldPopupShortcut, StringComparison.OrdinalIgnoreCase))
+            settings.KeyboardShortcut = DefaultPopupShortcut;
+        settings.PopupShortcutMoved = true;
+        return true;
     }
 
     /// <summary>

@@ -55,6 +55,23 @@ There are three ways to load the add-in. Pick whichever fits your setup.
    Boss enabled for that session only. Quickest if you only need it
    once.
 
+Using it
+--------
+
+  Ctrl+Shift+J   Opens the popup on its commands. Type to filter (a
+                 leading / is optional), Enter runs, Esc closes. The
+                 first command imports every library with no prefix,
+                 so Ctrl+Shift+J then Enter loads everything.
+  Library        The command for loading one library or searching the
+                 lambdas: Tab switches, Esc goes back to the commands.
+  Ctrl+Shift+C   Check Formula (a Labs switch), in a cell or while
+                 editing a formula.
+
+Settings (the ribbon's Settings button) has "Popup opens on: Commands |
+Libraries"; Libraries gives the older popup that opens on the library
+list. Both keys are settings in %APPDATA%\LambdaBoss\settings.json
+(KeyboardShortcut, CheckFormulaShortcut).
+
 Offline use (a competition machine)
 -----------------------------------
 

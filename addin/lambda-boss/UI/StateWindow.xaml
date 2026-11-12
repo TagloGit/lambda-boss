@@ -82,12 +82,12 @@
                      TextChanged="Field_TextChanged" />
             <CheckBox x:Name="DebugBox"
                       Grid.Column="4"
-                      Content="Debug"
+                      Content="_Debug"
                       Foreground="#dcdcaa"
                       FontSize="13"
                       VerticalAlignment="Center"
                       Margin="16,0,0,0"
-                      ToolTip="On: the fold runs as a SCAN inside SplitState(…, 1), so every step shows. Off: back to the REDUCE, and the debug-only outputs are dropped"
+                      ToolTip="Alt+D toggles and saves. On: the fold runs as a SCAN inside SplitState(…, 1), so every step shows. Off: back to the REDUCE, and the debug-only outputs are dropped"
                       Checked="Debug_Changed"
                       Unchecked="Debug_Changed" />
         </Grid>
@@ -135,7 +135,7 @@
                        FontSize="11"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"
-                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one." />
+                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Alt+D toggles Debug and saves." />
         </DockPanel>
     </Grid>
 </Window>

@@ -25,7 +25,7 @@ public class RibbonController : ExcelRibbon
                   size='large'
                   imageMso='ModuleInsert'
                   onAction='OnLoadLibrary'
-                  screentip='Open the Lambda library browser (Ctrl+Shift+L)' />
+                  screentip='Open the Lambda Boss popup: commands first, libraries behind Library (Ctrl+Shift+J)' />
         </group>
         <group id='GenerateGroup' label='Generate'>
           <button id='LetToLambdaButton'
@@ -48,7 +48,7 @@ public class RibbonController : ExcelRibbon
                   imageMso='FormulaEvaluate'
                   onAction='OnCheckFormula'
                   getVisible='GetCheckFormulaVisible'
-                  screentip='Point at unmatched brackets and unknown names in the active cell&apos;s formula (Ctrl+Shift+K; also works while editing)' />
+                  screentip='Point at unmatched brackets and unknown names in the active cell&apos;s formula (Ctrl+Shift+C; also works while editing)' />
         </group>
         <group id='ManageGroup' label='Manage'>
           <button id='SettingsButton'

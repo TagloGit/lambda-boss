@@ -9,8 +9,9 @@ using LambdaBoss.UI;
 namespace LambdaBoss.Commands;
 
 /// <summary>
-///     Check Formula (spec 0014, issue #419, Labs switch <c>check-formula</c>). Ctrl+Shift+K or the
-///     ribbon button checks the active cell's formula; Ctrl+Shift+K while a formula is being edited
+///     Check Formula (spec 0014, issue #419, Labs switch <c>check-formula</c>). Its shortcut (the
+///     <c>CheckFormulaShortcut</c> setting, Ctrl+Shift+C by default since spec 0017) or the ribbon
+///     button checks the active cell's formula; the shortcut while a formula is being edited
 ///     (including after Excel refuses it) checks the text being edited. The edit-mode path is a
 ///     keyboard hook on Excel's main thread (<see cref="FormulaEditHook"/>), because Excel runs no
 ///     macros, ribbon or OnKey commands during cell edit. Nothing runs until the key is pressed,
@@ -19,9 +20,13 @@ namespace LambdaBoss.Commands;
 /// </summary>
 public static class CheckFormulaCommand
 {
-    internal const string OnKeyShortcut = "^+K";
-    internal const string ShortcutLabel = "Ctrl+Shift+K";
+    /// <summary>The shortcut in use: the one registered, or the setting's when nothing is.</summary>
+    internal static ShortcutKey Shortcut =>
+        _registered ?? ShortcutKey.ParseOr(Settings.Current.CheckFormulaShortcut, Settings.DefaultCheckFormulaShortcut);
 
+    internal static string ShortcutLabel => Shortcut.Label;
+
+    private static ShortcutKey? _registered;
     private static bool _started;
     private static Timer? _refreshTimer;
 
@@ -102,8 +107,16 @@ public static class CheckFormulaCommand
 
         try
         {
-            XlCall.Excel(XlCall.xlcOnKey, OnKeyShortcut, nameof(CheckFormula));
-            FormulaEditHook.Install(OnEditedFormula);
+            if (!ShortcutKey.TryParse(Settings.Current.CheckFormulaShortcut, out var key))
+            {
+                Logger.Info($"CheckFormula: shortcut '{Settings.Current.CheckFormulaShortcut}' isn't one it can use; "
+                            + $"using {Settings.DefaultCheckFormulaShortcut}");
+                key = ShortcutKey.ParseOr(null, Settings.DefaultCheckFormulaShortcut);
+            }
+
+            XlCall.Excel(XlCall.xlcOnKey, key.OnKey, nameof(CheckFormula));
+            _registered = key;
+            FormulaEditHook.Install(OnEditedFormula, key);
             _refreshTimer = new Timer(_ => ExcelAsyncUtil.QueueAsMacro(WorkbookNames.RefreshIfChanged),
                 null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5));
             _started = true;
@@ -144,7 +157,8 @@ public static class CheckFormulaCommand
         {
             try
             {
-                XlCall.Excel(XlCall.xlcOnKey, OnKeyShortcut);
+                if (_registered != null)
+                    XlCall.Excel(XlCall.xlcOnKey, _registered.OnKey);
             }
             catch (Exception ex)
             {
@@ -152,6 +166,7 @@ public static class CheckFormulaCommand
             }
         }
 
+        _registered = null;
         _started = false;
         Logger.Info("CheckFormula: stopped");
     }
@@ -161,7 +176,13 @@ public static class CheckFormulaCommand
         ExcelAsyncUtil.QueueAsMacro(() =>
         {
             if (Enabled)
+            {
+                // A changed shortcut takes effect on save: unbind the old key, bind the new one.
+                if (_started && _registered?.OnKey
+                    != ShortcutKey.ParseOr(Settings.Current.CheckFormulaShortcut, Settings.DefaultCheckFormulaShortcut).OnKey)
+                    Stop();
                 StartIfEnabled();
+            }
             else
                 Stop();
         });
@@ -365,14 +386,13 @@ internal static class WorkbookNames
 }
 
 /// <summary>
-///     A keyboard hook on Excel's main thread that sees Ctrl+Shift+K while a formula is being
+///     A keyboard hook on Excel's main thread that sees Check Formula's shortcut while a formula is being
 ///     edited and reads the text with Excel's own <c>xlGetFmlaInfo</c> (the call
 ///     ExcelDna.IntelliSense uses). Outside edit mode it lets the key through to the OnKey command.
 /// </summary>
 internal static class FormulaEditHook
 {
     private const int WhKeyboard = 2;
-    private const int VkK = 0x4B;
     private const int VkShift = 0x10;
     private const int VkControl = 0x11;
     private const int VkMenu = 0x12;
@@ -383,9 +403,10 @@ internal static class FormulaEditHook
     private static IntPtr _hook;
     private static Action<string, IntPtr>? _handler;
     private static IntPtr _excelHwnd;
+    private static ShortcutKey? _key;
 
     /// <summary>Main thread only.</summary>
-    public static void Install(Action<string, IntPtr> handler)
+    public static void Install(Action<string, IntPtr> handler, ShortcutKey key)
     {
         if (_hook != IntPtr.Zero)
             return;
@@ -393,6 +414,7 @@ internal static class FormulaEditHook
         dynamic app = ExcelDnaUtil.Application;
         _excelHwnd = new IntPtr(app.Hwnd);
         _handler = handler;
+        _key = key;
         _proc = Proc;
         _hook = SetWindowsHookEx(WhKeyboard, _proc, IntPtr.Zero, GetCurrentThreadId());
         if (_hook == IntPtr.Zero)
@@ -406,6 +428,7 @@ internal static class FormulaEditHook
         _hook = IntPtr.Zero;
         _proc = null;
         _handler = null;
+        _key = null;
     }
 
     private static IntPtr Proc(int code, IntPtr wParam, IntPtr lParam)
@@ -413,12 +436,12 @@ internal static class FormulaEditHook
         try
         {
             // Key down (bit 31 clear), not an auto-repeat (bit 30 clear).
-            if (code == 0 && wParam.ToInt64() == VkK && (lParam.ToInt64() & 0xC0000000L) == 0
-                && IsDown(VkControl) && IsDown(VkShift) && !IsDown(VkMenu)
+            if (code == 0 && _key is { } key && wParam.ToInt64() == key.VirtualKey && (lParam.ToInt64() & 0xC0000000L) == 0
+                && IsDown(VkControl) == key.Ctrl && IsDown(VkShift) == key.Shift && IsDown(VkMenu) == key.Alt
                 && TryGetEditedFormula(out var text))
             {
                 _handler?.Invoke(text, _excelHwnd);
-                return new IntPtr(1); // swallow: don't type a K into the formula
+                return new IntPtr(1); // swallow: don't type the key into the formula
             }
         }
         catch (Exception ex)
@@ -440,7 +463,7 @@ internal static class FormulaEditHook
 
         text = Marshal.PtrToStringUni(info.lpch, info.cch) ?? "";
 
-        // Only formulas: in a cell holding text, Ctrl+Shift+K goes through untouched.
+        // Only formulas: in a cell holding text, the shortcut goes through untouched.
         return text.Length > 0 && text[0] is '=' or '+' or '-';
     }
 

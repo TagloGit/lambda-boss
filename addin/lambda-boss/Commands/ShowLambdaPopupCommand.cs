@@ -239,7 +239,7 @@ public static class ShowLambdaPopupCommand
             _windowDispatcher?.Invoke(() =>
             {
                 _window?.SetData(libraries, lambdas, loaded);
-                _window?.SetStatus(note ?? "↑↓ navigate · Enter load · Tab switch · Esc close");
+                _window?.ShowIdleStatus(note);
                 // Refilter around whatever is typed; never clear it (#452 / popup race)
                 _window?.OnDataArrived();
             });

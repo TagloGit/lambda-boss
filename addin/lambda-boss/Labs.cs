@@ -30,8 +30,8 @@ public static class Labs
 
     public static readonly LabsSwitch CheckFormula = new(
         "check-formula",
-        "Check Formula (Ctrl+Shift+K)",
-        "Points at unmatched or misplaced brackets and unknown names in the active cell's formula, or in the formula being edited. Also a ribbon button.");
+        "Check Formula (Ctrl+Shift+C)",
+        "Points at unmatched or misplaced brackets and unknown names in the active cell's formula, or in the formula being edited. Also a ribbon button. The key is the CheckFormulaShortcut setting in settings.json, read when Excel starts.");
 
     public static readonly IReadOnlyList<LabsSwitch> All =
         new[] { PopupChannelBadge, State, CheckFormula };

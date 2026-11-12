@@ -20,7 +20,8 @@
         </Grid.RowDefinitions>
 
         <!-- Mode indicator -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+        <!-- Mode bar: the code orders it (Commands first when the popup opens on them, spec 0017) -->
+        <StackPanel x:Name="ModeBar" Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock x:Name="LibraryModeLabel"
                        Text="Libraries"
                        FontSize="12"

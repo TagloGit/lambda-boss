@@ -29,7 +29,7 @@ public class SettingsTests : IDisposable
 
         Assert.Single(settings.Repos);
         Assert.Equal("https://github.com/TagloGit/lambda-boss", settings.Repos[0].Url);
-        Assert.Equal("^+L", settings.KeyboardShortcut);
+        Assert.Equal("^+J", settings.KeyboardShortcut);
         Assert.Equal(60, settings.CacheTtlMinutes);
     }
 
@@ -60,7 +60,7 @@ public class SettingsTests : IDisposable
         var settings = Settings.Load(_settingsPath);
 
         Assert.Single(settings.Repos);
-        Assert.Equal("^+L", settings.KeyboardShortcut);
+        Assert.Equal("^+J", settings.KeyboardShortcut);
     }
 
     [Fact]

@@ -258,6 +258,28 @@
                              Foreground="#cccccc"
                              Click="ChannelRadio_Click" />
             </StackPanel>
+            <TextBlock Text="Popup opens on"
+                       FontSize="13"
+                       FontWeight="Bold"
+                       Foreground="#dcdcaa"
+                       Margin="0,12,0,6" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="OpensOnCommandsRadio"
+                             GroupName="PopupOpensOn"
+                             Content="Commands"
+                             AutomationProperties.AutomationId="opens-on-commands"
+                             ToolTip="Type to filter the commands; Enter on a fresh popup imports every library with no prefix. Library opens the library list."
+                             Foreground="#cccccc"
+                             Margin="0,0,16,0"
+                             Click="OpensOnRadio_Click" />
+                <RadioButton x:Name="OpensOnLibrariesRadio"
+                             GroupName="PopupOpensOn"
+                             Content="Libraries"
+                             AutomationProperties.AutomationId="opens-on-libraries"
+                             ToolTip="The library list, as before: type / for the commands."
+                             Foreground="#cccccc"
+                             Click="OpensOnRadio_Click" />
+            </StackPanel>
             <TextBlock Text="Hints"
                        FontSize="13"
                        FontWeight="Bold"

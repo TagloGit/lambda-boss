@@ -122,7 +122,7 @@ public sealed class AddIn : IExcelAddIn, IDisposable
     {
         try
         {
-            // Register keyboard shortcut from settings (default: Ctrl+Shift+L)
+            // Register keyboard shortcut from settings (default: Ctrl+Shift+J, spec 0017)
             XlCall.Excel(XlCall.xlcOnKey, Settings.Current.KeyboardShortcut, "ShowLambdaPopup");
 
             Logger.Info("Lambda Boss keyboard shortcut registered");

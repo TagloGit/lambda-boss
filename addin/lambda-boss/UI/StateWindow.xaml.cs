@@ -200,12 +200,28 @@ public partial class StateWindow
             CancelButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
+        else if (IsToggleDebugKey(e))
+        {
+            // Alt+D (spec 0017): flip Debug and save in one press. Debug_Changed has switched the
+            // form and refreshed the preview by the time IsChecked returns.
+            DebugBox.IsChecked = DebugBox.IsChecked != true;
+            if (SaveButton.IsEnabled)
+                SaveButton_Click(this, new RoutedEventArgs());
+            e.Handled = true;
+        }
         else if (e.Key == Key.Enter && SaveButton.IsEnabled && !CancelButton.IsKeyboardFocused && !FormBox.IsDropDownOpen)
         {
             SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
     }
+
+    /// <summary>Alt+D, the Debug box's access key: WPF reports Alt combinations as Key.System.</summary>
+    internal static bool IsToggleDebugKey(Key key, Key systemKey, ModifierKeys modifiers) =>
+        key == Key.System && systemKey == Key.D && modifiers == ModifierKeys.Alt;
+
+    private static bool IsToggleDebugKey(KeyEventArgs e) =>
+        IsToggleDebugKey(e.Key, e.SystemKey, Keyboard.Modifiers);
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
