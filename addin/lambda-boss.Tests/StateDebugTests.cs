@@ -192,6 +192,23 @@ public class StateDebugTests
         Assert.Equal(Compact, book.Toggle(debug, on: false));
     }
 
+    // #463: a game log in one cell, split to a row. The toggle reads the text, so a row of
+    // inputs round-trips like a column; SplitState reads the row of states SCAN gives.
+    [Theory]
+    [InlineData("TEXTSPLIT(G55,\",\")")]
+    [InlineData("TEXTSPLIT(G55,,\",\")")]
+    public void AFoldOverASplitLog_OnThenOff_GivesBackTimsExactText(string cases)
+    {
+        var fold = Compact.Replace("SEQUENCE(15)", cases);
+        var book = new Book();
+
+        var debug = book.Toggle(fold, on: true);
+        Assert.StartsWith("=SplitState(SCAN(", debug);
+        Assert.Contains(cases, debug);
+        Assert.True(book.Read(debug).IsDebug);
+        Assert.Equal(fold, book.Toggle(debug, on: false));
+    }
+
     // Debug on puts the incoming values and the intermediate in front, spaced as Tim spaces his own.
     private static readonly string CompactEntered = "=SplitState(" + Compact[1..]
         .Replace("REDUCE(", "SCAN(")

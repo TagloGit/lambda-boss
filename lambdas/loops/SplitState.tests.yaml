@@ -141,3 +141,34 @@ tests:
   - name: REDUCE state with an error array
     args: ['=REDUCE(SetVars("ns", {1;2}, "n", 0), {1;2;3}, LAMBDA(a, v, SetVars("ns", GetVar(a, "ns")/{1;0}, "n", GetVar(a, "n") + 1)))', "=TRUE"]
     expected: [["ns", "n"], ["[1, #DIV/0!]", 3]]
+
+  # #463: SCAN over a row (TEXTSPLIT(x, ",")) gives a row of states; every step shows
+  - name: a row of states shows one row per state
+    args: ['=HSTACK(SetVars("a", 1, "b", 2), SetVars("a", 3, "b", 4))', "=TRUE"]
+    expected:
+      - ["a", "b"]
+      - [1, 2]
+      - [3, 4]
+
+  - name: SCAN over a split row shows every step
+    args: ['=SCAN(SetVars("n", 0, "last", "-"), TEXTSPLIT("x,y,z", ","), LAMBDA(a, v, SetVars("n", GetVar(a, "n") + 1, "last", v)))', "=TRUE"]
+    expected:
+      - ["n", "last"]
+      - [1, "x"]
+      - [2, "y"]
+      - [3, "z"]
+
+  - name: SCAN over a split column shows the same steps
+    args: ['=SCAN(SetVars("n", 0, "last", "-"), TEXTSPLIT("x,y,z", , ","), LAMBDA(a, v, SetVars("n", GetVar(a, "n") + 1, "last", v)))', "=TRUE"]
+    expected:
+      - ["n", "last"]
+      - [1, "x"]
+      - [2, "y"]
+      - [3, "z"]
+
+  - name: a row of one-variable states without headers
+    args: ['=SCAN(SetVars("s", 0), {1,2,3}, LAMBDA(a, v, SetVars("s", GetVar(a, "s") + v)))']
+    expected:
+      - [1]
+      - [3]
+      - [6]
