@@ -87,11 +87,16 @@ internal static class GatherCommand
             Dictionary<string, string>? existingNames = gatherNext
                 ? ConvertLetToLambdaCommand.GetExistingNames(workbook)
                 : null;
+            int firstSinkOffset = gatherNext ? (int)ReadSpillWidth(activeCell) : 1;
+            IReadOnlyList<SinkCellInfo>? sinkTargets = gatherNext
+                ? (IReadOnlyList<SinkCellInfo>)ReadSinkTargets(app, worksheet, activeCell, sink, firstSinkOffset)
+                : null;
 
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
                 string? saved = null;
                 GatherLambda? savedLambda = null;
+                CellRef target = sink;
 
                 dispatcher.Invoke(() =>
                 {
@@ -120,7 +125,8 @@ internal static class GatherCommand
                             existingNames.TryGetValue(name, out string? refersTo) ? refersTo : null;
                     }
 
-                    var window = new GatherWindow(result, Recompute, gatherNext, resolveExisting);
+                    var window = new GatherWindow(
+                        result, Recompute, gatherNext, resolveExisting, sinkTargets, firstSinkOffset);
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
 
@@ -128,6 +134,7 @@ internal static class GatherCommand
                     {
                         saved = window.SavedFormula;
                         savedLambda = window.SavedLambda;
+                        target = window.SavedTarget;
                     }
                 });
 
@@ -147,8 +154,27 @@ internal static class GatherCommand
                     // legacy Formula property silently wraps array refs
                     // like `A1#` with the implicit-intersection `@`
                     // operator on write, which would scalarise our LET.
-                    activeCell.Formula2 = saved;
-                    Logger.Info($"Gather: Wrote {(savedLambda != null ? "LAMBDA call" : "LET")} into {sink.A1Address}");
+                    if (target.Equals(sink))
+                    {
+                        activeCell.Formula2 = saved;
+                    }
+                    else
+                    {
+                        // Issue #470: the start cell stays as it is, as a fallback. Select
+                        // the new cell so filling down starts from it.
+                        dynamic targetCell = worksheet.Cells[target.Row, target.Column];
+                        targetCell.Formula2 = saved;
+                        try
+                        {
+                            targetCell.Select();
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error("Gather/SelectTarget", ex);
+                        }
+                    }
+
+                    Logger.Info($"Gather: Wrote {(savedLambda != null ? "LAMBDA call" : "LET")} into {target.A1Address}");
                 }
                 catch (Exception ex)
                 {
@@ -161,6 +187,100 @@ internal static class GatherCommand
         {
             Logger.Error("Gather", ex);
             ShowError($"Unexpected error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    ///     Issue #470: what the cells right of the start cell hold, read on Excel's thread
+    ///     so the dialog can say what moving the result there would overwrite. Index
+    ///     offset - 1. A cell that can't be read counts as empty.
+    /// </summary>
+    private static IReadOnlyList<SinkCellInfo> ReadSinkTargets(
+        dynamic app, dynamic worksheet, dynamic activeCell, CellRef sink, int firstOffset)
+    {
+        // Excel's own precedents of the start cell (every level, this sheet): catches
+        // whole-column, table and name refs the text check can't see. Throws when the
+        // cell has none.
+        object? precedents = null;
+        try
+        {
+            precedents = activeCell.Precedents;
+        }
+        catch
+        {
+            // No precedents on this sheet.
+        }
+
+        var count = Math.Min(GatherSinkTarget.LastOffset(firstOffset), 16384 - sink.Column);
+        var infos = new List<SinkCellInfo>(count);
+        for (var offset = 1; offset <= count; offset++)
+        {
+            try
+            {
+                dynamic cell = worksheet.Cells[sink.Row, sink.Column + offset];
+                var hasFormula = (bool)cell.HasFormula;
+                var isEmpty = !hasFormula && cell.Value2 == null;
+                CellRef? anchor = null;
+                object? parent = null;
+                try
+                {
+                    parent = cell.SpillParent;
+                }
+                catch
+                {
+                    // Excel 365 only; older builds have no spills.
+                }
+
+                if (parent != null)
+                {
+                    dynamic p = parent;
+                    var a = new CellRef(sink.Sheet, (int)p.Column, (int)p.Row);
+                    if (a.Column != sink.Column + offset || a.Row != sink.Row)
+                        anchor = a;
+                }
+
+                var isPrecedent = false;
+                if (precedents != null)
+                {
+                    try
+                    {
+                        isPrecedent = app.Intersect(cell, precedents) != null;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error("Gather/ReadSinkTargets/Intersect", ex);
+                    }
+                }
+
+                infos.Add(new SinkCellInfo(isEmpty, hasFormula, anchor, isPrecedent));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Gather/ReadSinkTargets", ex);
+                infos.Add(SinkCellInfo.Empty);
+            }
+        }
+
+        return infos;
+    }
+
+    /// <summary>
+    ///     Issue #470: how many columns the start cell's own spill covers (1 when it
+    ///     doesn't spill), so the first Alt+Right steps over it.
+    /// </summary>
+    private static int ReadSpillWidth(dynamic activeCell)
+    {
+        try
+        {
+            if (!(bool)activeCell.HasSpill)
+                return 1;
+            dynamic? rect = activeCell.SpillingToRange;
+            return rect == null ? 1 : Math.Max(1, (int)rect.Columns.Count);
+        }
+        catch
+        {
+            // Excel 365 only; older builds have no spills.
+            return 1;
         }
     }
 

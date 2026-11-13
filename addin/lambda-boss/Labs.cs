@@ -36,7 +36,7 @@ public static class Labs
     public static readonly LabsSwitch GatherNext = new(
         "gather-next",
         "Gather next",
-        "Gather walks ranges over formula cells, names inputs and steps from the nearest label, and can save the gathered LET as a named LAMBDA from its own dialog (Lambda name box, Alt+Up/Down to reorder inputs, Alt+I to toggle a row's role).");
+        "Gather walks ranges over formula cells, names inputs and steps from the nearest label, and can save the gathered LET as a named LAMBDA from its own dialog (Lambda name box, Alt+Up/Down to reorder inputs, Alt+I to toggle a row's role, Alt+Right/Left to write the result to a cell further right and keep the start cell).");
 
     public static readonly IReadOnlyList<LabsSwitch> All =
         new[] { PopupChannelBadge, State, CheckFormula, GatherNext };
