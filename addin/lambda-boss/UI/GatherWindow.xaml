@@ -63,20 +63,28 @@
                        Margin="0,0,0,8" />
         </StackPanel>
 
-        <TextBlock Grid.Row="1"
+        <TextBlock x:Name="SinkLabel"
+                   Grid.Row="1"
                    Text="Sink"
                    FontSize="13"
                    FontWeight="Bold"
                    Foreground="#dcdcaa"
                    Margin="0,0,0,4" />
 
-        <TextBlock x:Name="SinkAddressText"
-                   Grid.Row="2"
-                   Padding="6,4"
-                   FontSize="13"
-                   FontFamily="Consolas"
-                   Background="#2d2d2d"
-                   Foreground="#cccccc" />
+        <StackPanel Grid.Row="2">
+            <TextBlock x:Name="SinkAddressText"
+                       Padding="6,4"
+                       FontSize="13"
+                       FontFamily="Consolas"
+                       Background="#2d2d2d"
+                       Foreground="#cccccc" />
+            <!-- Issue #470 (gather-next): what writing to a moved target overwrites, or
+                 why it can't be written there. -->
+            <TextBlock x:Name="SinkTargetStatus"
+                       FontSize="11"
+                       Margin="0,2,0,0"
+                       Visibility="Collapsed" />
+        </StackPanel>
 
         <TextBlock Grid.Row="3"
                    Text="Original formula"

@@ -112,6 +112,12 @@ public partial class GatherWindow
     private readonly bool _gatherNext;
     private readonly Func<string, string?> _resolveExistingRefersTo;
 
+    // Issue #470: how many columns right of the start cell the result is written
+    // (Alt+Right / Alt+Left), and what the add-in read about those cells. Index
+    // offset - 1; null with the switch off.
+    private readonly IReadOnlyList<SinkCellInfo>? _sinkTargets;
+    private int _sinkOffset;
+
     // Whether every row's name is canonical, as last computed — Save needs it
     // again when only the Lambda name changes.
     private bool _rowNamesValid = true;
@@ -126,13 +132,15 @@ public partial class GatherWindow
         GatherResult initial,
         Func<IReadOnlyList<RowState>, GatherResult?> recompute,
         bool gatherNext = false,
-        Func<string, string?>? resolveExistingRefersTo = null)
+        Func<string, string?>? resolveExistingRefersTo = null,
+        IReadOnlyList<SinkCellInfo>? sinkTargets = null)
     {
         InitializeComponent();
         _result = initial;
         _recompute = recompute;
         _gatherNext = gatherNext;
         _resolveExistingRefersTo = resolveExistingRefersTo ?? (_ => null);
+        _sinkTargets = gatherNext ? sinkTargets ?? Array.Empty<SinkCellInfo>() : null;
         _previewDebounce = new DebouncedAction(PreviewDebounceDelay, RecomputeForNameOnly);
 
         WalkHintText.Text = BuildWalkHint(initial);
@@ -147,9 +155,16 @@ public partial class GatherWindow
         if (_gatherNext)
         {
             LambdaNamePanel.Visibility = Visibility.Visible;
+            SinkLabel.Text = "Sink  (Alt+\u2192 / Alt+\u2190 writes the result further right)";
             Loaded += (_, _) => LambdaNameBox.Focus();
         }
     }
+
+    /// <summary>
+    ///     Issue #470: the cell Save writes to. The start cell unless Alt+Right moved it;
+    ///     then the start cell is left as it is.
+    /// </summary>
+    public CellRef SavedTarget => GatherSinkTarget.At(_result.Sink, _sinkOffset);
 
     /// <summary>
     ///     Populated on Save; null when cancelled. The LET to write into the sink or,
@@ -317,6 +332,12 @@ public partial class GatherWindow
     /// </summary>
     private bool HandleAltKey(Key key)
     {
+        if (key == Key.Left || key == Key.Right)
+        {
+            MoveSinkTarget(key == Key.Right ? 1 : -1);
+            return true;
+        }
+
         if (key != Key.Up && key != Key.Down && key != Key.I)
             return false;
         if ((Keyboard.FocusedElement as FrameworkElement)?.DataContext is not GatherRowVm vm
@@ -334,6 +355,63 @@ public partial class GatherWindow
 
         MoveInputRow(vm, key == Key.Up ? -1 : 1);
         return true;
+    }
+
+    /// <summary>
+    ///     Issue #470: Alt+Right / Alt+Left move the cell the result is written to, one
+    ///     column at a time, never left of the start cell.
+    /// </summary>
+    private void MoveSinkTarget(int delta)
+    {
+        var next = GatherSinkTarget.Move(_result.Sink, _sinkOffset, delta);
+        if (_sinkTargets != null)
+            next = Math.Min(next, _sinkTargets.Count);
+        if (next == _sinkOffset)
+            return;
+        _sinkOffset = next;
+        UpdateSaveButtonEnabled(_rowNamesValid);
+        RefreshPreview();
+    }
+
+    /// <summary>
+    ///     The target's check against the formula Save would write now: blocked when the
+    ///     target is part of the calculation, a warning when it overwrites something.
+    /// </summary>
+    private SinkTargetCheck CheckSinkTarget()
+    {
+        if (_sinkOffset == 0 || _sinkTargets == null)
+            return SinkTargetCheck.Fine;
+        var formulas = new List<string> { _result.SynthesisedLet };
+        var lambdaName = CurrentLambdaName();
+        if (lambdaName.Length > 0 && ExcelNameValidator.Validate(lambdaName).IsValid)
+        {
+            var lambda = BuildLambda(lambdaName);
+            if (lambda != null)
+            {
+                formulas.Add(lambda.Call);
+                formulas.Add(lambda.Formula);
+            }
+        }
+
+        return GatherSinkTarget.Check(
+            _result.Sink, SavedTarget, _result.Bindings, formulas, _sinkTargets[_sinkOffset - 1]);
+    }
+
+    private void UpdateSinkDisplay(SinkTargetCheck check)
+    {
+        var start = _result.Sink.A1Address;
+        SinkAddressText.Text = _sinkOffset == 0
+            ? start
+            : $"{SavedTarget.A1Address}   (written here; {start} is left as it is)";
+        if (check.Message == null)
+        {
+            SinkTargetStatus.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        SinkTargetStatus.Text = check.Message;
+        SinkTargetStatus.Foreground = check.Blocked ? ErrorBrush : InfoBrush;
+        SinkTargetStatus.Visibility = Visibility.Visible;
     }
 
     /// <summary>
@@ -924,7 +1002,9 @@ public partial class GatherWindow
         }
 
         var (lambdaOk, lambdaMessage, isWarning) = EvaluateLambdaName();
-        SaveButton.IsEnabled = allValid && lambdaOk;
+        var sinkCheck = CheckSinkTarget();
+        UpdateSinkDisplay(sinkCheck);
+        SaveButton.IsEnabled = allValid && lambdaOk && !sinkCheck.Blocked;
         SaveButton.Content = CurrentLambdaName().Length > 0 ? "Save LAMBDA" : "Save";
 
         if (lambdaMessage == null)
@@ -942,6 +1022,8 @@ public partial class GatherWindow
             ? InvalidNameStatusText
             : !lambdaOk
                 ? "Fix the Lambda name before saving"
+                : sinkCheck.Blocked
+                    ? "Can't write there: Alt+\u2190 to move back"
                 : CurrentLambdaName().Length > 0
                     ? "Save registers the LAMBDA and writes a call to it into the sink cell · Esc to cancel"
                     : DefaultStatusText;
