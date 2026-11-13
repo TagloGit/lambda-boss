@@ -27,7 +27,7 @@ public sealed record SinkTargetCheck(bool Blocked, string? Message)
 ///     the same wherever it lands: its references are A1 text, which names the same cells
 ///     from any cell, and filling down from the new cell shifts the row-relative ones as it
 ///     would from the start cell. Formulas that depend on the cell they sit in
-///     (<c>COLUMN()</c>, <c>INDIRECT</c>, <c>OFFSET</c>) are the exception, and get a warning.
+///     (<c>COLUMN()</c>, <c>INDIRECT</c>) are the exception, and get a warning.
 /// </summary>
 public static class GatherSinkTarget
 {
@@ -103,32 +103,33 @@ public static class GatherSinkTarget
                 return new SinkTargetCheck(true, $"{addr} is read by the formula (circular)");
         }
 
-        foreach (var formula in formulas)
-            if (DependsOnPosition(formula))
-                return new SinkTargetCheck(false,
-                    $"The formula uses COLUMN(), INDIRECT or OFFSET: check {addr}'s value");
-
+        var warnings = new List<string>();
         if (info.SpillAnchor != null)
-            return new SinkTargetCheck(false,
-                $"{addr} is inside {info.SpillAnchor.A1Address}'s spill, which will show #SPILL!");
-        if (info.HasFormula)
-            return new SinkTargetCheck(false, $"Overwrites the formula in {addr}");
-        if (!info.IsEmpty)
-            return new SinkTargetCheck(false, $"Overwrites the value in {addr}");
-        return SinkTargetCheck.Fine;
+            warnings.Add($"{addr} is inside {info.SpillAnchor.A1Address}'s spill, which will show #SPILL!");
+        else if (info.HasFormula)
+            warnings.Add($"Overwrites the formula in {addr}");
+        else if (!info.IsEmpty)
+            warnings.Add($"Overwrites the value in {addr}");
+        if (formulas.Any(DependsOnPosition))
+            warnings.Add($"The formula uses COLUMN() or INDIRECT: check {addr}'s value");
+
+        return warnings.Count == 0
+            ? SinkTargetCheck.Fine
+            : new SinkTargetCheck(false, string.Join(" \u00b7 ", warnings));
     }
 
     /// <summary>
     ///     True when the formula may depend on the column it sits in: <c>COLUMN()</c> without
-    ///     an argument, <c>INDIRECT</c> (R1C1 text is relative to the caller) or <c>OFFSET</c>.
-    ///     <c>ROW()</c> is unaffected: the target is on the same row. String literals are ignored.
+    ///     an argument, or <c>INDIRECT</c> (R1C1 text is relative to the caller). <c>ROW()</c>
+    ///     is unaffected: the target is on the same row. String literals are ignored, and a
+    ///     longer name (<c>MYCOLUMN()</c>) does not match.
     /// </summary>
-    internal static bool DependsOnPosition(string formula)
-    {
-        var code = StripStrings(formula).ToUpperInvariant().Replace(" ", "");
-        return code.Contains("COLUMN()") || code.Contains("COLUMNS()")
-               || code.Contains("INDIRECT(") || code.Contains("OFFSET(");
-    }
+    internal static bool DependsOnPosition(string formula) =>
+        PositionPattern.IsMatch(StripStrings(formula).Replace(" ", ""));
+
+    private static readonly System.Text.RegularExpressions.Regex PositionPattern = new(
+        @"(?<![A-Za-z0-9_.])(COLUMN\(\)|INDIRECT\()",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     private static string StripStrings(string formula)
     {

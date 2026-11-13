@@ -95,7 +95,7 @@ shows the target and that the start cell is left as it is; after Save the target
 so filling down starts there. The written text is the same as at the start cell: its A1
 references name the same cells from any cell, and fill-down shifts them by row as before
 (issue #470 asked for references to be adjusted; A1 text needs none). The exception is a
-formula that depends on its own column (`COLUMN()`, `INDIRECT`, `OFFSET`): a warning says so.
+formula that depends on its own column (`COLUMN()` with no argument, `INDIRECT`): a warning says so.
 
 Save is blocked when the target is part of the calculation (a walked cell, inside an input
 range or a walked spill, inside the start cell's own spill, or one of the start cell's

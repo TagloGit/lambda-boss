@@ -148,7 +148,7 @@ public class GatherSinkTargetTests
     [Theory]
     [InlineData("=LET(a, INDEX(B5:Z5, COLUMN()-3), a)")]
     [InlineData("=LET(a, INDIRECT(\"RC[-1]\", FALSE), a)")]
-    [InlineData("=LET(a, OFFSET(A5, 0, 1), a)")]
+    [InlineData("=LET(a, indirect(\"RC[-1]\", FALSE), a)")]
     public void Check_ColumnDependentFormula_WarnsWithoutBlocking(string formula)
     {
         var check = GatherSinkTarget.Check(C("D5"), C("E5"), NoBindings,
@@ -158,11 +158,22 @@ public class GatherSinkTargetTests
     }
 
     [Fact]
-    public void Check_ColumnWithAnArgumentOrInAString_DoesNotWarn()
+    public void Check_ColumnWithAnArgumentInAStringOrALongerName_DoesNotWarn()
     {
         var check = GatherSinkTarget.Check(C("D5"), C("E5"), NoBindings,
-            new[] { "=LET(a, COLUMN(A5), b, \"COLUMN()\", a)" }, SinkCellInfo.Empty);
+            new[] { "=LET(a, COLUMN(A5), b, \"COLUMN()\", c, MYCOLUMN(), d, OFFSET(A5,0,1), a)" },
+            SinkCellInfo.Empty);
         Assert.Null(check.Message);
+    }
+
+    [Fact]
+    public void Check_OverwriteAndColumnWarnings_AreBothShown()
+    {
+        var check = GatherSinkTarget.Check(C("D5"), C("E5"), NoBindings,
+            new[] { "=LET(a, INDEX(B5:Z5, COLUMN()-3), a)" }, new SinkCellInfo(false, false));
+        Assert.False(check.Blocked);
+        Assert.Contains("Overwrites the value in E5", check.Message);
+        Assert.Contains("COLUMN()", check.Message);
     }
 
     [Fact]
