@@ -26,8 +26,9 @@ SplitState = LAMBDA(
         rs, CHAR(30),
         gs, CHAR(29),
     //  A list of states is one-dimensional either way: SCAN over a row (TEXTSPLIT(x, ",")) gives a
-    //  row of states, over a column a column. Read it as a column (#463).
-        states, TOCOL(state),
+    //  row of states, over a column a column. Read it as a column (#463). A blank cell in a range
+    //  stays "" (TOCOL alone would make it 0), so it still shows as "(empty)".
+        states, TOCOL(IF(ISBLANK(state), "", state)),
         n, ROWS(states),
         firstState, INDEX(states, 1, 1),
         firstParts, IF(firstState = "", "(empty)", TEXTSPLIT(firstState, us)),
