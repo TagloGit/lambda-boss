@@ -2,7 +2,7 @@
     DESCRIPTION:*//**Splits a state (or column of states) into one row of values per state. Scalars are coerced to native types via the per-entry tag; arrays render as [a, b, c]. Optionally prepends a header row of variable names.*/
 /*  RETURNS:            array: one row of values per state, columns by variable; optional header row of names
     PARAMETERS:
-        state           (Required) Scalar state, or a vertical column of states (e.g. SCAN result).
+        state           (Required) Scalar state, or a column or row of states (e.g. SCAN result; SCAN over a row gives a row).
         IncludeHeaders  (Optional) Pass TRUE to prepend a row of variable names taken from the first state. Defaults to FALSE.
     EXAMPLE:            =SplitState(SCAN(SetState(0,0), SEQUENCE(5), reducer), TRUE) -> (5+1)xN table: header row of variable names, then one row per iteration
     NOTE:               Pair with SCAN to inspect REDUCE state at every iteration. Columns are the first state's variables, in its order; every row is read by name, so a state built in another order still lines up, and a row missing a variable shows #N/A. Array slots are flattened to a [a, b, c] text preview because a 2D output cell can't hold a nested array.
@@ -14,6 +14,7 @@
                         2026-11-09  Claude      Read each row by the first state's names, not by position; a missing name gives #N/A (spec 0011 part 5)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
                         2026-11-10  Claude      An entry holding an error shows it in place: as its text in a list, as itself alone (#442)
+                        2026-11-13  Claude      A row of states (SCAN over a row, e.g. TEXTSPLIT(x, ",")) shows every step, not just the first (#463)
 */
 SplitState = LAMBDA(
 //  Parameter Declarations
@@ -24,8 +25,12 @@ SplitState = LAMBDA(
         us, CHAR(31),
         rs, CHAR(30),
         gs, CHAR(29),
-        n, ROWS(state),
-        firstState, INDEX(state, 1, 1),
+    //  A list of states is one-dimensional either way: SCAN over a row (TEXTSPLIT(x, ",")) gives a
+    //  row of states, over a column a column. Read it as a column (#463). A blank cell in a range
+    //  stays "" (TOCOL alone would make it 0), so it still shows as "(empty)".
+        states, TOCOL(IF(ISBLANK(state), "", state)),
+        n, ROWS(states),
+        firstState, INDEX(states, 1, 1),
         firstParts, IF(firstState = "", "(empty)", TEXTSPLIT(firstState, us)),
         numVars, COLUMNS(firstParts),
     //  Column c is the first state's c-th name. Every row is read by that name, as GetVar reads it,
@@ -52,7 +57,7 @@ SplitState = LAMBDA(
             ),
         body, MAKEARRAY(n, numVars, LAMBDA(r, c,
                     LET(
-                        s, INDEX(state, r, 1),
+                        s, INDEX(states, r, 1),
                         IF(s = "", "(empty)",
                             LET(
                             //  Match mode 1 ignores case, like GetVar. The key on the end means
