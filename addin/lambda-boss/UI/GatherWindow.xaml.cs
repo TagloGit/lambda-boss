@@ -114,8 +114,10 @@ public partial class GatherWindow
 
     // Issue #470: how many columns right of the start cell the result is written
     // (Alt+Right / Alt+Left), and what the add-in read about those cells. Index
-    // offset - 1; null with the switch off.
+    // offset - 1; null with the switch off. The first target steps over the start
+    // cell's own spill.
     private readonly IReadOnlyList<SinkCellInfo>? _sinkTargets;
+    private readonly int _firstSinkOffset;
     private int _sinkOffset;
 
     // Whether every row's name is canonical, as last computed — Save needs it
@@ -133,7 +135,8 @@ public partial class GatherWindow
         Func<IReadOnlyList<RowState>, GatherResult?> recompute,
         bool gatherNext = false,
         Func<string, string?>? resolveExistingRefersTo = null,
-        IReadOnlyList<SinkCellInfo>? sinkTargets = null)
+        IReadOnlyList<SinkCellInfo>? sinkTargets = null,
+        int firstSinkOffset = 1)
     {
         InitializeComponent();
         _result = initial;
@@ -141,6 +144,7 @@ public partial class GatherWindow
         _gatherNext = gatherNext;
         _resolveExistingRefersTo = resolveExistingRefersTo ?? (_ => null);
         _sinkTargets = gatherNext ? sinkTargets ?? Array.Empty<SinkCellInfo>() : null;
+        _firstSinkOffset = Math.Max(1, firstSinkOffset);
         _previewDebounce = new DebouncedAction(PreviewDebounceDelay, RecomputeForNameOnly);
 
         WalkHintText.Text = BuildWalkHint(initial);
@@ -363,9 +367,9 @@ public partial class GatherWindow
     /// </summary>
     private void MoveSinkTarget(int delta)
     {
-        var next = GatherSinkTarget.Move(_result.Sink, _sinkOffset, delta);
-        if (_sinkTargets != null)
-            next = Math.Min(next, _sinkTargets.Count);
+        var next = GatherSinkTarget.Move(_result.Sink, _sinkOffset, delta, _firstSinkOffset);
+        if (_sinkTargets != null && next > _sinkTargets.Count)
+            return;
         if (next == _sinkOffset)
             return;
         _sinkOffset = next;
@@ -1023,7 +1027,7 @@ public partial class GatherWindow
             : !lambdaOk
                 ? "Fix the Lambda name before saving"
                 : sinkCheck.Blocked
-                    ? "Can't write there: Alt+\u2190 to move back"
+                    ? "Can't write there: Alt+\u2192 / Alt+\u2190 to pick another cell"
                 : CurrentLambdaName().Length > 0
                     ? "Save registers the LAMBDA and writes a call to it into the sink cell · Esc to cancel"
                     : DefaultStatusText;

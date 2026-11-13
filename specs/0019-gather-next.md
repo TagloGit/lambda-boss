@@ -89,14 +89,18 @@ On a focused row, **Alt+I** toggles input/step (the existing toggle, where the r
 
 Tim, 13 Nov: "sometimes you want to put it in a different cell, just in case something goes
 wrong." In the dialog, **Alt+Right** moves the cell Save writes to one column right of the
-start cell (up to 10); **Alt+Left** moves it back, never left of the start cell. The Sink box
+start cell (ten targets); **Alt+Left** moves it back, never left of the start cell. When the
+start cell spills right, the first Alt+Right steps over its spill. The Sink box
 shows the target and that the start cell is left as it is; after Save the target is selected,
 so filling down starts there. The written text is the same as at the start cell: its A1
-references name the same cells from any cell, and fill-down shifts them by row as before.
+references name the same cells from any cell, and fill-down shifts them by row as before
+(issue #470 asked for references to be adjusted; A1 text needs none). The exception is a
+formula that depends on its own column (`COLUMN()`, `INDIRECT`, `OFFSET`): a warning says so.
 
 Save is blocked when the target is part of the calculation (a walked cell, inside an input
-range or a walked spill, inside the start cell's own spill) or the written formulas read it
-(circular). A target that holds a value or formula, or sits in another spill, shows a warning
+range or a walked spill, inside the start cell's own spill, or one of the start cell's
+precedents by Excel's own `Range.Precedents`, which sees whole-column, table and name refs) or
+the written formulas read it (circular). A target that holds a value or formula, or sits in another spill, shows a warning
 and can still be written.
 
 ## Acceptance criteria

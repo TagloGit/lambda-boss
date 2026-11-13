@@ -45,6 +45,20 @@ public class GatherSinkTargetTests
     }
 
     [Fact]
+    public void Move_StepsOverTheStartCellsOwnSpill()
+    {
+        // D5 spills four columns wide (D5:G5): the first target is H5, offset 4.
+        var start = C("D5");
+        Assert.Equal(4, GatherSinkTarget.Move(start, 0, 1, firstOffset: 4));
+        Assert.Equal(5, GatherSinkTarget.Move(start, 4, 1, firstOffset: 4));
+        Assert.Equal(4, GatherSinkTarget.Move(start, 5, -1, firstOffset: 4));
+        Assert.Equal(0, GatherSinkTarget.Move(start, 4, -1, firstOffset: 4));
+        Assert.Equal(GatherSinkTarget.LastOffset(4),
+            GatherSinkTarget.Move(start, GatherSinkTarget.LastOffset(4), 1, firstOffset: 4));
+        Assert.Equal(13, GatherSinkTarget.LastOffset(4));
+    }
+
+    [Fact]
     public void At_ShiftsTheColumnOnly()
     {
         Assert.Equal(C("F5"), GatherSinkTarget.At(C("D5"), 2));
@@ -118,6 +132,37 @@ public class GatherSinkTargetTests
             new[] { "=LET(a, A1, SEQUENCE(1, a))" }, new SinkCellInfo(false, false, C("D5")));
         Assert.True(check.Blocked);
         Assert.Contains("D5's spill", check.Message);
+    }
+
+    [Fact]
+    public void Check_ExcelsOwnPrecedent_Blocks()
+    {
+        // e.g. XLOOKUP(x, E:E, F:F): no cell ref the text check can see.
+        var check = GatherSinkTarget.Check(C("D5"), C("E5"), NoBindings,
+            new[] { "=LET(a, XLOOKUP(A5, E:E, F:F), a)" },
+            new SinkCellInfo(true, false, IsPrecedent: true));
+        Assert.True(check.Blocked);
+        Assert.Contains("part of the calculation", check.Message);
+    }
+
+    [Theory]
+    [InlineData("=LET(a, INDEX(B5:Z5, COLUMN()-3), a)")]
+    [InlineData("=LET(a, INDIRECT(\"RC[-1]\", FALSE), a)")]
+    [InlineData("=LET(a, OFFSET(A5, 0, 1), a)")]
+    public void Check_ColumnDependentFormula_WarnsWithoutBlocking(string formula)
+    {
+        var check = GatherSinkTarget.Check(C("D5"), C("E5"), NoBindings,
+            new[] { formula }, SinkCellInfo.Empty);
+        Assert.False(check.Blocked);
+        Assert.Contains("COLUMN()", check.Message);
+    }
+
+    [Fact]
+    public void Check_ColumnWithAnArgumentOrInAString_DoesNotWarn()
+    {
+        var check = GatherSinkTarget.Check(C("D5"), C("E5"), NoBindings,
+            new[] { "=LET(a, COLUMN(A5), b, \"COLUMN()\", a)" }, SinkCellInfo.Empty);
+        Assert.Null(check.Message);
     }
 
     [Fact]
