@@ -50,8 +50,19 @@ and the reference is rewritten to a stack of the cells' bindings:
 - one row → `HSTACK(a, b, c)`; one column → `VSTACK(a, b, c)`;
 - a block → `VSTACK(HSTACK(r1c1, r1c2), HSTACK(r2c1, r2c2))`.
 
-The stack is its own binding row, always named `<first cell's name>_s` (its label would be its first cell's own label, which only collides), so
-step formulas still receive bare names. Limit: 64 cells; beyond that the range promotes as today.
+The stack is its own binding row, so step formulas still receive bare names. Its default name
+must not read as one of its parts (#469; its label would be its first cell's own label, which
+only collides):
+
+- **two parts** join their names: `couponDeal` and `_3For2Deal` → `couponDeal_3For2Deal`
+  (leading underscores of the second part dropped);
+- **three or more** take `<reader>_in`, where the reader is the cell that reads the stack: the
+  sink's label (§2's rule) when the sink reads it, the step's name when a labelled step does
+  (`bestPrice_in`);
+- else `stack_1`, `stack_2` (numbered in emission order). A two-part stack with an unnamed
+  part, or a joined name Excel would refuse, takes the three-or-more rule.
+
+Names stay unique (collision suffix `_2`). The name is a default: it can be retyped in the dialog. Limit: 64 cells; beyond that the range promotes as today.
 A range whose cells are all literals promotes exactly as today (data stays a range input).
 
 ### 2. Names
