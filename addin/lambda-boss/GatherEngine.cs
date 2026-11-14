@@ -577,9 +577,25 @@ public static class GatherEngine
                 || (excludedCells != null && excludedCells.Contains(c));
 
             inCalc = InCalc;
+
+            // #473: the name of the first cell that reads a range input (a step in
+            // topo order, else the sink), for `<reader>_in`.
+            string? RangeReaderName(FormulaRef range)
+            {
+                var reader = nonSink.FirstOrDefault(c => c.Precedents.Contains(range));
+                if (reader != null)
+                    return nameOverrides != null && nameOverrides.TryGetValue(RowRef(reader), out var o)
+                        ? o
+                        : FindLabel(reader.Ref, source, InCalc)?.Name;
+                var sinkCell = walked.FirstOrDefault(w => w.Ref.Equals(sink));
+                return sinkCell != null && sinkCell.Precedents.Contains(range)
+                    ? FindLabel(sink, source, InCalc)?.Name
+                    : null;
+            }
+
             nameByRef = AssignNamesNext(
                 ranges, nonSink, slices, expandedRanges.Keys.ToList(), source, nameOverrides,
-                InCalc, pending, counters);
+                InCalc, pending, counters, RangeReaderName);
         }
         else
         {
@@ -1141,6 +1157,76 @@ public static class GatherEngine
         return candidate;
     }
 
+    /// <summary>
+    ///     Spec 0019 §2 (#473). A multi-column range input's default name must not read
+    ///     as one of its columns. Given the label found for its first cell:
+    ///     a label to the left (a row label), or one above whose row is blank over the
+    ///     rest of the range (a merged cell reads blank there too), spans the range and
+    ///     is kept; two columns with their own labels join them (<c>priceA_priceB</c>);
+    ///     three or more take <c>&lt;reader&gt;_in</c> when the first cell that reads
+    ///     the range has a name, else <c>range_N</c>. A second label that is not a
+    ///     usable name, or a joined name Excel would refuse, takes the three-or-more
+    ///     rule. Returns a base name; the caller resolves collisions.
+    /// </summary>
+    internal static string DefaultRangeName(
+        FormulaRef range,
+        (string Name, CellRef At) startLabel,
+        ICellSource source,
+        Func<CellRef, bool> inCalc,
+        Func<string?> readerName,
+        HashSet<string> used,
+        ref int rangeCounter)
+    {
+        if (range.End == null || range.End.Column == range.Start.Column)
+            return startLabel.Name;
+        // A label to the left labels one row: it spans a one-row range, but on a
+        // block it would read as the first row only.
+        var leftLabel = startLabel.At.Row == range.Start.Row;
+        if (leftLabel && range.End.Row == range.Start.Row)
+            return startLabel.Name;
+
+        var labelRow = startLabel.At.Row;
+        var sheet = range.Start.Sheet;
+        if (!leftLabel)
+        {
+            var spans = true;
+            for (var c = range.Start.Column + 1; c <= range.End.Column && spans; c++)
+                if (!source.ReadCell(new CellRef(sheet, c, labelRow)).IsEmpty)
+                    spans = false;
+            if (spans)
+                return startLabel.Name;
+        }
+
+        if (!leftLabel && range.End.Column - range.Start.Column == 1)
+        {
+            var at = new CellRef(sheet, range.End.Column, labelRow);
+            var text = inCalc(at) ? null : source.ReadCell(at).Text;
+            var second = LetNameSanitizer.Sanitize(text)?.TrimStart('_');
+            if (!string.IsNullOrEmpty(second))
+            {
+                var joined = $"{startLabel.Name}_{second}";
+                if (ExcelNameValidator.Validate(joined).IsValid)
+                    return joined;
+            }
+        }
+
+        var reader = readerName();
+        if (reader != null)
+        {
+            var inName = $"{reader}_in";
+            if (ExcelNameValidator.Validate(inName).IsValid)
+                return inName;
+        }
+
+        string candidate;
+        do
+        {
+            candidate = $"range_{++rangeCounter}";
+        } while (used.Contains(candidate));
+
+        return candidate;
+    }
+
     private static string NextFallbackName(string kind, HashSet<string> used, FallbackCounters counters)
     {
         string candidate;
@@ -1213,10 +1299,12 @@ public static class GatherEngine
         IReadOnlyDictionary<FormulaRef, string>? nameOverrides,
         Func<CellRef, bool> inCalc,
         HashSet<FormulaRef> pending,
-        FallbackCounters counters)
+        FallbackCounters counters,
+        Func<FormulaRef, string?> rangeReaderName)
     {
         var nameByRef = new Dictionary<FormulaRef, string>();
         var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rangeCounter = 0;
 
         void Claim(FormulaRef key, string baseName)
         {
@@ -1241,7 +1329,8 @@ public static class GatherEngine
             if (nameByRef.ContainsKey(range)) continue;
             var label = FindLabel(range.Start, source, inCalc);
             if (label != null)
-                Claim(range, label.Value.Name);
+                Claim(range, DefaultRangeName(
+                    range, label.Value, source, inCalc, () => rangeReaderName(range), used, ref rangeCounter));
             else
                 Claim(range, NextFallbackName("input", used, counters));
         }
