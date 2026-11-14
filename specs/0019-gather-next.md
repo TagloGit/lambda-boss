@@ -56,9 +56,9 @@ only collides):
 
 - **two parts** join their names: `couponDeal` and `_3For2Deal` → `couponDeal_3For2Deal`
   (leading underscores of the second part dropped);
-- **three or more** take `<reader>_in`, where the reader is the cell that reads the stack: the
-  sink's label (§2's rule) when the sink reads it, the step's name when a labelled step does
-  (`bestPrice_in`);
+- **three or more** take `<reader>_in`, where the reader is the first cell that reads the stack
+  (the stack row sits just before it): the sink's label (§2's rule) when that is the sink, the
+  step's name when it is a labelled step (`bestPrice_in`);
 - else `stack_1`, `stack_2` (numbered in emission order). A two-part stack with an unnamed
   part, or a joined name Excel would refuse, takes the three-or-more rule.
 
