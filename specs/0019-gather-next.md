@@ -72,10 +72,11 @@ A range whose cells are all literals promotes exactly as today (data stays a ran
   inside an input range). Else the cell to the left under the same rule. Else the fallback.
 - **A range input spanning several columns** (#473) must not read as one of its columns
   (`SUM(priceA)` over C5:E5 reads as price A only). From its first cell's label: a label to the
-  left (a row label), or one above whose row is blank over the rest of the range (a merged
-  label reads that way too), spans the range and is kept; **two columns** with their own labels
-  join them (`priceA_priceB`); **three or more** take `<reader>_in`, the reader being the first
-  cell that reads the range (a labelled step's name, else the sink's label), else `range_1`,
+  left of a one-row range (a row label), or one above whose row is blank over the rest of the
+  range (a merged label reads that way too), spans the range and is kept; **two columns** with
+  their own labels join them (`priceA_priceB`); **three or more**, or a block with only a row
+  label to its left, take `<reader>_in`, the reader being the first cell that reads the range
+  (a step: its label; the sink: its label; an unlabelled reader gives none, as for stacks), else `range_1`,
   `range_2`. A second label that is not a usable name, or a joined name Excel would refuse,
   takes the three-or-more rule. A one-column range keeps its label; a range with no label stays
   `input_N`. Collisions suffix `_2`.

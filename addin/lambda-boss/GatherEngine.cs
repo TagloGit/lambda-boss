@@ -1179,19 +1179,25 @@ public static class GatherEngine
     {
         if (range.End == null || range.End.Column == range.Start.Column)
             return startLabel.Name;
-        if (startLabel.At.Row == range.Start.Row)
+        // A label to the left labels one row: it spans a one-row range, but on a
+        // block it would read as the first row only.
+        var leftLabel = startLabel.At.Row == range.Start.Row;
+        if (leftLabel && range.End.Row == range.Start.Row)
             return startLabel.Name;
 
         var labelRow = startLabel.At.Row;
         var sheet = range.Start.Sheet;
-        var spans = true;
-        for (var c = range.Start.Column + 1; c <= range.End.Column && spans; c++)
-            if (!source.ReadCell(new CellRef(sheet, c, labelRow)).IsEmpty)
-                spans = false;
-        if (spans)
-            return startLabel.Name;
+        if (!leftLabel)
+        {
+            var spans = true;
+            for (var c = range.Start.Column + 1; c <= range.End.Column && spans; c++)
+                if (!source.ReadCell(new CellRef(sheet, c, labelRow)).IsEmpty)
+                    spans = false;
+            if (spans)
+                return startLabel.Name;
+        }
 
-        if (range.End.Column - range.Start.Column == 1)
+        if (!leftLabel && range.End.Column - range.Start.Column == 1)
         {
             var at = new CellRef(sheet, range.End.Column, labelRow);
             var text = inCalc(at) ? null : source.ReadCell(at).Text;

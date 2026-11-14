@@ -327,6 +327,23 @@ public class GatherNextTests
     }
 
     [Fact]
+    public void RangeName_BlockWithOnlyARowLabelToTheLeft_TakesTheReaderRule()
+    {
+        // "Jan" left of C5 labels row 5 only; the block C5:E7 must not read as it.
+        var source = new StubCellSource()
+            .WithLabel("B5", "Jan").WithLabel("B6", "Feb").WithLabel("B7", "Mar")
+            .WithLiteral("C5").WithLiteral("D5").WithLiteral("E5")
+            .WithLiteral("C6").WithLiteral("D6").WithLiteral("E6")
+            .WithLiteral("C7").WithLiteral("D7").WithLiteral("E7")
+            .WithLabel("G4", "Total")
+            .WithFormula("G5", "=SUM(C5:E7)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("total_in", result.Bindings.Single(b => b.Source.IsRange).Name);
+    }
+
+    [Fact]
     public void RangeName_SingleColumn_KeepsItsLabel()
     {
         var source = new StubCellSource()
