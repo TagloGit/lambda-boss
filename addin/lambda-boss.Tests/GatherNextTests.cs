@@ -226,6 +226,134 @@ public class GatherNextTests
         Assert.Equal("stack_1", GatherEngine.DefaultStackName(new[] { "a", null }, null, used, ref counter));
     }
 
+    // -- §2 range-input names (#473): a multi-column range never reads as one column --
+
+    [Fact]
+    public void RangeName_ThreeLabelledColumns_TakesTheReaderLabelWithIn()
+    {
+        // The #473 layout: Price A/B/C over C5:E5, a labelled helper sums them.
+        var source = new StubCellSource()
+            .WithLabel("C4", "Price A")
+            .WithLabel("D4", "Price B")
+            .WithLabel("E4", "Price C")
+            .WithLiteral("C5").WithLiteral("D5").WithLiteral("E5")
+            .WithLabel("M4", "Discounted")
+            .WithFormula("M5", "=SUM(C5:E5)*0.9")
+            .WithFormula("P5", "=M5+1");
+
+        var result = GatherOn(source, "P5");
+
+        var range = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal("discounted_in", range.Name);
+        Assert.Equal("C5:E5", range.Rhs);
+        Assert.Equal("SUM(discounted_in)*0.9", result.Bindings.Single(b => b.Name == "discounted").Rhs);
+    }
+
+    [Fact]
+    public void RangeName_ThreeLabelledColumns_ReadByTheSink_TakesTheSinkLabel()
+    {
+        var source = new StubCellSource()
+            .WithLabel("C4", "Price A")
+            .WithLabel("D4", "Price B")
+            .WithLabel("E4", "Price C")
+            .WithLiteral("C5").WithLiteral("D5").WithLiteral("E5")
+            .WithLabel("G4", "Total")
+            .WithFormula("G5", "=SUM(C5:E5)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("total_in", result.Bindings.Single(b => b.Source.IsRange).Name);
+        Assert.Equal("SUM(total_in)", result.Body);
+    }
+
+    [Fact]
+    public void RangeName_ThreeLabelledColumns_UnlabelledReader_IsRangeN()
+    {
+        var source = new StubCellSource()
+            .WithLabel("C4", "Price A")
+            .WithLabel("D4", "Price B")
+            .WithLabel("E4", "Price C")
+            .WithLiteral("C5").WithLiteral("D5").WithLiteral("E5")
+            .WithFormula("G5", "=SUM(C5:E5)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("range_1", result.Bindings.Single(b => b.Source.IsRange).Name);
+        Assert.Equal("SUM(range_1)", result.Body);
+    }
+
+    [Fact]
+    public void RangeName_TwoLabelledColumns_JoinsThem()
+    {
+        var source = new StubCellSource()
+            .WithLabel("C4", "Price A")
+            .WithLabel("D4", "Price B")
+            .WithLiteral("C5").WithLiteral("D5")
+            .WithLabel("G4", "Total")
+            .WithFormula("G5", "=SUM(C5:D5)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("priceA_priceB", result.Bindings.Single(b => b.Source.IsRange).Name);
+        Assert.Equal("SUM(priceA_priceB)", result.Body);
+    }
+
+    [Fact]
+    public void RangeName_OneLabelOverTheWholeRange_IsKept()
+    {
+        // "Prices" in C4 with D4:E4 blank (how a merged C4:E4 reads too).
+        var source = new StubCellSource()
+            .WithLabel("C4", "Prices")
+            .WithLiteral("C5").WithLiteral("D5").WithLiteral("E5")
+            .WithLabel("G4", "Total")
+            .WithFormula("G5", "=SUM(C5:E5)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("prices", result.Bindings.Single(b => b.Source.IsRange).Name);
+    }
+
+    [Fact]
+    public void RangeName_RowLabelToTheLeft_IsKept()
+    {
+        var source = new StubCellSource()
+            .WithLabel("B5", "Prices")
+            .WithLiteral("C5").WithLiteral("D5").WithLiteral("E5")
+            .WithFormula("G5", "=SUM(C5:E5)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("prices", result.Bindings.Single(b => b.Source.IsRange).Name);
+    }
+
+    [Fact]
+    public void RangeName_SingleColumn_KeepsItsLabel()
+    {
+        var source = new StubCellSource()
+            .WithLabel("C4", "Price")
+            .WithLiteral("C5").WithLiteral("C6").WithLiteral("C7")
+            .WithFormula("G5", "=SUM(C5:C7)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("price", result.Bindings.Single(b => b.Source.IsRange).Name);
+    }
+
+    [Fact]
+    public void RangeName_TwoRangesFallingBack_NumberInOrderAndStayUnique()
+    {
+        var source = new StubCellSource()
+            .WithLabel("A1", "North").WithLabel("B1", "South").WithLabel("C1", "East")
+            .WithLiteral("A2").WithLiteral("B2").WithLiteral("C2")
+            .WithLabel("A4", "Red").WithLabel("B4", "Green").WithLabel("C4", "Blue")
+            .WithLiteral("A5").WithLiteral("B5").WithLiteral("C5")
+            .WithFormula("G5", "=SUM(A2:C2)+MAX(A5:C5)");
+
+        var result = GatherOn(source, "G5");
+
+        Assert.Equal("SUM(range_1)+MAX(range_2)", result.Body);
+    }
+
     [Fact]
     public void Range_WithTheSwitchOff_StillPromotesToOneInput()
     {
