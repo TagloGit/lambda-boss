@@ -557,6 +557,7 @@ public static class GatherEngine
         var pending = new HashSet<FormulaRef>();
         var counters = new FallbackCounters();
         Dictionary<FormulaRef, string> nameByRef;
+        Func<CellRef, bool> inCalc = _ => false;
         if (next)
         {
             var calcCells = new HashSet<CellRef>(walked.Select(w => w.Ref));
@@ -575,6 +576,7 @@ public static class GatherEngine
                 // A cell the user unticked is still part of what is being gathered.
                 || (excludedCells != null && excludedCells.Contains(c));
 
+            inCalc = InCalc;
             nameByRef = AssignNamesNext(
                 ranges, nonSink, slices, expandedRanges.Keys.ToList(), source, nameOverrides,
                 InCalc, pending, counters);
@@ -644,8 +646,10 @@ public static class GatherEngine
 
         // Spec 0019 §1: the stack row for an expanded range lands just before the
         // first step that reads it (its cells all precede that step in topo order).
+        // readerName is that reader's name (the sink's label for the sink), or null.
         var emittedStacks = new HashSet<FormulaRef>();
-        void EmitStacksFor(IReadOnlyList<FormulaRef> precedents)
+        var stackCounter = 0;
+        void EmitStacksFor(IReadOnlyList<FormulaRef> precedents, string? readerName)
         {
             foreach (var p in precedents)
             {
@@ -664,21 +668,14 @@ public static class GatherEngine
                 string stackName;
                 if (pending.Contains(p))
                 {
-                    var firstName = nameByRef.TryGetValue(new FormulaRef(rangeCells[0]), out var fn)
-                                    && fn != PendingName
-                        ? fn
-                        : null;
-                    if (firstName == null)
-                    {
-                        stackName = ResolvePending(p, "step");
-                    }
-                    else
-                    {
-                        stackName = ResolveCollision($"{firstName}_s", used);
-                        nameByRef[p] = stackName;
-                        used.Add(stackName);
-                        pending.Remove(p);
-                    }
+                    stackName = DefaultStackName(
+                        rangeCells.Select(c => nameByRef.TryGetValue(new FormulaRef(c), out var n) && n != PendingName
+                            ? n
+                            : null).ToList(),
+                        readerName, used, ref stackCounter);
+                    nameByRef[p] = stackName;
+                    used.Add(stackName);
+                    pending.Remove(p);
                 }
                 else
                 {
@@ -724,9 +721,13 @@ public static class GatherEngine
 
         foreach (var cell in nonSink)
         {
-            if (next)
-                EmitStacksFor(cell.Precedents);
             var cellFormulaRef = RowRef(cell);
+            if (next)
+                EmitStacksFor(
+                    cell.Precedents,
+                    nameByRef.TryGetValue(cellFormulaRef, out var readerName) && readerName != PendingName
+                        ? readerName
+                        : null);
             var name = nameByRef[cellFormulaRef];
             var isPending = pending.Contains(cellFormulaRef);
             var role = ClassifyRole(cell, nameByRef, excluded, revertedSliceRefs, roleOverrides);
@@ -857,7 +858,7 @@ public static class GatherEngine
         if (next)
         {
             var sinkCell = walked.First(w => w.Ref.Equals(sink));
-            EmitStacksFor(sinkCell.Precedents);
+            EmitStacksFor(sinkCell.Precedents, FindLabel(sink, source, inCalc)?.Name);
             if (inputOrder != null)
             {
                 var reordered = ReorderInputs(bindings, inputOrder);
@@ -1103,6 +1104,43 @@ public static class GatherEngine
         public int Step;
     }
 
+    /// <summary>
+    ///     Spec 0019 §1 (#469). A stack row's default name must not read as one of its
+    ///     parts: two parts join their names (<c>couponDeal_3For2Deal</c>); three or more
+    ///     take <c>&lt;reader&gt;_in</c> when the cell that reads the stack has a name
+    ///     (the sink's label, for the sink), else <c>stack_N</c>. A part with no name, or
+    ///     a joined name Excel would refuse, also falls to the three-or-more rule.
+    /// </summary>
+    internal static string DefaultStackName(
+        IReadOnlyList<string?> partNames, string? readerName, HashSet<string> used, ref int stackCounter)
+    {
+        if (partNames.Count == 2 && partNames[0] != null && partNames[1] != null)
+        {
+            var second = partNames[1]!.TrimStart('_');
+            if (second.Length > 0)
+            {
+                var joined = $"{partNames[0]}_{second}";
+                if (ExcelNameValidator.Validate(joined).IsValid)
+                    return ResolveCollision(joined, used);
+            }
+        }
+
+        if (readerName != null)
+        {
+            var inName = $"{readerName}_in";
+            if (ExcelNameValidator.Validate(inName).IsValid)
+                return ResolveCollision(inName, used);
+        }
+
+        string candidate;
+        do
+        {
+            candidate = $"stack_{++stackCounter}";
+        } while (used.Contains(candidate));
+
+        return candidate;
+    }
+
     private static string NextFallbackName(string kind, HashSet<string> used, FallbackCounters counters)
     {
         string candidate;
@@ -1251,8 +1289,8 @@ public static class GatherEngine
         }
 
         // A stack's label would be its first cell's own label (the same search from
-        // the same cell), which only collides; it settles at emission as
-        // `<first cell's name>_s`.
+        // the same cell), which only collides; it settles at emission
+        // (see DefaultStackName).
         foreach (var stack in stacks)
         {
             if (nameByRef.ContainsKey(stack)) continue;

@@ -39,7 +39,7 @@ public class GatherNextTests
         var result = GatherOn(source, "C1");
 
         Assert.Equal(
-            new[] { "input_1", "step_1", "step_2", "step_1_s" },
+            new[] { "input_1", "step_1", "step_2", "step_1_step_2" },
             result.Bindings.Select(b => b.Name).ToArray());
         Assert.Equal(BindingRole.Input, result.Bindings[0].Role);
         Assert.Equal("B1", result.Bindings[0].Rhs);
@@ -47,10 +47,10 @@ public class GatherNextTests
         Assert.Equal("input_1*3", result.Bindings[2].Rhs);
         Assert.Equal(BindingRole.Step, result.Bindings[3].Role);
         Assert.Equal("VSTACK(step_1, step_2)", result.Bindings[3].Rhs);
-        Assert.Equal("MAX(step_1_s)", result.Body);
+        Assert.Equal("MAX(step_1_step_2)", result.Body);
 
         var parsed = LetParser.Parse(result.SynthesisedLet);
-        Assert.Equal("MAX(step_1_s)", parsed.Body);
+        Assert.Equal("MAX(step_1_step_2)", parsed.Body);
         Assert.Equal(4, parsed.Bindings.Count);
     }
 
@@ -67,7 +67,7 @@ public class GatherNextTests
 
         var stack = result.Bindings.Single(b => b.Source.IsRange);
         Assert.Equal("HSTACK(step_1, step_2)", stack.Rhs);
-        Assert.Equal("SUM(step_1_s)", result.Body);
+        Assert.Equal("SUM(step_1_step_2)", result.Body);
     }
 
     [Fact]
@@ -101,10 +101,129 @@ public class GatherNextTests
         var result = GatherOn(source, "C1");
 
         var names = result.Bindings.Select(b => b.Name).ToList();
-        Assert.True(names.IndexOf("step_1_s") > names.IndexOf("step_2"));
-        Assert.True(names.IndexOf("step_1_s") < names.IndexOf("step_3"));
+        Assert.True(names.IndexOf("step_1_step_2") > names.IndexOf("step_2"));
+        Assert.True(names.IndexOf("step_1_step_2") < names.IndexOf("step_3"));
         var reader = result.Bindings.Single(b => b.Name == "step_3");
-        Assert.Equal("MAX(step_1_s)", reader.Rhs);
+        Assert.Equal("MAX(step_1_step_2)", reader.Rhs);
+    }
+
+    // -- §1 stack names (#469): a stack's default name never reads as one of its parts ----
+
+    [Fact]
+    public void StackName_TwoParts_JoinsTheirNames()
+    {
+        // The #469 layout: two labelled helpers, the answer takes the MIN of both.
+        var source = new StubCellSource()
+            .WithLiteral("C5")
+            .WithLabel("M4", "Coupon deal")
+            .WithLabel("N4", "3 for 2 deal")
+            .WithLabel("P4", "Best price")
+            .WithFormula("M5", "=C5*2")
+            .WithFormula("N5", "=C5*3")
+            .WithFormula("P5", "=MIN(M5:N5)");
+
+        var result = GatherOn(source, "P5");
+
+        var stack = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal("couponDeal_3For2Deal", stack.Name);
+        Assert.Equal("HSTACK(couponDeal, _3For2Deal)", stack.Rhs);
+        Assert.Equal("MIN(couponDeal_3For2Deal)", result.Body);
+    }
+
+    [Fact]
+    public void StackName_ThreeParts_TakesTheSinkLabelWithIn()
+    {
+        var source = new StubCellSource()
+            .WithLiteral("A5")
+            .WithLabel("A1", "Coupon")
+            .WithLabel("B1", "Bulk")
+            .WithLabel("C1", "Loyalty")
+            .WithLabel("E1", "Best price")
+            .WithFormula("A2", "=A5*2")
+            .WithFormula("B2", "=A5*3")
+            .WithFormula("C2", "=A5*4")
+            .WithFormula("E2", "=MIN(A2:C2)");
+
+        var result = GatherOn(source, "E2");
+
+        var stack = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal("bestPrice_in", stack.Name);
+        Assert.Equal("HSTACK(coupon, bulk, loyalty)", stack.Rhs);
+        Assert.Equal("MIN(bestPrice_in)", result.Body);
+    }
+
+    [Fact]
+    public void StackName_ThreeParts_NoSinkLabel_IsStackN()
+    {
+        var source = new StubCellSource()
+            .WithLiteral("A5")
+            .WithFormula("A1", "=A5*2")
+            .WithFormula("B1", "=A5*3")
+            .WithFormula("C1", "=A5*4")
+            .WithFormula("E1", "=MIN(A1:C1)");
+
+        var result = GatherOn(source, "E1");
+
+        var stack = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal("stack_1", stack.Name);
+        Assert.Equal("MIN(stack_1)", result.Body);
+    }
+
+    [Fact]
+    public void StackName_ThreeParts_ReadByALabelledStep_TakesThatStepsName()
+    {
+        // B5 "Cheapest" =MIN(A1:A3) reads the stack; the sink C5 is unlabelled.
+        var source = new StubCellSource()
+            .WithLiteral("E1")
+            .WithFormula("A1", "=E1*2")
+            .WithFormula("A2", "=E1*3")
+            .WithFormula("A3", "=E1*4")
+            .WithLabel("B4", "Cheapest")
+            .WithFormula("B5", "=MIN(A1:A3)")
+            .WithFormula("C7", "=B5+1");
+
+        var result = GatherOn(source, "C7");
+
+        var stack = result.Bindings.Single(b => b.Source.IsRange);
+        Assert.Equal("cheapest_in", stack.Name);
+        Assert.Equal("MIN(cheapest_in)", result.Bindings.Single(b => b.Name == "cheapest").Rhs);
+    }
+
+    [Fact]
+    public void StackName_TwoUnlabelledThreePartStacks_NumberInOrder()
+    {
+        var source = new StubCellSource()
+            .WithLiteral("H1")
+            .WithFormula("A1", "=H1*2")
+            .WithFormula("B1", "=H1*3")
+            .WithFormula("C1", "=H1*4")
+            .WithFormula("A2", "=H1*5")
+            .WithFormula("B2", "=H1*6")
+            .WithFormula("C2", "=H1*7")
+            .WithFormula("E1", "=MIN(A1:C1)+MAX(A2:C2)");
+
+        var result = GatherOn(source, "E1");
+
+        Assert.Equal("MIN(stack_1)+MAX(stack_2)", result.Body);
+    }
+
+    [Fact]
+    public void DefaultStackName_JoinedNameTaken_Suffixes()
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "a_b" };
+        var counter = 0;
+
+        Assert.Equal("a_b_2", GatherEngine.DefaultStackName(new[] { "a", "b" }, null, used, ref counter));
+    }
+
+    [Fact]
+    public void DefaultStackName_TwoPartsOneUnnamed_FallsToReaderOrStack()
+    {
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var counter = 0;
+
+        Assert.Equal("total_in", GatherEngine.DefaultStackName(new[] { "a", null }, "total", used, ref counter));
+        Assert.Equal("stack_1", GatherEngine.DefaultStackName(new[] { "a", null }, null, used, ref counter));
     }
 
     [Fact]
@@ -494,8 +613,8 @@ public class GatherNextTests
         var lambda = GatherLambdaBuilder.Build("peak", result.Bindings, result.Body!)!;
 
         Assert.Equal("=peak(B1)", lambda.Call);
-        Assert.Contains("step_1_s, VSTACK(step_1, step_2),", lambda.Formula);
-        Assert.Contains("MAX(step_1_s)", lambda.Formula);
+        Assert.Contains("step_1_step_2, VSTACK(step_1, step_2),", lambda.Formula);
+        Assert.Contains("MAX(step_1_step_2)", lambda.Formula);
         Assert.StartsWith("=LAMBDA(\n    input_1,\n", lambda.Formula);
     }
 
