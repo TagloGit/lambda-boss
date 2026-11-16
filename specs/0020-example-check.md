@@ -53,7 +53,8 @@ relative; text trimmed, case-insensitive, as Excel's `=` compares) one of these,
    - the formula **doesn't read it**, alone or inside a range (the slip is a value typed *instead of* the cell; a formula
      that reads the cell and also compares it with a literal, like Cricket Darts'
      `throw="Bull"`, is using the input);
-   - it isn't in any of the written columns (a fill of D:F excludes all three from each).
+   - it isn't in any of the written columns (a fill of D:F excludes all three from each), nor in a
+     column a written formula spills sideways into (that's its own output, not an input);
    Typed cells and computed cells (Tim's helper columns) both count, except that a small integer
    (|n| ≤ 10) matches typed cells only: computed cells are full of small counts.
 2. **The first row of a multi-row range the formula reads that starts on the example row** (up to
