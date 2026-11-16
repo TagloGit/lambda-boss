@@ -1,23 +1,27 @@
 tests:
   - name: manhattan default distance 1
     args: ["C3"]
-    expected: [["C2"], ["B3"], ["D3"], ["C4"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"]]
 
   - name: chebyshev distance 1 gives 8 neighbours
     args: ["C3", "=1", "=1"]
-    expected: [["B2"], ["C2"], ["D2"], ["B3"], ["D3"], ["B4"], ["C4"], ["D4"]]
+    expected: [["C2"], ["D2"], ["D3"], ["D4"], ["C4"], ["B4"], ["B3"], ["B2"]]
 
-  - name: manhattan distance 2 gives diamond
+  - name: chebyshev distance 2 goes ring by ring, each clockwise from north
+    args: ["C3", "=2", "=1"]
+    expected: [["C2"], ["D2"], ["D3"], ["D4"], ["C4"], ["B4"], ["B3"], ["B2"], ["C1"], ["D1"], ["E1"], ["E2"], ["E3"], ["E4"], ["E5"], ["D5"], ["C5"], ["B5"], ["A5"], ["A4"], ["A3"], ["A2"], ["A1"], ["B1"]]
+
+  - name: manhattan distance 2 gives diamond, ring by ring
     args: ["C3", "=2"]
-    expected: [["C1"], ["B2"], ["C2"], ["D2"], ["A3"], ["B3"], ["D3"], ["E3"], ["B4"], ["C4"], ["D4"], ["C5"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"], ["C1"], ["D2"], ["E3"], ["D4"], ["C5"], ["B4"], ["A3"], ["B2"]]
 
-  - name: euclidean distance 2 gives disc
+  - name: euclidean distance 2 gives disc, nearest first (1, then root 2, then 2)
     args: ["C3", "=2", "=2"]
-    expected: [["C1"], ["B2"], ["C2"], ["D2"], ["A3"], ["B3"], ["D3"], ["E3"], ["B4"], ["C4"], ["D4"], ["C5"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"], ["D2"], ["D4"], ["B4"], ["B2"], ["C1"], ["E3"], ["C5"], ["A3"]]
 
   - name: euclidean distance 1.5 includes diagonals
     args: ["C3", "=1.5", "=2"]
-    expected: [["B2"], ["C2"], ["D2"], ["B3"], ["D3"], ["B4"], ["C4"], ["D4"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"], ["D2"], ["D4"], ["B4"], ["B2"]]
 
   - name: sheet edges clamp at A1
     args: ["A1"]
@@ -25,7 +29,7 @@ tests:
 
   - name: grid bounds clamp neighbours
     args: ["C3", "=1", "=1", "=SEQUENCE(3,3)"]
-    expected: [["B2"], ["C2"], ["B3"]]
+    expected: [["C2"], ["B3"], ["B2"]]
 
   - name: origin anchors in-memory grid bounds
     args: ["E5", "=1", "=0", "=SEQUENCE(3,3)", "=E5"]
@@ -37,20 +41,20 @@ tests:
 
   - name: 1x1 array centre behaves as scalar
     args: ['=CHOOSEROWS({"C3";"Z9"},1)']
-    expected: [["C2"], ["B3"], ["D3"], ["C4"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"]]
 
   - name: 1x1 array distance behaves as scalar
     args: ["C3", "=CHOOSEROWS({2;9},1)"]
-    expected: [["C1"], ["B2"], ["C2"], ["D2"], ["A3"], ["B3"], ["D3"], ["E3"], ["B4"], ["C4"], ["D4"], ["C5"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"], ["C1"], ["D2"], ["E3"], ["D4"], ["C5"], ["B4"], ["A3"], ["B2"]]
 
   - name: multi-letter column centre
     args: ["AA10"]
-    expected: [["AA9"], ["Z10"], ["AB10"], ["AA11"]]
+    expected: [["AA9"], ["AB10"], ["AA11"], ["Z10"]]
 
   - name: centre past XFD with no grid (#380)
     args: ["XFE5"]
-    expected: [["XFE4"], ["XFD5"], ["XFF5"], ["XFE6"]]
+    expected: [["XFE4"], ["XFF5"], ["XFE6"], ["XFD5"]]
 
   - name: packed integer centre (#380)
     args: ["=3000003"]
-    expected: [["C2"], ["B3"], ["D3"], ["C4"]]
+    expected: [["C2"], ["D3"], ["C4"], ["B3"]]
