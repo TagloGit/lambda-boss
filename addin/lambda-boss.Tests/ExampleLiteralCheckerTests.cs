@@ -203,6 +203,18 @@ public class ExampleLiteralCheckerTests
     }
 
     [Fact]
+    public void Vocabulary_keeps_its_case()
+    {
+        // Gerrymandering: the rules say "the enacted plan"; the example row's map is "Enacted plan".
+        var sheet = new Sheet()
+            .Row(151, "", "Example4a", 4, 0, null, null, "Enacted plan", 0.09)
+            .Row(154, "", 61, 4, 7, null, null, "01", 0.11);
+        var f = Assert.Single(Check(sheet, "=COUNTIFS(jPlans[Section], \"Enacted plan\", jPlans[Pct], \">\"&H151)", "E151",
+            new[] { 154 }, "Of the districts under the enacted plan, count those above the threshold in each map."));
+        Assert.Equal("G151", f.SourceAddress);
+    }
+
+    [Fact]
     public void An_example_word_does_not_count_as_rules_vocabulary()
     {
         var sheet = new Sheet()

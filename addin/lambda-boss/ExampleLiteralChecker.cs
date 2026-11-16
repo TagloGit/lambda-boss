@@ -137,8 +137,8 @@ internal static class ExampleLiteralChecker
 
     /// <summary>
     ///     The findings for one written formula, most certain first (cells before text). Empty when
-    ///     nothing matches. <paramref name="ruleWords"/> gives the lower-cased words of the
-    ///     workbook's prose outside its examples; it's asked only when a text literal matches a cell.
+    ///     nothing matches. <paramref name="ruleWords"/> gives the words of the workbook's prose
+    ///     outside its examples (case kept; see <see cref="RuleWords"/>); it's asked only when a text literal matches a cell.
     /// </summary>
     public static IReadOnlyList<ExampleLiteralFinding> Check(ExampleCheckRequest request, IExampleSheet sheet,
         Func<IReadOnlyCollection<string>>? ruleWords = null)
@@ -357,8 +357,9 @@ internal static class ExampleLiteralChecker
     }
 
     /// <summary>
-    ///     The lower-cased words of prose (text cells of 26+ characters) outside example paragraphs.
-    ///     A level or bonus heading ends an example. Used for the workbook's rules vocabulary.
+    ///     The words of prose (text cells of 26+ characters) outside example paragraphs, as written
+    ///     (case kept: "Bull" the dartboard sector, not "bull"). A level or bonus heading ends an
+    ///     example. Used for the workbook's rules vocabulary.
     /// </summary>
     public static HashSet<string> RuleWords(IEnumerable<string> cellTexts)
     {
@@ -373,7 +374,7 @@ internal static class ExampleLiteralChecker
             if (inExample || s.Length < MinProseLength)
                 continue;
             foreach (Match m in Word.Matches(s))
-                words.Add(m.Value.ToLowerInvariant());
+                words.Add(m.Value);
         }
 
         return words;
@@ -381,7 +382,7 @@ internal static class ExampleLiteralChecker
 
     private static bool InProse(string text, IReadOnlyCollection<string> words)
     {
-        var parts = Word.Matches(text).Cast<Match>().Select(m => m.Value.ToLowerInvariant()).ToList();
+        var parts = Word.Matches(text).Cast<Match>().Select(m => m.Value).ToList();
         return parts.Count > 0 && parts.All(words.Contains);
     }
 

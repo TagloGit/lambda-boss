@@ -73,9 +73,10 @@ relative; text trimmed, case-insensitive, as Excel's `=` compares) one of these,
   if-empty, `IFERROR`'s fallback, `DATE`, `LAMBDA`, and the rest in
   `ExampleLiteralChecker.StructuralArgs`). `SWITCH`'s keys and results are the case's rules (an
   in-formula lookup table) and are never flagged.
-- **Rules vocabulary**: a text literal of two or more characters whose words all appear in the
-  workbook's prose outside example paragraphs ("Bull", "Azure", "Milk"). One-letter text (`"A"`)
-  is never vocabulary.
+- **Rules vocabulary**: a text literal of two or more characters whose words all appear, with the
+  same capitals, in the workbook's prose outside example paragraphs ("Bull", "Azure", "Milk"; but
+  not "Enacted plan" when the rules only say "the enacted plan"). One-letter text (`"A"`) is never
+  vocabulary.
 - A number that appears in both the level's rules and its example (the rules define it).
 
 ## What Tim sees
@@ -114,26 +115,30 @@ PR and below.
 
 ## Tuning (16 Nov, on Tim's files)
 
-The rule was tuned on a prototype over nine of Tim's worked files before the C# port: every
-vertical family of two or more rows was "re-filled" and every spilling cell "re-entered".
+The rule was tuned on nine of Tim's worked files across vintages, then the shipped
+`ExampleLiteralChecker` was run over the same files (exported cell values and formulas): every
+vertical family of two or more rows "re-filled", every spilling cell "re-entered".
 
-| Case (vintage) | Families / spills | Flags | Synthetic slips caught |
+| Case (vintage) | Fills / spills | Flags (true / false) | Synthetic slips caught |
 |---|---|---|---|
-| Gerrymandering (2026 community) | 17 / 7 | 1 true (L6's `10`) | 20/22 |
-| Monday Morning Quarterback (2026) | 25 / 9 | 0 | 25/25 |
-| Grand Sumo (MEWC 2026 group stage) | 30 / 2 | 0 | 7/7 |
-| Oachi in Zurich (DACH starter 2026) | 9 / 0 | 0 | 3/6 |
-| A Good Walk Spoiled (2026 community) | 17 / 0 | 0 | 26/26 |
-| Bushland Adventures (MEWC 2025) | 26 / 11 | 0 | 21/31 |
-| Mama Africa's Kitchen (MEWC SA 2025) | 16 / 5 | 0 | 14/14 |
-| Sommelier (RTLV 2024) | 36 / 0 | 0 | 22/23 |
-| Cricket Darts (MEWC 2023) | 34 / 11 | 0 | 10/24 |
+| Gerrymandering (2026 community) | 17 / 7 | 2 / 0 (L6's `10`, in the family and in a probe copy) | 18/20 |
+| Monday Morning Quarterback (2026) | 25 / 9 | 0 / 0 | 24/25 |
+| Grand Sumo (MEWC 2026 group stage) | 30 / 2 | 0 / 0 | 4/7 |
+| Oachi in Zurich (DACH starter 2026) | 9 / 0 | 0 / 0 | 3/4 |
+| A Good Walk Spoiled (2026 community) | 17 / 0 | 0 / 0 | 23/26 |
+| Bushland Adventures (MEWC 2025) | 26 / 11 | 0 / 0 | 21/26 |
+| Mama Africa's Kitchen (MEWC SA 2025) | 16 / 5 | 0 / 0 | 14/14 |
+| Sommelier (RTLV 2024) | 36 / 0 | 0 / 0 | 23/23 |
+| Cricket Darts (MEWC 2023) | 34 / 11 | 0 / 0 | 7/17 |
 
-"Synthetic slips": in each family, each same-row reference whose column varies was replaced by its
-example-row value (Tim's slip, made on purpose), and the check run. The misses are by design: text
-that is the case's vocabulary ("T20", "Bull", "Azure", "Milk", "Rock"), small integers that equal
-only computed cells, and cell-address strings. Gerrymandering's three real slips: 3/3; its
-corrected formulas: silent.
+**Synthetic slips**: in each family, each same-row reference whose column varies was replaced by
+its example-row value (Tim's slip, made on purpose) and the check run: 137 of 162 caught, inputs
+to the left and to the right alike. The misses are by design: text that is the case's vocabulary
+("Bull", "Azure", "Milk", "Grass"), small integers whose only match is a computed cell or a
+structural slot, and long list strings. **Gerrymandering's three real slips: 3/3; its corrected
+formulas: silent.** Before the rules-vocabulary and "a cell the formula reads" rules, Cricket
+Darts raised five false flags (`"Bull"`, multipliers 2 and 3 in a helper grid) and MMQ one (`20`
+matching a count in an unrelated table on the same row, now outside the row's block).
 
 ## Defaults Tim can reverse
 
