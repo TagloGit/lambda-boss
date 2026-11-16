@@ -376,42 +376,62 @@ internal static class ExampleLiteralChecker
         var anyNumber = sourceColumns.Any(sc => sc.Value is not string);
         var floor = Math.Max(1, request.Row - TextRowsAbove);
         var r = request.Row - 1;
-        while (r >= floor && sheet.Value(r, request.Column) is not null && !IsHeadingRow(sheet, r))
-            r--;
+        // The table above the source: passed over, but a header row on top of it still ends the walk.
+        for (; r >= floor && sheet.Value(r, request.Column) is not null; r--)
+            if (IsHeadingRow(sheet, r) || Classify(sheet, r, sourceColumns, anyNumber) == LineRow.Header)
+                return 0;
         for (; r >= floor; r--)
         {
             if (IsHeadingRow(sheet, r))
                 return 0;
-            int same = 0, other = 0, sameNumbers = 0;
-            foreach (var (c, v) in sourceColumns)
+            switch (Classify(sheet, r, sourceColumns, anyNumber))
             {
-                var w = sheet.Value(r, c);
-                if (!Usable(w))
-                    continue;
-                if ((w is string) == (v is string))
-                {
-                    same++;
-                    if (w is not string)
-                        sameNumbers++;
-                }
-                else
-                    other++;
+                case LineRow.Header:
+                    return 0; // the example line would have been below it
+                case LineRow.Line when !IsIndexRow(sheet, r):
+                    return r;
             }
-
-            if (same + other == 0)
-                continue;
-            if (anyNumber && sameNumbers == 0)
-            {
-                if (other > 0)
-                    return 0; // a header row: the example line would have been below it
-                continue;
-            }
-
-            if (same >= other && !IsIndexRow(sheet, r))
-                return r;
         }
 
         return 0;
+    }
+
+    private enum LineRow
+    {
+        Pass,
+        Header,
+        Line
+    }
+
+    /// <summary>
+    ///     A row's filled cells in the source row's input columns: a header (text where the source has
+    ///     numbers, and no numbers), an example line (at least as often the same kind as not, with a
+    ///     number where the source has numbers), or neither.
+    /// </summary>
+    private static LineRow Classify(IExampleSheet sheet, int row, List<(int Column, object Value)> sourceColumns,
+        bool anyNumber)
+    {
+        int same = 0, other = 0, sameNumbers = 0;
+        foreach (var (c, v) in sourceColumns)
+        {
+            var w = sheet.Value(row, c);
+            if (!Usable(w))
+                continue;
+            if ((w is string) == (v is string))
+            {
+                same++;
+                if (w is not string)
+                    sameNumbers++;
+            }
+            else
+                other++;
+        }
+
+        if (same + other == 0)
+            return LineRow.Pass;
+        if (anyNumber && sameNumbers == 0)
+            return other > 0 ? LineRow.Header : LineRow.Pass;
+        return same >= other ? LineRow.Line : LineRow.Pass;
     }
 
     /// <summary>
@@ -423,8 +443,9 @@ internal static class ExampleLiteralChecker
     {
         var numbers = new List<double>();
         var last = Math.Min(Math.Max(1, sheet.LastColumn), MaxRowColumns);
+        // Small whole numbers only: a line of consecutive dates (46000 …) is data, not an index.
         for (var c = 1; c <= last; c++)
-            if (sheet.Value(row, c) is double d)
+            if (sheet.Value(row, c) is double d && Math.Abs(d) < 1000 && Math.Abs(d % 1) < 1e-12)
                 numbers.Add(d);
         if (numbers.Count < 3)
             return false;

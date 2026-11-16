@@ -533,6 +533,27 @@ public class ExampleLiteralCheckerTests
     }
 
     [Fact]
+    public void A_header_row_directly_on_the_table_ends_the_walk()
+    {
+        // No example line; headers on 298 over the table, including the answer column (I298); a
+        // price table higher in the level.
+        var sheet = TimLayout().Set("G297", "").Set("H297", "").Set("G296", "").Set("H296", "")
+            .Set("G298", "Weekly income").Set("H298", "Target").Set("I298", "Weeks")
+            .Set("G293", 40).Set("H293", 900).Set("G294", 50).Set("H294", 950);
+        Assert.Equal(0, ExampleLiteralChecker.ExampleLine(Request(TimFormula(299, "900"), "I299", TableBelow299), sheet));
+        Assert.Empty(Check(sheet, TimFormula(299, "900"), "I299", TableBelow299));
+    }
+
+    [Fact]
+    public void An_example_line_of_consecutive_dates_is_not_an_index_row()
+    {
+        // Five consecutive days, then 26 | 670: mostly +1 steps, but dates, not indices.
+        var sheet = TimLayout().Set("B297", 46000.0).Set("C297", 46001.0).Set("D297", 46002.0)
+            .Set("E297", 46003.0).Set("F297", 46004.0);
+        Assert.Equal(297, ExampleLiteralChecker.ExampleLine(Request(TimFormula(299, "670"), "I299", TableBelow299), sheet));
+    }
+
+    [Fact]
     public void An_index_row_is_not_an_example_line()
     {
         // Cricket Darts L5: a 10, 11, 12 … row over the table; 14 is the rules' threshold.
