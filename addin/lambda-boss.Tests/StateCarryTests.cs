@@ -23,6 +23,15 @@ public class StateCarryTests
         "    SetVars(\"n\", nextN)",
         ")))");
 
+    private static readonly string CarriedPos = Lines(
+        "=REDUCE(SetVars(\"n\", 0, \"pos\", \"\"), TEXTSPLIT(G55, \",\"), LAMBDA(a, v, LET(",
+        "    n, GetVar(a, \"n\"),",
+        "    pos, n + LEN(v),",
+        "    cell, pos * 2,",
+        "    nextN, n + 1,",
+        "    SetVars(\"n\", nextN, \"pos\", pos)",
+        ")))");
+
     private static StateEngine Read(string formula)
     {
         var read = StateEngines.Read(formula, _ => null, Kinds);
@@ -75,12 +84,7 @@ public class StateCarryTests
     {
         var formula = Carry(Plain, "pos");
 
-        Assert.Contains("SetVars(\"n\", 0, \"pos\", \"\")", formula);
-        Assert.Contains("SetVars(\"n\", nextN, \"pos\", pos)", formula);
-        Assert.Contains("pos, n + LEN(v),", formula);
-        Assert.Contains("cell, pos * 2,", formula);
-        Assert.DoesNotContain("pos_", formula);
-        Assert.DoesNotContain("nextPos", formula);
+        Assert.Equal(CarriedPos, formula);
         Assert.Equal(new[] { "n", "pos" }, Keys(formula));
     }
 
@@ -159,11 +163,7 @@ public class StateCarryTests
         var result = Apply(engine, new StateEngineChange(rows, engine.Fold, null));
 
         Assert.Null(result.Error);
-        Assert.Contains("place, n + LEN(v),", result.Formula);
-        Assert.Contains("cell, place * 2,", result.Formula);
-        Assert.Contains("\"place\", place)", result.Formula);
-        Assert.Contains("\"place\", \"\"", result.Formula);
-        Assert.DoesNotContain("pos", result.Formula);
+        Assert.Equal(CarriedPos.Replace("pos", "place"), result.Formula);
         Assert.Equal(new[] { "n", "place" }, Keys(result.Formula!));
         Assert.Equal(new[] { "place" }, Read(result.Formula!).CarriedKeys);
     }
@@ -233,9 +233,18 @@ public class StateCarryTests
 
         var on = Apply(engine, new StateEngineChange(engine.Rows, engine.Fold, null, null, null, true));
         Assert.Null(on.Error);
-        Assert.Contains("\"pos\", pos", on.Formula);
-        Assert.Contains("pos, n + LEN(v),", on.Formula);
-        Assert.Contains("\"pos\", \"\"", on.Formula);
+        Assert.Equal(
+            Lines(
+                "=REDUCE(SetVars(\"n\", 0, \"pos\", \"\", \"st\", \"go\"), TEXTSPLIT(G55, \",\"), LAMBDA(a, v, LET(",
+                "    n, GetVar(a, \"n\"),",
+                "    st, GetVar(a, \"st\"),",
+                "    pos, n + LEN(v),",
+                "    cell, pos * 2,",
+                "    nextN, n + 1,",
+                "    nextSt, st,",
+                "    IF(GetVar(a, \"st\") <> \"go\", a, SetVars(\"n\", nextN, \"pos\", pos, \"st\", nextSt))",
+                ")))"),
+            on.Formula);
 
         var guarded = Read(on.Formula!);
         Assert.True(guarded.IsGuarded);
@@ -244,8 +253,18 @@ public class StateCarryTests
         var off = Apply(guarded, new StateEngineChange(guarded.Rows, guarded.Fold, null, null, null, false));
         Assert.Null(off.Error);
         Assert.False(Read(off.Formula!).IsGuarded);
-        Assert.Contains("\"pos\", pos", off.Formula);
-        Assert.Contains("pos, n + LEN(v),", off.Formula);
+        Assert.Equal(
+            Lines(
+                "=REDUCE(SetVars(\"n\", 0, \"pos\", \"\", \"st\", \"go\"), TEXTSPLIT(G55, \",\"), LAMBDA(a, v, LET(",
+                "    n, GetVar(a, \"n\"),",
+                "    st, GetVar(a, \"st\"),",
+                "    pos, n + LEN(v),",
+                "    cell, pos * 2,",
+                "    nextN, n + 1,",
+                "    nextSt, st,",
+                "    SetVars(\"n\", nextN, \"pos\", pos, \"st\", nextSt)",
+                ")))"),
+            off.Formula);
     }
 
     // ------------------------------------------------------------ what can't be carried

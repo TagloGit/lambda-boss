@@ -115,7 +115,7 @@ public partial class StateWindow
         SelectedFold,
         NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
         DebugBox.IsChecked == true,
-        AnswerChanged() || AnswerFormChanged() ? AnswerKeys() : null,
+        AnswerChanged() ? AnswerKeys() : AnswerFormChanged() ? _engine.Answer : null,
         GuardBox.IsChecked == true,
         AnswerFormChanged() ? AnswerLetBox.IsChecked == true : null);
 

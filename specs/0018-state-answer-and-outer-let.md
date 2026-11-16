@@ -239,6 +239,8 @@ rows, in order, as before) is written as LET names:
   "The last line is your own, and GetVars would lose it. Take it out first, or keep LET names."
   Lines of Tim's own between the answer lines and the last line count as part of the last line
   (kept, and read for names; Debug's `_answer` goes in front of the final expression only).
+  A hand-written last line that happens to equal the default for the current answers is treated as
+  the default from then on.
 
 **Defaults taken** (each reversible: tell the Excel director):
 - The box starts unticked for a cell with no answer yet: GetVars stays the default answer form,

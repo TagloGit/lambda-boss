@@ -154,6 +154,10 @@ public static class StateAnswer
 
     private const string AnswerName = "_answer";
 
+    // _answer, or _answer_ and so on when the LET already binds the shorter one.
+    private static bool IsMarker(string name) =>
+        name.StartsWith(AnswerName, StringComparison.OrdinalIgnoreCase) && name[AnswerName.Length..].All(c => c == '_');
+
     private const string FoldWord = "fold";
 
     private const string NeedsLet =
@@ -228,7 +232,7 @@ public static class StateAnswer
         var i = s.K + 1;
         while (i + 1 <= s.Args.Count - 2
                && s.Args[i] is LeafNode { TokenType: FormulaTokenType.Name } line
-               && !(debug && string.Equals(line.Text, AnswerName, StringComparison.OrdinalIgnoreCase))
+               && !(debug && IsMarker(line.Text))
                && s.Args[i + 1] is FunctionCallNode read && StateStepParser.IsNamed(read.Name, "GetVar")
                && read.Arguments.Count == 2
                && read.Arguments[0] is LeafNode { TokenType: FormulaTokenType.Name } source
@@ -247,7 +251,7 @@ public static class StateAnswer
             && s.Args[^1] is LeafNode { TokenType: FormulaTokenType.Name } last
             && string.Equals(last.Text, s.FoldName, StringComparison.OrdinalIgnoreCase)
             && s.Args[^3] is LeafNode { TokenType: FormulaTokenType.Name } marker
-            && string.Equals(marker.Text, AnswerName, StringComparison.OrdinalIgnoreCase))
+            && IsMarker(marker.Text))
             s.DebugTail = true;
         return s;
     }
@@ -279,7 +283,7 @@ public static class StateAnswer
             if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_')) name = "_" + name;
         }
 
-        while (taken.Contains(name) || !ExcelNameValidator.Validate(name).IsValid) name += "_";
+        while (taken.Contains(name) || !StateScaffold.IsUsableBinding(name)) name += "_";
         taken.Add(name);
         return name;
     }
@@ -319,6 +323,8 @@ public static class StateAnswer
 
         var taken = BoundNames(s, skipAnswer: true);
         taken.Add(s.FoldName!);
+        // Names Tim's own last line reads are taken too: a new line never captures one.
+        if (!isDefault) taken.UnionWith(WordsIn(tail));
 
         var lines = new List<(string Name, string Text)>();
         foreach (var key in keys)
@@ -348,8 +354,9 @@ public static class StateAnswer
     // The fold back where it was: a LET made for the answer is taken off, Tim's own keeps its lines.
     private static (string, string) Collapse(string b, string a, LetShape s)
     {
+        // A LET left with no bindings is taken off, whatever surrounds it.
         var letStart = s.Let.Start;
-        if (s.K == 1 && s.F[..letStart].Trim() == "=" && s.F[s.Let.End..].Trim().Length == 0)
+        if (s.K == 1)
             return (s.F[..letStart], s.F[s.Let.End..]);
 
         var nameStart = s.Args[s.K - 1].Start;
@@ -404,7 +411,10 @@ public static class StateAnswer
     {
         var x = s.Args[^1];
         var gap = s.F[s.Args[^2].End..x.Start];
-        var text = AnswerName + ", " + s.F[x.Start..x.End] + gap + s.FoldName;
+        var taken = BoundNames(s, skipAnswer: false);
+        var marker = AnswerName;
+        while (taken.Contains(marker)) marker += "_";
+        var text = marker + ", " + s.F[x.Start..x.End] + gap + s.FoldName;
         return (b, a[..(x.Start - s.Offset)] + text + a[(x.End - s.Offset)..]);
     }
 

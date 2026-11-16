@@ -88,7 +88,9 @@ public class StateAnswerLetTests
     [Fact]
     public void Tick_OneAnswer_TheLastLineIsTheBareName()
     {
-        Assert.EndsWith("    cash, GetVar(fold, \"cash\"),\n    cash\n)", Set(Bare, true, "cash"));
+        Assert.Equal(
+            Lines("=LET(", "    fold, " + Truck() + ",", "    cash, GetVar(fold, \"cash\"),", "    cash", ")"),
+            Set(Bare, true, "cash"));
     }
 
     [Fact]
@@ -138,6 +140,57 @@ public class StateAnswerLetTests
         var written = Set(formula, true, "cash");
         Assert.Contains("    fold_, REDUCE(", written);
         Assert.Contains("cash, GetVar(fold_, \"cash\")", written);
+    }
+
+
+    [Fact]
+    public void Names_ANewLine_NeverCapturesANameTimsLastLineReads()
+    {
+        var typed = Answered(last: "IF(cash > 0, crates, 0)").Replace(
+            "    crates, GetVar(fold, \"crates\"),\n", "");
+        var written = Set(typed, null, "cash", "crates");
+        Assert.Equal(
+            Lines(
+                "=LET(", "    fold, " + Truck() + ",", "    cash, GetVar(fold, \"cash\"),",
+                "    crates_, GetVar(fold, \"crates\"),", "    IF(cash > 0, crates, 0)", ")"),
+            written);
+    }
+
+    [Fact]
+    public void Names_RowColumnLookalikes_GetAnUnderscore()
+    {
+        var step = Lines(
+            "REDUCE(SetVars(\"rc\", 0, \"R2C\", 0), A1:A3, LAMBDA(a, v, LET(",
+            "    x, GetVar(a, \"rc\"),",
+            "    y, GetVar(a, \"R2C\"),",
+            "    nextX, x + v,",
+            "    nextY, y + 1,",
+            "    SetVars(\"rc\", nextX, \"R2C\", nextY)",
+            ")))");
+        var written = Set("=" + step, true, "rc", "R2C");
+        Assert.Contains("    rc_, GetVar(fold, \"rc\"),\n    R2C_, GetVar(fold, \"R2C\"),\n    HSTACK(rc_, R2C_)\n)", written);
+    }
+
+    [Fact]
+    public void UntickAll_InsideAnotherFunction_TakesTheLetOff()
+    {
+        var typed = "=TAKE(" + Lines("LET(", "    f, " + Truck() + ",", "    x, GetVar(f, \"cash\"),", "    x", ")") + ", 1)";
+        Assert.Equal("=TAKE(" + Truck() + ", 1)", Set(typed, null));
+    }
+
+    [Fact]
+    public void DebugOn_WhenTheLetBindsAnswer_UsesAnotherMarker_AndOffGivesTheTextBack()
+    {
+        var typed = Lines(
+            "=LET(", "    _answer, 1,", "    fold, " + Truck() + ",", "    cash, GetVar(fold, \"cash\"),", "    cash", ")");
+        var engine = Read(typed);
+        var on = Apply(engine, DebugOn(engine));
+        Assert.Null(on.Error);
+        Assert.EndsWith("    _answer_, cash,\n    fold\n)", on.Formula);
+
+        var debug = Read(on.Formula!);
+        Assert.Equal(new[] { "cash" }, debug.Answer);
+        Assert.Equal(typed, Apply(debug, StateDebug.Toggle(debug, false, Kinds)).Formula);
     }
 
     [Fact]
