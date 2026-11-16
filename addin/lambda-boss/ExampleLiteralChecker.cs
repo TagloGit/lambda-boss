@@ -221,7 +221,13 @@ internal static class ExampleLiteralChecker
     {
         var list = new List<Candidate>();
         var others = request.OtherRows.Take(MaxCompareRows).ToList();
-        var read = new HashSet<(int, int)>(refs.Where(r => r.IsSingleCell).Select(r => (r.Row1, r.Col1)));
+        // A cell the formula reads, alone or inside a range, is used, not replaced.
+        bool Reads(int row, int col) => refs.Any(r => r.Row1 <= row && row <= r.Row2 && r.Col1 <= col && col <= r.Col2);
+
+        // A column varies when another row holds a different value: blanks below (an input box
+        // level with the first row) don't count.
+        bool Varies(object v, IEnumerable<int> rows, int col) =>
+            rows.Any(r => sheet.Value(r, col) is { } o && Usable(o) && !Same(v, o));
 
         // 1. The example row, both ways from the formula, within its block (two empty columns end it).
         if (others.Count > 0)
@@ -230,18 +236,20 @@ internal static class ExampleLiteralChecker
             foreach (var c in Block(sheet, request.Row, request.Column, -1, last)
                          .Concat(Block(sheet, request.Row, request.Column, 1, last)))
             {
-                if (request.TargetColumns.Contains(c) || read.Contains((request.Row, c)))
-                    continue; // a cell the formula reads is used, not replaced
+                if (request.TargetColumns.Contains(c) || Reads(request.Row, c))
+                    continue;
                 var v = sheet.Value(request.Row, c);
                 if (!Usable(v))
                     continue;
-                if (others.Any(r => !Same(v!, sheet.Value(r, c))))
+                if (Varies(v!, others, c))
                     list.Add(new Candidate(v!, request.Row, c, Address(request.Row, c), sheet.IsFormula(request.Row, c), false));
             }
         }
 
-        // 2. The first row of each multi-row range the formula reads, where its column varies.
-        foreach (var r in refs.Where(r => !r.IsSingleCell && r.Row2 > r.Row1 && r.Col2 - r.Col1 < MaxRangeColumns))
+        // 2. The first row of each multi-row range the formula reads that starts on the example row
+        //    (a spill over the table), where its column varies.
+        foreach (var r in refs.Where(r => !r.IsSingleCell && r.Row1 == request.Row && r.Row2 > r.Row1
+                                          && r.Col2 - r.Col1 < MaxRangeColumns))
         {
             var lastRow = Math.Min(r.Row2, r.Row1 + MaxCompareRows);
             for (var c = r.Col1; c <= r.Col2; c++)
@@ -249,10 +257,7 @@ internal static class ExampleLiteralChecker
                 var v = sheet.Value(r.Row1, c);
                 if (!Usable(v))
                     continue;
-                var varies = false;
-                for (var row = r.Row1 + 1; row <= lastRow && !varies; row++)
-                    varies = !Same(v!, sheet.Value(row, c));
-                if (varies)
+                if (Varies(v!, Enumerable.Range(r.Row1 + 1, lastRow - r.Row1), c))
                     list.Add(new Candidate(v!, r.Row1, c, Address(r.Row1, c), sheet.IsFormula(r.Row1, c), true));
             }
         }

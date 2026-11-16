@@ -45,14 +45,17 @@ internal static class ExampleCheckWindow
     }
 
     /// <summary>Main thread (the SheetChange handler).</summary>
+    // Held in a field: a local timer can be collected before it fires.
+    private static Timer? _statusTimer;
+
     public static void Present(CheckedWrite where, IReadOnlyList<ExampleCheckFinding> findings, string mode)
     {
         var app = (Excel.Application)ExcelDnaUtil.Application;
-        var written = ScreenRect(app, where.Row, where.Column, where.Rows, where.Columns);
+        var written = ScreenRect(app, where.Sheet, where.Row, where.Column, where.Rows, where.Columns);
         var first = findings[0];
         var source = first.Finding.FromText
             ? (NativeMethods.Rect?)null
-            : ScreenRect(app, first.Finding.SourceRow, first.Finding.SourceColumn, 1, 1);
+            : ScreenRect(app, where.Sheet, first.Finding.SourceRow, first.Finding.SourceColumn, 1, 1);
         var shortcut = CheckFormulaCommand.ShortcutLabel;
 
         if (mode == ExampleCheckModes.Status)
@@ -69,7 +72,8 @@ internal static class ExampleCheckWindow
             }
 
             // Hand the status bar back to Excel after a while, unless something else changed it.
-            var timer = new Timer(_ => ExcelAsyncUtil.QueueAsMacro(() =>
+            _statusTimer?.Dispose();
+            _statusTimer = new Timer(_ => ExcelAsyncUtil.QueueAsMacro(() =>
             {
                 try
                 {
@@ -82,7 +86,6 @@ internal static class ExampleCheckWindow
                     // Excel busy or closing: leave it.
                 }
             }), null, TimeSpan.FromSeconds(15), Timeout.InfiniteTimeSpan);
-            GC.KeepAlive(timer);
             ShowLambdaPopupCommand.InvokeOnWindowThread(d => d.BeginInvoke(new Action(() =>
             {
                 CloseAllOnWindowThread();
@@ -365,13 +368,14 @@ internal static class ExampleCheckWindow
     private const int WsExTransparent = 0x00000020;
 
     /// <summary>A range's rectangle on screen, in pixels, or null when Excel can't say. Main thread.</summary>
-    private static NativeMethods.Rect? ScreenRect(Excel.Application app, int row, int column, int rows, int columns)
+    private static NativeMethods.Rect? ScreenRect(Excel.Application app, string sheet, int row, int column, int rows, int columns)
     {
         try
         {
             var win = app.ActiveWindow;
             var pane = win.ActivePane;
-            if (app.ActiveSheet is not Excel.Worksheet ws)
+            // A write to another sheet (a macro) has nothing on screen to outline.
+            if (app.ActiveSheet is not Excel.Worksheet ws || ws.Name != sheet)
                 return null;
             var rng = Com.Block(ws, row, column, row + rows - 1, column + columns - 1);
             static double D(object o) => Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture);

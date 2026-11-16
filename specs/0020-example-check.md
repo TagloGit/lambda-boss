@@ -47,16 +47,17 @@ relative; text trimmed, case-insensitive, as Excel's `=` compares) one of these,
    same row as the formula, but they may be to the left or to the right"). The row is read
    outwards from the formula both ways until two empty columns in a row (one empty column, like
    Gerrymandering's gap between Answer and Map, doesn't end it). A cell counts only if:
-   - its column **varies** across the family (some other row differs), so the literal can't be
-     right for every row: a level column holding 4 on every row never matches;
-   - the formula **doesn't read it** (the slip is a value typed *instead of* the cell; a formula
+   - its column **varies** across the family (some other row holds a different, non-empty
+     value), so the literal can't be right for every row: a level column holding 4 on every row
+     never matches, nor does an input box level with the first row with nothing below it;
+   - the formula **doesn't read it**, alone or inside a range (the slip is a value typed *instead of* the cell; a formula
      that reads the cell and also compares it with a literal, like Cricket Darts'
      `throw="Bull"`, is using the input);
-   - it isn't in the written columns.
+   - it isn't in any of the written columns (a fill of D:F excludes all three from each).
    Typed cells and computed cells (Tim's helper columns) both count, except that a small integer
    (|n| ≤ 10) matches typed cells only: computed cells are full of small counts.
-2. **The first row of a multi-row range the formula reads** (up to 30 columns wide), where that
-   column varies further down: a spilled MAP over `B2:B21` with the example's `"Rioja"` inside.
+2. **The first row of a multi-row range the formula reads that starts on the example row** (up to
+   30 columns wide), where that column varies further down: a spilled MAP over `B2:B21` with the example's `"Rioja"` inside.
 3. **A number the level's example text states and its rules text doesn't.** The level's text is
    the prose (text cells of 26+ characters, columns A–AD) above the formula, back to the
    `Level n` / `Bonus n` heading or 80 rows. Its example part starts at the first line beginning
@@ -110,8 +111,20 @@ confirms undo after a flagged fill in every mode.
 A finding needs: one `FormulaR1C1` read of the written column and one of the 60 rows above, one
 `Value2` read of a block from 80 rows above the example row to the last compared row (≤ 200
 columns), one `Formula2` read of the example row, and the workbook's prose once per workbook (400
-rows × 30 columns per sheet, only when a text literal matches a cell). Measured times are in the
-PR and below.
+rows × 30 columns per sheet, only when a text literal matches a cell).
+
+Measured in real Excel (VM `taglo-win`, 16 Nov), after the start-up warm-up:
+
+| Write | Time |
+|---|---|
+| 1,000-row fill with a finding | 15 ms |
+| 1,000-row clean fill, including the one-off vocabulary read (17 ms) | 35 ms |
+| 1,000-row spill | 2 ms |
+| Gerrymandering fills (22 rows) | 2–23 ms |
+| 262 fills and spills replayed over 9 played cases | mean 2–8 ms per file; one cold first check 115 ms |
+
+A finding shown in the last minute (the same example cell, literal and match) isn't shown again,
+so an undo, a redo or a re-fill doesn't repeat the panel. The log still records it.
 
 ## Tuning (16 Nov, on Tim's files)
 
@@ -129,10 +142,10 @@ vertical family of two or more rows "re-filled", every spilling cell "re-entered
 | Bushland Adventures (MEWC 2025) | 26 / 11 | 0 / 0 | 21/26 |
 | Mama Africa's Kitchen (MEWC SA 2025) | 16 / 5 | 0 / 0 | 14/14 |
 | Sommelier (RTLV 2024) | 36 / 0 | 0 / 0 | 23/23 |
-| Cricket Darts (MEWC 2023) | 34 / 11 | 0 / 0 | 7/17 |
+| Cricket Darts (MEWC 2023) | 34 / 11 | 0 / 0 | 5/17 |
 
 **Synthetic slips**: in each family, each same-row reference whose column varies was replaced by
-its example-row value (Tim's slip, made on purpose) and the check run: 137 of 162 caught, inputs
+its example-row value (Tim's slip, made on purpose) and the check run: 135 of 162 caught, inputs
 to the left and to the right alike. The misses are by design: text that is the case's vocabulary
 ("Bull", "Azure", "Milk", "Grass"), small integers whose only match is a computed cell or a
 structural slot, and long list strings. **Gerrymandering's three real slips: 3/3; its corrected

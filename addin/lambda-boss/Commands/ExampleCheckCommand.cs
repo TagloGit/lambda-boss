@@ -144,7 +144,7 @@ internal static class ExampleCheckCommand
             if (where is null)
                 return; // not a fill or spill: nothing was checked
             LastCheckMs = sw.Elapsed.TotalMilliseconds;
-            var fresh = findings.Where(Fresh).ToList();
+            var fresh = findings.Where(f => Fresh(f, ((Excel.Worksheet)sh).Parent is Excel.Workbook b ? $"{b.Name}!{where.Sheet}" : where.Sheet)).ToList();
             var detail = string.Join("; ", findings.Select(f =>
                 $"{f.Finding.Literal} in {ExampleLiteralChecker.Address(f.Request.Row, f.Request.Column)} = "
                 + (f.Finding.FromText ? "example text" : f.Finding.SourceAddress)));
@@ -166,9 +166,9 @@ internal static class ExampleCheckCommand
     ///     False when the same finding (sheet, example cell, literal, match) was shown in the last
     ///     minute: an undo, a redo or a re-fill of the same formula doesn't show it again.
     /// </summary>
-    private static bool Fresh(ExampleCheckFinding f)
+    private static bool Fresh(ExampleCheckFinding f, string where)
     {
-        var key = $"{f.Request.Row}:{f.Request.Column}|{f.Finding.Literal}|{f.Finding.SourceAddress}|{f.Request.Formula.GetHashCode()}";
+        var key = $"{where}|{f.Request.Row}:{f.Request.Column}|{f.Finding.Literal}|{f.Finding.SourceAddress}|{f.Request.Formula.GetHashCode()}";
         var now = DateTime.UtcNow;
         foreach (var old in Shown.Where(kv => now - kv.Value > TimeSpan.FromMinutes(1)).Select(kv => kv.Key).ToList())
             Shown.Remove(old);
@@ -221,9 +221,11 @@ internal static class ExampleCheckCommand
         }
         else
         {
+            // Every written column is excluded from every column's candidates: its values are outputs.
+            var written = Enumerable.Range(c1, cols).ToList();
             for (var i = 1; i <= Math.Min(cols, MaxColumns); i++)
             {
-                var req = FamilyRequest(ws, r1, c1 + i - 1, rows);
+                var req = FamilyRequest(ws, r1, c1 + i - 1, rows, written);
                 if (req is not null)
                     requests.Add(req);
             }
@@ -273,8 +275,11 @@ internal static class ExampleCheckCommand
     ///     first formula, extended upward over the rows the fill started from. Null when that's a
     ///     single row (nothing to compare with).
     /// </summary>
-    private static ExampleCheckRequest? FamilyRequest(Excel.Worksheet ws, int r1, int col, int rows)
+    private static ExampleCheckRequest? FamilyRequest(Excel.Worksheet ws, int r1, int col, int rows,
+        IReadOnlyCollection<int> targetColumns)
     {
+        // Only the first rows matter (50 are compared): a full-column fill reads no more than this.
+        rows = Math.Min(rows, ExampleLiteralChecker.MaxCompareRows + 10);
         object written = Com.Block(ws, r1, col, r1 + rows - 1, col).FormulaR1C1;
         var texts = Column(written, rows);
         var firstIdx = Array.FindIndex(texts, t => t.StartsWith("=", StringComparison.Ordinal));
@@ -314,7 +319,7 @@ internal static class ExampleCheckCommand
         var example = family[0];
         var formula = Com.Formula2(Com.Block(ws, example, col, example, col));
         return new ExampleCheckRequest(formula, example, col,
-            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), new[] { col });
+            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), targetColumns);
     }
 
     /// <summary>

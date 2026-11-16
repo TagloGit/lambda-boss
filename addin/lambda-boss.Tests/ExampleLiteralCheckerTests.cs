@@ -330,4 +330,46 @@ public class ExampleLiteralCheckerTests
         Assert.Equal(new[] { 10000d, 12.22, 0.1222, 2596 },
             ExampleLiteralChecker.Numbers("by 10,000 and 12.22% gives 2596; Example4a is a name").ToArray());
     }
+
+    // ------------------------------------------------------------ review (PR #476)
+
+    [Fact]
+    public void Every_written_column_is_excluded_from_every_column()
+    {
+        // A fill of D5:F7: E's values are outputs, not inputs, when D is checked.
+        var sheet = new Sheet().Row(5, null, "a", null, null, 25).Row(6, null, "b", null, null, 30).Row(7, null, "c", null, null, 35);
+        var r = ExampleLiteralChecker.Check(new ExampleCheckRequest("=IF(B5=\"a\",25,2)", 5, 4, new[] { 6, 7 }, new[] { 4, 5, 6 }),
+            sheet, null);
+        Assert.Empty(r);
+    }
+
+    [Fact]
+    public void A_cell_read_through_a_range_is_not_a_candidate()
+    {
+        var sheet = new Sheet().Row(5, null, "x", 3, "x").Row(6, null, "y", 4, "x").Row(7, null, "x", 5, "y");
+        Assert.Empty(Check(sheet, "=IF(COUNTIF(B5:D5,\"x\")>=3,\"yes\",\"no\")", "F5", new[] { 6, 7 }));
+    }
+
+    [Fact]
+    public void A_column_blank_on_the_other_rows_does_not_vary()
+    {
+        // An input box level with the first row: Threshold 0.09 in H5, nothing below.
+        var sheet = new Sheet().Row(5, null, "a", null, null, null, null, "Threshold", 0.09).Row(6, null, "b").Row(7, null, "c");
+        Assert.Empty(Check(sheet, "=IF(B5>0.09,1,2)", "E5", new[] { 6, 7 }));
+    }
+
+    [Fact]
+    public void A_range_that_does_not_start_on_the_example_row_is_not_a_candidate()
+    {
+        var sheet = new Sheet().Set("K2", 7.5).Set("K3", 8.5).Set("K4", 9.5).Row(10, null, "a").Row(11, null, "b");
+        Assert.Empty(Check(sheet, "=XLOOKUP(B10,J2:J4,K2:K4)>7.5", "E10", new[] { 11 }));
+    }
+
+    [Fact]
+    public void A_range_starting_on_the_example_row_is_a_candidate()
+    {
+        var sheet = new Sheet().Row(2, null, 7.5).Row(3, null, 8.5).Row(4, null, 9.5);
+        var f = Assert.Single(Check(sheet, "=MAP(B2:B4,LAMBDA(x,x))*7.5", "E2", new[] { 3, 4 }));
+        Assert.Equal("B2", f.SourceAddress);
+    }
 }
