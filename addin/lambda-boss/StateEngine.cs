@@ -303,8 +303,10 @@ public static class StateEngines
         StateEngine engine,
         StateEngineChange change,
         Func<string, string?> refersTo,
-        Func<StateFoldKind, string> callName)
+        Func<StateFoldKind, string> callName,
+        StateAnswerContext? made = null)
     {
+        made ??= StateAnswerMade.Shared.For(null);
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (change is null) throw new ArgumentNullException(nameof(change));
         if (refersTo is null) throw new ArgumentNullException(nameof(refersTo));
@@ -332,7 +334,7 @@ public static class StateEngines
                 var sameKeys = target.SequenceEqual(engine.Answer, StringComparer.OrdinalIgnoreCase);
                 if (!sameKeys || (target.Count > 0 && asLet != engine.AnswerAsLet))
                 {
-                    var (answerBefore, answerAfter) = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, target, asLet);
+                    var (answerBefore, answerAfter) = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, target, made, asLet);
                     engine = engine with { Before = answerBefore, After = answerAfter };
                 }
             }
@@ -469,7 +471,7 @@ public static class StateEngines
             if (change.Fold == null && !engine.IsWholeFormula)
             {
                 return Failed(
-                    engine.Answer.Count > 0 && (engine.AnswerAsLet || WholeWithoutAnswer(engine))
+                    engine.Answer.Count > 0 && (engine.AnswerAsLet || WholeWithoutAnswer(engine, made))
                         ? "The LET step can't carry answer outputs. Untick them, or pick a fold."
                         : "The fold sits inside a larger formula, so it can't unfold here. Put the fold in a cell of its own first.",
                     notes);
@@ -521,9 +523,9 @@ public static class StateEngines
     }
 
     // True when taking the answer wrapper off leaves the fold as the whole formula.
-    private static bool WholeWithoutAnswer(StateEngine engine)
+    private static bool WholeWithoutAnswer(StateEngine engine, StateAnswerContext made)
     {
-        var bare = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, Array.Empty<string>());
+        var bare = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, Array.Empty<string>(), made);
         return bare.Before.Trim() == "=" && bare.After.Trim().Length == 0;
     }
 
