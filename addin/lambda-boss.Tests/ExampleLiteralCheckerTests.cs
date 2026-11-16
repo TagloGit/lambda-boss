@@ -372,4 +372,36 @@ public class ExampleLiteralCheckerTests
         var f = Assert.Single(Check(sheet, "=MAP(B2:B4,LAMBDA(x,x))*7.5", "E2", new[] { 3, 4 }));
         Assert.Equal("B2", f.SourceAddress);
     }
+
+    // ------------------------------------------------------------ Tim's PC (16 Nov)
+
+    /// <summary>
+    ///     Tim's sheet: a header, a separate example line (26 | 670), then the table from row 299,
+    ///     income in G and target in H; a three-line LET in I299 with the target typed, filled down.
+    /// </summary>
+    [Fact]
+    public void Tim_16_Nov_multi_line_LET_typed_target_at_row_299_is_flagged()
+    {
+        var sheet = new Sheet()
+            .Set("G290", "Weekly income").Set("H290", "Target")
+            .Set("G292", 26).Set("H292", 670)
+            .Set("G299", 26).Set("H299", 620)
+            .Set("G300", 21).Set("H300", 500)
+            .Set("G301", 29).Set("H301", 1300)
+            .Set("G302", 13).Set("H302", 490)
+            .Set("G303", 14).Set("H303", 470)
+            .Set("G304", 27).Set("H304", 520);
+        const string formula = "=LET(target, 620,\n  income, G299,\n  target+income)";
+        var f = Assert.Single(Check(sheet, formula, "I299", new[] { 300, 301, 302, 303, 304 }));
+        Assert.Equal("620", f.Literal);
+        Assert.Equal("H299", f.SourceAddress);
+    }
+
+    /// <summary>
+    ///     Excel's IDispatch rejects LCID 127 (the invariant culture) with 0x80028018 when the
+    ///     Windows user locale is en-GB: every late-bound read failed on Tim's PC.
+    /// </summary>
+    [Fact]
+    public void Late_bound_reads_pass_en_US_to_Excel() =>
+        Assert.Equal(1033, LambdaBoss.Commands.Com.DispatchCulture.LCID);
 }
