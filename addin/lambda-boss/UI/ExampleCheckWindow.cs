@@ -148,7 +148,8 @@ internal static class ExampleCheckWindow
     private static string Detail(ExampleCheckFinding f) =>
         f.Finding.FromText
             ? $"{f.Finding.Literal} is in this level's example text"
-            : $"{f.Finding.Literal} is {f.Finding.SourceAddress}'s value on the example row";
+            : $"{f.Finding.Literal} is {f.Finding.SourceAddress}'s value on "
+              + (f.Finding.RowLabel.Length > 0 ? f.Finding.RowLabel : "the example row");
 
     private static StackPanel Body(CheckedWrite where, IReadOnlyList<ExampleCheckFinding> findings, string shortcut, bool compact)
     {

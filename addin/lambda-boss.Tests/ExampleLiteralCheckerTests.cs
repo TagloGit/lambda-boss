@@ -397,6 +397,132 @@ public class ExampleLiteralCheckerTests
         Assert.Equal("H299", f.SourceAddress);
     }
 
+    // ------------------------------------------------------------ the level's example line (Tim, 16 Nov)
+
+    /// <summary>
+    ///     Tim's layout: headers on 296, the example line on 297 (26 | 670), a blank row, the table
+    ///     from 299 (income in G, target in H), the formula in I. Optionally a formula on I297.
+    /// </summary>
+    private static Sheet TimLayout(bool formulaOnExampleLine = false)
+    {
+        var sheet = new Sheet()
+            .Set("B290", "Level 3").Set("C290", "Savings")
+            .Set("B292", "Work out how many weeks it takes each saver to reach the target amount.")
+            .Set("G296", "Weekly income").Set("H296", "Target")
+            .Set("G297", 26).Set("H297", 670)
+            .Set("G299", 26).Set("H299", 620)
+            .Set("G300", 21).Set("H300", 500)
+            .Set("G301", 29).Set("H301", 1300)
+            .Set("G302", 13).Set("H302", 490)
+            .Set("G303", 14).Set("H303", 470)
+            .Set("G304", 27).Set("H304", 520);
+        if (formulaOnExampleLine)
+            sheet.Set("I297", 26, formula: true);
+        return sheet;
+    }
+
+    private static readonly int[] TableBelow299 = { 300, 301, 302, 303, 304 };
+
+    private static string TimFormula(int row, string target) => $"=LET(target, {target},\n  income, G{row},\n  ROUNDUP(target/income,0))";
+
+    [Fact]
+    public void Tim_a_formula_on_the_example_line_copied_to_the_table_flags_the_example_lines_value()
+    {
+        // (a) The formula with 670 on I297, copied to I299 and filled: the family is 297 and 299:304.
+        var others = TableBelow299.Append(297).ToArray();
+        var f = Assert.Single(Check(TimLayout(true), TimFormula(299, "670"), "I299", others));
+        Assert.Equal("670", f.Literal);
+        Assert.Equal("H297", f.SourceAddress);
+        Assert.Equal("the level's example line", f.RowLabel);
+        Assert.Contains("example line", f.Message);
+    }
+
+    [Fact]
+    public void Tim_b_the_top_row_edited_to_its_own_value_flags_the_row_copied_from()
+    {
+        // (b) I299 edited to 620 (H299's value): the example line drops out of the family.
+        var f = Assert.Single(Check(TimLayout(true), TimFormula(299, "620"), "I299", TableBelow299));
+        Assert.Equal("620", f.Literal);
+        Assert.Equal("H299", f.SourceAddress);
+        Assert.Equal("the row you copied from", f.RowLabel);
+    }
+
+    [Fact]
+    public void Tim_c_no_formula_on_the_example_line_still_flags_its_value()
+    {
+        // (c) The table's top row holds 670, the example line holds no formula: before, missed.
+        var f = Assert.Single(Check(TimLayout(), TimFormula(299, "670"), "I299", TableBelow299));
+        Assert.Equal("H297", f.SourceAddress);
+        Assert.Equal(297, ExampleLiteralChecker.ExampleLine(Request(TimFormula(299, "670"), "I299", TableBelow299), TimLayout()));
+    }
+
+    [Fact]
+    public void Tim_d_correct_formulas_are_silent()
+    {
+        Assert.Empty(Check(TimLayout(), TimFormula(299, "H299"), "I299", TableBelow299));
+        Assert.Empty(Check(TimLayout(true), TimFormula(299, "H299"), "I299", TableBelow299.Append(297).ToArray()));
+    }
+
+    [Fact]
+    public void A_value_on_both_rows_is_one_finding_from_the_row_copied_from()
+    {
+        var sheet = TimLayout().Set("H299", 670);
+        var f = Assert.Single(Check(sheet, TimFormula(299, "670"), "I299", TableBelow299));
+        Assert.Equal("H299", f.SourceAddress);
+    }
+
+    [Fact]
+    public void A_fill_handle_refill_lower_in_the_table_passes_over_the_family_to_the_example_line()
+    {
+        // Rows 299:301 already hold the formula; dragged from 302 down: the source is 302.
+        var others = new[] { 303, 304, 301, 300, 299 };
+        Assert.Equal(297, ExampleLiteralChecker.ExampleLine(Request(TimFormula(302, "670"), "I302", others), TimLayout()));
+        var f = Assert.Single(Check(TimLayout(), TimFormula(302, "670"), "I302", others));
+        Assert.Equal("H297", f.SourceAddress);
+    }
+
+    [Fact]
+    public void Header_text_over_numbers_is_not_an_example_line()
+    {
+        var sheet = TimLayout().Set("G297", "").Set("H297", "");
+        // Without the example line the walk reaches the headers on 296: text over numbers, passed over.
+        Assert.Equal(0, ExampleLiteralChecker.ExampleLine(Request(TimFormula(299, "670"), "I299", TableBelow299), sheet));
+    }
+
+    [Fact]
+    public void The_walk_stops_at_the_level_heading()
+    {
+        // Level 2's example line (26 | 670) sits above Level 3's heading; Level 3 has no example line.
+        var sheet = new Sheet()
+            .Set("B280", "Level 2")
+            .Set("G282", 26).Set("H282", 670)
+            .Set("G284", 30).Set("H284", 700).Set("G285", 31).Set("H285", 800)
+            .Set("B290", "Level 3")
+            .Set("G296", "Weekly income").Set("H296", "Target")
+            .Set("G299", 26).Set("H299", 620).Set("G300", 21).Set("H300", 500).Set("G301", 29).Set("H301", 1300);
+        var req = Request(TimFormula(299, "670"), "I299", new[] { 300, 301 });
+        Assert.Equal(0, ExampleLiteralChecker.ExampleLine(req, sheet));
+        Assert.Empty(Check(sheet, TimFormula(299, "670"), "I299", new[] { 300, 301 }));
+        // Control: without the heading, Level 2's table row 285 would be taken.
+        Assert.Equal(285, ExampleLiteralChecker.ExampleLine(req, sheet.Set("B290", "")));
+    }
+
+    [Fact]
+    public void Gerrymandering_built_on_a_game_row_flags_the_example_rows_value()
+    {
+        // Level 4 built on game 61 (row 154) instead of the example: 0.13 is Example4b's threshold.
+        var formula = L4Fixed.Replace("G151", "G154").Replace("pct>H151", "pct>0.13");
+        var f = Assert.Single(Check(Level4(), formula, "E154", new[] { 155 }));
+        Assert.Equal("H152", f.SourceAddress);
+        Assert.Equal("the level's example line", f.RowLabel);
+    }
+
+    private static ExampleCheckRequest Request(string formula, string at, int[] otherRows)
+    {
+        Assert.True(ExampleLiteralChecker.TryCell(at, out var r, out var c));
+        return new ExampleCheckRequest(formula, r, c, otherRows, new[] { c });
+    }
+
     /// <summary>
     ///     Excel's IDispatch rejects LCID 127 (the invariant culture) with 0x80028018 when the
     ///     Windows user locale is en-GB: every late-bound read failed on Tim's PC.
