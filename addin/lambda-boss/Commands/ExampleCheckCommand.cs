@@ -99,7 +99,11 @@ internal static class ExampleCheckCommand
             if (where is null)
                 return; // not a fill or spill: nothing was checked
             LastCheckMs = sw.Elapsed.TotalMilliseconds;
-            Logger.Info($"ExampleCheck: {where.Label} checked in {LastCheckMs:F1} ms, {findings.Count} finding(s)");
+            var detail = string.Join("; ", findings.Select(f =>
+                $"{f.Finding.Literal} in {ExampleLiteralChecker.Address(f.Request.Row, f.Request.Column)} = "
+                + (f.Finding.FromText ? "example text" : f.Finding.SourceAddress)));
+            Logger.Info($"ExampleCheck: {where.Sheet}!{where.Label} checked in {LastCheckMs:F1} ms, "
+                        + $"{findings.Count} finding(s){(findings.Count > 0 ? ": " + detail : "")}");
             if (findings.Count > 0)
                 ExampleCheckWindow.Present(where, findings, ExampleCheckModes.Normalize(Settings.Current.ExampleCheckMode));
         }
