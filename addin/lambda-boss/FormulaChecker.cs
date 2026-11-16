@@ -38,6 +38,9 @@ internal enum FormulaProblemKind
     /// <summary>Not an error: a LET name that is never used (often the other half of a typo).</summary>
     UnusedName,
 
+    /// <summary>A constant that equals a value from the worked example (spec 0020's example check).</summary>
+    ExampleValue,
+
     /// <summary>Not a finding: the line that says how many more were left out.</summary>
     More
 }

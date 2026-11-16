@@ -506,6 +506,7 @@ internal sealed class CheckFormulaWindow : Window
         FormulaProblemKind.UnknownReference => "Unknown sheet, table or column",
         FormulaProblemKind.ImplicitIntersection => "@ on a fold's array",
         FormulaProblemKind.UnusedName => "Note: unused name",
+        FormulaProblemKind.ExampleValue => "Value from the example",
         _ => kind.ToString()
     };
 

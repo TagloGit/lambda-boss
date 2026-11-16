@@ -79,9 +79,14 @@ public static class CheckFormulaCommand
         }
 
         target ??= (FixTarget?)CellTarget(excelHwnd, cell);
-        var names = WorkbookNames.Capture(app);
-        var result = FormulaChecker.Check(formula, names);
+        FormulaNameContext names = WorkbookNames.Capture(app);
+        FormulaCheckResult result = FormulaChecker.Check(formula, names);
         result = ConfirmWithExcel(app, result, names);
+
+        // The example check's findings for this cell (spec 0020), when that switch is on.
+        IReadOnlyList<FormulaProblem> example = ExampleCheckCommand.ProblemsForCell((object)cell, formula);
+        if (example.Count > 0)
+            result = result.WithProblems(result.Problems.Concat(example).ToList());
         CheckFormulaWindow.Show(excelHwnd, result, address, null, target);
     }
 
