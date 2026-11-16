@@ -33,9 +33,10 @@ Excel's `SheetChange` event, read-only:
 The **family** of a filled column is the written rows holding the same formula (compared in R1C1)
 as the column's first formula, extended upward over rows with that formula (gaps of up to four
 blank rows), because the fill handle's write leaves out the row it was dragged from. The
-**source row** is the row the fill was copied from: the row just above the write when it holds the
-family's formula (the fill handle leaves its starting row out of the write), otherwise the write's
-top row (Ctrl+D, Ctrl+Enter, a paste). The family's other rows (up to 50, those below the source
+**source row** is taken to be the row the fill was copied from: the row just above the write when it
+holds the family's formula (the fill handle leaves its starting row out of the write), otherwise
+the write's top row (Ctrl+D, Ctrl+Enter, a paste). The event doesn't say which: a paste below a row
+that already holds the formula is read as a fill-handle drag from that row. The family's other rows (up to 50, those below the source
 first) are what "varies" is judged against. A spill's source row is the spilling cell's; its other
 rows are the rows it spills into below the formula. A family of one row (a fill across, Ctrl+R)
 has nothing to compare and isn't checked. (Until 16 Nov the example row was the family's top row;
@@ -66,14 +67,22 @@ relative; text trimmed, case-insensitive, as Excel's `=` compares) one of these,
    so it differs from the formula on the example line, the example line leaves the family, and a
    value copied from it was missed; it's also compared when it holds no formula at all.
    - **Finding it**: walk up from the source row, within the level (stop at the `Level n` /
-     `Bonus n` heading, or after 80 rows). The example line is the nearest row whose values in the
-     source row's input columns (the columns that are candidates under 1) are of the same kind
-     (number or text) as the source row's: at least half the columns, at least as many matching as
-     not, and a number where the source row has numbers. So a header row (text over numbers) is
-     passed over, while a label column (`Example4b` over game numbers) doesn't disqualify a row.
-   - The family's own rows are passed over (a re-fill from lower in the table), except the
-     family's top row when a gap separates it from the rest: that's the example line with Tim's
-     formula on it. It's then compared once, as the example line.
+     `Bonus n` heading, or after 80 rows):
+     - the rows directly above that hold something in the formula's column are the table (game
+       rows, or an older fill of another formula), passed over;
+     - a row with nothing in the source row's input columns (the columns that are candidates
+       under 1) is passed over;
+     - a **header row** (text where the source row has numbers, and no numbers there) ends the
+       walk with no example line: the example line sits below the headers, so the walk never
+       reaches a price or rules table higher up in the level;
+     - an **index row** (its numbers, left to right, mostly count up by one: Cricket Darts' 10, 11,
+       12 … row) is passed over;
+     - otherwise the row is the example line if its filled input cells are at least as often the
+       same kind (number or text) as the source row's as not, with a number where the source row
+       has numbers. A label column (`Example4b` over game numbers) doesn't disqualify a row, nor
+       do inputs the example line leaves blank.
+   - If Tim put the formula on the example line too, the blank row between it and the table
+     ends the table, so the line is found and compared once, as the example line.
    - Its cell counts under the same conditions as 1: the column varies across the family's rows,
      the formula doesn't read it, and it isn't a written or spill column.
    - In Tim's layout (table rows 299–304, income in G and target in H, a blank row 298, the example
@@ -178,6 +187,18 @@ formulas: silent.** Before the rules-vocabulary and "a cell the formula reads" r
 Darts raised five false flags (`"Bull"`, multipliers 2 and 3 in a helper grid) and MMQ one (`20`
 matching a count in an unrelated table on the same row, now outside the row's block).
 
+### The example line on the tuning set (16 Nov)
+
+The same nine files were replayed with the example line (lambda-boss#489): each family re-filled
+from its top row and, for families of four or more, from its middle row. **No new flags, none
+lost**: Gerrymandering's four findings are unchanged. In the Case sheets the line found is the
+level's `ExampleN` row (Sommelier, Bushland, Mama Africa, A Good Walk Spoiled, MMQ, Gerrymandering,
+Oachi). The first version of the rule raised one false flag (Cricket Darts L5, `=--(I7>14)`: 14
+matched a 1, 2, 3 … index row above the table) and, per the review, could take a game row or a
+table higher in the level; the walk was tightened (pass over the table, stop at the header row,
+skip index rows) and the replay re-run. Check Formula, which has no write, names the source row
+"the family's top row".
+
 ## Defaults Tim can reverse
 
 - **Mode: `toast`.** The `ExampleCheckMode` setting (`status`, `toast`, `prompt`), in the settings window.
@@ -186,8 +207,9 @@ matching a count in an unrelated table on the same row, now outside the row's bl
 - **A cell the formula reads never matches.**
 - **Two rows are compared**: the row copied from and the level's example line, not every game
   row (Tim, 16 Nov: no to comparing every game row).
-- **The example line is found by kind**: the nearest row above the source, within the level, with
-  numbers where the source row's inputs are numbers (at least half its input columns filled).
+- **The example line is found by kind**: the nearest row above the table, within the level and
+  below its headers, with numbers where the source row's inputs are numbers. Index rows don't
+  count.
 - **Small integers (|n| ≤ 10) match typed cells only.**
 - **Powers of ten from 100 up are never flagged**; 10 can be.
 - **Rules vocabulary is workbook-wide** and needs two or more characters.

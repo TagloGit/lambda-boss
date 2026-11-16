@@ -360,7 +360,7 @@ internal static class ExampleCheckCommand
         if (SpillSize(exampleCell, out _, out int exampleSpillCols))
             ExampleLiteralChecker.ExcludeSpillColumns(target, col, exampleSpillCols);
         return new ExampleCheckRequest(formula, example, col,
-            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), target);
+            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), target, Copied: false);
     }
 
     private static string[] Column(object values, int rows)

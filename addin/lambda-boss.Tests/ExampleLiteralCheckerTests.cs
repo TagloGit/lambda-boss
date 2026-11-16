@@ -416,6 +416,9 @@ public class ExampleLiteralCheckerTests
             .Set("G302", 13).Set("H302", 490)
             .Set("G303", 14).Set("H303", 470)
             .Set("G304", 27).Set("H304", 520);
+        // The formula column's results on the table rows (what a fill leaves there).
+        foreach (var row in new[] { 299, 300, 301, 302, 303, 304 })
+            sheet.Set($"I{row}", 20 + row - 299, formula: true);
         if (formulaOnExampleLine)
             sheet.Set("I297", 26, formula: true);
         return sheet;
@@ -503,8 +506,65 @@ public class ExampleLiteralCheckerTests
         var req = Request(TimFormula(299, "670"), "I299", new[] { 300, 301 });
         Assert.Equal(0, ExampleLiteralChecker.ExampleLine(req, sheet));
         Assert.Empty(Check(sheet, TimFormula(299, "670"), "I299", new[] { 300, 301 }));
-        // Control: without the heading, Level 2's table row 285 would be taken.
-        Assert.Equal(285, ExampleLiteralChecker.ExampleLine(req, sheet.Set("B290", "")));
+        // Control: without the heading (and the header row, which also ends the walk), Level 2's
+        // table row 285 would be taken.
+        Assert.Equal(285, ExampleLiteralChecker.ExampleLine(req, sheet.Set("B290", "").Set("G296", "").Set("H296", "")));
+    }
+
+    [Fact]
+    public void A_re_fill_below_an_older_fill_passes_over_the_table_not_just_the_family()
+    {
+        // I299:I301 hold an older formula (not this family); Tim fixed I302 and dragged it to I304.
+        var sheet = TimLayout();
+        var req = Request(TimFormula(302, "670"), "I302", new[] { 303, 304 });
+        Assert.Equal(297, ExampleLiteralChecker.ExampleLine(req, sheet));
+        // 1300 is H301's value, a game row's: never the example line's.
+        Assert.Empty(Check(sheet, TimFormula(302, "1300"), "I302", new[] { 303, 304 }));
+    }
+
+    [Fact]
+    public void A_header_row_ends_the_walk_before_a_table_higher_in_the_level()
+    {
+        // A price table above the headers, within the level: never the example line.
+        var sheet = TimLayout().Set("G297", "").Set("H297", "")
+            .Set("G293", 40).Set("H293", 900).Set("G294", 50).Set("H294", 950);
+        Assert.Equal(0, ExampleLiteralChecker.ExampleLine(Request(TimFormula(299, "900"), "I299", TableBelow299), sheet));
+        Assert.Empty(Check(sheet, TimFormula(299, "900"), "I299", TableBelow299));
+    }
+
+    [Fact]
+    public void An_index_row_is_not_an_example_line()
+    {
+        // Cricket Darts L5: a 10, 11, 12 … row over the table; 14 is the rules' threshold.
+        var sheet = new Sheet()
+            .Row(2, 71, null, null, 10, 11, 12, 13, 14, 15)
+            .Row(7, "Example5", null, 1, 3, 0, 2, 1, 0, 2)
+            .Row(8, 1, null, 0, 1, 2, 0, 3, 1, 0)
+            .Row(9, 2, null, 1, 0, 0, 2, 2, 3, 1);
+        const string formula = "=--(C7>14)";
+        Assert.Equal(0, ExampleLiteralChecker.ExampleLine(Request(formula, "B7", new[] { 8, 9 }), sheet));
+        Assert.Empty(Check(sheet, formula, "B7", new[] { 8, 9 }));
+    }
+
+    [Fact]
+    public void An_example_line_holding_only_some_of_the_inputs_still_counts()
+    {
+        // The table has a game number, a name and a date as well; the example line only 26 | 670.
+        var sheet = TimLayout();
+        foreach (var row in new[] { 299, 300, 301, 302, 303, 304 })
+            sheet.Set($"C{row}", (double)row).Set($"D{row}", $"Saver {row}").Set($"E{row}", 46000.0 + row);
+        var f = Assert.Single(Check(sheet, TimFormula(299, "670"), "I299", TableBelow299));
+        Assert.Equal("H297", f.SourceAddress);
+    }
+
+    [Fact]
+    public void Check_Formula_names_the_familys_top_row()
+    {
+        Assert.True(ExampleLiteralChecker.TryCell("I299", out var r, out var c));
+        var req = new ExampleCheckRequest(TimFormula(299, "620"), r, c, TableBelow299, new[] { c }, Copied: false);
+        var f = Assert.Single(ExampleLiteralChecker.Check(req, TimLayout()));
+        Assert.Equal("the family's top row", f.RowLabel);
+        Assert.Contains("on the family's top row", f.Message);
     }
 
     [Fact]

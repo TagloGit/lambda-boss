@@ -19,7 +19,8 @@ internal interface IExampleSheet
 }
 
 /// <summary>
-///     What was written. <paramref name="Formula"/> is the source cell's <c>Formula2</c>: the row
+///     What was written. <paramref name="Copied"/> is false for Check Formula, where nothing was
+///     copied: the source row is then the family's top row, and the message says so. <paramref name="Formula"/> is the source cell's <c>Formula2</c>: the row
 ///     the fill was copied from (the top of the fill, or the row the fill handle was dragged from),
 ///     or the spilling cell. <paramref name="OtherRows"/> are the family's other rows, above or
 ///     below (a fill), or the rows the result spills into below the formula (a spill): a value on
@@ -30,7 +31,8 @@ internal sealed record ExampleCheckRequest(
     int Row,
     int Column,
     IReadOnlyList<int> OtherRows,
-    IReadOnlyCollection<int> TargetColumns);
+    IReadOnlyCollection<int> TargetColumns,
+    bool Copied = true);
 
 /// <summary>
 ///     One literal that looks like a value from the worked example. <see cref="Start"/> and
@@ -205,7 +207,7 @@ internal static class ExampleLiteralChecker
             {
                 if (seen.Add($"{lit.Source}|{hit.Address}"))
                     findings.Add(new ExampleLiteralFinding(lit.Start, lit.Length, lit.Source, hit.Row, hit.Column,
-                        hit.Address, CellMessage(lit, hit), RowLabel(hit.Kind)));
+                        hit.Address, CellMessage(lit, hit, request.Copied), RowLabel(hit.Kind, request.Copied)));
                 continue;
             }
 
@@ -222,7 +224,7 @@ internal static class ExampleLiteralChecker
         return findings;
     }
 
-    private static string CellMessage(FormulaLiteral lit, Candidate hit) =>
+    private static string CellMessage(FormulaLiteral lit, Candidate hit, bool copied) =>
         hit.Kind switch
         {
             ExampleRowKind.Range =>
@@ -231,16 +233,16 @@ internal static class ExampleLiteralChecker
             ExampleRowKind.ExampleLine =>
                 $"{lit.Source} equals {hit.Address} on the level's example line, and that column changes on the table's rows. "
                 + "If it's the example's value, it won't be right for the other rows.",
-            _ => $"{lit.Source} equals {hit.Address} on the row you copied from, and that column changes on the other rows. "
+            _ => $"{lit.Source} equals {hit.Address} on {RowLabel(hit.Kind, copied)}, and that column changes on the other rows. "
                  + $"Use {hit.Address} instead of the typed value?"
         };
 
     /// <summary>The row a match came from, for the panel and the status bar.</summary>
-    internal static string RowLabel(ExampleRowKind kind) => kind switch
+    internal static string RowLabel(ExampleRowKind kind, bool copied = true) => kind switch
     {
         ExampleRowKind.ExampleLine => "the level's example line",
         ExampleRowKind.Range => "the first row of a range the formula reads",
-        _ => "the row you copied from"
+        _ => copied ? "the row you copied from" : "the family's top row"
     };
 
     // ------------------------------------------------------------ candidates
@@ -330,13 +332,19 @@ internal static class ExampleLiteralChecker
     }
 
     /// <summary>
-    ///     The level's example line for this request, or 0: walking up from the source row, within
-    ///     the level (stopping at the "Level n" / "Bonus n" heading or <see cref="TextRowsAbove"/>
-    ///     rows), the nearest row whose values in the source row's input columns are at least half
-    ///     of the same kind (number or text) as the source row's, with a number where the source row
-    ///     has numbers. Header text over numbers doesn't count.
-    ///     The family's own rows are passed over (a re-fill from lower in the table), except its top
-    ///     row when a gap separates it from the rest: that's the example line with the formula on it.
+    ///     The level's example line for this request, or 0. Walking up from the source row, within
+    ///     the level (the "Level n" / "Bonus n" heading or <see cref="TextRowsAbove"/> rows):
+    ///     <list type="bullet">
+    ///         <item>the rows directly above that hold something in the formula's column are the table
+    ///         (game rows, or an older fill), passed over;</item>
+    ///         <item>a row with no values in the source row's input columns is passed over;</item>
+    ///         <item>a header row (text where the source row has numbers, and no numbers) ends the
+    ///         walk: the example line sits below the headers;</item>
+    ///         <item>an index row (1, 2, 3 …) is passed over;</item>
+    ///         <item>the first row whose filled input cells are at least as often the same kind
+    ///         (number or text) as the source row's as not, with a number where the source row has
+    ///         numbers, is the example line.</item>
+    ///     </list>
     /// </summary>
     internal static int ExampleLine(ExampleCheckRequest request, IExampleSheet sheet)
     {
@@ -365,16 +373,15 @@ internal static class ExampleLiteralChecker
     {
         if (sourceColumns.Count == 0)
             return 0;
-        var family = new HashSet<int>(request.OtherRows) { request.Row };
-        var top = family.Min();
-        var isolatedTop = top < request.Row && !family.Contains(top + 1);
         var anyNumber = sourceColumns.Any(sc => sc.Value is not string);
-        for (var r = request.Row - 1; r >= 1 && r >= request.Row - TextRowsAbove; r--)
+        var floor = Math.Max(1, request.Row - TextRowsAbove);
+        var r = request.Row - 1;
+        while (r >= floor && sheet.Value(r, request.Column) is not null && !IsHeadingRow(sheet, r))
+            r--;
+        for (; r >= floor; r--)
         {
             if (IsHeadingRow(sheet, r))
                 return 0;
-            if (family.Contains(r) && !(r == top && isolatedTop))
-                continue;
             int same = 0, other = 0, sameNumbers = 0;
             foreach (var (c, v) in sourceColumns)
             {
@@ -391,13 +398,41 @@ internal static class ExampleLiteralChecker
                     other++;
             }
 
-            // A label column ("Example4b" over game numbers) may differ; a header row (all text
-            // where the source row has numbers) never passes.
-            if (same > 0 && same >= other && same * 2 >= sourceColumns.Count && (sameNumbers > 0 || !anyNumber))
+            if (same + other == 0)
+                continue;
+            if (anyNumber && sameNumbers == 0)
+            {
+                if (other > 0)
+                    return 0; // a header row: the example line would have been below it
+                continue;
+            }
+
+            if (same >= other && !IsIndexRow(sheet, r))
                 return r;
         }
 
         return 0;
+    }
+
+    /// <summary>
+    ///     A row whose numbers (three or more, left to right) mostly count up by one (1, 2, 3 …, at
+    ///     least two steps in three):
+    ///     a row of indices, not data. Cricket Darts' 10, 11, 12 … row over a table with a game number.
+    /// </summary>
+    private static bool IsIndexRow(IExampleSheet sheet, int row)
+    {
+        var numbers = new List<double>();
+        var last = Math.Min(Math.Max(1, sheet.LastColumn), MaxRowColumns);
+        for (var c = 1; c <= last; c++)
+            if (sheet.Value(row, c) is double d)
+                numbers.Add(d);
+        if (numbers.Count < 3)
+            return false;
+        var steps = 0;
+        for (var i = 1; i < numbers.Count; i++)
+            if (Near(numbers[i], numbers[i - 1] + 1))
+                steps++;
+        return steps * 3 >= (numbers.Count - 1) * 2;
     }
 
     private static bool IsHeadingRow(IExampleSheet sheet, int row)
