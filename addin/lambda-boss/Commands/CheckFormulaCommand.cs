@@ -84,7 +84,7 @@ public static class CheckFormulaCommand
         result = ConfirmWithExcel(app, result, names);
 
         // The example check's findings for this cell (spec 0020), when that switch is on.
-        var example = ExampleCheckCommand.ProblemsForCell(cell, formula);
+        IReadOnlyList<FormulaProblem> example = ExampleCheckCommand.ProblemsForCell((object)cell, formula);
         if (example.Count > 0)
             result = result.WithProblems(result.Problems.Concat(example).ToList());
         CheckFormulaWindow.Show(excelHwnd, result, address, null, target);

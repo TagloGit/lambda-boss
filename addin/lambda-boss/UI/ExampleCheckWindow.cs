@@ -8,6 +8,8 @@ using System.Windows.Threading;
 
 using ExcelDna.Integration;
 
+using Excel = Microsoft.Office.Interop.Excel;
+
 using LambdaBoss.Commands;
 using LambdaBoss.Common;
 
@@ -45,7 +47,7 @@ internal static class ExampleCheckWindow
     /// <summary>Main thread (the SheetChange handler).</summary>
     public static void Present(CheckedWrite where, IReadOnlyList<ExampleCheckFinding> findings, string mode)
     {
-        dynamic app = ExcelDnaUtil.Application;
+        var app = (Excel.Application)ExcelDnaUtil.Application;
         var written = ScreenRect(app, where.Row, where.Column, where.Rows, where.Columns);
         var first = findings[0];
         var source = first.Finding.FromText
@@ -71,7 +73,7 @@ internal static class ExampleCheckWindow
             {
                 try
                 {
-                    dynamic a = ExcelDnaUtil.Application;
+                    var a = (Excel.Application)ExcelDnaUtil.Application;
                     if (a.StatusBar is string s && s == _statusText)
                         a.StatusBar = false;
                 }
@@ -228,8 +230,10 @@ internal static class ExampleCheckWindow
         _ = NativeMethods.SetWindowLong(hwnd, NativeMethods.GwlExStyle,
             ex | NativeMethods.WsExNoActivate | NativeMethods.WsExToolWindow);
         Open.Add(w);
-        w.Show();
+        // Placed before it shows (WPF moves a window placed after), and again once it has its height.
         Place(hwnd, where.ExcelHwnd, near);
+        w.ContentRendered += (_, _) => Place(hwnd, where.ExcelHwnd, near);
+        w.Show();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         timer.Tick += (_, _) =>
         {
@@ -347,32 +351,22 @@ internal static class ExampleCheckWindow
     private const int WsExTransparent = 0x00000020;
 
     /// <summary>A range's rectangle on screen, in pixels, or null when Excel can't say. Main thread.</summary>
-    private static NativeMethods.Rect? ScreenRect(dynamic app, int row, int column, int rows, int columns)
+    private static NativeMethods.Rect? ScreenRect(Excel.Application app, int row, int column, int rows, int columns)
     {
         try
         {
-            dynamic win = app.ActiveWindow;
-            dynamic pane = win.ActivePane;
-            dynamic ws = app.ActiveSheet;
-            dynamic rng = ws.Range[ws.Cells[row, column], ws.Cells[row + rows - 1, column + columns - 1]];
-            double zoom = win.Zoom / 100.0;
-            double l = rng.Left, t = rng.Top, w = rng.Width, h = rng.Height;
-            // PointsToScreenPixels maps the sheet's points (unzoomed) at the pane's origin; the
-            // offset into the sheet scales with the zoom.
-            int x0 = pane.PointsToScreenPixelsX(0);
-            int y0 = pane.PointsToScreenPixelsY(0);
-            var scale = (pane.PointsToScreenPixelsX(72) - x0) / 72.0; // pixels per point at 100%
-            dynamic visible = pane.VisibleRange;
-            double vl = visible.Left, vt = visible.Top;
-            var left = x0 + (int)Math.Round((l - vl) * zoom * scale);
-            var top = y0 + (int)Math.Round((t - vt) * zoom * scale);
-            return new NativeMethods.Rect
-            {
-                Left = left,
-                Top = top,
-                Right = left + (int)Math.Round(w * zoom * scale),
-                Bottom = top + (int)Math.Round(h * zoom * scale)
-            };
+            var win = app.ActiveWindow;
+            var pane = win.ActivePane;
+            if (app.ActiveSheet is not Excel.Worksheet ws)
+                return null;
+            var rng = Com.Block(ws, row, column, row + rows - 1, column + columns - 1);
+            static double D(object o) => Convert.ToDouble(o, System.Globalization.CultureInfo.InvariantCulture);
+            // The pane maps a cell's position in points (Range.Left/Top) to screen pixels, scroll
+            // and zoom included.
+            var x = new Func<double, int>(pts => pane.PointsToScreenPixelsX((int)Math.Round(pts)));
+            var y = new Func<double, int>(pts => pane.PointsToScreenPixelsY((int)Math.Round(pts)));
+            double l = D(rng.Left), t = D(rng.Top), w = D(rng.Width), h = D(rng.Height);
+            return new NativeMethods.Rect { Left = x(l), Top = y(t), Right = x(l + w), Bottom = y(t + h) };
         }
         catch (Exception ex)
         {

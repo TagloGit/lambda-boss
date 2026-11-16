@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Globalization;
+using System.Reflection;
 
 using ExcelDna.Integration;
 
@@ -48,6 +50,20 @@ internal static class ExampleCheckCommand
             _app.SheetChange += OnSheetChange;
             _started = true;
             Logger.Info($"ExampleCheck: started (mode {ExampleCheckModes.Normalize(Settings.Current.ExampleCheckMode)})");
+
+            // JIT the checker and compile its regexes off Excel's thread, so the first fill isn't slow.
+            Task.Run(() =>
+            {
+                try
+                {
+                    ExampleLiteralChecker.Check(new ExampleCheckRequest("=IF(A1>0.5,\"x\",B1:B2)", 2, 3, new[] { 3 }, new[] { 3 }),
+                        new WarmUpSheet(), () => ExampleLiteralChecker.RuleWords(new[] { "Level 1 warm-up text for the example check." }));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error("ExampleCheck.WarmUp", ex);
+                }
+            });
         }
         catch (Exception ex)
         {
@@ -120,11 +136,13 @@ internal static class ExampleCheckCommand
     private static List<ExampleCheckFinding> CheckWrite(object sh, Excel.Range target, out CheckedWrite? where)
     {
         where = null;
-        dynamic ws = sh;
-        dynamic area = target.Areas[1];
-        long count = area.CountLarge;
-        dynamic first = area.Cells[1, 1];
-        if (!(bool)first.HasFormula)
+        // Typed COM calls, not dynamic: the DLR binder costs a second on the first fill of a session.
+        if (sh is not Excel.Worksheet ws)
+            return new List<ExampleCheckFinding>();
+        var area = target.Areas[1];
+        var count = Convert.ToInt64(area.CountLarge, CultureInfo.InvariantCulture);
+        var first = (Excel.Range)area.Cells[1, 1];
+        if (first.HasFormula is not true)
         {
             if (count == 1)
                 return new List<ExampleCheckFinding>();
@@ -144,7 +162,7 @@ internal static class ExampleCheckCommand
             if (!SpillSize(first, out int spillRows, out int spillCols) || spillRows * spillCols <= 1)
                 return new List<ExampleCheckFinding>();
             var others = Enumerable.Range(r1 + 1, Math.Min(spillRows - 1, ExampleLiteralChecker.MaxCompareRows)).ToList();
-            requests.Add(new ExampleCheckRequest((string)first.Formula2, r1, c1, others,
+            requests.Add(new ExampleCheckRequest(Com.Formula2(first), r1, c1, others,
                 Enumerable.Range(c1, spillCols).ToList()));
             label = $"spill from {ExampleLiteralChecker.Address(r1, c1)}";
         }
@@ -163,7 +181,7 @@ internal static class ExampleCheckCommand
         }
 
         var sheet = new ComExampleSheet(ws, requests);
-        var wb = ws.Parent;
+        var wb = (Excel.Workbook)ws.Parent;
         var findings = new List<ExampleCheckFinding>();
         foreach (var req in requests)
         {
@@ -171,18 +189,18 @@ internal static class ExampleCheckCommand
                 findings.Add(new ExampleCheckFinding(req, f));
         }
 
-        where = new CheckedWrite(label, (string)ws.Name, r1, c1, rows, cols, new IntPtr(_app!.Hwnd));
+        where = new CheckedWrite(label, ws.Name, r1, c1, rows, cols, new IntPtr(_app!.Hwnd));
         return findings;
     }
 
-    private static bool SpillSize(dynamic cell, out int rows, out int cols)
+    private static bool SpillSize(Excel.Range cell, out int rows, out int cols)
     {
         rows = cols = 1;
         try
         {
-            if (!(bool)cell.HasSpill)
+            if (Com.Get(cell, "HasSpill") is not true)
                 return false;
-            dynamic spill = cell.SpillingToRange;
+            var spill = (Excel.Range)Com.Get(cell, "SpillingToRange")!;
             rows = spill.Rows.Count;
             cols = spill.Columns.Count;
             return true;
@@ -198,9 +216,9 @@ internal static class ExampleCheckCommand
     ///     first formula, extended upward over the rows the fill started from. Null when that's a
     ///     single row (nothing to compare with).
     /// </summary>
-    private static ExampleCheckRequest? FamilyRequest(dynamic ws, int r1, int col, int rows)
+    private static ExampleCheckRequest? FamilyRequest(Excel.Worksheet ws, int r1, int col, int rows)
     {
-        object written = ws.Range[ws.Cells[r1, col], ws.Cells[r1 + rows - 1, col]].FormulaR1C1;
+        object written = Com.Block(ws, r1, col, r1 + rows - 1, col).FormulaR1C1;
         var texts = Column(written, rows);
         var firstIdx = Array.FindIndex(texts, t => t.StartsWith("=", StringComparison.Ordinal));
         if (firstIdx < 0)
@@ -216,7 +234,7 @@ internal static class ExampleCheckCommand
         var above = Math.Min(FamilyRowsAbove, top - 1);
         if (above > 0)
         {
-            object up = ws.Range[ws.Cells[top - above, col], ws.Cells[top - 1, col]].FormulaR1C1;
+            object up = Com.Block(ws, top - above, col, top - 1, col).FormulaR1C1;
             var upTexts = Column(up, above);
             var gap = 0;
             for (var i = upTexts.Length - 1; i >= 0; i--)
@@ -237,7 +255,7 @@ internal static class ExampleCheckCommand
         if (family.Count < 2)
             return null;
         var example = family[0];
-        string formula = ws.Cells[example, col].Formula2;
+        var formula = Com.Formula2(Com.Block(ws, example, col, example, col));
         return new ExampleCheckRequest(formula, example, col,
             family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), new[] { col });
     }
@@ -246,11 +264,11 @@ internal static class ExampleCheckCommand
     ///     The family the active cell belongs to: the rows above and below holding its formula
     ///     (R1C1), with gaps of up to four rows. Null when it's alone.
     /// </summary>
-    private static ExampleCheckRequest? FamilyAround(dynamic ws, int row, int col, string cellFormula)
+    private static ExampleCheckRequest? FamilyAround(Excel.Worksheet ws, int row, int col, string cellFormula)
     {
         var top = Math.Max(1, row - FamilyRowsAbove);
-        var bottom = row + FamilyRowsAbove;
-        object window = ws.Range[ws.Cells[top, col], ws.Cells[bottom, col]].FormulaR1C1;
+        var bottom = Math.Min(1048576, row + FamilyRowsAbove);
+        object window = Com.Block(ws, top, col, bottom, col).FormulaR1C1;
         var texts = Column(window, bottom - top + 1);
         var at = row - top;
         var key = texts[at];
@@ -277,7 +295,7 @@ internal static class ExampleCheckCommand
             return null;
         family.Sort();
         var example = family[0];
-        string formula = example == row ? cellFormula : ws.Cells[example, col].Formula2;
+        var formula = example == row ? cellFormula : Com.Formula2(Com.Block(ws, example, col, example, col));
         return new ExampleCheckRequest(formula, example, col,
             family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), new[] { col });
     }
@@ -304,14 +322,14 @@ internal static class ExampleCheckCommand
     ///     <paramref name="cellFormula"/>. Empty unless the cell is part of a filled family or
     ///     spills. Macro context.
     /// </summary>
-    internal static IReadOnlyList<FormulaProblem> ProblemsForCell(dynamic cell, string cellFormula)
+    internal static IReadOnlyList<FormulaProblem> ProblemsForCell(object cellObject, string cellFormula)
     {
         var problems = new List<FormulaProblem>();
-        if (!Enabled)
+        if (!Enabled || cellObject is not Excel.Range cell)
             return problems;
         try
         {
-            dynamic ws = cell.Worksheet;
+            var ws = cell.Worksheet;
             int row = cell.Row, col = cell.Column;
             ExampleCheckRequest? req;
             if (SpillSize(cell, out int sr, out int sc) && sr * sc > 1)
@@ -326,7 +344,7 @@ internal static class ExampleCheckCommand
             }
 
             var findings = ExampleLiteralChecker.Check(req, new ComExampleSheet(ws, new[] { req }),
-                () => RuleWordCache.For(ws.Parent));
+                () => RuleWordCache.For((Excel.Workbook)ws.Parent));
             if (findings.Count == 0)
                 return problems;
 
@@ -352,6 +370,14 @@ internal static class ExampleCheckCommand
 
         return problems;
     }
+}
+
+/// <summary>A tiny sheet for the warm-up check.</summary>
+internal sealed class WarmUpSheet : IExampleSheet
+{
+    public object? Value(int row, int column) => row == 1 ? "Example: the threshold is 0.5 in this warm-up text." : (double)row;
+    public bool IsFormula(int row, int column) => false;
+    public int LastColumn => 3;
 }
 
 /// <summary>Where a check ran: the written range, for the message and the highlight.</summary>
@@ -384,18 +410,18 @@ internal static class ExampleCheckModes
 internal sealed class ComExampleSheet : IExampleSheet
 {
     private const int MaxColumns = 200;
-    private readonly dynamic _ws;
+    private readonly Excel.Worksheet _ws;
     private readonly List<(int R1, int C1, int R2, int C2, object[,] Values)> _blocks = new();
     private readonly Dictionary<int, HashSet<int>> _formulaColumns = new();
 
-    public ComExampleSheet(dynamic ws, IReadOnlyCollection<ExampleCheckRequest> requests)
+    public ComExampleSheet(Excel.Worksheet ws, IReadOnlyCollection<ExampleCheckRequest> requests)
     {
         _ws = ws;
         int lastCol;
         try
         {
-            dynamic used = ws.UsedRange;
-            lastCol = (int)used.Column + (int)used.Columns.Count - 1;
+            var used = ws.UsedRange;
+            lastCol = used.Column + used.Columns.Count - 1;
         }
         catch
         {
@@ -410,7 +436,7 @@ internal sealed class ComExampleSheet : IExampleSheet
         foreach (var row in requests.Select(r => r.Row).Distinct())
         {
             var set = new HashSet<int>();
-            object f = ws.Range[ws.Cells[row, 1], ws.Cells[row, LastColumn]].Formula2;
+            var f = Com.Get(Com.Block(ws, row, 1, row, LastColumn), "Formula2");
             if (f is object[,] arr)
             {
                 var lb = arr.GetLowerBound(0);
@@ -443,7 +469,7 @@ internal sealed class ComExampleSheet : IExampleSheet
 
     private void Load(int r1, int c1, int r2, int c2)
     {
-        object v = _ws.Range[_ws.Cells[r1, c1], _ws.Cells[r2, c2]].Value2;
+        object v = Com.Block(_ws, r1, c1, r2, c2).Value2;
         if (v is not object[,] arr)
         {
             arr = (object[,])Array.CreateInstance(typeof(object), new[] { 1, 1 }, new[] { 1, 1 });
@@ -468,7 +494,7 @@ internal static class RuleWordCache
 {
     private static readonly Dictionary<string, HashSet<string>> Cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public static IReadOnlyCollection<string> For(dynamic wb)
+    public static IReadOnlyCollection<string> For(Excel.Workbook wb)
     {
         string key;
         try
@@ -484,11 +510,12 @@ internal static class RuleWordCache
             return words;
 
         var texts = new List<string>();
+        var sw = Stopwatch.StartNew();
         try
         {
-            foreach (var ws in wb.Worksheets)
+            foreach (Excel.Worksheet ws in wb.Worksheets)
             {
-                object v = ws.Range[ws.Cells[1, 1], ws.Cells[400, 30]].Value2;
+                object v = Com.Block(ws, 1, 1, 400, 30).Value2;
                 if (v is not object[,] arr)
                     continue;
                 for (var r = arr.GetLowerBound(0); r <= arr.GetUpperBound(0); r++)
@@ -504,6 +531,22 @@ internal static class RuleWordCache
 
         words = ExampleLiteralChecker.RuleWords(texts);
         Cache[key] = words;
+        Logger.Info($"ExampleCheck: read {wb.Name}'s rules vocabulary ({words.Count} words) in {sw.ElapsedMilliseconds} ms");
         return words;
     }
+}
+
+/// <summary>
+///     Typed COM helpers. Properties newer than the embedded Excel 2013 types (Formula2, HasSpill,
+///     SpillingToRange) go through IDispatch by name.
+/// </summary>
+internal static class Com
+{
+    public static Excel.Range Block(Excel.Worksheet ws, int r1, int c1, int r2, int c2) =>
+        ws.Range[ws.Cells[r1, c1], ws.Cells[r2, c2]];
+
+    public static object? Get(object o, string property) =>
+        o.GetType().InvokeMember(property, BindingFlags.GetProperty, null, o, null, CultureInfo.InvariantCulture);
+
+    public static string Formula2(Excel.Range cell) => Get(cell, "Formula2") as string ?? "";
 }
