@@ -56,6 +56,12 @@ internal static class ExampleCheckCommand
             {
                 try
                 {
+                    foreach (var type in new[]
+                             {
+                                 typeof(ExampleCheckCommand), typeof(ComExampleSheet), typeof(RuleWordCache), typeof(Com),
+                                 typeof(ExampleCheckWindow), typeof(ExampleLiteralChecker), typeof(FormulaParser)
+                             })
+                        PreJit(type);
                     ExampleLiteralChecker.Check(new ExampleCheckRequest("=IF(A1>0.5,\"x\",B1:B2)", 2, 3, new[] { 3 }, new[] { 3 }),
                         new WarmUpSheet(), () => ExampleLiteralChecker.RuleWords(new[] { "Level 1 warm-up text for the example check." }));
                 }
@@ -91,6 +97,29 @@ internal static class ExampleCheckCommand
         Logger.Info("ExampleCheck: stopped");
     }
 
+    private static void PreJit(Type type)
+    {
+        const BindingFlags all = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static
+                                 | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        foreach (var m in type.GetMethods(all).Cast<MethodBase>().Concat(type.GetConstructors(all)))
+        {
+            if (m.IsAbstract || m.ContainsGenericParameters)
+                continue;
+            try
+            {
+                System.Runtime.CompilerServices.RuntimeHelpers.PrepareMethod(m.MethodHandle);
+            }
+            catch
+            {
+                // A method that can't be prepared ahead is JIT-compiled on first use as usual.
+            }
+        }
+
+        foreach (var nested in type.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
+            if (!nested.ContainsGenericParameters)
+                PreJit(nested);
+    }
+
     /// <summary>Applies the switch after the settings window saves. Safe from any thread.</summary>
     internal static void ApplySwitch() =>
         ExcelAsyncUtil.QueueAsMacro(() =>
@@ -110,18 +139,20 @@ internal static class ExampleCheckCommand
             if (!Enabled)
                 return;
             var sw = Stopwatch.StartNew();
-            var findings = CheckWrite(sh, target, out var where);
+            var findings = CheckWrite(sh, target, out var where, out var stages);
             sw.Stop();
             if (where is null)
                 return; // not a fill or spill: nothing was checked
             LastCheckMs = sw.Elapsed.TotalMilliseconds;
+            var fresh = findings.Where(Fresh).ToList();
             var detail = string.Join("; ", findings.Select(f =>
                 $"{f.Finding.Literal} in {ExampleLiteralChecker.Address(f.Request.Row, f.Request.Column)} = "
                 + (f.Finding.FromText ? "example text" : f.Finding.SourceAddress)));
-            Logger.Info($"ExampleCheck: {where.Sheet}!{where.Label} checked in {LastCheckMs:F1} ms, "
-                        + $"{findings.Count} finding(s){(findings.Count > 0 ? ": " + detail : "")}");
-            if (findings.Count > 0)
-                ExampleCheckWindow.Present(where, findings, ExampleCheckModes.Normalize(Settings.Current.ExampleCheckMode));
+            Logger.Info($"ExampleCheck: {where.Sheet}!{where.Label} checked in {LastCheckMs:F1} ms ({stages}), "
+                        + $"{findings.Count} finding(s){(findings.Count > 0 ? ": " + detail : "")}"
+                        + (fresh.Count < findings.Count ? $" ({findings.Count - fresh.Count} shown in the last minute: not again)" : ""));
+            if (fresh.Count > 0)
+                ExampleCheckWindow.Present(where, fresh, ExampleCheckModes.Normalize(Settings.Current.ExampleCheckMode));
         }
         catch (Exception ex)
         {
@@ -129,13 +160,35 @@ internal static class ExampleCheckCommand
         }
     }
 
+    private static readonly Dictionary<string, DateTime> Shown = new(StringComparer.Ordinal);
+
+    /// <summary>
+    ///     False when the same finding (sheet, example cell, literal, match) was shown in the last
+    ///     minute: an undo, a redo or a re-fill of the same formula doesn't show it again.
+    /// </summary>
+    private static bool Fresh(ExampleCheckFinding f)
+    {
+        var key = $"{f.Request.Row}:{f.Request.Column}|{f.Finding.Literal}|{f.Finding.SourceAddress}|{f.Request.Formula.GetHashCode()}";
+        var now = DateTime.UtcNow;
+        foreach (var old in Shown.Where(kv => now - kv.Value > TimeSpan.FromMinutes(1)).Select(kv => kv.Key).ToList())
+            Shown.Remove(old);
+        if (Shown.ContainsKey(key))
+            return false;
+        Shown[key] = now;
+        return true;
+    }
+
     /// <summary>
     ///     The findings for one write, or none. <paramref name="where"/> is null when the write was
     ///     neither a multi-cell formula write nor a spilling formula (so nothing was checked).
+    ///     <paramref name="stages"/> says where the time went, for the log.
     /// </summary>
-    private static List<ExampleCheckFinding> CheckWrite(object sh, Excel.Range target, out CheckedWrite? where)
+    private static List<ExampleCheckFinding> CheckWrite(object sh, Excel.Range target, out CheckedWrite? where,
+        out string stages)
     {
         where = null;
+        stages = "";
+        var clock = Stopwatch.StartNew();
         // Typed COM calls, not dynamic: the DLR binder costs a second on the first fill of a session.
         if (sh is not Excel.Worksheet ws)
             return new List<ExampleCheckFinding>();
@@ -180,7 +233,9 @@ internal static class ExampleCheckCommand
             label = $"fill of {ExampleLiteralChecker.Address(r1, c1)}:{ExampleLiteralChecker.Address(r1 + rows - 1, c1 + cols - 1)}";
         }
 
+        var tFamily = clock.Elapsed.TotalMilliseconds;
         var sheet = new ComExampleSheet(ws, requests);
+        var tRead = clock.Elapsed.TotalMilliseconds;
         var wb = (Excel.Workbook)ws.Parent;
         var findings = new List<ExampleCheckFinding>();
         foreach (var req in requests)
@@ -188,6 +243,8 @@ internal static class ExampleCheckCommand
             foreach (var f in ExampleLiteralChecker.Check(req, sheet, () => RuleWordCache.For(wb)))
                 findings.Add(new ExampleCheckFinding(req, f));
         }
+
+        stages = $"family {tFamily:F0}, read {tRead - tFamily:F0}, check {clock.Elapsed.TotalMilliseconds - tRead:F0}";
 
         where = new CheckedWrite(label, ws.Name, r1, c1, rows, cols, new IntPtr(_app!.Hwnd));
         return findings;

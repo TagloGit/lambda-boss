@@ -79,8 +79,8 @@ public static class CheckFormulaCommand
         }
 
         target ??= (FixTarget?)CellTarget(excelHwnd, cell);
-        var names = WorkbookNames.Capture(app);
-        var result = FormulaChecker.Check(formula, names);
+        FormulaNameContext names = WorkbookNames.Capture(app);
+        FormulaCheckResult result = FormulaChecker.Check(formula, names);
         result = ConfirmWithExcel(app, result, names);
 
         // The example check's findings for this cell (spec 0020), when that switch is on.

@@ -102,13 +102,27 @@ internal static class ExampleCheckWindow
                 if (mode == ExampleCheckModes.Prompt)
                     ShowPrompt(where, findings, shortcut);
                 else
-                    ShowToast(where, findings, shortcut, written);
+                    ShowToast(where, findings, shortcut, Union(written, source));
             }
             catch (Exception ex)
             {
                 Logger.Error("ExampleCheckWindow", ex);
             }
         })));
+    }
+
+    /// <summary>The written cells and the matching cell together, so the panel covers neither.</summary>
+    private static NativeMethods.Rect? Union(NativeMethods.Rect? a, NativeMethods.Rect? b)
+    {
+        if (a is not { } x)
+            return b;
+        if (b is not { } y || y.Top > x.Bottom || y.Bottom < x.Top)
+            return a; // the matching cell isn't beside the written cells: place by those alone
+        return new NativeMethods.Rect
+        {
+            Left = Math.Min(x.Left, y.Left), Top = Math.Min(x.Top, y.Top),
+            Right = Math.Max(x.Right, y.Right), Bottom = Math.Max(x.Bottom, y.Bottom)
+        };
     }
 
     public static void CloseAll() =>
