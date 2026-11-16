@@ -150,6 +150,29 @@ public sealed record StateEngine(
         }
     }
 
+    /// <summary>
+    ///     The step's lines a new row can carry into the state by typing their name (spec 0018
+    ///     addendum, "Carry a body variable"). A line already a variable is left out.
+    /// </summary>
+    public IReadOnlyList<string> CarryCandidates
+    {
+        get
+        {
+            if (IsNew) return Array.Empty<string>();
+
+            var names = StateEdit.CarryCandidates(
+                StateEngines.Intermediate(this, withOtherArguments: true), Parameters.Skip(1).ToList());
+            var taken = Rows.Select(r => r.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return names.Where(n => !taken.Contains(n)).ToList();
+        }
+    }
+
+    /// <summary>The variables that are lines of the step, carried: worked out each step, the last value kept (spec 0018 addendum).</summary>
+    public IReadOnlyList<string> CarriedKeys =>
+        IsNew
+            ? Array.Empty<string>()
+            : StateEdit.CarriedKeys(StateEngines.Intermediate(this, withOtherArguments: true));
+
     /// <summary>Output keys nothing reads back (spec 0015, "Debug toggle"): not state variables.</summary>
     public IReadOnlyList<string> DebugKeys => StateDebug.DebugKeys(this);
 
@@ -162,6 +185,9 @@ public sealed record StateEngine(
 
     /// <summary>The answer outputs, in order: the keys of a <c>GetVars</c> round the fold (spec 0018). Empty when none.</summary>
     public IReadOnlyList<string> Answer => StateAnswer.Read(Before, After);
+
+    /// <summary>The answer is written as LET names, not a <c>GetVars</c> wrapper (spec 0018 addendum, #480).</summary>
+    public bool AnswerAsLet => StateAnswer.IsLetNames(Before, After);
 
     /// <summary>A new engine for an empty cell: no variables yet, a REDUCE with placeholders.</summary>
     public static StateEngine New(string prefix) => new(
@@ -179,7 +205,8 @@ public sealed record StateEngineRead(StateEngine? Engine, bool IsEmpty, string? 
 ///     What the dialog asks for: the variables, the form (null = LET step), the name (null =
 ///     inline), the debug state (null = leave as it is; spec 0015, "Debug toggle"), the
 ///     answer outputs in order (null = leave as they are, empty = none; spec 0018), named as the
-///     rows now name them, and the guard (null = leave as it is; spec 0015, "Guard toggle").
+///     rows now name them, the guard (null = leave as it is; spec 0015, "Guard toggle"), and the
+///     answer's form (true = LET names, false = GetVars, null = leave as it is; spec 0018 addendum).
 /// </summary>
 public sealed record StateEngineChange(
     IReadOnlyList<StateEditRow> Rows,
@@ -187,7 +214,8 @@ public sealed record StateEngineChange(
     string? StepName,
     bool? Debug = null,
     IReadOnlyList<string>? Answer = null,
-    bool? Guard = null);
+    bool? Guard = null,
+    bool? AnswerAsLet = null);
 
 /// <summary>
 ///     The cell after a change, and the named LAMBDA to store when the step is named. Null
@@ -297,10 +325,16 @@ public static class StateEngines
             engine = StateAnswer.RenameReads(engine, renames);
 
             // Keys match ignoring case, as GetVar reads them: a case-only difference is no change.
-            if (change.Answer != null && !change.Answer.SequenceEqual(engine.Answer, StringComparer.OrdinalIgnoreCase))
+            if (change.Answer != null || change.AnswerAsLet != null)
             {
-                var (answerBefore, answerAfter) = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, change.Answer);
-                engine = engine with { Before = answerBefore, After = answerAfter };
+                var target = change.Answer ?? engine.Answer;
+                var asLet = change.AnswerAsLet ?? engine.AnswerAsLet;
+                var sameKeys = target.SequenceEqual(engine.Answer, StringComparer.OrdinalIgnoreCase);
+                if (!sameKeys || (target.Count > 0 && asLet != engine.AnswerAsLet))
+                {
+                    var (answerBefore, answerAfter) = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, target, asLet);
+                    engine = engine with { Before = answerBefore, After = answerAfter };
+                }
             }
 
             var removed = change.Rows
@@ -317,10 +351,13 @@ public static class StateEngines
             // 0. A name can't be a debug output's: it would be set twice in the output.
             if (!engine.IsNew)
             {
+                // A new row naming a body line that is a debug output carries it (spec 0018 addendum).
                 var known = engine.DebugKeys;
+                var carry = known.Count == 0 ? Array.Empty<string>() : engine.CarryCandidates;
                 var clash = change.Rows.FirstOrDefault(r =>
                     r.Key.Trim().Length > 0 && !string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal)
-                    && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase));
+                    && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+                    && !(r.OriginalKey == null && (r.Value.Trim().Length == 0 || r.Value.Trim() == StateEngine.Placeholder) && carry.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase)));
                 if (clash != null)
                     return Failed($"{clash.Key.Trim()} is already a debug output of this step. Pick another name.", notes);
             }
@@ -431,9 +468,8 @@ public static class StateEngines
             // 3. Form.
             if (change.Fold == null && !engine.IsWholeFormula)
             {
-                var bare = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, Array.Empty<string>());
                 return Failed(
-                    engine.Answer.Count > 0 && bare.Before.Trim() == "=" && bare.After.Trim().Length == 0
+                    engine.Answer.Count > 0 && (engine.AnswerAsLet || WholeWithoutAnswer(engine))
                         ? "The LET step can't carry answer outputs. Untick them, or pick a fold."
                         : "The fold sits inside a larger formula, so it can't unfold here. Put the fold in a cell of its own first.",
                     notes);
@@ -482,6 +518,13 @@ public static class StateEngines
         {
             return Failed(ex.Message, notes);
         }
+    }
+
+    // True when taking the answer wrapper off leaves the fold as the whole formula.
+    private static bool WholeWithoutAnswer(StateEngine engine)
+    {
+        var bare = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, Array.Empty<string>());
+        return bare.Before.Trim() == "=" && bare.After.Trim().Length == 0;
     }
 
     // The dialog always sends a trailing blank row for a new variable: that is no edit.
@@ -547,12 +590,14 @@ public static class StateEngines
         var after = engine.After;
         if (engine.IsDebug && !debug)
         {
+            (before, after) = StateAnswer.DebugAnswer(before, after, false);
             if (!StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter)) return null;
             (before, after) = (bare, bareAfter);
         }
         else if (!engine.IsDebug && debug && !StateDebug.TryUnwrap(before, after, out _, out _))
         {
             (before, after) = StateDebug.Wrap(before, after, shaped.Prefix);
+            (before, after) = StateAnswer.DebugAnswer(before, after, true);
         }
 
         return before + text + after;
@@ -933,7 +978,8 @@ public static class StateEngines
                 : r)
             .ToList();
 
-        var result = StateEdit.Apply(Intermediate(engine, withOtherArguments: true), rowsWithPlaceholders);
+        var result = StateEdit.Apply(
+            Intermediate(engine, withOtherArguments: true), rowsWithPlaceholders, engine.Parameters.Skip(1).ToList());
         if (result.Formula == null)
         {
             error = result.Error;
@@ -1192,10 +1238,18 @@ public static class StateEngines
         var after = original.After;
 
         // The debug wrapper goes on or comes off; every other wrapper is left as it was.
-        if (original.IsDebug && !debug && StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter))
+        if (original.IsDebug && !debug && StateDebug.TryUnwrap(before, after, out _, out _))
+        {
+            // The LET names' last line goes back first (spec 0018 addendum), then the wrapper.
+            (before, after) = StateAnswer.DebugAnswer(before, after, false);
+            StateDebug.TryUnwrap(before, after, out var bare, out var bareAfter);
             (before, after) = (bare, bareAfter);
+        }
         else if (!original.IsDebug && debug && !StateDebug.TryUnwrap(before, after, out _, out _))
+        {
             (before, after) = StateDebug.Wrap(before, after, engine.Prefix);
+            (before, after) = StateAnswer.DebugAnswer(before, after, true);
+        }
 
         return before + call + after;
     }

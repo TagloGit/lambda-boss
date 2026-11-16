@@ -137,3 +137,123 @@ the branch's definition was added by hand after /State loaded Loops bare.
 **Found, not from this change:** with `TEXTSPLIT(log, ",")` as the inputs (a row), SCAN gives a row
 of states and SplitState reads only the first, so the debug table shows step 1 only (screenshot
 02). Filed as #463.
+
+---
+
+# Addendum (16 Nov 2026): carry a body variable, answers as LET names
+
+Issues: #479 (carry), #480 (answers as LET names). Same Labs switch, `state-any-form`. From Tim's
+R4 State Reps v3 L5 play (16 Nov), every level single-cell with /State.
+
+## Carry a body variable in the state (#479)
+
+**Problem.** `pos` was a plain line in the step. To get it out of the fold, Tim added a new state
+variable, deleted his line and renamed the references: "a bit painful". His correction: "I'm not
+sure it needs a starting value. It's more like saying, 'keep this variable in the output when I
+turn debug off'."
+
+**The command: type the line's name in the new-variable row.** `pos` typed in the blank row, when
+the step already has a `pos` line, carries that line instead of adding a second variable. Alt+A
+then ticks it into the answer, so the whole job is the name, Alt+A, Enter. No new key to learn,
+and it's where Tim already goes to add a variable. Before this, typing `pos` there added a
+`GetVar` line `pos_` and a `nextPos` line beside his own `pos`: never what anyone wants. Under the
+rows the dialog lists the lines it can carry: "Body lines you can carry (type the name in a new
+row): pos, cell."
+
+**What it writes.**
+
+- The output's SetVars gets `"pos", pos` at its end. The `pos` line is not touched: it is worked
+  out each step as before, and keeps its name, so every reference keeps working.
+- The seed gets `"pos", ""`. **Placeholder: `""`**, never asked for. Nothing in the step reads it
+  (a carried variable has no GetVar line); `GetVar(fold, "pos")` shows it only when the fold has
+  no inputs. It is what makes `pos` a state variable rather than a debug output (a key the seed
+  holds is never a debug output), so Debug off keeps it.
+- No `GetVar` line. If Tim later wants last step's value, he adds `pos, GetVar(a, "pos")` by hand
+  (and renames his own line), as for any variable.
+
+**In the dialog** a carried row's name is italic, with the tooltip "Carried: worked out each
+step; its last value is kept in the state." It ticks and moves like any row.
+
+**Unmark** by clearing the row (or ✕), as for removing a variable: the seed pair and the output
+pair go, and the `pos` line stays, as a debug output's line does. Blocked, as any remove, while
+something outside the fold reads the key.
+
+**Rename** of a carried row renames the key and the line together, references included (the key
+and the line share the name).
+
+**Debug and Guard.** Debug on adds no `in.pos` (there's no incoming value) and doesn't repeat the
+line (it's already the output's value). Debug off keeps it: it's seeded. Carrying while Debug is
+on: the debug pair `"pos", pos` already in the output becomes the carry, and only the seed pair is
+added. Guard wraps the output as before; the pair is inside it.
+
+**What can be carried.** A LET line of the step that isn't the state or the input, a GetVar line,
+another variable's next line, a LAMBDA, or at or after the output's own line; whose name is a
+usable key not already a seed key or read as a key round the fold.
+
+## Answers as LET names (#480)
+
+**Problem.** Tim needed status, position and step count. GetVars puts the answer in one row, and
+the visited cells (an array) didn't fit beside the status. His words: "put the whole thing in a
+LET, or keep it in the LET it's already in, then make the loop output a variable, then call
+GetVar on the output as many times as required."
+
+**The option: the "LET names" box, Alt+L**, beside Debug and Guard. Ticked, the answer (the ticked
+rows, in order, as before) is written as LET names:
+
+```excel
+=LET(
+    fold, REDUCE(SetVars("st", "go", "pos", ""), TEXTSPLIT(G55, ","), LAMBDA(a, v, LET(
+        …rules…
+    ))),
+    st, GetVar(fold, "st"),
+    pos, GetVar(fold, "pos"),
+    HSTACK(st, pos)
+)
+```
+
+- **An outer LET is reused** when the fold is its last line: `fold, ` goes in front of the fold
+  and the GetVar lines and the last line after it. Otherwise, with the fold the whole formula, a
+  new LET goes round it. A fold anywhere else is refused: "LET names need the fold to be the whole
+  formula or the last line of its LET."
+- **Names.** A line is named as its key. A key that isn't a LET name, or is already bound in that
+  LET, gets `_` added. The fold's name is `fold` (`fold_` when taken).
+- **The last line** defaults to the answer names in order: `HSTACK(st, pos)`, or the name alone
+  for one. Tim edits it from there.
+- **Ticks and order** (Alt+A, Alt+Up/Down) rewrite the GetVar lines. The last line is rewritten
+  only while it is still the default for the old ticks; Tim's own last line is left alone, and
+  unticking a name it reads is refused: "The last line reads pos. Take that out first."
+- **Untick everything**: with the default last line, the fold goes back to where it was (a LET
+  that /State made is taken off; Tim's own keeps its lines with the fold as its last line again).
+  With his own last line, refused.
+- **Alt+L with ticks** switches between GetVars and LET names. From LET names with Tim's own last
+  line, refused: it would be lost.
+- **Read back** from the text: the answer is the run of `name, GetVar(fold, "key")` lines straight
+  after the fold's line. The box opens ticked when the cell has that form.
+- **Debug on** puts `SplitState(SCAN(…), 1)` round the fold, as always, so `fold` holds the debug
+  table; and the LET's last line becomes `_answer, <last line>, fold`, so the cell shows the whole
+  table. Debug off takes both off and gives the text back exactly.
+- **Rename** follows the `GetVar(fold, "key")` reads (as 0018 does); the LET name stays Tim's.
+- **Unfold** is refused, as for GetVars ("untick them, or pick a fold").
+- **Refusals as built.** Untick everything with Tim's own last line: "The last line is your own, so
+  the answer names can't come off. Take the last line out first." Switching to GetVars with it:
+  "The last line is your own, and GetVars would lose it. Take it out first, or keep LET names."
+  Lines of Tim's own between the answer lines and the last line count as part of the last line
+  (kept, and read for names; Debug's `_answer` goes in front of the final expression only).
+  A hand-written last line that happens to equal the default for the current answers is treated as
+  the default from then on.
+
+**Defaults taken** (each reversible: tell the Excel director):
+- The box starts unticked for a cell with no answer yet: GetVars stays the default answer form,
+  shorter for scalar answers. It starts ticked when the cell already has LET names.
+- Alt+L toggles only; it doesn't save (Alt+D and Alt+G save, because they're whole jobs).
+- The last line defaults to `HSTACK` of the answer names.
+
+## Acceptance (addendum)
+
+- [ ] Carry: type a body line's name, the seed and output pairs written, the line untouched;
+      Alt+A ticks it; unmark keeps the line; rename renames line and key; Debug on/off exact with a
+      carried variable, and it stays after Debug off; carry while Debug is on; Guard on/off.
+- [ ] LET names: new LET, reused LET, refused elsewhere; ticks and order; own last line kept and
+      guarded; untick all; switch both ways; Debug on/off exact with `_answer`; rename.
+- [ ] VM: R4 v3 L5 single-cell, `pos` carried, answers as LET names, matching the key; Debug
+      on/off gives the text back exactly.

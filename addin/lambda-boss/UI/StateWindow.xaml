@@ -55,6 +55,12 @@
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
             <StackPanel>
                 <StackPanel x:Name="RowsPanel" />
+                <TextBlock x:Name="CarryText"
+                           Foreground="#808080"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Margin="0,4,0,0"
+                           Visibility="Collapsed" />
                 <TextBlock x:Name="DebugText"
                            Foreground="#808080"
                            FontSize="11"
@@ -70,6 +76,7 @@
                 <ColumnDefinition Width="200" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
@@ -104,6 +111,16 @@
                       ToolTip="Alt+G toggles and saves. On: the step's body goes inside IF(GetVar(a, &quot;st&quot;) &lt;&gt; &quot;go&quot;, a, …), so any status but &quot;go&quot; ends the walk; st is added, seeded &quot;go&quot;, if it's missing. Off: the guard comes off; st stays"
                       Checked="Guard_Changed"
                       Unchecked="Guard_Changed" />
+            <CheckBox x:Name="AnswerLetBox"
+                      Grid.Column="6"
+                      Content="_LET names"
+                      Foreground="#dcdcaa"
+                      FontSize="13"
+                      VerticalAlignment="Center"
+                      Margin="16,0,0,0"
+                      ToolTip="Alt+L toggles. On: the ticked answers are written as LET names: fold, name, GetVar(fold, &quot;key&quot;) lines, then a last line (HSTACK of the names) you can edit. The fold's own LET is reused when it is the last line; else a LET goes round the whole formula. Off: one GetVars(…) round the fold"
+                      Checked="Answer_Changed"
+                      Unchecked="Answer_Changed" />
         </Grid>
 
         <TextBlock x:Name="MessageText"
@@ -149,7 +166,7 @@
                        FontSize="11"
                        TextWrapping="Wrap"
                        VerticalAlignment="Center"
-                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Tick the answer's variables (Alt+A) and set their order with Alt+Up/Down. Alt+D toggles Debug and saves; Alt+G toggles Guard and saves." />
+                       Text="Type over a name to rename it; clear it or press ✕ to remove it; the last row adds one. Tick the answer's variables (Alt+A) and set their order with Alt+Up/Down. Alt+D toggles Debug and saves; Alt+G toggles Guard and saves. Alt+L toggles LET names for the answer." />
         </DockPanel>
     </Grid>
 </Window>

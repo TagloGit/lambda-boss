@@ -282,7 +282,7 @@ public static class StateDebug
     ///     A line that may hold a function, which SetVars can't store: a LAMBDA, a LET that ends in
     ///     one, or a bare name that isn't the step's own (a workbook LAMBDA or a range: left out).
     /// </summary>
-    private static bool IsFunction(string value, HashSet<string> local)
+    internal static bool IsFunction(string value, HashSet<string> local)
     {
         try
         {

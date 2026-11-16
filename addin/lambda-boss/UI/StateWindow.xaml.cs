@@ -25,6 +25,11 @@ public partial class StateWindow
     // The ticks as the dialog opened: while they stand, the answer is left as the cell has it
     // (a key with no row to tick, Tim's own spacing).
     private readonly List<string> _openedAnswer;
+    private readonly bool _openedAnswerLet;
+
+    // Body lines already carried, and those a new row can carry by name (spec 0018 addendum).
+    private readonly IReadOnlyList<string> _carried;
+    private readonly IReadOnlyList<string> _candidates;
 
     public StateWindow(
         StateEngine engine,
@@ -38,6 +43,8 @@ public partial class StateWindow
         _engine = engine;
         _refersTo = refersTo;
         _callName = callName;
+        _carried = engine.CarriedKeys;
+        _candidates = engine.CarryCandidates;
 
         HeaderText.Text = StateEngines.Describe(engine) + (note == null ? "" : " " + note);
 
@@ -63,6 +70,12 @@ public partial class StateWindow
 
         _folds.AddRange(folds);
 
+        if (_candidates.Count > 0)
+        {
+            CarryText.Text = "Body lines you can carry (type the name in a new row): " + string.Join(", ", _candidates) + ".";
+            CarryText.Visibility = Visibility.Visible;
+        }
+
         var debugKeys = engine.DebugKeys;
         if (debugKeys.Count > 0)
         {
@@ -76,7 +89,9 @@ public partial class StateWindow
         NameBox.Text = engine.StepName ?? "";
         DebugBox.IsChecked = engine.IsDebug;
         GuardBox.IsChecked = engine.IsGuarded;
+        AnswerLetBox.IsChecked = engine.AnswerAsLet;
         _openedAnswer = AnswerKeys();
+        _openedAnswerLet = engine.AnswerAsLet;
 
         _loaded = true;
         Refresh();
@@ -100,10 +115,13 @@ public partial class StateWindow
         SelectedFold,
         NameBox.Text.Trim().Length == 0 ? null : NameBox.Text.Trim(),
         DebugBox.IsChecked == true,
-        AnswerChanged() ? AnswerKeys() : null,
-        GuardBox.IsChecked == true);
+        AnswerChanged() ? AnswerKeys() : AnswerFormChanged() ? _engine.Answer : null,
+        GuardBox.IsChecked == true,
+        AnswerFormChanged() ? AnswerLetBox.IsChecked == true : null);
 
     private bool AnswerChanged() => !AnswerKeys().SequenceEqual(_openedAnswer, StringComparer.OrdinalIgnoreCase);
+
+    private bool AnswerFormChanged() => (AnswerLetBox.IsChecked == true) != _openedAnswerLet;
 
     private List<string> AnswerKeys() =>
         _rows.Where(r => r.Answer.IsChecked == true && r.Name.Text.Trim().Length > 0)
@@ -136,7 +154,13 @@ public partial class StateWindow
         grid.Children.Add(tick);
 
         var name = new TextBox { Text = row.Key };
+        ShowCarried(name, row.OriginalKey != null
+            ? _carried.Contains(row.OriginalKey, StringComparer.OrdinalIgnoreCase)
+            : IsCandidate(row.Key));
         name.TextChanged += Field_TextChanged;
+        name.TextChanged += (_, _) => ShowCarried(name, row.OriginalKey != null
+            ? _carried.Contains(row.OriginalKey, StringComparer.OrdinalIgnoreCase)
+            : IsCandidate(name.Text));
         Grid.SetColumn(name, 1);
         grid.Children.Add(name);
 
@@ -159,6 +183,16 @@ public partial class StateWindow
 
         RowsPanel.Children.Add(grid);
         _rows.Add(new RowBox(row.OriginalKey, name, tick, grid, state ?? _nextNewRow++));
+    }
+
+    private bool IsCandidate(string text) =>
+        _candidates.Contains(text.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    // A carried row reads in italic: worked out each step, only its last value kept.
+    private static void ShowCarried(TextBox name, bool carried)
+    {
+        name.FontStyle = carried ? FontStyles.Italic : FontStyles.Normal;
+        name.ToolTip = carried ? "Carried: worked out each step; its last value is kept in the state." : null;
     }
 
     private void Answer_Changed(object sender, RoutedEventArgs e) => Refresh();
@@ -294,6 +328,12 @@ public partial class StateWindow
                 SaveButton_Click(this, new RoutedEventArgs());
             e.Handled = true;
         }
+        else if (IsAnswerLetKey(e.Key, e.SystemKey, Keyboard.Modifiers))
+        {
+            // Alt+L: LET names for the answer. Toggles only; the preview shows the result.
+            AnswerLetBox.IsChecked = AnswerLetBox.IsChecked != true;
+            e.Handled = true;
+        }
         else if (MoveRowKey(e.Key, e.SystemKey, Keyboard.Modifiers) is { } by && RowHasFocus())
         {
             MoveFocusedRow(by);
@@ -329,6 +369,10 @@ public partial class StateWindow
     /// <summary>Alt+A ticks or unticks the focused row for the answer.</summary>
     internal static bool IsAnswerKey(Key key, Key systemKey, ModifierKeys modifiers) =>
         key == Key.System && systemKey == Key.A && modifiers == ModifierKeys.Alt;
+
+    /// <summary>Alt+L, the LET names box's access key.</summary>
+    internal static bool IsAnswerLetKey(Key key, Key systemKey, ModifierKeys modifiers) =>
+        key == Key.System && systemKey == Key.L && modifiers == ModifierKeys.Alt;
 
     private static bool IsToggleDebugKey(KeyEventArgs e) =>
         IsToggleDebugKey(e.Key, e.SystemKey, Keyboard.Modifiers);

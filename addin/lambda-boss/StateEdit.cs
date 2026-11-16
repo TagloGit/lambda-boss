@@ -61,15 +61,73 @@ public static class StateEdit
         static StateEditView Refused(string why) => new(Array.Empty<StateEditRow>(), why);
     }
 
+    /// <summary>
+    ///     The names of the step's lines a new row can carry into the state (spec 0018 addendum,
+    ///     "Carry a body variable"). <paramref name="parameterNames" /> are the step's own
+    ///     parameters beyond the state, which stand in as lines in <paramref name="formula" />.
+    ///     Empty when the formula isn't a state step.
+    /// </summary>
+    public static IReadOnlyList<string> CarryCandidates(string formula, IReadOnlyCollection<string>? parameterNames = null)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+
+        try
+        {
+            return new EditableStep(formula, parameterNames).CarryCandidates();
+        }
+        catch (FormatException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>The keys that are carried lines: no GetVar line, the line of the same name as the key, seeded.</summary>
+    public static IReadOnlyList<string> CarriedKeys(string formula)
+    {
+        if (formula is null) throw new ArgumentNullException(nameof(formula));
+
+        try
+        {
+            return new EditableStep(formula, null).CarriedKeys();
+        }
+        catch (FormatException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
     /// <summary>Applies the dialog's rows: removals first, then renames, then new variables.</summary>
-    public static StateEditResult Apply(string formula, IReadOnlyList<StateEditRow> rows)
+    public static StateEditResult Apply(string formula, IReadOnlyList<StateEditRow> rows) =>
+        Apply(formula, rows, null);
+
+    /// <summary>
+    ///     As <see cref="Apply(string, IReadOnlyList{StateEditRow})" />. A new row named for a line of
+    ///     the step (and left without a value, or <c>""</c>) carries that line instead of adding a
+    ///     variable. <paramref name="parameterNames" /> are the step's parameters beyond the state.
+    /// </summary>
+    public static StateEditResult Apply(
+        string formula, IReadOnlyList<StateEditRow> rows, IReadOnlyCollection<string>? parameterNames)
     {
         if (formula is null) throw new ArgumentNullException(nameof(formula));
         if (rows is null) throw new ArgumentNullException(nameof(rows));
 
         try
         {
-            var rowError = CheckRows(rows);
+            EditableStep? carrier = null;
+            bool CanCarry(string key)
+            {
+                try
+                {
+                    carrier ??= new EditableStep(formula, parameterNames);
+                    return carrier.CarryName(key) != null;
+                }
+                catch (FormatException)
+                {
+                    return false;
+                }
+            }
+
+            var rowError = CheckRows(rows, CanCarry);
             if (rowError != null) return Failed(rowError);
 
             var existing = rows.Where(r => r.OriginalKey != null).ToList();
@@ -85,7 +143,7 @@ public static class StateEdit
             if (removed.Count == existing.Count && added.Count == 0)
                 return Failed("A state needs at least one variable.");
 
-            var step = new EditableStep(formula);
+            var step = new EditableStep(formula, parameterNames);
 
             if (removed.Count > 0)
             {
@@ -102,7 +160,11 @@ public static class StateEdit
             }
 
             foreach (var row in added)
-                step.Add(row.Key.Trim(), row.Value.Trim());
+            {
+                var carried = IsBlankSeed(row.Value) ? step.CarryName(row.Key.Trim()) : null;
+                if (carried != null) step.Carry(carried);
+                else step.Add(row.Key.Trim(), row.Value.Trim());
+            }
 
             var written = step.Write();
             if (written.Length > MaxFormulaLength)
@@ -159,7 +221,10 @@ public static class StateEdit
         return written;
     }
 
-    private static string? CheckRows(IReadOnlyList<StateEditRow> rows)
+    /// <summary>No value typed, or the placeholder <c>""</c>: nothing was asked for as a starting value.</summary>
+    private static bool IsBlankSeed(string value) => value.Trim().Length == 0 || value.Trim() == StateEngine.Placeholder;
+
+    private static string? CheckRows(IReadOnlyList<StateEditRow> rows, Func<string, bool> canCarry)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
@@ -175,8 +240,13 @@ public static class StateEdit
                     continue;
                 }
 
-                if (value.Length == 0) return $"{key} needs a value.";
-                if (!StateScaffold.Reads(value)) return $"Can't read the value of {key}: {value}";
+                // A line of the step named here is carried: it needs no starting value.
+                var carries = IsBlankSeed(value) && canCarry(key);
+                if (!carries)
+                {
+                    if (value.Length == 0) return $"{key} needs a value.";
+                    if (!StateScaffold.Reads(value)) return $"Can't read the value of {key}: {value}";
+                }
             }
 
             if (key.Length == 0) continue;
@@ -384,6 +454,9 @@ public static class StateEdit
         // Stands for the output call inside the text around it while that text is rewritten.
         private const string Hole = "_stateoutput_";
 
+        // The prefix of the lines that hold a fold's other arguments (a stop) in the edit form.
+        private const string OtherSlot = "_arg_";
+
         private readonly string? _inputName;
         private readonly List<Line> _lines;
         private readonly Chain _output;
@@ -400,9 +473,12 @@ public static class StateEdit
         private string _template;
         private bool _sampleChanged;
 
-        public EditableStep(string formula)
+        private readonly HashSet<string> _standIns;
+
+        public EditableStep(string formula, IReadOnlyCollection<string>? parameterNames = null)
         {
             if (!IsWholeLet(formula)) throw new FormatException("The cell isn't a LET.");
+            _standIns = new HashSet<string>(parameterNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
 
             var parsed = LetParser.Parse(formula);
             var step = StateStepParser.TryParse(parsed)
@@ -449,6 +525,9 @@ public static class StateEdit
             foreach (var variable in leaving)
             {
                 if (variable.Binding != null) deleted.Add(variable.Binding);
+
+                // A carried variable's line is the step's own: only its pairs go.
+                if (IsCarried(variable)) continue;
                 if (variable.Next == null
                     || IsNamed(variable.Next, _stateName)
                     || IsNamed(variable.Next, _inputName)
@@ -599,6 +678,21 @@ public static class StateEdit
                 renames[variable.Next!] = next;
             }
 
+            // A carried variable's key and line share a name: the line follows the key.
+            if (IsCarried(variable) && !SameKey(oldKey, newKey))
+            {
+                used.Remove(variable.Next!);
+                if (!StateScaffold.IsUsableBinding(newKey) || IsReserved(newKey))
+                    return $"{newKey} can't be the name of a line in this step.";
+                if (used.Contains(newKey)) return $"{newKey} is already used in this step.";
+                renames[variable.Next!] = newKey;
+            }
+            else if (IsCarried(variable) && !string.Equals(oldKey, newKey, StringComparison.Ordinal))
+            {
+                // A change of case only: the line takes the new spelling too.
+                renames[variable.Next!] = newKey;
+            }
+
             // Keys first: rewriting needs the state's name, which never changes here.
             foreach (var line in _lines)
                 line.Rhs = RewriteKey(line.Rhs, _stateName, oldKey, newKey);
@@ -660,6 +754,65 @@ public static class StateEdit
             _sample.Set(key, value);
             _sampleChanged = true;
             _variables.Add(new Variable(key, binding, next));
+        }
+
+        /// <summary>
+        ///     A variable whose value is a line of the step: no GetVar line, and the key and the line
+        ///     share a name. Debug on shows the same shape for every line; the seed tells them apart.
+        /// </summary>
+        private bool IsCarried(Variable v) => v.Binding == null && v.Next != null && IsNamed(v.Next, v.Key);
+
+        public IReadOnlyList<string> CarriedKeys() =>
+            _variables.Where(v => IsCarried(v) && _sample.Has(v.Key)).Select(v => v.Key).ToList();
+
+        public IReadOnlyList<string> CarryCandidates() =>
+            _lines.Select(l => l.Name).Where(n => CarryName(n) != null).ToList();
+
+        /// <summary>
+        ///     The line's own spelling of <paramref name="key" /> when that line can be carried, else
+        ///     null. Not carried: the state, the input, a parameter's stand-in, a slot, a GetVar line,
+        ///     another variable's line, a LAMBDA, a line at or after the output's own, a name a key
+        ///     can't be, one the seed already holds, or one the output sets to something else.
+        /// </summary>
+        public string? CarryName(string key)
+        {
+            var at = _lines.FindIndex(l => IsNamed(l.Name, key));
+            if (at < 0) return null;
+
+            var line = _lines[at];
+            var name = line.Name;
+            var siteAt = _siteLine == null ? _lines.Count : _lines.IndexOf(_siteLine);
+            if (at <= _lines.FindIndex(l => IsNamed(l.Name, _stateName)) || at >= siteAt) return null;
+
+            if (IsNamed(name, _inputName) || _standIns.Contains(name) || IsReserved(name)
+                || name.StartsWith(OtherSlot, StringComparison.OrdinalIgnoreCase)
+                || IsNamed(name, StateEngines.SeedSlot) || IsNamed(name, StateEngines.InputsSlot)
+                || !StateScaffold.IsUsableKey(name)
+                || _sample.Has(name)
+                || _output.Pairs.Any(p => SameKey(p.Key, name) && !IsNamed(p.Value, name))
+                || _variables.Any(v => IsNamed(v.Binding, name))
+                || _variables.Any(v => IsNamed(v.Next, name) && !(v.Binding == null && SameKey(v.Key, name))))
+                return null;
+
+            if (Root(line.Rhs) is FunctionCallNode call
+                && StateStepParser.IsNamed(call.Name, "GetVar")
+                && KeyOnState(call, _stateName) != null)
+                return null;
+
+            var local = _lines.Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return StateDebug.IsFunction(line.Rhs, local) ? null : name;
+        }
+
+        /// <summary>
+        ///     Makes the line a state variable: its pair goes at the end of the output (unless a debug
+        ///     pair already holds it) and a placeholder seed goes in the state. The line is untouched.
+        /// </summary>
+        public void Carry(string name)
+        {
+            if (!_output.Has(name)) _output.Set(name, name);
+            _sample.Set(name, StateEngine.Placeholder);
+            _sampleChanged = true;
+            if (!_variables.Any(v => SameKey(v.Key, name))) _variables.Add(new Variable(name, null, name));
         }
 
         public string Write()
