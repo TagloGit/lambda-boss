@@ -204,7 +204,9 @@ internal static class ExampleCheckCommand
         else
         {
             // Every written column is excluded from every column's candidates: its values are outputs.
-            var written = Enumerable.Range(c1, cols).ToList();
+            // So are the columns a written formula spills sideways into (its own output, spill children).
+            // One shared set: columns found while reading a later column still apply to earlier requests.
+            var written = new HashSet<int>(Enumerable.Range(c1, cols));
             for (var i = 1; i <= Math.Min(cols, MaxColumns); i++)
             {
                 var req = FamilyRequest(ws, r1, c1 + i - 1, rows, written);
@@ -260,7 +262,7 @@ internal static class ExampleCheckCommand
     ///     single row (nothing to compare with).
     /// </summary>
     private static ExampleCheckRequest? FamilyRequest(Excel.Worksheet ws, int r1, int col, int rows,
-        IReadOnlyCollection<int> targetColumns)
+        HashSet<int> targetColumns)
     {
         // Only the first rows matter (50 are compared): a full-column fill reads no more than this.
         rows = Math.Min(rows, ExampleLiteralChecker.MaxCompareRows + 10);
@@ -301,7 +303,12 @@ internal static class ExampleCheckCommand
         if (family.Count < 2)
             return null;
         var example = family[0];
-        var formula = Com.Formula2(Com.Block(ws, example, col, example, col));
+        var exampleCell = Com.Block(ws, example, col, example, col);
+        var formula = Com.Formula2(exampleCell);
+        if (SpillSize(exampleCell, out _, out int exampleSpillCols))
+            ExampleLiteralChecker.ExcludeSpillColumns(targetColumns, col, exampleSpillCols);
+        if (top != example && SpillSize(Com.Block(ws, top, col, top, col), out _, out int topSpillCols))
+            ExampleLiteralChecker.ExcludeSpillColumns(targetColumns, col, topSpillCols);
         return new ExampleCheckRequest(formula, example, col,
             family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), targetColumns);
     }

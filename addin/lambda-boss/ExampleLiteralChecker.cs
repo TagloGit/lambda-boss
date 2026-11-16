@@ -217,6 +217,16 @@ internal static class ExampleLiteralChecker
 
     private sealed record Candidate(object Value, int Row, int Column, string Address, bool IsFormula, bool FromRange);
 
+    /// <summary>
+    ///     Adds the columns a formula written in <paramref name="column"/> spills into
+    ///     (column .. column+spillColumns-1) to the excluded set: they hold its own output.
+    /// </summary>
+    internal static void ExcludeSpillColumns(ISet<int> excluded, int column, int spillColumns)
+    {
+        for (var c = column; c < column + spillColumns; c++)
+            excluded.Add(c);
+    }
+
     private static List<Candidate> Candidates(ExampleCheckRequest request, IExampleSheet sheet, List<FormulaCellRef> refs)
     {
         var list = new List<Candidate>();

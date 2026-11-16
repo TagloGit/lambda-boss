@@ -404,4 +404,49 @@ public class ExampleLiteralCheckerTests
     [Fact]
     public void Late_bound_reads_pass_en_US_to_Excel() =>
         Assert.Equal(1033, LambdaBoss.Commands.Com.DispatchCulture.LCID);
+
+    // ------------------------------------------------------------ own spill columns (#486)
+
+    private static IReadOnlyList<ExampleLiteralFinding> CheckWith(Sheet sheet, string formula, string at,
+        int[] otherRows, IReadOnlyCollection<int> target)
+    {
+        Assert.True(ExampleLiteralChecker.TryCell(at, out var r, out var c));
+        return ExampleLiteralChecker.Check(new ExampleCheckRequest(formula, r, c, otherRows, target), sheet,
+            () => ExampleLiteralChecker.RuleWords(Array.Empty<string>()));
+    }
+
+    /// <summary>kit-vmtest Spill sheet: B1 spills into B1:C1 (C1 = 10); a fill of B2:B6 with B1's formula.</summary>
+    private static Sheet SpillSheet() => new Sheet()
+        .Row(1, 1, "S", 10, 2).Set("C1", 10).Set("D1", 2, formula: true)
+        .Set("D2", 5).Set("D3", 5).Set("D4", 5).Set("D5", 5).Set("D6", 5)
+        .Set("A2", 2).Set("A3", 3).Set("A4", 4).Set("A5", 5).Set("A6", 6)
+        .Set("B2", "S").Set("C2", 20).Set("C3", 30).Set("C4", 40).Set("C5", 50).Set("C6", 60);
+
+    [Fact]
+    public void Fill_literal_equal_to_the_formulas_own_sideways_spill_is_not_flagged()
+    {
+        var rows = new[] { 2, 3, 4, 5, 6 };
+        const string formula = "=HSTACK(\"S\",A1*10)";
+        var writtenOnly = new HashSet<int> { 2 };
+        // Before the fix: only the written column was excluded, so C1 (10) matched the literal 10.
+        Assert.Single(CheckWith(SpillSheet(), formula, "B1", rows, writtenOnly));
+        var target = new HashSet<int> { 2 };
+        ExampleLiteralChecker.ExcludeSpillColumns(target, 2, 2);
+        Assert.Equal(new[] { 2, 3 }, target.OrderBy(x => x));
+        Assert.Empty(CheckWith(SpillSheet(), formula, "B1", rows, target));
+    }
+
+    [Fact]
+    public void J_formula_spilling_into_K_to_M_excludes_those_columns()
+    {
+        var sheet = new Sheet().Set("A1", 7).Set("A2", 8).Set("A3", 9)
+            .Set("K1", 77).Set("K2", 88).Set("K3", 99).Set("L1", 1).Set("L2", 2).Set("L3", 3)
+            .Set("M1", 4).Set("M2", 5).Set("M3", 6);
+        var target = new HashSet<int> { 10 };
+        ExampleLiteralChecker.ExcludeSpillColumns(target, 10, 4);
+        Assert.Equal(new[] { 10, 11, 12, 13 }, target.OrderBy(x => x));
+        Assert.Empty(CheckWith(sheet, "=A1+77", "J1", new[] { 2, 3 }, target));
+        // Control: without the spill columns the 77 in K1 is flagged.
+        Assert.Single(CheckWith(sheet, "=A1+77", "J1", new[] { 2, 3 }, new HashSet<int> { 10 }));
+    }
 }
