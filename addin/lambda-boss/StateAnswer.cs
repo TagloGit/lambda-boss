@@ -77,8 +77,9 @@ public static class StateAnswer
     ///     Throws <see cref="InvalidOperationException" /> with the reason when the text can't take the form.
     /// </summary>
     public static (string Before, string After) Set(
-        string before, string after, string prefix, IReadOnlyList<string> keys, bool? asLet = null)
+        string before, string after, string prefix, IReadOnlyList<string> keys, StateAnswerMade made, bool? asLet = null)
     {
+        if (made is null) throw new ArgumentNullException(nameof(made));
         if (before is null) throw new ArgumentNullException(nameof(before));
         if (after is null) throw new ArgumentNullException(nameof(after));
         if (keys is null) throw new ArgumentNullException(nameof(keys));
@@ -109,7 +110,21 @@ public static class StateAnswer
                     throw new InvalidOperationException(keys.Count == 0
                         ? "The last line is your own, so the answer names can't come off. Take the last line out first."
                         : "The last line is your own, and GetVars would lose it. Take it out first, or keep LET names.");
-                (b, a) = Collapse(b, a, shape);
+                var (plainB, plainA) = Collapse(b, a, shape);
+                if (made.Contains(plainB, plainA))
+                {
+                    (b, a) = (plainB, plainA);
+                }
+                else if (keys.Count == 0)
+                {
+                    // The fold's line is Tim's: only the answer lines and the default last line come off.
+                    (b, a) = KeepFold(b, a, shape);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        "The fold's line is your own, and GetVars would take it away. Keep LET names.");
+                }
             }
         }
         else if (TryUnwrap(b, a, out var bareBefore, out var bareAfter, out _))
@@ -121,7 +136,7 @@ public static class StateAnswer
         {
             if (keys.Count > 0)
             {
-                if (wantLet) (b, a) = AddLet(b, a, prefix, keys);
+                if (wantLet) (b, a) = AddLet(b, a, prefix, keys, made);
                 else (b, a) = (b + prefix + WrapperName + "(", ", " + ArrayText(keys) + ")" + a);
             }
         }
@@ -363,17 +378,49 @@ public static class StateAnswer
         return (b[..nameStart], a[(s.Args[^1].End - s.Offset)..]);
     }
 
+    // Tim's own fold line stays: the answer lines and the default last line go, and the fold's name
+    // is the last line.
+    private static (string, string) KeepFold(string b, string a, LetShape s)
+    {
+        var gap = s.F[s.Args[s.K].End..s.Args[s.K + 1].Start];
+        return (b, gap + s.FoldName + a[(s.Args[^1].End - s.Offset)..]);
+    }
+
     // The answer as LET names where there is none: a new LET round a whole-formula fold, or the
     // fold's own LET when the fold is its last line.
-    private static (string, string) AddLet(string b, string a, string prefix, IReadOnlyList<string> keys)
+    private static (string, string) AddLet(string b, string a, string prefix, IReadOnlyList<string> keys, StateAnswerMade made)
     {
         var s = Find(b, a);
+
+        // Tim's own `fold, <fold>, fold)`: the lines go in after his fold line and the last line `fold`
+        // becomes the default one. Nothing is recorded: the fold line is his.
+        if (s != null && s.K >= 1 && s.K % 2 == 1 && s.K == s.Args.Count - 2
+            && s.Args[s.K - 1] is LeafNode { TokenType: FormulaTokenType.Name } own
+            && s.Args[s.K + 1] is LeafNode { TokenType: FormulaTokenType.Name } last
+            && string.Equals(own.Text, last.Text, StringComparison.OrdinalIgnoreCase))
+        {
+            var used = BoundNames(s, skipAnswer: false);
+            var ownGap = s.F[s.Args[s.K].End..last.Start];
+            var ownNames = new List<string>();
+            var ownSb = new StringBuilder(ownGap);
+            foreach (var key in keys)
+            {
+                var name = NameFor(key, used);
+                ownNames.Add(name);
+                ownSb.Append(LineText(name, prefix, own.Text, key)).Append(ownGap);
+            }
+
+            ownSb.Append(DefaultTail(ownNames));
+            return (b, ownSb + a[(last.End - s.Offset)..]);
+        }
+
         var reuse = s != null && s.K == s.Args.Count - 1 && s.K % 2 == 0 && s.K >= 2;
         var whole = b.Trim() == "=" && a.Trim().Length == 0;
         if (!reuse && !whole) throw new InvalidOperationException(NeedsLet);
 
         HashSet<string> taken;
         string sep;
+        made.Record(b, a);
         if (reuse)
         {
             taken = BoundNames(s!, skipAnswer: false);

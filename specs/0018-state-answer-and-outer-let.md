@@ -158,7 +158,9 @@ then ticks it into the answer, so the whole job is the name, Alt+A, Enter. No ne
 and it's where Tim already goes to add a variable. Before this, typing `pos` there added a
 `GetVar` line `pos_` and a `nextPos` line beside his own `pos`: never what anyone wants. Under the
 rows the dialog lists the lines it can carry: "Body lines you can carry (type the name in a new
-row): pos, cell."
+row): pos, cell." (#485: the list sits in the new-variable row itself as a grey "carry: pos, cell"
+at its right edge, with the sentence as that box's tooltip, so it stays in view while Tim types;
+it goes once the typed text stops being the start of a candidate. Under the rows it scrolled away.)
 
 **What it writes.**
 
@@ -222,11 +224,16 @@ rows, in order, as before) is written as LET names:
 - **Ticks and order** (Alt+A, Alt+Up/Down) rewrite the GetVar lines. The last line is rewritten
   only while it is still the default for the old ticks; Tim's own last line is left alone, and
   unticking a name it reads is refused: "The last line reads pos. Take that out first."
-- **Untick everything**: with the default last line, the fold goes back to where it was (a LET
-  that /State made is taken off; Tim's own keeps its lines with the fold as its last line again).
-  With his own last line, refused.
+- **Untick everything** (#484): the GetVar answer lines and the default last line come off, always.
+  Whether the `fold,` line (or the LET round it) comes off too depends on who wrote it: only a line
+  /State added goes (the fold goes back to where it was, exactly). Tim's own `fold, <fold>` line
+  stays, and the LET's last line becomes the fold's name: `=LET(grid, X, fold, REDUCE(...), fold)`.
+  Ticking again from that form puts the lines back after his fold line and the default last line
+  in place of `fold`. With his own last line, untick is refused.
 - **Alt+L with ticks** switches between GetVars and LET names. From LET names with Tim's own last
-  line, refused: it would be lost.
+  line, refused: it would be lost. Likewise when the fold's line is Tim's own: "The fold's line is
+  your own, and GetVars would take it away. Keep LET names."
+
 - **Read back** from the text: the answer is the run of `name, GetVar(fold, "key")` lines straight
   after the fold's line. The box opens ticked when the cell has that form.
 - **Debug on** puts `SplitState(SCAN(…), 1)` round the fold, as always, so `fold` holds the debug
@@ -241,6 +248,18 @@ rows, in order, as before) is written as LET names:
   (kept, and read for names; Debug's `_answer` goes in front of the final expression only).
   A hand-written last line that happens to equal the default for the current answers is treated as
   the default from then on.
+
+**How /State tells its lines from Tim's** (#484). Text alone can't: a `fold, <fold>` line /State
+added and one Tim wrote look the same. So when ticking adds the fold's name to a LET (or makes a
+LET round a whole-formula fold), /State records the plain text around the fold from before the add:
+the pair (text before the fold, text after it), with Debug's wrapper and tail off and the fold call
+itself left out (editing the step's rules later doesn't invalidate it). On untick-all, or on the
+switch to GetVars, /State works out the text it would give back; if that pair is recorded the
+fold line was /State's and comes off as above, else it is Tim's and stays. The record is in memory
+for the Excel session (`StateAnswerMade`): restarting Excel empties it, and everything is then
+treated as Tim's, which is safe (nothing of his is lost; at worst a `fold,` line /State made stays,
+and Tim deletes it). A record made from one text doesn't apply to another: if Tim edits a line
+around the fold after ticking, the pair no longer matches and the fold line stays.
 
 **Defaults taken** (each reversible: tell the Excel director):
 - The box starts unticked for a cell with no answer yet: GetVars stays the default answer form,

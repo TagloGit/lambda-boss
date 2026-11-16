@@ -55,13 +55,16 @@ public class StateAnswerLetTests
         return read.Engine!;
     }
 
-    private static StateEngineResult Apply(StateEngine engine, StateEngineChange change) =>
-        StateEngines.Apply(engine, change, _ => null, k => k.Name);
+    // What /State made, per test (xUnit makes one instance of this class per test).
+    private readonly StateAnswerMade _made = new();
+
+    private StateEngineResult Apply(StateEngine engine, StateEngineChange change) =>
+        StateEngines.Apply(engine, change, _ => null, k => k.Name, _made);
 
     private static StateEngineChange Ticks(StateEngine engine, bool? asLet, params string[] answer) =>
         new(engine.Rows, engine.Fold, engine.StepName, null, answer, null, asLet);
 
-    private static string Set(string formula, bool? asLet, params string[] answer)
+    private string Set(string formula, bool? asLet, params string[] answer)
     {
         var engine = Read(formula);
         var result = Apply(engine, Ticks(engine, asLet, answer));
@@ -69,7 +72,7 @@ public class StateAnswerLetTests
         return result.Formula!;
     }
 
-    private static string? Error(string formula, bool? asLet, params string[] answer)
+    private string? Error(string formula, bool? asLet, params string[] answer)
     {
         var engine = Read(formula);
         var result = Apply(engine, Ticks(engine, asLet, answer));
@@ -109,7 +112,7 @@ public class StateAnswerLetTests
     [Fact]
     public void Tick_FoldThatIsNotTheLastLineOfItsLet_IsRefused()
     {
-        var formula = Lines("=LET(", "    r, " + Truck() + ",", "    r", ")");
+        var formula = Lines("=LET(", "    r, " + Truck() + ",", "    r + 1", ")");
         Assert.Contains("LET names need the fold", Error(formula, true, "cash"));
     }
 
@@ -175,6 +178,7 @@ public class StateAnswerLetTests
     public void UntickAll_InsideAnotherFunction_TakesTheLetOff()
     {
         var typed = "=TAKE(" + Lines("LET(", "    f, " + Truck() + ",", "    x, GetVar(f, \"cash\"),", "    x", ")") + ", 1)";
+        _made.Record("=TAKE(", ", 1)"); // the LET was /State's
         Assert.Equal("=TAKE(" + Truck() + ", 1)", Set(typed, null));
     }
 
@@ -296,13 +300,13 @@ public class StateAnswerLetTests
     [Fact]
     public void UntickAll_TakesTheLetThatWasMadeOff_AndGivesTheTextBack()
     {
-        Assert.Equal(Bare, Set(Answered(), null));
+        Assert.Equal(Bare, Set(Set(Bare, true, "cash", "crates"), null));
     }
 
     [Fact]
     public void UntickAll_OfAReusedLet_KeepsTheLetAndGivesTheTextBack()
     {
-        Assert.Equal(Outer, Set(OuterAnswered, null));
+        Assert.Equal(Outer, Set(Set(Outer, true, "cash", "crates"), null));
     }
 
     [Fact]
@@ -319,6 +323,70 @@ public class StateAnswerLetTests
         Assert.Equal(Outer, Set(Set(Outer, true, "crates"), true));
     }
 
+    // ------------------------------------------------------------ Tim's own fold line (#484)
+
+    private static string OwnFold(string? before = null, string tail = "fold") => Lines(
+        "=LET(",
+        before == null ? "" : "    " + before + ",",
+        "    fold, " + Truck() + ",",
+        "    " + tail,
+        ")").Replace("\n\n", "\n");
+
+    [Fact]
+    public void UntickAll_OfTimsOwnFoldLine_KeepsIt()
+    {
+        Assert.Equal(OwnFold(), Set(Answered(), null));
+    }
+
+    [Fact]
+    public void UntickAll_OfTimsOwnFoldLine_WithALineBeforeIt_KeepsBoth()
+    {
+        var typed = Lines(
+            "=LET(", "    grid, 7,", "    fold, " + Truck() + ",",
+            "    cash, GetVar(fold, \"cash\"),", "    cash", ")");
+        Assert.Equal(OwnFold("grid, 7"), Set(typed, null));
+    }
+
+    [Fact]
+    public void TickAgain_FromAKeptFoldLine_ThenUntick_GivesTheTextBack()
+    {
+        var kept = OwnFold("grid, 7");
+        var ticked = Set(kept, true, "cash", "crates");
+        Assert.Equal(
+            Lines("=LET(", "    grid, 7,", "    fold, " + Truck() + ",", "    cash, GetVar(fold, \"cash\"),",
+                "    crates, GetVar(fold, \"crates\"),", "    HSTACK(cash, crates)", ")"),
+            ticked);
+        Assert.Equal(kept, Set(ticked, null));
+    }
+
+    [Fact]
+    public void ToolMadeLet_WithDebugOnAndOff_StillUntickedToTheOriginal()
+    {
+        var ticked = Set(Bare, true, "cash", "crates");
+        var engine = Read(ticked);
+        var on = Apply(engine, DebugOn(engine));
+        var debug = Read(on.Formula!);
+        var off = Apply(debug, StateDebug.Toggle(debug, false, Kinds));
+        Assert.Equal(ticked, off.Formula);
+        Assert.Equal(Bare, Set(off.Formula!, null));
+    }
+
+    [Fact]
+    public void ARecord_DoesNotApplyToTextTimEditedAfterTicking()
+    {
+        var ticked = Set(Outer, true, "cash");
+        var edited = ticked.Replace("price, 5", "price, 6");
+        Assert.Equal(OwnFold("cost, 3,\n    price, 6"), Set(edited, null));
+    }
+
+    [Fact]
+    public void SwitchToGetVars_WithTimsOwnFoldLine_IsRefused()
+    {
+        var typed = Answered();
+        var error = Error(typed, false, "cash", "crates");
+        Assert.Equal("The fold's line is your own, and GetVars would take it away. Keep LET names.", error);
+    }
+
     // ------------------------------------------------------------ switching
 
     [Fact]
@@ -331,7 +399,7 @@ public class StateAnswerLetTests
 
         var bareGetVars = "=GetVars(" + Truck() + ", {\"cash\",\"crates\"})";
         Assert.Equal(Answered(), Set(bareGetVars, true, "cash", "crates"));
-        Assert.Equal(bareGetVars, Set(Answered(), false, "cash", "crates"));
+        Assert.Equal(bareGetVars, Set(Set(bareGetVars, true, "cash", "crates"), false, "cash", "crates"));
     }
 
     [Fact]
@@ -420,7 +488,7 @@ public class StateAnswerLetTests
     [Fact]
     public void UntickingAllWhileDebugIsOn_TakesTheAnswerOff_AndTheWrapperStays()
     {
-        var engine = Read(Answered());
+        var engine = Read(Set(Bare, true, "cash", "crates"));
         var on = Apply(engine, DebugOn(engine));
         var debug = Read(on.Formula!);
 
