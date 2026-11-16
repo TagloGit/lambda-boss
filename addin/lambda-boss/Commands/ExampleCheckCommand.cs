@@ -348,9 +348,13 @@ internal static class ExampleCheckCommand
             return null;
         family.Sort();
         var example = family[0];
-        var formula = example == row ? cellFormula : Com.Formula2(Com.Block(ws, example, col, example, col));
+        var exampleCell = Com.Block(ws, example, col, example, col);
+        var formula = example == row ? cellFormula : Com.Formula2(exampleCell);
+        var target = new HashSet<int> { col };
+        if (SpillSize(exampleCell, out _, out int exampleSpillCols))
+            ExampleLiteralChecker.ExcludeSpillColumns(target, col, exampleSpillCols);
         return new ExampleCheckRequest(formula, example, col,
-            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), new[] { col });
+            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), target);
     }
 
     private static string[] Column(object values, int rows)
