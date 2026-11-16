@@ -264,9 +264,11 @@ internal static class ExampleCheckCommand
             cols = spill.Columns.Count;
             return true;
         }
-        catch
+        catch (Exception ex)
         {
-            return false; // an Excel without dynamic arrays
+            // An Excel without dynamic arrays, or a COM failure: logged so a silent skip shows up.
+            Logger.Info($"ExampleCheck: spill read failed ({ex.GetBaseException().Message})");
+            return false;
         }
     }
 
