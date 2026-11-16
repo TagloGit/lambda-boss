@@ -55,6 +55,12 @@
         <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,4,0,0">
             <StackPanel>
                 <StackPanel x:Name="RowsPanel" />
+                <TextBlock x:Name="CarryText"
+                           Foreground="#808080"
+                           FontSize="11"
+                           TextWrapping="Wrap"
+                           Margin="0,4,0,0"
+                           Visibility="Collapsed" />
                 <TextBlock x:Name="DebugText"
                            Foreground="#808080"
                            FontSize="11"

@@ -26,6 +26,10 @@ public partial class StateWindow
     // (a key with no row to tick, Tim's own spacing).
     private readonly List<string> _openedAnswer;
 
+    // Body lines already carried, and those a new row can carry by name (spec 0018 addendum).
+    private readonly IReadOnlyList<string> _carried;
+    private readonly IReadOnlyList<string> _candidates;
+
     public StateWindow(
         StateEngine engine,
         IReadOnlyList<StateFoldKind> libraryFolds,
@@ -38,6 +42,8 @@ public partial class StateWindow
         _engine = engine;
         _refersTo = refersTo;
         _callName = callName;
+        _carried = engine.CarriedKeys;
+        _candidates = engine.CarryCandidates;
 
         HeaderText.Text = StateEngines.Describe(engine) + (note == null ? "" : " " + note);
 
@@ -62,6 +68,12 @@ public partial class StateWindow
         }
 
         _folds.AddRange(folds);
+
+        if (_candidates.Count > 0)
+        {
+            CarryText.Text = "Body lines you can carry (type the name in a new row): " + string.Join(", ", _candidates) + ".";
+            CarryText.Visibility = Visibility.Visible;
+        }
 
         var debugKeys = engine.DebugKeys;
         if (debugKeys.Count > 0)
@@ -136,7 +148,13 @@ public partial class StateWindow
         grid.Children.Add(tick);
 
         var name = new TextBox { Text = row.Key };
+        ShowCarried(name, row.OriginalKey != null
+            ? _carried.Contains(row.OriginalKey, StringComparer.OrdinalIgnoreCase)
+            : IsCandidate(row.Key));
         name.TextChanged += Field_TextChanged;
+        name.TextChanged += (_, _) => ShowCarried(name, row.OriginalKey != null
+            ? _carried.Contains(row.OriginalKey, StringComparer.OrdinalIgnoreCase)
+            : IsCandidate(name.Text));
         Grid.SetColumn(name, 1);
         grid.Children.Add(name);
 
@@ -159,6 +177,16 @@ public partial class StateWindow
 
         RowsPanel.Children.Add(grid);
         _rows.Add(new RowBox(row.OriginalKey, name, tick, grid, state ?? _nextNewRow++));
+    }
+
+    private bool IsCandidate(string text) =>
+        _candidates.Contains(text.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    // A carried row reads in italic: worked out each step, only its last value kept.
+    private static void ShowCarried(TextBox name, bool carried)
+    {
+        name.FontStyle = carried ? FontStyles.Italic : FontStyles.Normal;
+        name.ToolTip = carried ? "Carried: worked out each step; its last value is kept in the state." : null;
     }
 
     private void Answer_Changed(object sender, RoutedEventArgs e) => Refresh();

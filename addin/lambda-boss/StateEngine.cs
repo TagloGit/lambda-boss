@@ -150,6 +150,29 @@ public sealed record StateEngine(
         }
     }
 
+    /// <summary>
+    ///     The step's lines a new row can carry into the state by typing their name (spec 0018
+    ///     addendum, "Carry a body variable"). A line already a variable is left out.
+    /// </summary>
+    public IReadOnlyList<string> CarryCandidates
+    {
+        get
+        {
+            if (IsNew) return Array.Empty<string>();
+
+            var names = StateEdit.CarryCandidates(
+                StateEngines.Intermediate(this, withOtherArguments: true), Parameters.Skip(1).ToList());
+            var taken = Rows.Select(r => r.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            return names.Where(n => !taken.Contains(n)).ToList();
+        }
+    }
+
+    /// <summary>The variables that are lines of the step, carried: worked out each step, the last value kept (spec 0018 addendum).</summary>
+    public IReadOnlyList<string> CarriedKeys =>
+        IsNew
+            ? Array.Empty<string>()
+            : StateEdit.CarriedKeys(StateEngines.Intermediate(this, withOtherArguments: true));
+
     /// <summary>Output keys nothing reads back (spec 0015, "Debug toggle"): not state variables.</summary>
     public IReadOnlyList<string> DebugKeys => StateDebug.DebugKeys(this);
 
@@ -317,10 +340,13 @@ public static class StateEngines
             // 0. A name can't be a debug output's: it would be set twice in the output.
             if (!engine.IsNew)
             {
+                // A new row naming a body line that is a debug output carries it (spec 0018 addendum).
                 var known = engine.DebugKeys;
+                var carry = known.Count == 0 ? Array.Empty<string>() : engine.CarryCandidates;
                 var clash = change.Rows.FirstOrDefault(r =>
                     r.Key.Trim().Length > 0 && !string.Equals(r.Key.Trim(), r.OriginalKey, StringComparison.Ordinal)
-                    && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase));
+                    && known.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+                    && !(r.OriginalKey == null && (r.Value.Trim().Length == 0 || r.Value.Trim() == StateEngine.Placeholder) && carry.Contains(r.Key.Trim(), StringComparer.OrdinalIgnoreCase)));
                 if (clash != null)
                     return Failed($"{clash.Key.Trim()} is already a debug output of this step. Pick another name.", notes);
             }
@@ -933,7 +959,8 @@ public static class StateEngines
                 : r)
             .ToList();
 
-        var result = StateEdit.Apply(Intermediate(engine, withOtherArguments: true), rowsWithPlaceholders);
+        var result = StateEdit.Apply(
+            Intermediate(engine, withOtherArguments: true), rowsWithPlaceholders, engine.Parameters.Skip(1).ToList());
         if (result.Formula == null)
         {
             error = result.Error;

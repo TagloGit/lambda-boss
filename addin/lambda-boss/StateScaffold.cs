@@ -247,7 +247,7 @@ public static class StateScaffold
     public static string NormalAddress(string address) =>
         address.Trim().Replace("$", "").ToUpperInvariant();
 
-    private static bool IsUsableBinding(string name) =>
+    internal static bool IsUsableBinding(string name) =>
         ExcelNameValidator.Validate(name).IsValid && !RowColumnForm.IsMatch(name);
 
     /// <summary>
