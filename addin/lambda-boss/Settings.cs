@@ -142,6 +142,13 @@ public sealed class Settings
     public bool ArgumentHints { get; set; } = true;
 
     /// <summary>
+    ///     How the example check (spec 0020, Labs) shows a finding: "status" (status bar and a drawn
+    ///     outline), "toast" (a panel beside the cells that doesn't take focus; the default) or
+    ///     "prompt" (a window that takes focus until Enter or Esc).
+    /// </summary>
+    public string ExampleCheckMode { get; set; } = "toast";
+
+    /// <summary>
     ///     Returns the current settings instance, loading from disk on first access.
     /// </summary>
     public static Settings Current => _current ??= Load();

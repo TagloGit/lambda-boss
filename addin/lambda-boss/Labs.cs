@@ -38,8 +38,14 @@ public static class Labs
         "Gather next",
         "Gather walks ranges over formula cells, names inputs and steps from the nearest label, and can save the gathered LET as a named LAMBDA from its own dialog (Lambda name box, Alt+Up/Down to reorder inputs, Alt+I to toggle a row's role, Alt+Right/Left to write the result to a cell further right and keep the start cell).");
 
+    /// <summary>The example check (spec 0020, excel-esports#80).</summary>
+    public static readonly LabsSwitch ExampleCheck = new(
+        "example-check",
+        "Example check on fills and spills",
+        "When a formula is filled to several cells, or spills, flags a value left in from the worked example (a typed 0.09 that is the example row's threshold, the example's district \"A\", a number from the level's example text). Silent otherwise. How it shows is the Example check setting below. Read-only: Excel's undo is untouched.");
+
     public static readonly IReadOnlyList<LabsSwitch> All =
-        new[] { PopupChannelBadge, State, CheckFormula, GatherNext };
+        new[] { PopupChannelBadge, State, CheckFormula, GatherNext, ExampleCheck };
 
     public static bool IsOn(LabsSwitch labsSwitch) =>
         Settings.Current.LabsSwitchesOn.Contains(labsSwitch.Id);

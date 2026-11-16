@@ -1,3 +1,5 @@
+using LambdaBoss.Commands;
+
 using Ookii.Dialogs.Wpf;
 using System.ComponentModel;
 using System.Windows;
@@ -154,6 +156,10 @@ public partial class SettingsWindow
         ArgumentHintsCheckbox.IsChecked = settings.ArgumentHints;
         OpensOnCommandsRadio.IsChecked = settings.PopupOpensOn == PopupOpensOn.Commands;
         OpensOnLibrariesRadio.IsChecked = settings.PopupOpensOn == PopupOpensOn.Libraries;
+        var mode = ExampleCheckModes.Normalize(settings.ExampleCheckMode);
+        ExampleStatusRadio.IsChecked = mode == ExampleCheckModes.Status;
+        ExampleToastRadio.IsChecked = mode == ExampleCheckModes.Toast;
+        ExamplePromptRadio.IsChecked = mode == ExampleCheckModes.Prompt;
 
         LabsSwitchList.ItemsSource = Labs.All
             .Select(s => new LabsSwitchDisplayItem
@@ -190,6 +196,21 @@ public partial class SettingsWindow
         settings.PopupOpensOn = opensOn;
         settings.Save();
         StatusText.Text = $"Popup opens on: {opensOn}";
+    }
+
+    private void ExampleMode_Click(object sender, RoutedEventArgs e)
+    {
+        var mode = ExampleStatusRadio.IsChecked == true ? ExampleCheckModes.Status
+            : ExamplePromptRadio.IsChecked == true ? ExampleCheckModes.Prompt
+            : ExampleCheckModes.Toast;
+        var settings = Settings.Current;
+        if (ExampleCheckModes.Normalize(settings.ExampleCheckMode) == mode)
+            return;
+
+        // Read at each finding, so it needs no restart.
+        settings.ExampleCheckMode = mode;
+        settings.Save();
+        StatusText.Text = $"Example check shows: {mode}";
     }
 
     private void ArgumentHints_Click(object sender, RoutedEventArgs e)

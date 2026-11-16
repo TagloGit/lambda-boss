@@ -41,6 +41,9 @@
     <!-- ExcelDna.IntelliSense is vendored and patched (addin/vendor/ExcelDna.IntelliSense, #433). It
          references ExcelDna.Integration 1.9.0, so ExcelDna.AddIn moves with it: bump both together. -->
     <PackageReference Include="ExcelDna.AddIn" Version="1.9.0" />
+    <!-- Excel's COM types for the example check's SheetChange event (spec 0020). Embedded in
+         lambda-boss.dll by the package's targets (EmbedInteropTypes), so no DLL ships with it. -->
+    <PackageReference Include="ExcelDna.Interop" Version="15.0.1" PrivateAssets="all" />
     <PackageReference Include="gong-wpf-dragdrop" Version="3.2.*" />
     <PackageReference Include="Microsoft.Bcl.HashCode" Version="6.0.*" />
     <PackageReference Include="Ookii.Dialogs.Wpf" Version="5.0.1" />

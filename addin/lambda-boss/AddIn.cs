@@ -81,6 +81,10 @@ public sealed class AddIn : IExcelAddIn, IDisposable
             CheckFormulaCommand.StartIfEnabled();
             ShowLambdaPopupCommand.SettingsSaved += CheckFormulaCommand.ApplySwitch;
 
+            // The example check (Labs, spec 0020): a read-only SheetChange watcher.
+            ExampleCheckCommand.StartIfEnabled();
+            ShowLambdaPopupCommand.SettingsSaved += ExampleCheckCommand.ApplySwitch;
+
             var assemblyVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
                                   ?? new Version(0, 0, 0);
             UpdateChecker.Initialize(
@@ -109,6 +113,8 @@ public sealed class AddIn : IExcelAddIn, IDisposable
         LambdaHints.Stop(removeFile: false);
         ShowLambdaPopupCommand.SettingsSaved -= CheckFormulaCommand.ApplySwitch;
         CheckFormulaCommand.Stop();
+        ShowLambdaPopupCommand.SettingsSaved -= ExampleCheckCommand.ApplySwitch;
+        ExampleCheckCommand.Stop();
         Dispose();
     }
 

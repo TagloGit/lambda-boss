@@ -316,6 +316,35 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <TextBlock Text="Example check shows (when its switch is on)"
+                       FontSize="12"
+                       Foreground="#cccccc"
+                       Margin="0,6,0,4" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton x:Name="ExampleStatusRadio"
+                             GroupName="ExampleCheckMode"
+                             Content="Status bar + outline"
+                             AutomationProperties.AutomationId="example-mode-status"
+                             ToolTip="Quietest: Excel's status bar, and a drawn outline around the filled cells and the matching cell for a few seconds. Nothing is written to the sheet."
+                             Foreground="#cccccc"
+                             Margin="0,0,16,0"
+                             Click="ExampleMode_Click" />
+                <RadioButton x:Name="ExampleToastRadio"
+                             GroupName="ExampleCheckMode"
+                             Content="Panel (default)"
+                             AutomationProperties.AutomationId="example-mode-toast"
+                             ToolTip="A panel beside the filled cells naming the value and the cell it matches. It doesn't take focus and closes itself after 20 seconds."
+                             Foreground="#cccccc"
+                             Margin="0,0,16,0"
+                             Click="ExampleMode_Click" />
+                <RadioButton x:Name="ExamplePromptRadio"
+                             GroupName="ExampleCheckMode"
+                             Content="Prompt"
+                             AutomationProperties.AutomationId="example-mode-prompt"
+                             ToolTip="Loudest: a window over Excel that takes focus until Enter or Esc."
+                             Foreground="#cccccc"
+                             Click="ExampleMode_Click" />
+            </StackPanel>
         </StackPanel>
 
         <!-- Status bar -->
