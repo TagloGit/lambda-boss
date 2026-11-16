@@ -607,8 +607,15 @@ internal static class Com
     public static Excel.Range Block(Excel.Worksheet ws, int r1, int c1, int r2, int c2) =>
         ws.Range[ws.Cells[r1, c1], ws.Cells[r2, c2]];
 
+    /// <summary>
+    ///     The locale passed to Excel's IDispatch: en-US (1033), which every Excel accepts. The
+    ///     invariant culture (LCID 127) fails with 0x80028018 TYPE_E_INVDATAREAD when the Windows
+    ///     user locale is, say, en-GB (seen on Tim's PC, 16 Nov; reproduced in the VM).
+    /// </summary>
+    internal static readonly CultureInfo DispatchCulture = CultureInfo.GetCultureInfo(1033);
+
     public static object? Get(object o, string property) =>
-        o.GetType().InvokeMember(property, BindingFlags.GetProperty, null, o, null, CultureInfo.InvariantCulture);
+        o.GetType().InvokeMember(property, BindingFlags.GetProperty, null, o, null, DispatchCulture);
 
     public static string Formula2(Excel.Range cell) => Get(cell, "Formula2") as string ?? "";
 }
