@@ -146,7 +146,7 @@ internal static class ExampleCheckCommand
             LastCheckMs = sw.Elapsed.TotalMilliseconds;
             var detail = string.Join("; ", findings.Select(f =>
                 $"{f.Finding.Literal} in {ExampleLiteralChecker.Address(f.Request.Row, f.Request.Column)} = "
-                + (f.Finding.FromText ? "example text" : f.Finding.SourceAddress)));
+                + (f.Finding.FromText ? "example text" : $"{f.Finding.SourceAddress} ({f.Finding.RowLabel})")));
             Logger.Info($"ExampleCheck: {where.Sheet}!{where.Label} checked in {LastCheckMs:F1} ms ({stages}), "
                         + $"{findings.Count} finding(s){(findings.Count > 0 ? ": " + detail : "")}");
             // Every finding is shown, every time, even one shown a moment ago (Tim, 16 Nov video:
@@ -302,15 +302,21 @@ internal static class ExampleCheckCommand
 
         if (family.Count < 2)
             return null;
-        var example = family[0];
-        var exampleCell = Com.Block(ws, example, col, example, col);
-        var formula = Com.Formula2(exampleCell);
-        if (SpillSize(exampleCell, out _, out int exampleSpillCols))
-            ExampleLiteralChecker.ExcludeSpillColumns(targetColumns, col, exampleSpillCols);
-        if (top != example && SpillSize(Com.Block(ws, top, col, top, col), out _, out int topSpillCols))
+
+        // The source row, the one copied from: the fill handle leaves it out of the write, just
+        // above; Ctrl+D, Ctrl+Enter and a paste write it as the fill's top row. The level's example
+        // line, above the table, is found by the checker from here (Tim, 16 Nov).
+        var source = family.Contains(top - 1) ? top - 1 : top;
+        var sourceCell = Com.Block(ws, source, col, source, col);
+        var formula = Com.Formula2(sourceCell);
+        if (SpillSize(sourceCell, out _, out int sourceSpillCols))
+            ExampleLiteralChecker.ExcludeSpillColumns(targetColumns, col, sourceSpillCols);
+        if (top != source && SpillSize(Com.Block(ws, top, col, top, col), out _, out int topSpillCols))
             ExampleLiteralChecker.ExcludeSpillColumns(targetColumns, col, topSpillCols);
-        return new ExampleCheckRequest(formula, example, col,
-            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), targetColumns);
+        // Rows below the source first: they're the table the values vary across.
+        var others = family.Where(r => r > source).Concat(family.Where(r => r < source).Reverse())
+            .Take(ExampleLiteralChecker.MaxCompareRows).ToList();
+        return new ExampleCheckRequest(formula, source, col, others, targetColumns);
     }
 
     /// <summary>
@@ -354,7 +360,7 @@ internal static class ExampleCheckCommand
         if (SpillSize(exampleCell, out _, out int exampleSpillCols))
             ExampleLiteralChecker.ExcludeSpillColumns(target, col, exampleSpillCols);
         return new ExampleCheckRequest(formula, example, col,
-            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), target);
+            family.Skip(1).Take(ExampleLiteralChecker.MaxCompareRows).ToList(), target, Copied: false);
     }
 
     private static string[] Column(object values, int rows)
@@ -415,7 +421,7 @@ internal static class ExampleCheckCommand
                 if (idx < 0 || idx >= cellLits.Count || cellLits.Count != exampleLits.Count)
                     continue;
                 var at = cellLits[idx];
-                var src = f.FromText ? "the level's example text" : $"{f.SourceAddress} (the example row is {req.Row})";
+                var src = f.FromText ? "the level's example text" : $"{f.SourceAddress}, on {f.RowLabel}";
                 problems.Add(new FormulaProblem(FormulaProblemKind.ExampleValue, at.Start, at.Length,
                     f.Message + $" Matched: {src}."));
             }
@@ -491,20 +497,7 @@ internal sealed class ComExampleSheet : IExampleSheet
         Load(top, 1, bottom, LastColumn);
 
         foreach (var row in requests.Select(r => r.Row).Distinct())
-        {
-            var set = new HashSet<int>();
-            var f = Com.Get(Com.Block(ws, row, 1, row, LastColumn), "Formula2");
-            if (f is object[,] arr)
-            {
-                var lb = arr.GetLowerBound(0);
-                var lc = arr.GetLowerBound(1);
-                for (var c = 0; c < LastColumn; c++)
-                    if (arr[lb, lc + c] is string s && s.StartsWith("=", StringComparison.Ordinal))
-                        set.Add(c + 1);
-            }
-
-            _formulaColumns[row] = set;
-        }
+            _formulaColumns[row] = FormulaColumns(row);
     }
 
     public int LastColumn { get; }
@@ -521,8 +514,33 @@ internal sealed class ComExampleSheet : IExampleSheet
         return Value(row, column);
     }
 
-    public bool IsFormula(int row, int column) =>
-        _formulaColumns.TryGetValue(row, out var set) && set.Contains(column);
+    public bool IsFormula(int row, int column)
+    {
+        // The source rows are read up front; another row (the level's example line) on first ask.
+        if (!_formulaColumns.TryGetValue(row, out var set))
+            _formulaColumns[row] = set = FormulaColumns(row);
+        return set.Contains(column);
+    }
+
+    private HashSet<int> FormulaColumns(int row)
+    {
+        var set = new HashSet<int>();
+        if (row < 1 || row > 1048576)
+            return set;
+        var f = Com.Get(Com.Block(_ws, row, 1, row, LastColumn), "Formula2");
+        if (f is object[,] arr)
+        {
+            var lb = arr.GetLowerBound(0);
+            var lc = arr.GetLowerBound(1);
+            for (var c = 0; c < LastColumn; c++)
+                if (arr[lb, lc + c] is string s && s.StartsWith("=", StringComparison.Ordinal))
+                    set.Add(c + 1);
+        }
+        else if (f is string one && one.StartsWith("=", StringComparison.Ordinal))
+            set.Add(1);
+
+        return set;
+    }
 
     private void Load(int r1, int c1, int r2, int c2)
     {

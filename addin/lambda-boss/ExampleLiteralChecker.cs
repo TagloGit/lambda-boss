@@ -19,17 +19,20 @@ internal interface IExampleSheet
 }
 
 /// <summary>
-///     What was written. <paramref name="Formula"/> is the example cell's <c>Formula2</c> (the top
-///     cell of the filled family, or the spilling cell). <paramref name="OtherRows"/> are the family's
-///     other rows (a fill) or the rows the result spills into below the formula (a spill): a value
-///     on the example row only counts when it differs on one of them.
+///     What was written. <paramref name="Copied"/> is false for Check Formula, where nothing was
+///     copied: the source row is then the family's top row, and the message says so. <paramref name="Formula"/> is the source cell's <c>Formula2</c>: the row
+///     the fill was copied from (the top of the fill, or the row the fill handle was dragged from),
+///     or the spilling cell. <paramref name="OtherRows"/> are the family's other rows, above or
+///     below (a fill), or the rows the result spills into below the formula (a spill): a value on
+///     the source row or the level's example line only counts when it differs on one of them.
 /// </summary>
 internal sealed record ExampleCheckRequest(
     string Formula,
     int Row,
     int Column,
     IReadOnlyList<int> OtherRows,
-    IReadOnlyCollection<int> TargetColumns);
+    IReadOnlyCollection<int> TargetColumns,
+    bool Copied = true);
 
 /// <summary>
 ///     One literal that looks like a value from the worked example. <see cref="Start"/> and
@@ -43,19 +46,34 @@ internal sealed record ExampleLiteralFinding(
     int SourceRow,
     int SourceColumn,
     string SourceAddress,
-    string Message)
+    string Message,
+    string RowLabel = "")
 {
     public bool FromText => SourceRow == 0;
+}
+
+/// <summary>Where a matching cell is: which row the check compared it from.</summary>
+internal enum ExampleRowKind
+{
+    /// <summary>The row the formula was copied from (the request's row).</summary>
+    Source,
+
+    /// <summary>The level's example line above the table (spec 0020, excel-esports, Tim 16 Nov).</summary>
+    ExampleLine,
+
+    /// <summary>The first row of a multi-row range the formula reads.</summary>
+    Range
 }
 
 /// <summary>
 ///     The example check (spec 0020, excel-esports#80): after a formula is filled to several cells,
 ///     or spills, flags a constant in it that equals a value from the worked example, the slip
-///     where the example passes because the value came from the example. Three sources, in order:
-///     a typed or computed cell on the example row (left or right of the formula, within its
-///     block) whose column varies across the family and that the formula doesn't read; the first
-///     row of a multi-row range the formula reads; a number the level's example text states and
-///     its rules text doesn't. Pure and read-only.
+///     where the example passes because the value came from the example. Four sources, in order:
+///     a typed or computed cell on the source row (the row copied from; left or right of the
+///     formula, within its block) whose column varies across the family and that the formula
+///     doesn't read; the same columns on the level's example line above the table; the first row
+///     of a multi-row range the formula reads; a number the level's example text states and its
+///     rules text doesn't. Pure and read-only.
 /// </summary>
 internal static class ExampleLiteralChecker
 {
@@ -189,7 +207,7 @@ internal static class ExampleLiteralChecker
             {
                 if (seen.Add($"{lit.Source}|{hit.Address}"))
                     findings.Add(new ExampleLiteralFinding(lit.Start, lit.Length, lit.Source, hit.Row, hit.Column,
-                        hit.Address, CellMessage(lit, hit)));
+                        hit.Address, CellMessage(lit, hit, request.Copied), RowLabel(hit.Kind, request.Copied)));
                 continue;
             }
 
@@ -206,16 +224,30 @@ internal static class ExampleLiteralChecker
         return findings;
     }
 
-    private static string CellMessage(FormulaLiteral lit, Candidate hit) =>
-        hit.FromRange
-            ? $"{lit.Source} equals {hit.Address}, the first row of a range this formula reads, and that column changes further down. "
-              + "If it's the example's value, it won't be right for the other rows."
-            : $"{lit.Source} equals {hit.Address} on the example row, and that column changes on the other rows. "
-              + $"Use {hit.Address} instead of the typed value?";
+    private static string CellMessage(FormulaLiteral lit, Candidate hit, bool copied) =>
+        hit.Kind switch
+        {
+            ExampleRowKind.Range =>
+                $"{lit.Source} equals {hit.Address}, the first row of a range this formula reads, and that column changes further down. "
+                + "If it's the example's value, it won't be right for the other rows.",
+            ExampleRowKind.ExampleLine =>
+                $"{lit.Source} equals {hit.Address} on the level's example line, and that column changes on the table's rows. "
+                + "If it's the example's value, it won't be right for the other rows.",
+            _ => $"{lit.Source} equals {hit.Address} on {RowLabel(hit.Kind, copied)}, and that column changes on the other rows. "
+                 + $"Use {hit.Address} instead of the typed value?"
+        };
+
+    /// <summary>The row a match came from, for the panel and the status bar.</summary>
+    internal static string RowLabel(ExampleRowKind kind, bool copied = true) => kind switch
+    {
+        ExampleRowKind.ExampleLine => "the level's example line",
+        ExampleRowKind.Range => "the first row of a range the formula reads",
+        _ => copied ? "the row you copied from" : "the family's top row"
+    };
 
     // ------------------------------------------------------------ candidates
 
-    private sealed record Candidate(object Value, int Row, int Column, string Address, bool IsFormula, bool FromRange);
+    private sealed record Candidate(object Value, int Row, int Column, string Address, bool IsFormula, ExampleRowKind Kind);
 
     /// <summary>
     ///     Adds the columns a formula written in <paramref name="column"/> spills into
@@ -239,7 +271,8 @@ internal static class ExampleLiteralChecker
         bool Varies(object v, IEnumerable<int> rows, int col) =>
             rows.Any(r => sheet.Value(r, col) is { } o && Usable(o) && !Same(v, o));
 
-        // 1. The example row, both ways from the formula, within its block (two empty columns end it).
+        // 1. The source row, both ways from the formula, within its block (two empty columns end it).
+        var sourceColumns = new List<(int Column, object Value)>();
         if (others.Count > 0)
         {
             var last = Math.Min(Math.Max(sheet.LastColumn, request.Column), MaxRowColumns);
@@ -252,7 +285,30 @@ internal static class ExampleLiteralChecker
                 if (!Usable(v))
                     continue;
                 if (Varies(v!, others, c))
-                    list.Add(new Candidate(v!, request.Row, c, Address(request.Row, c), sheet.IsFormula(request.Row, c), false));
+                {
+                    list.Add(new Candidate(v!, request.Row, c, Address(request.Row, c), sheet.IsFormula(request.Row, c),
+                        ExampleRowKind.Source));
+                    sourceColumns.Add((c, v!));
+                }
+            }
+        }
+
+        // 1b. The level's example line (Tim, 16 Nov): the nearest row above, within the level, with
+        //     values of the same kind in the source row's input columns. It counts even when it holds
+        //     no formula, so a value copied from it is caught after the table's top row was edited.
+        //     Only the source row's input columns are compared: one the formula reads, writes or
+        //     spills into is already out, and the line's value must vary across the family's rows.
+        var line = ExampleLine(request, sheet, sourceColumns);
+        if (line > 0)
+        {
+            var familyRows = others.Append(request.Row).Where(r => r != line).ToList();
+            foreach (var (c, _) in sourceColumns)
+            {
+                var v = sheet.Value(line, c);
+                if (!Usable(v) || Reads(line, c))
+                    continue;
+                if (Varies(v!, familyRows, c))
+                    list.Add(new Candidate(v!, line, c, Address(line, c), sheet.IsFormula(line, c), ExampleRowKind.ExampleLine));
             }
         }
 
@@ -268,11 +324,145 @@ internal static class ExampleLiteralChecker
                 if (!Usable(v))
                     continue;
                 if (Varies(v!, Enumerable.Range(r.Row1 + 1, lastRow - r.Row1), c))
-                    list.Add(new Candidate(v!, r.Row1, c, Address(r.Row1, c), sheet.IsFormula(r.Row1, c), true));
+                    list.Add(new Candidate(v!, r.Row1, c, Address(r.Row1, c), sheet.IsFormula(r.Row1, c), ExampleRowKind.Range));
             }
         }
 
         return list;
+    }
+
+    /// <summary>
+    ///     The level's example line for this request, or 0. Walking up from the source row, within
+    ///     the level (the "Level n" / "Bonus n" heading or <see cref="TextRowsAbove"/> rows):
+    ///     <list type="bullet">
+    ///         <item>the rows directly above that hold something in the formula's column are the table
+    ///         (game rows, or an older fill), passed over;</item>
+    ///         <item>a row with no values in the source row's input columns is passed over;</item>
+    ///         <item>a header row (text where the source row has numbers, and no numbers) ends the
+    ///         walk: the example line sits below the headers;</item>
+    ///         <item>an index row (1, 2, 3 …) is passed over;</item>
+    ///         <item>the first row whose filled input cells are at least as often the same kind
+    ///         (number or text) as the source row's as not, with a number where the source row has
+    ///         numbers, is the example line.</item>
+    ///     </list>
+    /// </summary>
+    internal static int ExampleLine(ExampleCheckRequest request, IExampleSheet sheet)
+    {
+        var refs = SafeRefs(request.Formula);
+        return refs is null ? 0 : ExampleLine(request, sheet, SourceColumns(request, sheet, refs));
+    }
+
+    private static List<FormulaCellRef>? SafeRefs(string formula)
+    {
+        try
+        {
+            return Scan(formula).Refs;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static List<(int Column, object Value)> SourceColumns(ExampleCheckRequest request, IExampleSheet sheet,
+        List<FormulaCellRef> refs) =>
+        Candidates(request, sheet, refs).Where(c => c.Kind == ExampleRowKind.Source).Select(c => (c.Column, c.Value)).ToList();
+
+    private static int ExampleLine(ExampleCheckRequest request, IExampleSheet sheet,
+        List<(int Column, object Value)> sourceColumns)
+    {
+        if (sourceColumns.Count == 0)
+            return 0;
+        var anyNumber = sourceColumns.Any(sc => sc.Value is not string);
+        var floor = Math.Max(1, request.Row - TextRowsAbove);
+        var r = request.Row - 1;
+        // The table above the source: passed over, but a header row on top of it still ends the walk.
+        for (; r >= floor && sheet.Value(r, request.Column) is not null; r--)
+            if (IsHeadingRow(sheet, r) || Classify(sheet, r, sourceColumns, anyNumber) == LineRow.Header)
+                return 0;
+        for (; r >= floor; r--)
+        {
+            if (IsHeadingRow(sheet, r))
+                return 0;
+            switch (Classify(sheet, r, sourceColumns, anyNumber))
+            {
+                case LineRow.Header:
+                    return 0; // the example line would have been below it
+                case LineRow.Line when !IsIndexRow(sheet, r):
+                    return r;
+            }
+        }
+
+        return 0;
+    }
+
+    private enum LineRow
+    {
+        Pass,
+        Header,
+        Line
+    }
+
+    /// <summary>
+    ///     A row's filled cells in the source row's input columns: a header (text where the source has
+    ///     numbers, and no numbers), an example line (at least as often the same kind as not, with a
+    ///     number where the source has numbers), or neither.
+    /// </summary>
+    private static LineRow Classify(IExampleSheet sheet, int row, List<(int Column, object Value)> sourceColumns,
+        bool anyNumber)
+    {
+        int same = 0, other = 0, sameNumbers = 0;
+        foreach (var (c, v) in sourceColumns)
+        {
+            var w = sheet.Value(row, c);
+            if (!Usable(w))
+                continue;
+            if ((w is string) == (v is string))
+            {
+                same++;
+                if (w is not string)
+                    sameNumbers++;
+            }
+            else
+                other++;
+        }
+
+        if (same + other == 0)
+            return LineRow.Pass;
+        if (anyNumber && sameNumbers == 0)
+            return other > 0 ? LineRow.Header : LineRow.Pass;
+        return same >= other ? LineRow.Line : LineRow.Pass;
+    }
+
+    /// <summary>
+    ///     A row whose numbers (three or more, left to right) mostly count up by one (1, 2, 3 …, at
+    ///     least two steps in three):
+    ///     a row of indices, not data. Cricket Darts' 10, 11, 12 … row over a table with a game number.
+    /// </summary>
+    private static bool IsIndexRow(IExampleSheet sheet, int row)
+    {
+        var numbers = new List<double>();
+        var last = Math.Min(Math.Max(1, sheet.LastColumn), MaxRowColumns);
+        // Small whole numbers only: a line of consecutive dates (46000 …) is data, not an index.
+        for (var c = 1; c <= last; c++)
+            if (sheet.Value(row, c) is double d && Math.Abs(d) < 1000 && Math.Abs(d % 1) < 1e-12)
+                numbers.Add(d);
+        if (numbers.Count < 3)
+            return false;
+        var steps = 0;
+        for (var i = 1; i < numbers.Count; i++)
+            if (Near(numbers[i], numbers[i - 1] + 1))
+                steps++;
+        return steps * 3 >= (numbers.Count - 1) * 2;
+    }
+
+    private static bool IsHeadingRow(IExampleSheet sheet, int row)
+    {
+        var lastCol = Math.Min(TextColumns, Math.Max(1, sheet.LastColumn));
+        for (var c = 1; c <= lastCol; c++)
+            if (sheet.Value(row, c) is string s && Heading.IsMatch(s))
+                return true;
+        return false;
     }
 
     private static IEnumerable<int> Block(IExampleSheet sheet, int row, int column, int step, int lastColumn)
