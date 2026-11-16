@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace LambdaBoss;
@@ -30,8 +31,19 @@ public static class StateAnswer
         if (before is null) throw new ArgumentNullException(nameof(before));
         if (after is null) throw new ArgumentNullException(nameof(after));
 
-        StateDebug.TryUnwrap(before, after, out var b, out var a);
+        var debug = StateDebug.TryUnwrap(before, after, out var b, out var a);
+        if (ReadShape(b, a, debug) is { } shape) return shape.Lines.Select(l => l.Key).ToList();
         return TryUnwrap(b, a, out _, out _, out var keys) ? keys : Array.Empty<string>();
+    }
+
+    /// <summary>True when the answer is written as LET names (spec 0018 addendum, #480).</summary>
+    public static bool IsLetNames(string before, string after)
+    {
+        if (before is null) throw new ArgumentNullException(nameof(before));
+        if (after is null) throw new ArgumentNullException(nameof(after));
+
+        var debug = StateDebug.TryUnwrap(before, after, out var b, out var a);
+        return ReadShape(b, a, debug) != null;
     }
 
     /// <summary>
@@ -59,10 +71,13 @@ public static class StateAnswer
     }
 
     /// <summary>
-    ///     The text around a fold with the answer set to <paramref name="keys" /> (none: no wrapper).
-    ///     A debug wrapper stays innermost, exactly as it was written.
+    ///     The text around a fold with the answer set to <paramref name="keys" /> (none: no answer).
+    ///     <paramref name="asLet" /> picks the form: LET names (true), a <c>GetVars</c> wrapper (false),
+    ///     or as the text has it now (null). A debug wrapper stays innermost, exactly as it was written.
+    ///     Throws <see cref="InvalidOperationException" /> with the reason when the text can't take the form.
     /// </summary>
-    public static (string Before, string After) Set(string before, string after, string prefix, IReadOnlyList<string> keys)
+    public static (string Before, string After) Set(
+        string before, string after, string prefix, IReadOnlyList<string> keys, bool? asLet = null)
     {
         if (before is null) throw new ArgumentNullException(nameof(before));
         if (after is null) throw new ArgumentNullException(nameof(after));
@@ -72,12 +87,332 @@ public static class StateAnswer
         var debugOpen = debug ? before[b.Length..] : "";
         var debugClose = debug ? after[..(after.Length - a.Length)] : "";
 
-        if (TryUnwrap(b, a, out var bareBefore, out var bareAfter, out _))
-            (b, a) = (bareBefore, bareAfter);
-        if (keys.Count > 0)
-            (b, a) = (b + prefix + WrapperName + "(", ", " + ArrayText(keys) + ")" + a);
+        var shape = ReadShape(b, a, debug);
+        var wantLet = asLet ?? shape != null;
 
-        return (b + debugOpen, debugClose + a);
+        if (shape != null)
+        {
+            // Work on the plain form: the debug tail goes back on at the end.
+            if (shape.DebugTail)
+            {
+                (b, a) = DropDebugTail(b, a, shape);
+                shape = ReadShape(b, a, false)!;
+            }
+
+            if (wantLet && keys.Count > 0)
+            {
+                (b, a) = Rewrite(b, a, shape, prefix, keys);
+            }
+            else
+            {
+                if (!IsDefaultTail(shape))
+                    throw new InvalidOperationException(keys.Count == 0
+                        ? "The last line is your own, so the answer names can't come off. Take the last line out first."
+                        : "The last line is your own, and GetVars would lose it. Take it out first, or keep LET names.");
+                (b, a) = Collapse(b, a, shape);
+            }
+        }
+        else if (TryUnwrap(b, a, out var bareBefore, out var bareAfter, out _))
+        {
+            (b, a) = (bareBefore, bareAfter);
+        }
+
+        if (shape == null || !(wantLet && keys.Count > 0))
+        {
+            if (keys.Count > 0)
+            {
+                if (wantLet) (b, a) = AddLet(b, a, prefix, keys);
+                else (b, a) = (b + prefix + WrapperName + "(", ", " + ArrayText(keys) + ")" + a);
+            }
+        }
+
+        var result = (Before: b + debugOpen, After: debugClose + a);
+        if (debug && wantLet && keys.Count > 0)
+            result = DebugAnswer(result.Before, result.After, true);
+        return result;
+    }
+
+    /// <summary>
+    ///     The Debug on or off done to the LET names' last line (spec 0018 addendum). With the debug
+    ///     wrapper on, the cell has to show the whole debug table, which sits in the fold's name: the
+    ///     last line <c>X</c> becomes <c>_answer, X, fold</c>. Off takes it out again, character for
+    ///     character. The text must still have the debug wrapper; it is returned with it. Text that
+    ///     isn't LET names comes back as it was.
+    /// </summary>
+    public static (string Before, string After) DebugAnswer(string before, string after, bool on)
+    {
+        if (!StateDebug.TryUnwrap(before, after, out var b, out var a)) return (before, after);
+        var open = before[b.Length..];
+        var close = after[..(after.Length - a.Length)];
+
+        var shape = ReadShape(b, a, true);
+        if (shape == null || shape.DebugTail == on) return (before, after);
+
+        (b, a) = on ? AddDebugTail(b, a, shape) : DropDebugTail(b, a, shape);
+        return (b + open, close + a);
+    }
+
+    private const string AnswerName = "_answer";
+
+    private const string FoldWord = "fold";
+
+    private const string NeedsLet =
+        "LET names need the fold to be the whole formula or the last line of its LET.";
+
+    // ------------------------------------------------------------ LET names
+
+    private sealed record LetLine(string Name, string Key, int Start, int End);
+
+    /// <summary>
+    ///     A fold seen as a line of a LET. <see cref="FoldName" /> null: the fold is the LET's last
+    ///     argument (no answer yet). Offsets are in <see cref="F" />, the text with the fold's place
+    ///     held by a <c>0</c> (so <c>Offset</c> is where the text after the fold starts).
+    /// </summary>
+    private sealed class LetShape
+    {
+        public string F = "";
+        public int Offset;
+        public FunctionCallNode Let = null!;
+        public IReadOnlyList<FormulaNode> Args = Array.Empty<FormulaNode>();
+        public int K;
+        public string? FoldName;
+        public List<LetLine> Lines = new();
+        public int TailIndex;
+        public bool DebugTail;
+
+        public string TailText =>
+            DebugTail
+                ? F[Args[TailIndex].Start..Args[^3].Start] + F[Args[^2].Start..Args[^2].End]
+                : F[Args[TailIndex].Start..Args[^1].End];
+    }
+
+    // The LET that holds the fold as one of its arguments, or null.
+    private static LetShape? Find(string before, string after)
+    {
+        var f = before + "0" + after;
+        var at = before.Length;
+
+        FormulaAst ast;
+        try
+        {
+            ast = FormulaParser.Parse(f);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+
+        foreach (var call in StateStepParser.Walk(ast.Root).OfType<FunctionCallNode>())
+        {
+            if (!StateStepParser.IsNamed(call.Name, "LET")) continue;
+            for (var i = 0; i < call.Arguments.Count; i++)
+                if (call.Arguments[i] is LeafNode { TokenType: FormulaTokenType.Number } n && n.Start == at && n.End == at + 1)
+                    return new LetShape { F = f, Offset = at + 1, Let = call, Args = call.Arguments, K = i };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    ///     The answer written as LET names: the lines <c>name, GetVar(fold, "key")</c> straight after
+    ///     the line <c>fold, &lt;fold&gt;</c>, with something after them (the last line). Null when the
+    ///     text isn't that.
+    /// </summary>
+    private static LetShape? ReadShape(string before, string after, bool debug)
+    {
+        var s = Find(before, after);
+        if (s == null || s.K < 1 || s.K % 2 == 0 || s.Args[s.K - 1] is not LeafNode { TokenType: FormulaTokenType.Name } name)
+            return null;
+
+        s.FoldName = name.Text;
+        var i = s.K + 1;
+        while (i + 1 <= s.Args.Count - 2
+               && s.Args[i] is LeafNode { TokenType: FormulaTokenType.Name } line
+               && !(debug && string.Equals(line.Text, AnswerName, StringComparison.OrdinalIgnoreCase))
+               && s.Args[i + 1] is FunctionCallNode read && StateStepParser.IsNamed(read.Name, "GetVar")
+               && read.Arguments.Count == 2
+               && read.Arguments[0] is LeafNode { TokenType: FormulaTokenType.Name } source
+               && string.Equals(source.Text, s.FoldName, StringComparison.OrdinalIgnoreCase)
+               && read.Arguments[1] is LeafNode { TokenType: FormulaTokenType.String } key)
+        {
+            s.Lines.Add(new LetLine(line.Text, key.Text[1..^1].Replace("\"\"", "\""), line.Start, read.End));
+            i += 2;
+        }
+
+        if (s.Lines.Count == 0) return null;
+        s.TailIndex = i;
+
+        var count = s.Args.Count;
+        if (debug && count - i >= 3
+            && s.Args[^1] is LeafNode { TokenType: FormulaTokenType.Name } last
+            && string.Equals(last.Text, s.FoldName, StringComparison.OrdinalIgnoreCase)
+            && s.Args[^3] is LeafNode { TokenType: FormulaTokenType.Name } marker
+            && string.Equals(marker.Text, AnswerName, StringComparison.OrdinalIgnoreCase))
+            s.DebugTail = true;
+        return s;
+    }
+
+    private static string Squash(string text) => Regex.Replace(text, @"\s+", "");
+
+    private static string DefaultTail(IReadOnlyList<string> names) =>
+        names.Count == 1 ? names[0] : "HSTACK(" + string.Join(", ", names) + ")";
+
+    private static bool IsDefaultTail(LetShape s) =>
+        Squash(s.TailText) == Squash(DefaultTail(s.Lines.Select(l => l.Name).ToList()));
+
+    // The names a piece of formula text reads (strings left out), as written.
+    private static HashSet<string> WordsIn(string text)
+    {
+        var bare = Regex.Replace(text, "\"(?:[^\"]|\"\")*\"", "\"\"");
+        return new HashSet<string>(
+            Regex.Matches(bare, @"(?<![A-Za-z0-9_.])[A-Za-z_\\][A-Za-z0-9_.]*").Cast<Match>().Select(m => m.Value),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    // The key as a LET name: itself when it is one and free, else with _ added (bad characters become _).
+    private static string NameFor(string key, HashSet<string> taken)
+    {
+        var name = key;
+        if (!ExcelNameValidator.Validate(name).IsValid)
+        {
+            name = Regex.Replace(name, @"[^A-Za-z0-9_.]", "_");
+            if (name.Length == 0 || !(char.IsLetter(name[0]) || name[0] == '_')) name = "_" + name;
+        }
+
+        while (taken.Contains(name) || !ExcelNameValidator.Validate(name).IsValid) name += "_";
+        taken.Add(name);
+        return name;
+    }
+
+    private static string LineText(string name, string prefix, string foldName, string key) =>
+        $"{name}, {prefix}GetVar({foldName}, \"{key.Replace("\"", "\"\"")}\")";
+
+    // Names bound by the LET (its even arguments, the last one excepted), but not those of the answer lines.
+    private static HashSet<string> BoundNames(LetShape s, bool skipAnswer)
+    {
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i + 1 < s.Args.Count; i += 2)
+        {
+            if (s.Args[i] is not LeafNode { TokenType: FormulaTokenType.Name } n) continue;
+            if (skipAnswer && i > s.K && i < s.TailIndex) continue;
+            taken.Add(n.Text);
+        }
+        return taken;
+    }
+
+    // The answer set again in a LET that already has one: lines for the keys, in order; the lines
+    // that stay keep their text; the last line follows only while it is the default.
+    private static (string, string) Rewrite(string b, string a, LetShape s, string prefix, IReadOnlyList<string> keys)
+    {
+        var tail = s.TailText;
+        var oldNames = s.Lines.Select(l => l.Name).ToList();
+        var isDefault = IsDefaultTail(s);
+
+        var removed = s.Lines.Where(l => !keys.Contains(l.Key, StringComparer.OrdinalIgnoreCase)).Select(l => l.Name).ToList();
+        if (!isDefault)
+        {
+            var read = WordsIn(tail);
+            var gone = removed.Where(read.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (gone.Count > 0)
+                throw new InvalidOperationException($"The last line reads {List(gone)}. Take that out first.");
+        }
+
+        var taken = BoundNames(s, skipAnswer: true);
+        taken.Add(s.FoldName!);
+
+        var lines = new List<(string Name, string Text)>();
+        foreach (var key in keys)
+        {
+            var old = s.Lines.FirstOrDefault(l => string.Equals(l.Key, key, StringComparison.OrdinalIgnoreCase));
+            if (old != null)
+            {
+                taken.Add(old.Name);
+                lines.Add((old.Name, s.F[old.Start..old.End]));
+            }
+            else
+            {
+                var name = NameFor(key, taken);
+                lines.Add((name, LineText(name, prefix, s.FoldName!, key)));
+            }
+        }
+
+        var gap = s.F[s.Args[s.K].End..s.Args[s.K + 1].Start];
+        var newTail = isDefault ? DefaultTail(lines.Select(l => l.Name).ToList()) : tail;
+        var region = string.Concat(lines.Select(l => gap + l.Text)) + gap + newTail;
+
+        var tailEnd = s.Args[^1].End;
+        if (s.DebugTail) throw new InvalidOperationException("Internal: debug tail not dropped.");
+        return (b, region + a[(tailEnd - s.Offset)..]);
+    }
+
+    // The fold back where it was: a LET made for the answer is taken off, Tim's own keeps its lines.
+    private static (string, string) Collapse(string b, string a, LetShape s)
+    {
+        var letStart = s.Let.Start;
+        if (s.K == 1 && s.F[..letStart].Trim() == "=" && s.F[s.Let.End..].Trim().Length == 0)
+            return (s.F[..letStart], s.F[s.Let.End..]);
+
+        var nameStart = s.Args[s.K - 1].Start;
+        return (b[..nameStart], a[(s.Args[^1].End - s.Offset)..]);
+    }
+
+    // The answer as LET names where there is none: a new LET round a whole-formula fold, or the
+    // fold's own LET when the fold is its last line.
+    private static (string, string) AddLet(string b, string a, string prefix, IReadOnlyList<string> keys)
+    {
+        var s = Find(b, a);
+        var reuse = s != null && s.K == s.Args.Count - 1 && s.K % 2 == 0 && s.K >= 2;
+        var whole = b.Trim() == "=" && a.Trim().Length == 0;
+        if (!reuse && !whole) throw new InvalidOperationException(NeedsLet);
+
+        HashSet<string> taken;
+        string sep;
+        if (reuse)
+        {
+            taken = BoundNames(s!, skipAnswer: false);
+            var nl = b.LastIndexOf('\n');
+            sep = nl >= 0 && b[(nl + 1)..].Trim().Length == 0 ? "\n" + b[(nl + 1)..] : " ";
+        }
+        else
+        {
+            taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            sep = "\n    ";
+        }
+
+        var foldName = FoldWord;
+        while (taken.Contains(foldName)) foldName += "_";
+        taken.Add(foldName);
+
+        var names = new List<string>();
+        var sb = new StringBuilder();
+        foreach (var key in keys)
+        {
+            var name = NameFor(key, taken);
+            names.Add(name);
+            sb.Append(',').Append(sep).Append(LineText(name, prefix, foldName, key));
+        }
+
+        sb.Append(',').Append(sep).Append(DefaultTail(names));
+
+        return reuse
+            ? (b + foldName + ", ", sb + a)
+            : ("=LET(" + sep + foldName + ", ", sb + "\n)");
+    }
+
+    // _answer, X, fold in place of the last line X (the debug table shows, X stays one line above).
+    private static (string, string) AddDebugTail(string b, string a, LetShape s)
+    {
+        var x = s.Args[^1];
+        var gap = s.F[s.Args[^2].End..x.Start];
+        var text = AnswerName + ", " + s.F[x.Start..x.End] + gap + s.FoldName;
+        return (b, a[..(x.Start - s.Offset)] + text + a[(x.End - s.Offset)..]);
+    }
+
+    private static (string, string) DropDebugTail(string b, string a, LetShape s)
+    {
+        var marker = s.Args[^3].Start - s.Offset;
+        var x = s.Args[^2];
+        return (b, a[..marker] + s.F[x.Start..x.End] + a[(s.Args[^1].End - s.Offset)..]);
     }
 
     /// <summary>The keys as Excel writes an array constant: <c>{"cash","crates"}</c>.</summary>
