@@ -70,12 +70,6 @@ public partial class StateWindow
 
         _folds.AddRange(folds);
 
-        if (_candidates.Count > 0)
-        {
-            CarryText.Text = "Body lines you can carry (type the name in a new row): " + string.Join(", ", _candidates) + ".";
-            CarryText.Visibility = Visibility.Visible;
-        }
-
         var debugKeys = engine.DebugKeys;
         if (debugKeys.Count > 0)
         {
@@ -161,8 +155,11 @@ public partial class StateWindow
         name.TextChanged += (_, _) => ShowCarried(name, row.OriginalKey != null
             ? _carried.Contains(row.OriginalKey, StringComparer.OrdinalIgnoreCase)
             : IsCandidate(name.Text));
-        Grid.SetColumn(name, 1);
-        grid.Children.Add(name);
+        var cell = new Grid();
+        cell.Children.Add(name);
+        if (row.OriginalKey == null && _candidates.Count > 0) AddCarryHint(cell, name);
+        Grid.SetColumn(cell, 1);
+        grid.Children.Add(cell);
 
         if (row.OriginalKey != null)
         {
@@ -183,6 +180,40 @@ public partial class StateWindow
 
         RowsPanel.Children.Add(grid);
         _rows.Add(new RowBox(row.OriginalKey, name, tick, grid, state ?? _nextNewRow++));
+    }
+
+    // The carry hint sits in the new-variable row itself, so it is in view while Tim types (it
+    // used to sit under the rows and scroll away). Grey, right-aligned, not clickable; it goes
+    // once the typed text is no longer the start of a candidate's name.
+    private void AddCarryHint(Grid cell, TextBox name)
+    {
+        var sentence = "Body lines you can carry (type the name in a new row): " + string.Join(", ", _candidates) + ".";
+
+        var hint = new TextBlock
+        {
+            Text = "carry: " + string.Join(", ", _candidates),
+            Foreground = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            FontSize = 11,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 6, 0),
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            IsHitTestVisible = false
+        };
+        cell.Children.Add(hint);
+
+        void Update()
+        {
+            var typed = name.Text.Trim();
+            if (!IsCandidate(typed)) name.ToolTip = sentence; // ShowCarried clears it on each keystroke
+            var show = typed.Length == 0
+                || (!IsCandidate(typed)
+                    && _candidates.Any(c => c.StartsWith(typed, StringComparison.OrdinalIgnoreCase)));
+            hint.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        name.TextChanged += (_, _) => Update();
+        Update();
     }
 
     private bool IsCandidate(string text) =>
