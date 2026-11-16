@@ -144,38 +144,20 @@ internal static class ExampleCheckCommand
             if (where is null)
                 return; // not a fill or spill: nothing was checked
             LastCheckMs = sw.Elapsed.TotalMilliseconds;
-            var fresh = findings.Where(f => Fresh(f, ((Excel.Worksheet)sh).Parent is Excel.Workbook b ? $"{b.Name}!{where.Sheet}" : where.Sheet)).ToList();
             var detail = string.Join("; ", findings.Select(f =>
                 $"{f.Finding.Literal} in {ExampleLiteralChecker.Address(f.Request.Row, f.Request.Column)} = "
                 + (f.Finding.FromText ? "example text" : f.Finding.SourceAddress)));
             Logger.Info($"ExampleCheck: {where.Sheet}!{where.Label} checked in {LastCheckMs:F1} ms ({stages}), "
-                        + $"{findings.Count} finding(s){(findings.Count > 0 ? ": " + detail : "")}"
-                        + (fresh.Count < findings.Count ? $" ({findings.Count - fresh.Count} shown in the last minute: not again)" : ""));
-            if (fresh.Count > 0)
-                ExampleCheckWindow.Present(where, fresh, ExampleCheckModes.Normalize(Settings.Current.ExampleCheckMode));
+                        + $"{findings.Count} finding(s){(findings.Count > 0 ? ": " + detail : "")}");
+            // Every finding is shown, every time, even one shown a moment ago (Tim, 16 Nov video:
+            // "I think we should just default to always showing it, even if it's already been seen").
+            if (findings.Count > 0)
+                ExampleCheckWindow.Present(where, findings, ExampleCheckModes.Normalize(Settings.Current.ExampleCheckMode));
         }
         catch (Exception ex)
         {
             Logger.Error("ExampleCheck", ex);
         }
-    }
-
-    private static readonly Dictionary<string, DateTime> Shown = new(StringComparer.Ordinal);
-
-    /// <summary>
-    ///     False when the same finding (sheet, example cell, literal, match) was shown in the last
-    ///     minute: an undo, a redo or a re-fill of the same formula doesn't show it again.
-    /// </summary>
-    private static bool Fresh(ExampleCheckFinding f, string where)
-    {
-        var key = $"{where}|{f.Request.Row}:{f.Request.Column}|{f.Finding.Literal}|{f.Finding.SourceAddress}|{f.Request.Formula.GetHashCode()}";
-        var now = DateTime.UtcNow;
-        foreach (var old in Shown.Where(kv => now - kv.Value > TimeSpan.FromMinutes(1)).Select(kv => kv.Key).ToList())
-            Shown.Remove(old);
-        if (Shown.ContainsKey(key))
-            return false;
-        Shown[key] = now;
-        return true;
     }
 
     /// <summary>

@@ -123,8 +123,10 @@ Measured in real Excel (VM `taglo-win`, 16 Nov), after the start-up warm-up:
 | Gerrymandering fills (22 rows) | 2–23 ms |
 | 262 fills and spills replayed over 9 played cases | mean 2–8 ms per file; one cold first check 115 ms |
 
-A finding shown in the last minute (the same example cell, literal and match) isn't shown again,
-so an undo, a redo or a re-fill doesn't repeat the panel. The log still records it.
+Every finding is shown every time, even one shown a moment ago: a re-fill, an undo or a redo that
+writes a flagged formula shows the panel again (Tim, 16 Nov video: "I think we should just default
+to always showing it, even if it's already been seen"). Until then a finding shown in the last
+minute wasn't shown again.
 
 ## Tuning (16 Nov, on Tim's files)
 
@@ -173,3 +175,5 @@ matching a count in an unrelated table on the same row, now outside the row's bl
   limited to 255 characters.
 - Horizontal fills, and inputs in rows above the formula (a header row of parameters).
 - A fix button that swaps the literal for the cell.
+- A value from a game row below the family's top row (a formula built on game 35, then moved to the
+  top row and filled): only the top row is compared (Tim's question, 16 Nov video).
