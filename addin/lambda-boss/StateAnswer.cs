@@ -77,7 +77,7 @@ public static class StateAnswer
     ///     Throws <see cref="InvalidOperationException" /> with the reason when the text can't take the form.
     /// </summary>
     public static (string Before, string After) Set(
-        string before, string after, string prefix, IReadOnlyList<string> keys, StateAnswerMade made, bool? asLet = null)
+        string before, string after, string prefix, IReadOnlyList<string> keys, StateAnswerContext made, bool? asLet = null)
     {
         if (made is null) throw new ArgumentNullException(nameof(made));
         if (before is null) throw new ArgumentNullException(nameof(before));
@@ -388,7 +388,7 @@ public static class StateAnswer
 
     // The answer as LET names where there is none: a new LET round a whole-formula fold, or the
     // fold's own LET when the fold is its last line.
-    private static (string, string) AddLet(string b, string a, string prefix, IReadOnlyList<string> keys, StateAnswerMade made)
+    private static (string, string) AddLet(string b, string a, string prefix, IReadOnlyList<string> keys, StateAnswerContext made)
     {
         var s = Find(b, a);
 
@@ -420,7 +420,7 @@ public static class StateAnswer
 
         HashSet<string> taken;
         string sep;
-        made.Record(b, a);
+        made.Add(b, a);
         if (reuse)
         {
             taken = BoundNames(s!, skipAnswer: false);

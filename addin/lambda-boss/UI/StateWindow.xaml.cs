@@ -26,6 +26,7 @@ public partial class StateWindow
     // (a key with no row to tick, Tim's own spacing).
     private readonly List<string> _openedAnswer;
     private readonly bool _openedAnswerLet;
+    private readonly string? _cell;
 
     // Body lines already carried, and those a new row can carry by name (spec 0018 addendum).
     private readonly IReadOnlyList<string> _carried;
@@ -36,9 +37,11 @@ public partial class StateWindow
         IReadOnlyList<StateFoldKind> libraryFolds,
         Func<string, string?> refersTo,
         Func<StateFoldKind, string> callName,
-        string? note)
+        string? note,
+        string? cell = null)
     {
         InitializeComponent();
+        _cell = cell;
 
         _engine = engine;
         _refersTo = refersTo;
@@ -271,7 +274,7 @@ public partial class StateWindow
         foreach (var row in _rows)
             row.Answer.Content = row.Answer.IsChecked == true && row.Name.Text.Trim().Length > 0 ? (++place).ToString(CultureInfo.InvariantCulture) : "";
 
-        var result = StateEngines.Apply(_engine, CurrentChange(), _refersTo, _callName);
+        var result = StateEngines.Apply(_engine, CurrentChange(), _refersTo, _callName, StateAnswerMade.Shared.For(_cell)); // a preview: records nothing
 
         var preview = result.Formula ?? "";
         if (result.Definition != null)

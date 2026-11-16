@@ -58,8 +58,14 @@ public class StateAnswerLetTests
     // What /State made, per test (xUnit makes one instance of this class per test).
     private readonly StateAnswerMade _made = new();
 
-    private StateEngineResult Apply(StateEngine engine, StateEngineChange change) =>
-        StateEngines.Apply(engine, change, _ => null, k => k.Name, _made);
+    private StateAnswerContext? _last;
+    private string _cell = "Book|Sheet1|A1";
+
+    private StateEngineResult Apply(StateEngine engine, StateEngineChange change)
+    {
+        _last = _made.For(_cell);
+        return StateEngines.Apply(engine, change, _ => null, k => k.Name, _last);
+    }
 
     private static StateEngineChange Ticks(StateEngine engine, bool? asLet, params string[] answer) =>
         new(engine.Rows, engine.Fold, engine.StepName, null, answer, null, asLet);
@@ -69,6 +75,7 @@ public class StateAnswerLetTests
         var engine = Read(formula);
         var result = Apply(engine, Ticks(engine, asLet, answer));
         Assert.Null(result.Error);
+        _last!.Commit(); // as the command does once the cell is written
         return result.Formula!;
     }
 
@@ -175,11 +182,11 @@ public class StateAnswerLetTests
     }
 
     [Fact]
-    public void UntickAll_InsideAnotherFunction_TakesTheLetOff()
+    public void UntickAll_InsideAnotherFunction_KeepsTimsLet()
     {
+        // /State only makes a LET round a whole-formula fold, so one inside TAKE is Tim's and stays.
         var typed = "=TAKE(" + Lines("LET(", "    f, " + Truck() + ",", "    x, GetVar(f, \"cash\"),", "    x", ")") + ", 1)";
-        _made.Record("=TAKE(", ", 1)"); // the LET was /State's
-        Assert.Equal("=TAKE(" + Truck() + ", 1)", Set(typed, null));
+        Assert.Equal("=TAKE(" + Lines("LET(", "    f, " + Truck() + ",", "    f", ")") + ", 1)", Set(typed, null));
     }
 
     [Fact]
@@ -377,6 +384,27 @@ public class StateAnswerLetTests
         var ticked = Set(Outer, true, "cash");
         var edited = ticked.Replace("price, 5", "price, 6");
         Assert.Equal(OwnFold("cost, 3,\n    price, 6"), Set(edited, null));
+    }
+
+    [Fact]
+    public void ATickOnOneCell_DoesNotMakeAnotherCellsFoldLineTheToolsOwn()
+    {
+        _cell = "Book|Sheet1|A1";
+        Set(Bare, true, "cash", "crates"); // /State makes the LET in A1; same surrounding text as below
+        _cell = "Book|Sheet1|B1";
+        Assert.Equal(OwnFold(), Set(Answered(), null)); // B1's LET is Tim's copy: kept
+
+        _cell = "Book|Sheet1|A1";
+        Assert.Equal(Bare, Set(Answered(), null)); // A1's own round trip still exact
+    }
+
+    [Fact]
+    public void APreview_RecordsNothing()
+    {
+        var engine = Read(Bare);
+        var preview = Apply(engine, Ticks(engine, true, "cash", "crates")); // never committed
+        Assert.Null(preview.Error);
+        Assert.Equal(OwnFold(), Set(preview.Formula!, null));
     }
 
     [Fact]

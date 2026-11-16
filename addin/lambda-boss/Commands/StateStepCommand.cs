@@ -138,12 +138,13 @@ internal static class StateStepCommand
             dynamic sheet = cell.Worksheet;
             var excelHwnd = new IntPtr(app.Hwnd);
 
+            string cellKey = CellKey(sheet, address);
             StateEngineChange? change = null;
             ShowLambdaPopupCommand.InvokeOnWindowThread(dispatcher =>
             {
                 dispatcher.Invoke(() =>
                 {
-                    var window = new StateWindow(engine, folds, refersTo, callName, note);
+                    var window = new StateWindow(engine, folds, refersTo, callName, note, cellKey);
                     var wpfHwnd = new WindowInteropHelper(window).EnsureHandle();
                     WindowPositioner.CenterOnExcel(excelHwnd, wpfHwnd);
                     if (window.ShowDialog() == true) change = window.Change;
@@ -215,14 +216,20 @@ internal static class StateStepCommand
         return load;
     }
 
+    // The cell as a record key: workbook, sheet and address, so a copy elsewhere never matches.
+    private static string CellKey(dynamic sheet, string address) =>
+        Convert.ToString(sheet.Parent.FullName) + "|" + Convert.ToString(sheet.Name) + "|" + address;
+
     /// <summary>Stores the named step, then writes the cell.</summary>
     private static void Save(
         dynamic sheet, string address, string original, StateEngine engine, StateEngineChange change,
         IReadOnlyDictionary<string, string> names)
     {
         var prefix = StateScaffold.FindPrefix(names) ?? (engine.Prefix.Length > 0 ? engine.Prefix : null);
+        string cellKey = CellKey(sheet, address);
+        var answers = StateAnswerMade.Shared.For(cellKey);
         var result = StateEngines.Apply(
-            engine, change, n => names.TryGetValue(n, out var r) ? r : null, k => CallName(k, names, prefix));
+            engine, change, n => names.TryGetValue(n, out var r) ? r : null, k => CallName(k, names, prefix), answers);
         if (result.Formula == null)
         {
             ShowError(result.Error ?? "Nothing was changed.");
@@ -258,6 +265,7 @@ internal static class StateStepCommand
                 throw;
             }
 
+            answers.Commit(); // only a written cell makes the fold line /State's
             Logger.Info($"State: Written to {address}");
         }
         catch (Exception ex)

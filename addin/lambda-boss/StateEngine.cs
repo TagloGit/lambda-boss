@@ -304,9 +304,9 @@ public static class StateEngines
         StateEngineChange change,
         Func<string, string?> refersTo,
         Func<StateFoldKind, string> callName,
-        StateAnswerMade? made = null)
+        StateAnswerContext? made = null)
     {
-        made ??= StateAnswerMade.Shared;
+        made ??= StateAnswerMade.Shared.For(null);
         if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (change is null) throw new ArgumentNullException(nameof(change));
         if (refersTo is null) throw new ArgumentNullException(nameof(refersTo));
@@ -523,7 +523,7 @@ public static class StateEngines
     }
 
     // True when taking the answer wrapper off leaves the fold as the whole formula.
-    private static bool WholeWithoutAnswer(StateEngine engine, StateAnswerMade made)
+    private static bool WholeWithoutAnswer(StateEngine engine, StateAnswerContext made)
     {
         var bare = StateAnswer.Set(engine.Before, engine.After, engine.Prefix, Array.Empty<string>(), made);
         return bare.Before.Trim() == "=" && bare.After.Trim().Length == 0;

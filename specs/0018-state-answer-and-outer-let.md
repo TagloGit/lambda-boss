@@ -253,13 +253,18 @@ rows, in order, as before) is written as LET names:
 added and one Tim wrote look the same. So when ticking adds the fold's name to a LET (or makes a
 LET round a whole-formula fold), /State records the plain text around the fold from before the add:
 the pair (text before the fold, text after it), with Debug's wrapper and tail off and the fold call
-itself left out (editing the step's rules later doesn't invalidate it). On untick-all, or on the
-switch to GetVars, /State works out the text it would give back; if that pair is recorded the
-fold line was /State's and comes off as above, else it is Tim's and stays. The record is in memory
-for the Excel session (`StateAnswerMade`): restarting Excel empties it, and everything is then
-treated as Tim's, which is safe (nothing of his is lost; at worst a `fold,` line /State made stays,
-and Tim deletes it). A record made from one text doesn't apply to another: if Tim edits a line
-around the fold after ticking, the pair no longer matches and the fold line stays.
+itself left out (editing the step's rules later doesn't invalidate it), **keyed by the cell**
+(workbook, sheet and address). It is recorded **only when the change is written to the cell**: the
+dialog's live preview runs the same code and records nothing, and a cancelled dialog leaves no
+trace. On untick-all, or on the switch to GetVars, /State works out the text it would give back; if
+that pair is recorded **for the cell being edited** the fold line was /State's and comes off as
+above, else it is Tim's and stays. A formula copied to another cell therefore never matches, however
+alike the text (a whole-formula fold always has the pair `=` and nothing, so without the cell any
+tick anywhere would claim every other cell's fold line). The record is in memory for the Excel
+session (`StateAnswerMade`): restarting Excel empties it, and everything is then treated as Tim's,
+which is safe (nothing of his is lost; at worst a `fold,` line /State made stays, and Tim deletes
+it). A record made from one text doesn't apply to another: if Tim edits a line around the fold
+after ticking, the pair no longer matches and the fold line stays.
 
 **Defaults taken** (each reversible: tell the Excel director):
 - The box starts unticked for a cell with no answer yet: GetVars stays the default answer form,
