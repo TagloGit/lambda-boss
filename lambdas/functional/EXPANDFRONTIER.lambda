@@ -1,12 +1,12 @@
 /*  FUNCTION NAME:      EXPANDFRONTIER
     DESCRIPTION:*//**Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes. For "at most N steps", give N as max_hops, not max_depth.*/
-/*  RETURNS:            array: column of distinct nodes reachable from the seeds through getNext (seeds optional); with_hops TRUE adds a second column, each node's hop count
+/*  RETURNS:            array: column of distinct nodes reachable from the seeds through getNext (seeds optional); with_hops TRUE adds a second column, each node's hop count ("" alone when nothing is returned)
     PARAMETERS:
         seeds           (Required) Scalar or 1-D array of starting node IDs (text or number). IDs must be type-consistent and never equal to the empty string.
         getNext         (Required) LAMBDA(node) returning the neighbours of one node - any shape; empty, error, or blank all mean no neighbours. Each node is expanded exactly once.
         include_seeds   (Optional) Default TRUE. FALSE returns only newly-reached nodes, so a count of triggered nodes is ROWS(result).
         max_depth       (Optional) Runaway guard, NOT a step limit: default 1000; returns #N/A if nodes are still being found after this many expansions. For "at most N steps" use max_hops.
-        max_hops        (Optional) Hop limit: stops after N hops and returns the nodes reached within N (0 = seeds only), never #N/A. Use this for "at most N steps/trails/moves".
+        max_hops        (Optional) Hop limit: stops after N hops and returns the nodes reached within N, with no #N/A (while N <= max_depth). Use this for "at most N steps/trails/moves". 0, a blank cell or a negative = seeds only.
         with_hops       (Optional) Default FALSE. TRUE returns two columns: node, and its fewest hops from a seed (seeds 0).
     EXAMPLE:            =EXPANDFRONTIER("A", LAMBDA(node, FILTER({"B";"C";"D"}, {"A";"A";"C"}=node, ""))) -> {A;B;C;D}
     REVISIONS:          Date        Developer   Description
