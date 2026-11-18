@@ -198,12 +198,18 @@ public static class StateDebug
             }
 
             var debug = DebugKeys(engine);
+            var stepParameter = engine.Parameters.Count > 1 ? engine.Parameters[1] : step.InputBinding?.Name;
             foreach (var v in step.Variables)
             {
                 if (v.GetVarLine != null) skip.Add(v.GetVarLine.Name);
                 if (v.NextLine != null) skip.Add(v.NextLine.Name);
                 if (v.GetVarLine != null && !debug.Contains(v.Key, StringComparer.OrdinalIgnoreCase))
                     Add(IncomingKey(v.Key), v.GetVarLine.Name);
+                // The step parameter carried (#492): what comes in is the parameter itself.
+                else if (v.GetVarLine == null && v.NextLine != null && stepParameter != null
+                         && string.Equals(v.Key, stepParameter, StringComparison.OrdinalIgnoreCase)
+                         && string.Equals(v.NextLine.RhsText.Trim(), stepParameter, StringComparison.OrdinalIgnoreCase))
+                    Add(IncomingKey(v.Key), stepParameter);
             }
 
             foreach (var (name, value) in engine.Bindings)
