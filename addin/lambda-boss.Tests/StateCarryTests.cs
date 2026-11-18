@@ -425,6 +425,33 @@ public class StateCarryTests
         Assert.Equal(new[] { "n", "v" }, Keys(off));
     }
 
+    [Theory]
+    [InlineData("n")]
+    [InlineData("pos")]
+    [InlineData("v")]
+    public void CarryTheStepParameter_WithASeedReadingTheStep_IsRefused(string seed)
+    {
+        var engine = Read(Plain);
+        var change = new StateEngineChange(
+            engine.Rows.Append(new StateEditRow(null, "v", seed)).ToList(), engine.Fold, engine.StepName);
+        var result = Apply(engine, change);
+
+        Assert.Null(result.Formula);
+        Assert.Contains("can't read", result.Error);
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_WithATypedSeed_UsesIt()
+    {
+        var engine = Read(Plain);
+        var change = new StateEngineChange(
+            engine.Rows.Append(new StateEditRow(null, "v", "0")).ToList(), engine.Fold, engine.StepName);
+        var result = Apply(engine, change);
+
+        Assert.Null(result.Error);
+        Assert.Equal(CarriedV.Replace("\"v\", \"\"", "\"v\", 0"), result.Formula);
+    }
+
     [Fact]
     public void CarryABodyLine_AndTheStepParameter_Together()
     {

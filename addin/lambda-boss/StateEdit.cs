@@ -729,13 +729,7 @@ public static class StateEdit
 
         public void Add(string key, string value)
         {
-            // The value goes in the sample state, which can't read itself or anything below it.
-            var stateAt = _lines.FindIndex(l => IsNamed(l.Name, _stateName));
-            var below = _lines.Skip(stateAt).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var readsBelow = StateStepParser.NamesIn(value, below);
-            if (readsBelow.Count > 0)
-                throw new InvalidOperationException(
-                    $"The value of {key} can't read {string.Join(", ", readsBelow)}: it goes in {_stateName}, above that line.");
+            CheckSeed(key, value);
 
             var taken = UsedNames();
             taken.UnionWith(StateScaffold.ReservedNames);
@@ -761,6 +755,17 @@ public static class StateEdit
             _sample.Set(key, value);
             _sampleChanged = true;
             _variables.Add(new Variable(key, binding, next));
+        }
+
+        /// <summary>The value goes in the sample state, which can't read itself or anything below it.</summary>
+        private void CheckSeed(string key, string value)
+        {
+            var stateAt = _lines.FindIndex(l => IsNamed(l.Name, _stateName));
+            var below = _lines.Skip(stateAt).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var readsBelow = StateStepParser.NamesIn(value, below);
+            if (readsBelow.Count > 0)
+                throw new InvalidOperationException(
+                    $"The value of {key} can't read {string.Join(", ", readsBelow)}: it goes in {_stateName}, above that line.");
         }
 
         /// <summary>
@@ -845,6 +850,8 @@ public static class StateEdit
         /// </summary>
         public void CarryParameter(string name, string seed)
         {
+            CheckSeed(name, seed);
+
             var taken = UsedNames();
             taken.UnionWith(StateScaffold.ReservedNames);
             taken.Add(_stateName);
