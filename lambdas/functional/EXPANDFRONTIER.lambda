@@ -1,15 +1,18 @@
 /*  FUNCTION NAME:      EXPANDFRONTIER
-    DESCRIPTION:*//**Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes.*/
-/*  RETURNS:            array: column of distinct nodes reachable from the seeds through getNext (seeds optional)
+    DESCRIPTION:*//**Expands seeds through getNext until nothing new is reached (BFS transitive closure), returning the deduplicated column of reachable nodes. For "at most N steps", give N as max_hops, not max_depth.*/
+/*  RETURNS:            array: column of distinct nodes reachable from the seeds through getNext (seeds optional); with_hops TRUE adds a second column, each node's hop count ("" alone when nothing is returned)
     PARAMETERS:
         seeds           (Required) Scalar or 1-D array of starting node IDs (text or number). IDs must be type-consistent and never equal to the empty string.
         getNext         (Required) LAMBDA(node) returning the neighbours of one node - any shape; empty, error, or blank all mean no neighbours. Each node is expanded exactly once.
         include_seeds   (Optional) Default TRUE. FALSE returns only newly-reached nodes, so a count of triggered nodes is ROWS(result).
-        max_depth       (Optional) Maximum expansion depth, default 1000. Returns #N/A instead of a runaway recursion.
+        max_depth       (Optional) Runaway guard, NOT a step limit: default 1000; returns #N/A if nodes are still being found after this many expansions. For "at most N steps" use max_hops.
+        max_hops        (Optional) Hop limit: stops after N hops and returns the nodes reached within N, with no #N/A (while N <= max_depth). Use this for "at most N steps/trails/moves". 0, a blank cell or a negative = seeds only.
+        with_hops       (Optional) Default FALSE. TRUE returns two columns: node, and its fewest hops from a seed (seeds 0).
     EXAMPLE:            =EXPANDFRONTIER("A", LAMBDA(node, FILTER({"B";"C";"D"}, {"A";"A";"C"}=node, ""))) -> {A;B;C;D}
     REVISIONS:          Date        Developer   Description
                         2026-07-22  Claude      Initial version
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-18  Claude      max_hops (hop limit, no #N/A) and with_hops (each node's hop count); max_depth unchanged (#494)
 */
 EXPANDFRONTIER = LAMBDA(
 //  Parameter Declarations
@@ -17,6 +20,8 @@ EXPANDFRONTIER = LAMBDA(
     [getNext],
     [include_seeds],
     [max_depth],
+    [max_hops],
+    [with_hops],
     LET(
     //  Procedure
         norm, LAMBDA(node, LET(
@@ -26,17 +31,23 @@ EXPANDFRONTIER = LAMBDA(
         expandAll, LAMBDA(frontier, LET(
                 stacked, REDUCE("", TOCOL(frontier), LAMBDA(acc, node, VSTACK(acc, norm(node)))),
                 FILTER(stacked, stacked <> "", ""))),
-        rec, LAMBDA(self, visited, frontier, depth, LET(
+        // visited is two columns: node, hop count. hopsLeft < 0 means no hop limit.
+        rec, LAMBDA(self, visited, frontier, depth, hop, hopsLeft,
+                IF(hopsLeft = 0, visited, LET(
                 candidates, expandAll(frontier),
-                fresh, UNIQUE(FILTER(candidates, ISNA(XMATCH(candidates, VSTACK(visited, ""))), "")),
+                fresh, UNIQUE(FILTER(candidates, ISNA(XMATCH(candidates, VSTACK(TAKE(visited, , 1), ""))), "")),
                 IF(AND(ROWS(fresh) = 1, INDEX(fresh, 1, 1) = ""), visited,
                    IF(depth <= 0, NA(),
-                      self(self, VSTACK(visited, fresh), fresh, depth - 1))))),
+                      self(self, VSTACK(visited, HSTACK(fresh, EXPAND(hop + 1, ROWS(fresh), 1, hop + 1))),
+                           fresh, depth - 1, hop + 1, hopsLeft - 1)))))),
         seedCol, UNIQUE(TOCOL(seeds)),
-        reached, rec(rec, seedCol, seedCol, IF(ISOMITTED(max_depth), 1000, max_depth)),
+        hopLimit, IF(ISOMITTED(max_hops), -1, MAX(0, INT(max_hops))),
+        reached, rec(rec, HSTACK(seedCol, EXPAND(0, ROWS(seedCol), 1, 0)), seedCol,
+                     IF(ISOMITTED(max_depth), 1000, max_depth), 0, hopLimit),
         keepSeeds, IF(ISOMITTED(include_seeds), TRUE, include_seeds),
-        result, IF(keepSeeds, reached,
-                   FILTER(reached, ISNA(XMATCH(reached, seedCol)), "")),
+        kept, IF(keepSeeds, reached,
+                 FILTER(reached, ISNA(XMATCH(TAKE(reached, , 1), seedCol)), "")),
+        result, IF(IF(ISOMITTED(with_hops), FALSE, with_hops), kept, TAKE(kept, , 1)),
         result
 )
 );
