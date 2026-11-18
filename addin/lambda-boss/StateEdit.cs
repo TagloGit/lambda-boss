@@ -119,7 +119,7 @@ public static class StateEdit
                 try
                 {
                     carrier ??= new EditableStep(formula, parameterNames);
-                    return carrier.CarryName(key) != null;
+                    return carrier.CarryName(key) != null || carrier.StepParameterName(key) != null;
                 }
                 catch (FormatException)
                 {
@@ -162,7 +162,10 @@ public static class StateEdit
             foreach (var row in added)
             {
                 var carried = IsBlankSeed(row.Value) ? step.CarryName(row.Key.Trim()) : null;
+                var parameter = carried == null ? step.StepParameterName(row.Key.Trim()) : null;
                 if (carried != null) step.Carry(carried);
+                else if (parameter != null)
+                    step.CarryParameter(parameter, IsBlankSeed(row.Value) ? StateEngine.Placeholder : row.Value.Trim());
                 else step.Add(row.Key.Trim(), row.Value.Trim());
             }
 
@@ -475,10 +478,14 @@ public static class StateEdit
 
         private readonly HashSet<string> _standIns;
 
+        // The fold lambda's own step parameter (v in LAMBDA(a, v, …)): already in scope every step.
+        private readonly string? _stepParameter;
+
         public EditableStep(string formula, IReadOnlyCollection<string>? parameterNames = null)
         {
             if (!IsWholeLet(formula)) throw new FormatException("The cell isn't a LET.");
             _standIns = new HashSet<string>(parameterNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+            _stepParameter = parameterNames?.FirstOrDefault();
 
             var parsed = LetParser.Parse(formula);
             var step = StateStepParser.TryParse(parsed)
@@ -722,13 +729,7 @@ public static class StateEdit
 
         public void Add(string key, string value)
         {
-            // The value goes in the sample state, which can't read itself or anything below it.
-            var stateAt = _lines.FindIndex(l => IsNamed(l.Name, _stateName));
-            var below = _lines.Skip(stateAt).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var readsBelow = StateStepParser.NamesIn(value, below);
-            if (readsBelow.Count > 0)
-                throw new InvalidOperationException(
-                    $"The value of {key} can't read {string.Join(", ", readsBelow)}: it goes in {_stateName}, above that line.");
+            CheckSeed(key, value);
 
             var taken = UsedNames();
             taken.UnionWith(StateScaffold.ReservedNames);
@@ -754,6 +755,17 @@ public static class StateEdit
             _sample.Set(key, value);
             _sampleChanged = true;
             _variables.Add(new Variable(key, binding, next));
+        }
+
+        /// <summary>The value goes in the sample state, which can't read itself or anything below it.</summary>
+        private void CheckSeed(string key, string value)
+        {
+            var stateAt = _lines.FindIndex(l => IsNamed(l.Name, _stateName));
+            var below = _lines.Skip(stateAt).Select(l => l.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var readsBelow = StateStepParser.NamesIn(value, below);
+            if (readsBelow.Count > 0)
+                throw new InvalidOperationException(
+                    $"The value of {key} can't read {string.Join(", ", readsBelow)}: it goes in {_stateName}, above that line.");
         }
 
         /// <summary>
@@ -813,6 +825,50 @@ public static class StateEdit
             _sample.Set(name, StateEngine.Placeholder);
             _sampleChanged = true;
             if (!_variables.Any(v => SameKey(v.Key, name))) _variables.Add(new Variable(name, null, name));
+        }
+
+        /// <summary>
+        ///     The step parameter's own spelling when <paramref name="key" /> names it (the fold
+        ///     lambda's second parameter, or the LET step's input) and it can be carried, else null.
+        ///     Not when the seed or the output already holds the key, or a variable has it.
+        /// </summary>
+        public string? StepParameterName(string key)
+        {
+            var parameter = _stepParameter ?? _inputName;
+            if (parameter == null || !IsNamed(key, parameter)) return null;
+
+            var line = _lines.FirstOrDefault(l => IsNamed(l.Name, parameter));
+            if (line == null || !StateScaffold.IsUsableKey(line.Name)) return null;
+            if (_sample.Has(line.Name) || _output.Has(line.Name) || _variables.Any(v => SameKey(v.Key, line.Name)))
+                return null;
+            return line.Name;
+        }
+
+        /// <summary>
+        ///     Carries the step parameter (#492): it is in scope every step, so it needs no GetVar line
+        ///     and no rename. Adds its seed, a next line that reads it, and the output pair.
+        /// </summary>
+        public void CarryParameter(string name, string seed)
+        {
+            CheckSeed(name, seed);
+
+            var taken = UsedNames();
+            taken.UnionWith(StateScaffold.ReservedNames);
+            taken.Add(_stateName);
+            if (_inputName != null) taken.Add(_inputName);
+            var next = StateScaffold.ChooseNext(name, taken);
+
+            // After the parameters, the GetVar lines and the other next lines; before the output.
+            var floor = _lines.FindLastIndex(l =>
+                IsNamed(l.Name, _stateName) || IsNamed(l.Name, _inputName) || _standIns.Contains(l.Name)
+                || l.Name.StartsWith(OtherSlot, StringComparison.OrdinalIgnoreCase));
+            var nextAt = Math.Max(Math.Max(LastNextLine(), LastGetVarLine()), floor) + 1;
+            _lines.Insert(nextAt, new Line(next, name));
+
+            _output.Set(name, next);
+            _sample.Set(name, seed);
+            _sampleChanged = true;
+            _variables.Add(new Variable(name, null, next));
         }
 
         public string Write()

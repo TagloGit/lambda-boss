@@ -292,7 +292,6 @@ public class StateCarryTests
     [InlineData("out")]
     [InlineData("nextN")]
     [InlineData("a")]
-    [InlineData("v")]
     public void ANonCarryableName_StillAddsANormalVariable(string name)
     {
         var engine = Read(Awkward);
@@ -323,6 +322,184 @@ public class StateCarryTests
             "    IF(late > 99, a, out)",
             ")))");
         Assert.DoesNotContain("late", Read(after).CarryCandidates);
+    }
+
+    // ------------------------------------------------------------ the step parameter (#492)
+
+    // Tim's R4 v3 L7: carrying v, the fold lambda's own step parameter, so the answer gives the
+    // step number. v is in scope every step: no GetVar line, no rename.
+    private static readonly string CarriedV = Lines(
+        "=REDUCE(SetVars(\"n\", 0, \"v\", \"\"), TEXTSPLIT(G55, \",\"), LAMBDA(a, v, LET(",
+        "    n, GetVar(a, \"n\"),",
+        "    pos, n + LEN(v),",
+        "    cell, pos * 2,",
+        "    nextN, n + 1,",
+        "    nextV, v,",
+        "    SetVars(\"n\", nextN, \"v\", nextV)",
+        ")))");
+
+    [Fact]
+    public void CarryTheStepParameter_AddsSeedNextLineAndPair_AndNoGetVar()
+    {
+        var formula = Carry(Plain, "v");
+
+        Assert.Equal(CarriedV, formula);
+        Assert.DoesNotContain("GetVar(a, \"v\")", formula);
+        Assert.DoesNotContain("v_", formula);
+        Assert.Equal(new[] { "n", "v" }, Keys(formula));
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_UsesItsOwnSpelling()
+    {
+        Assert.Equal(CarriedV, Carry(Plain, "V"));
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_WhateverItIsCalled()
+    {
+        var plain = Plain.Replace("LAMBDA(a, v,", "LAMBDA(a, step,").Replace("LEN(v)", "LEN(step)");
+        var formula = Carry(plain, "step");
+
+        Assert.Contains("SetVars(\"n\", 0, \"step\", \"\")", formula);
+        Assert.Contains("nextStep, step,", formula);
+        Assert.Contains("SetVars(\"n\", nextN, \"step\", nextStep)", formula);
+        Assert.DoesNotContain("GetVar(a, \"step\")", formula);
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_CanBeTickedIntoTheAnswer()
+    {
+        var engine = Read(Plain);
+        var result = Apply(engine, Typed(engine, "v") with { Answer = new[] { "n", "v" } });
+
+        Assert.Null(result.Error);
+        Assert.DoesNotContain("GetVar(a, \"v\")", result.Formula);
+        Assert.Contains("nextV, v,", result.Formula);
+        Assert.EndsWith("{\"n\",\"v\"})", result.Formula);
+        Assert.Equal(new[] { "n", "v" }, Read(result.Formula!).Answer);
+    }
+
+    [Fact]
+    public void UntickTheStepParameter_GivesTheStepBackExactly()
+    {
+        var engine = Read(CarriedV);
+        var rows = engine.Rows.Select(r => r.Key == "v" ? r with { Key = "" } : r).ToList();
+        var result = Apply(engine, new StateEngineChange(rows, engine.Fold, null));
+
+        Assert.Null(result.Error);
+        Assert.Equal(Plain, result.Formula);
+    }
+
+    [Fact]
+    public void DebugOnThenOff_WithTheStepParameterCarried_ShowsInVAsV_AndRoundTrips()
+    {
+        var debug = Toggle(CarriedV, on: true);
+
+        Assert.StartsWith("=SplitState(SCAN(", debug);
+        Assert.Contains("\"in.v\", v", debug);
+        Assert.Contains("\"in.n\", n", debug);
+        Assert.DoesNotContain("GetVar(a, \"v\")", debug);
+        Assert.Equal(new[] { "n", "v" }, Keys(debug));
+
+        var off = Toggle(debug, on: false);
+        Assert.Equal(CarriedV, off);
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_WhileDebugIsOn_SurvivesDebugOff()
+    {
+        var debug = Toggle(Plain, on: true);
+        var engine = Read(debug);
+        var result = Apply(engine, Typed(engine, "v"));
+
+        Assert.Null(result.Error);
+        Assert.DoesNotContain("GetVar(a, \"v\")", result.Formula);
+
+        var off = Toggle(result.Formula!, on: false);
+        Assert.StartsWith("=REDUCE(", off);
+        Assert.Contains("SetVars(\"n\", 0, \"v\", \"\")", off);
+        Assert.Contains("nextV, v,", off);
+        Assert.Contains("\"v\", nextV", off);
+        Assert.DoesNotContain("in.", off);
+        Assert.Equal(new[] { "n", "v" }, Keys(off));
+    }
+
+    [Theory]
+    [InlineData("n")]
+    [InlineData("pos")]
+    [InlineData("v")]
+    public void CarryTheStepParameter_WithASeedReadingTheStep_IsRefused(string seed)
+    {
+        var engine = Read(Plain);
+        var change = new StateEngineChange(
+            engine.Rows.Append(new StateEditRow(null, "v", seed)).ToList(), engine.Fold, engine.StepName);
+        var result = Apply(engine, change);
+
+        Assert.Null(result.Formula);
+        Assert.Contains("can't read", result.Error);
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_WithATypedSeed_UsesIt()
+    {
+        var engine = Read(Plain);
+        var change = new StateEngineChange(
+            engine.Rows.Append(new StateEditRow(null, "v", "0")).ToList(), engine.Fold, engine.StepName);
+        var result = Apply(engine, change);
+
+        Assert.Null(result.Error);
+        Assert.Equal(CarriedV.Replace("\"v\", \"\"", "\"v\", 0"), result.Formula);
+    }
+
+    [Fact]
+    public void CarryABodyLine_AndTheStepParameter_Together()
+    {
+        var engine = Read(Plain);
+        var result = Apply(engine, Typed(engine, "pos", "v"));
+
+        Assert.Null(result.Error);
+        Assert.Contains("SetVars(\"n\", 0, \"pos\", \"\", \"v\", \"\")", result.Formula);
+        Assert.Contains("SetVars(\"n\", nextN, \"pos\", pos, \"v\", nextV)", result.Formula);
+        Assert.DoesNotContain("GetVar(a, \"v\")", result.Formula);
+        Assert.Equal(new[] { "pos" }, Read(result.Formula!).CarriedKeys);
+    }
+
+    [Fact]
+    public void CarryTheStepParameter_InTheUnfoldedLetStep()
+    {
+        var engine = Read(LetStep);
+        var result = Apply(engine, Typed(engine, "v"));
+
+        Assert.Null(result.Error);
+        Assert.Contains("_seed, SetVars(\"n\", 0, \"v\", \"\")", result.Formula);
+        Assert.Contains("nextV, v,", result.Formula);
+        Assert.Contains("SetVars(\"n\", nextN, \"v\", nextV)", result.Formula);
+        Assert.DoesNotContain("GetVar(a, \"v\")", result.Formula);
+    }
+
+    [Fact]
+    public void StateEditApply_CarriesTheInputWithNoValue()
+    {
+        // The 0011 dialog: no parameter names, the input is the LET's v line.
+        var formula = Lines(
+            "=LET(",
+            "    a, SetVars(\"n\", 0),",
+            "    v, A1,",
+            "    n, GetVar(a, \"n\"),",
+            "    nextN, n + v,",
+            "    SetVars(\"n\", nextN)",
+            ")");
+        var result = StateEdit.Apply(formula, new[]
+        {
+            new StateEditRow("n", "n", "0"),
+            new StateEditRow(null, "v", "")
+        });
+
+        Assert.Null(result.Error);
+        Assert.Contains("SetVars(\"n\", 0, \"v\", \"\")", result.Formula);
+        Assert.Contains("nextV, v,", result.Formula);
+        Assert.DoesNotContain("GetVar(a, \"v\")", result.Formula);
     }
 
     // ------------------------------------------------------------ the unfolded LET step
