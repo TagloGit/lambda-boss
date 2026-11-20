@@ -150,6 +150,13 @@ try {
         Stop-Update "Couldn't write $Target (is Excel still closing?): $($_.Exception.Message)"
     }
     Unblock-File -Path $Target
+
+    # A new build starts from its own library or GitHub's, never a copy cached by the old one (#452).
+    $cache = Join-Path $env:LOCALAPPDATA "LambdaBoss\cache"
+    if (Test-Path $cache) {
+        Remove-Item -Recurse -Force -Path $cache -ErrorAction SilentlyContinue
+        Write-Host "Cleared the library cache: $cache"
+    }
 }
 finally {
     Remove-Item -Recurse -Force -Path $workDir -ErrorAction SilentlyContinue

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -19,13 +20,22 @@ public record InputChoice(
     bool IsOptional = false,
     string? DefaultExpression = null);
 
+/// <summary>
+///     Marks a LET as a state step. A binding with an input choice may be a parameter even when
+///     it is a calculation, and bindings that only fed the named two are dropped from the LAMBDA body.
+/// </summary>
+public record StateStepRoles(string StateBinding, string? InputBinding);
+
 public record LambdaGenerationRequest(
     string LambdaName,
     ParsedLet ParsedLet,
-    IReadOnlyList<InputChoice> Inputs);
+    IReadOnlyList<InputChoice> Inputs,
+    StateStepRoles? StateStep = null);
 
 public static class LetToLambdaBuilder
 {
+    private static readonly Regex CellAddress = new(@"^\$?([A-Za-z]{1,3})\$?([0-9]+)$");
+
     public static string Build(LambdaGenerationRequest request)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
@@ -42,8 +52,15 @@ public static class LetToLambdaBuilder
                     $"No input choice provided for binding '{b.Name}'.");
         }
 
+        // On a state step the dialog lists the role bindings, and a row keeps its choice when
+        // the input badge moves away, so any listed calculation counts.
+        var roleNames = (request.StateStep == null
+                ? Enumerable.Empty<string>()
+                : request.Inputs.Select(c => c.OriginalBindingName))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var bindingsByName = parsed.Bindings
-            .Where(b => !b.IsCalculation)
+            .Where(b => !b.IsCalculation || roleNames.Contains(b.Name))
             .ToDictionary(b => b.Name, b => b, StringComparer.OrdinalIgnoreCase);
 
         // Kept bindings follow the order of request.Inputs, which lets the
@@ -64,7 +81,14 @@ public static class LetToLambdaBuilder
         if (dup != null)
             throw new InvalidOperationException($"Duplicate parameter name: '{dup.Key}'.");
 
+        var keptNames = kept.Select(k => k.Binding.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var dropped = request.StateStep == null
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : SamplingOnlyBindings(parsed, request.StateStep, kept.Select(k => k.Choice).ToList());
+
         var internalBindingNames = parsed.Bindings
+            .Where(b => !keptNames.Contains(b.Name) && !dropped.Contains(b.Name))
             .Where(b => b.IsCalculation
                 || (choicesByName.TryGetValue(b.Name, out var c) && !c.Keep))
             .Select(b => b.Name)
@@ -87,20 +111,24 @@ public static class LetToLambdaBuilder
             .ToDictionary(k => k.Binding.Name, k => k.Choice.ParamName,
                 StringComparer.OrdinalIgnoreCase);
 
+        var letNames = parsed.Bindings.Select(b => b.Name).Concat(paramNames).ToList();
+
         // Internal bindings preserve source order; their RHS text has renames
         // applied. For excluded inputs (value bindings the user chose not to
         // keep) the RHS is hardcoded into the LAMBDA body, so cell refs are
         // forced absolute for the same reason as optional defaults — see the
         // note on AbsolutizeCellRefs. Calculation bindings are left untouched
-        // to preserve the author's original expression verbatim.
-        var keptNames = kept.Select(k => k.Binding.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // to preserve the author's original expression verbatim, unless they are
+        // a state step's role binding the user chose not to keep: those are
+        // excluded inputs too.
         var internalBindings = parsed.Bindings
-            .Where(b => !keptNames.Contains(b.Name))
+            .Where(b => !keptNames.Contains(b.Name) && !dropped.Contains(b.Name))
             .Select(b =>
             {
                 var renamed = ApplyRenames(b.RhsText, renames);
-                var rhs = b.IsCalculation ? renamed : AbsolutizeCellRefs(renamed);
+                var rhs = b.IsCalculation && !roleNames.Contains(b.Name)
+                    ? renamed
+                    : AbsolutizeCellRefs(renamed, letNames);
                 return new LetBinding(b.Name, rhs, b.IsCalculation);
             })
             .ToList();
@@ -126,7 +154,7 @@ public static class LetToLambdaBuilder
                     : k.Choice.DefaultExpression!;
                 return new LetBinding(
                     k.Choice.ParamName,
-                    $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(defaultExpr, renames))}, {k.Choice.ParamName})",
+                    $"IF(ISOMITTED({k.Choice.ParamName}), {AbsolutizeCellRefs(ApplyRenames(defaultExpr, renames), letNames)}, {k.Choice.ParamName})",
                     IsCalculation: false);
             })
             .ToList();
@@ -170,113 +198,243 @@ public static class LetToLambdaBuilder
     }
 
     /// <summary>
-    ///     Replaces identifier occurrences of each rename key with its value,
-    ///     skipping string literals. Case-insensitive, word-boundary matched.
+    ///     The bindings that only fed a state step's sample state or sample input. Once those
+    ///     two are parameters their RHS is gone, so anything nothing else reads goes with it
+    ///     (<c>k</c> in the part 4 stepper). A kept binding always stays, and so does a binding
+    ///     that fed neither (a <c>_note</c>). When a RHS can't be parsed nothing is dropped.
+    /// </summary>
+    private static HashSet<string> SamplingOnlyBindings(
+        ParsedLet parsed, StateStepRoles roles, IReadOnlyList<InputChoice> keptChoices)
+    {
+        var dropped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keptNames = keptChoices.Select(c => c.OriginalBindingName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = parsed.Bindings.Select(b => b.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var reads = StateStepParser.DirectReads(parsed);
+
+            var samples = new[] { roles.StateBinding, roles.InputBinding }
+                .Where(n => n != null && keptNames.Contains(n))
+                .SelectMany(n => reads[n!]);
+            var fedSamples = StateStepParser.Closure(samples, reads);
+            fedSamples.ExceptWith(keptNames);
+
+            var stillRead = new HashSet<string>(StateStepParser.NamesIn(parsed.Body, names),
+                StringComparer.OrdinalIgnoreCase);
+            foreach (var b in parsed.Bindings)
+                if (!fedSamples.Contains(b.Name) && !keptNames.Contains(b.Name))
+                    stillRead.UnionWith(reads[b.Name]);
+
+            // An optional parameter's default still lands in the body.
+            foreach (var c in keptChoices.Where(c => c.IsOptional))
+            {
+                var rhs = string.IsNullOrWhiteSpace(c.DefaultExpression)
+                    ? parsed.Bindings.First(b => string.Equals(b.Name, c.OriginalBindingName,
+                        StringComparison.OrdinalIgnoreCase)).RhsText
+                    : c.DefaultExpression!;
+                stillRead.UnionWith(StateStepParser.NamesIn(rhs, names));
+            }
+
+            // A kept binding's RHS is gone, so reading it no longer reads what it read.
+            foreach (var kept in keptNames) reads.Remove(kept);
+
+            dropped.UnionWith(fedSamples);
+            dropped.ExceptWith(StateStepParser.Closure(stillRead, reads));
+        }
+        catch (FormatException)
+        {
+            dropped.Clear();
+        }
+
+        return dropped;
+    }
+
+    /// <summary>
+    ///     Replaces each name in <paramref name="text" /> that is a rename key, matched
+    ///     case-insensitively on whole tokens. A token is a whole reference, so strings, array
+    ///     constants, errors, <c>$B$2</c>, <c>Sheet1!B2</c>, <c>t[b]</c> and <c>'b'!A1</c> are never
+    ///     hit. <c>b:b</c> is renamed, because in real Excel a LET name wins over the column, but
+    ///     <c>Data!A:B</c> isn't: both ends are on the sheet. An inner optional parameter
+    ///     (<c>LAMBDA([x], …)</c>) follows its body. Text the lexer can't read comes back unchanged.
     /// </summary>
     internal static string ApplyRenames(string text, IReadOnlyDictionary<string, string> renames)
     {
         if (renames.Count == 0) return text;
 
-        // Lookbehind/lookahead include '?' so a rename of 'Help?' isn't
-        // accidentally matched inside a longer name like 'Help??' or
-        // 'foo?Help?'. Mirrors the identifier rule in LetParser /
-        // ExcelNameValidator: '?' is part of the name body.
-        //
-        // Wrap the alternation in a non-capturing group so the word-boundary
-        // lookarounds apply to every alternative. Without the group, `|` would
-        // split the regex into "(?<!…)key1" and "key2(?!…)", letting a key
-        // match the first letter of a longer identifier (e.g. `a` in `ABS`).
-        var pattern = string.Join("|", renames.Keys.Select(Regex.Escape));
-        var regex = new Regex($@"(?<![A-Za-z0-9_.?])(?:{pattern})(?![A-Za-z0-9_.?])",
-            RegexOptions.IgnoreCase);
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, newName) in renames) byName[name] = newName;
 
-        var result = new StringBuilder();
-        var i = 0;
-        while (i < text.Length)
+        return RewriteNames(text, use =>
         {
-            if (text[i] == '"')
-            {
-                var end = SkipString(text, i);
-                result.Append(text, i, end - i);
-                i = end;
-                continue;
-            }
+            if (use.IsOptionalParam)
+                return byName.TryGetValue(use.Text[1..^1], out var newParam) ? $"[{newParam}]" : use.Text;
 
-            var nextQuote = text.IndexOf('"', i);
-            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
-            var segment = text[i..segEnd];
-            var rewritten = regex.Replace(segment, m =>
-            {
-                // Find the rename key case-insensitively.
-                var key = renames.Keys.First(k =>
-                    string.Equals(k, m.Value, StringComparison.OrdinalIgnoreCase));
-                return renames[key];
-            });
-            result.Append(rewritten);
-            i = segEnd;
-        }
-        return result.ToString();
+            if (use.EndsSheetRange || !byName.TryGetValue(use.Text, out var newName)) return use.Text;
+
+            // A binding can hold a LAMBDA, so a call can be a rename. But a built-in wins over a
+            // LET name of the same spelling (LET(max, 5, MAX(max, 1)) is 5). Excel shows a
+            // built-in in capitals and a binding's call in the binding's case, so the exact case
+            // tells them apart.
+            return !use.IsCall || renames.Keys.Contains(use.Text, StringComparer.Ordinal) ? newName : use.Text;
+        });
     }
 
     /// <summary>
     ///     Forces any A1-style cell reference in <paramref name="text" /> to
     ///     fully absolute form (e.g. <c>A1</c>, <c>$A1</c>, <c>A$1</c> all
     ///     become <c>$A$1</c>). Ranges like <c>A1:B5</c> and sheet-qualified
-    ///     refs like <c>Sheet1!A1</c> are handled; tokens inside string
-    ///     literals are left alone. Used so baked-in expressions in a
-    ///     registered LAMBDA (optional-param defaults and excluded-input
-    ///     RHS values) don't shift when the Name is invoked from a cell
-    ///     other than the one it was registered against.
+    ///     refs like <c>Sheet1!A1</c> are handled, and it works on whole tokens, so
+    ///     strings, function names (<c>LOG10(</c>), table columns and sheet names are left
+    ///     alone. Used so baked-in expressions in a registered LAMBDA (optional-param
+    ///     defaults and excluded-input RHS values) don't shift when the Name is invoked
+    ///     from a cell other than the one it was registered against.
     /// </summary>
-    internal static string AbsolutizeCellRefs(string text)
+    /// <param name="text">The expression. Text the lexer can't read comes back unchanged.</param>
+    /// <param name="letNames">
+    ///     Names bound around the expression. Excel lets a LET name shadow a cell
+    ///     (<c>LET(x1, 5, x1)</c> is 5), so these are left alone, as are names the expression
+    ///     binds itself. Excel writes the shadowed cell's other uses as <c>'x1'</c>, which
+    ///     isn't an address.
+    /// </param>
+    internal static string AbsolutizeCellRefs(string text, IReadOnlyCollection<string>? letNames = null)
     {
-        // Lookbehind includes '?' so a name fragment like 'Help?A1' isn't
-        // accidentally absolutized as the cell ref 'A1'. The lookahead
-        // already guards the cell-ref tail; '?' is added there too in
-        // case a defined name happens to start with what looks like a
-        // cell address followed by '?'.
-        var regex = new Regex(
-            @"(?<![A-Za-z0-9_.?])(\$?)([A-Za-z]{1,3})(\$?)([0-9]+)(?![A-Za-z0-9_.!?])");
-
-        var result = new StringBuilder();
-        var i = 0;
-        while (i < text.Length)
+        var shadowed = new HashSet<string>(letNames ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        try
         {
-            if (text[i] == '"')
-            {
-                var end = SkipString(text, i);
-                result.Append(text, i, end - i);
-                i = end;
-                continue;
-            }
-
-            var nextQuote = text.IndexOf('"', i);
-            var segEnd = nextQuote < 0 ? text.Length : nextQuote;
-            var segment = text[i..segEnd];
-            var rewritten = regex.Replace(segment,
-                m => "$" + m.Groups[2].Value + "$" + m.Groups[4].Value);
-            result.Append(rewritten);
-            i = segEnd;
+            shadowed.UnionWith(StateStepParser.InnerNames(FormulaParser.Parse(text).Root));
         }
-        return result.ToString();
+        catch (FormatException)
+        {
+            // Inner names only sharpen the rewrite, and it works without a tree.
+        }
+
+        return RewriteNames(text, use =>
+            use.IsCall || (shadowed.Contains(use.Text) && !use.EndsSheetRange)
+                ? use.Text
+                : AbsolutizeReference(use.Text));
     }
 
-    private static int SkipString(string text, int openQuoteIndex)
+    /// <summary>
+    ///     Makes the cell address in one reference token absolute: <c>H1</c>, <c>'Q1 data'!H1</c>
+    ///     or the two-sheet range <c>Sheet1!A1:Sheet1!B2</c>, which lexes as one token. In a
+    ///     3-D reference, only the address after the <c>!</c> is one.
+    /// </summary>
+    internal static string AbsolutizeReference(string token)
     {
-        var i = openQuoteIndex + 1;
-        while (i < text.Length)
+        var sb = new StringBuilder();
+        var copied = 0;
+        var qualified = false;
+        var i = 0;
+        while (i < token.Length)
         {
-            if (text[i] == '"')
+            switch (token[i])
             {
-                if (i + 1 < text.Length && text[i + 1] == '"')
-                {
-                    i += 2;
-                    continue;
-                }
-                return i + 1;
+                case '\'':
+                    i = FormulaParser.SkipSingleQuoted(token, i);
+                    break;
+                case '[':
+                    i = FormulaParser.SkipBrackets(token, i);
+                    break;
+                case '!':
+                    var end = i + 1;
+                    while (end < token.Length && token[end] != ':')
+                        end = token[end] switch
+                        {
+                            '\'' => FormulaParser.SkipSingleQuoted(token, end),
+                            '[' => FormulaParser.SkipBrackets(token, end),
+                            _ => end + 1
+                        };
+                    sb.Append(token, copied, i + 1 - copied);
+                    sb.Append(AbsoluteAddress(token[(i + 1)..end]));
+                    copied = i = end;
+                    qualified = true;
+                    break;
+                default:
+                    i++;
+                    break;
             }
-            i++;
         }
-        return text.Length;
+
+        return qualified ? sb.Append(token, copied, token.Length - copied).ToString() : AbsoluteAddress(token);
+    }
+
+    /// <summary>True for a cell on Excel's grid, written with or without <c>$</c>.</summary>
+    internal static bool IsGridCell(string address)
+    {
+        var match = CellAddress.Match(address);
+        return match.Success && IsOnGrid(match.Groups[1].Value, match.Groups[2].Value);
+    }
+
+    private static string AbsoluteAddress(string text)
+    {
+        var match = CellAddress.Match(text);
+        return IsGridCell(text) ? "$" + match.Groups[1].Value + "$" + match.Groups[2].Value : text;
+    }
+
+    // Past the grid it's a name: A0, XFE1 and A1048577 are all valid names.
+    private static bool IsOnGrid(string column, string row)
+    {
+        var columnNumber = column.Aggregate(0, (n, c) => n * 26 + char.ToUpperInvariant(c) - 'A' + 1);
+        var digits = row.TrimStart('0');
+        return columnNumber <= 16384
+            && digits.Length is > 0 and <= 7
+            && int.Parse(digits, CultureInfo.InvariantCulture) <= 1048576;
+    }
+
+    /// <summary>One name token and how it's used.</summary>
+    /// <param name="Text">The token.</param>
+    /// <param name="IsCall">A <c>(</c> touches it. With a space it's an intersection: Excel refuses <c>LOG10 (1)</c>.</param>
+    /// <param name="EndsSheetRange">It's the end of a qualified range, like <c>B</c> in <c>Data!A:B</c>.</param>
+    /// <param name="IsOptionalParam">It's <c>[x]</c> in the parameters of an inner <c>LAMBDA</c>.</param>
+    private readonly record struct NameUse(string Text, bool IsCall, bool EndsSheetRange, bool IsOptionalParam);
+
+    /// <summary>
+    ///     Copies <paramref name="text" /> with each name token passed through
+    ///     <paramref name="rewrite" />.
+    /// </summary>
+    private static string RewriteNames(string text, Func<NameUse, string> rewrite)
+    {
+        IReadOnlyList<FormulaToken> tokens;
+        try
+        {
+            tokens = FormulaParser.Tokenize(text);
+        }
+        catch (FormatException)
+        {
+            return text;
+        }
+
+        var result = new StringBuilder();
+        var copied = 0;
+        var calls = new Stack<string>();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var token = tokens[i];
+            var previous = i == 0 ? null : tokens[i - 1];
+
+            if (token.Type == FormulaTokenType.LParen)
+                calls.Push(previous is { Type: FormulaTokenType.Name } && token.Lead.Length == 0 ? previous.Text : "");
+            else if (token.Type == FormulaTokenType.RParen && calls.Count > 0)
+                calls.Pop();
+
+            if (token.Type != FormulaTokenType.Name) continue;
+
+            var next = tokens[i + 1];
+            var isCall = next.Type == FormulaTokenType.LParen && next.Lead.Length == 0;
+            var endsSheetRange = previous is { Type: FormulaTokenType.Operator, Text: ":" }
+                && i >= 2 && tokens[i - 2].Type == FormulaTokenType.Name && tokens[i - 2].Text.Contains('!');
+            var isOptionalParam = token.Text.StartsWith("[", StringComparison.Ordinal)
+                && token.Text.EndsWith("]", StringComparison.Ordinal)
+                && next.Type == FormulaTokenType.Comma
+                && calls.Count > 0 && StateStepParser.IsNamed(calls.Peek(), "LAMBDA");
+
+            result.Append(text, copied, token.Start - copied);
+            result.Append(rewrite(new NameUse(token.Text, isCall, endsSheetRange, isOptionalParam)));
+            copied = token.End;
+        }
+
+        return result.Append(text, copied, text.Length - copied).ToString();
     }
 }

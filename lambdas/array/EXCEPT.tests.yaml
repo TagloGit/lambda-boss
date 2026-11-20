@@ -22,7 +22,3 @@ tests:
   - name: all excluded falls back to if_empty
     args: ["={1;2}", "={1;2}", "none"]
     expected: "none"
-
-  - name: help text
-    args: []
-    expected_type: array

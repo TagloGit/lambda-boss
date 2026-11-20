@@ -26,7 +26,3 @@ tests:
   - name: negative step counts down
     args: ["=2", "=3", "=6", "=-1"]
     expected: [[6, 5, 4], [1, 2, 3]]
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -89,10 +89,6 @@ tests:
     args: ['=CHOOSEROWS({"BY85";"A1"},1)', "BZ85", "=2"]
     expected: 1
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: packed integers decode at _mult (#380)
     args: ["=5000005", "=7000008"]
     expected: 5

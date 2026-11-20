@@ -18,7 +18,3 @@ tests:
   - name: ragged heights in a column padded with blanks
     args: ['={1;2}', '=LAMBDA(x, SEQUENCE(1, x))']
     expected: [[1, ""], [1, 2]]
-
-  - name: help text
-    args: []
-    expected_type: array

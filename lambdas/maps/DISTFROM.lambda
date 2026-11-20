@@ -1,7 +1,15 @@
 /*  FUNCTION NAME:      DISTFROM
     DESCRIPTION:*//**For every cell in a grid, returns the grid distance to the nearest cell whose value matches the target.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array of numbers, same shape as the grid: distance to the nearest matching cell
+    PARAMETERS:
+        grid            (Required) The 2-D range or array to scan.
+        target          (Required) Value to match by equality. Also accepts an array of values — a cell matches if it equals ANY of them (e.g. nearest wall OR door). Matching is case-insensitive (via XMATCH). When test is supplied, target is passed to it as the second argument instead.
+        metric          (Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line). Mirrors CELLDIST.
+        test            (Optional) A predicate LAMBDA(value, target) returning TRUE for a matching cell, e.g. LAMBDA(v,t, v>=t) for a threshold or LAMBDA(v,t, ISNUMBER(v)). Overrides the default equality / membership match.
+    EXAMPLE:            =DISTFROM({0,1,0;0,0,0}, 1) -> {1,0,1;2,1,2} (Manhattan distance to the nearest 1)
+    REVISIONS:          Date        Developer   Description
                         2026-07-01  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 DISTFROM = LAMBDA(
 //  Parameter Declarations
@@ -9,23 +17,7 @@ DISTFROM = LAMBDA(
     [target],
     [metric],
     [test],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →DISTFROM(grid, target, [metric], [test])¶" &
-                "DESCRIPTION:   →For every cell in a grid, returns the distance to the nearest cell whose value matches the target. Result is the same shape as grid; a cell that itself matches is distance 0. Every cell returns #N/A when nothing matches.¶" &
-                "VERSION:       →Jul 01 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   grid           →(Required) The 2-D range or array to scan.¶" &
-                "   target         →(Required) Value to match by equality. Also accepts an array of values — a cell matches if it equals ANY of them (e.g. nearest wall OR door). Matching is case-insensitive (via XMATCH). When test is supplied, target is passed to it as the second argument instead.¶" &
-                "   metric         →(Optional) Distance metric: 0 Manhattan (default, 4-directional), 1 Chebyshev (8-directional, diagonals count as 1), 2 Euclidean (straight-line). Mirrors CELLDIST.¶" &
-                "   test           →(Optional) A predicate LAMBDA(value, target) returning TRUE for a matching cell, e.g. LAMBDA(v,t, v>=t) for a threshold or LAMBDA(v,t, ISNUMBER(v)). Overrides the default equality / membership match.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=DISTFROM({0,1,0;0,0,0}, 1)¶" &
-                "Result         →{1,0,1;2,1,2} (Manhattan distance to the nearest 1)",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(grid),
+    LET(
     //  Procedure
         nRows, ROWS(grid),
         nCols, COLUMNS(grid),
@@ -46,6 +38,6 @@ DISTFROM = LAMBDA(
                              BYROW(rdist + cdist, MIN))),
         distGrid, WRAPROWS(perCell, nCols),
         result, IF(nMatch = 0, SEQUENCE(nRows, nCols) * 0 + NA(), distGrid),
-        IF(Help?, Help, result)
+        result
 )
 );

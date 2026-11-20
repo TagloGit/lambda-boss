@@ -55,7 +55,3 @@ tests:
         - { name: "wrow", refers_to: "B2:E2" }
     args: ["=wrow", "X", "=3"]
     expected: [["a", "b", "X", "d"]]
-
-  - name: help text
-    args: []
-    expected_type: array

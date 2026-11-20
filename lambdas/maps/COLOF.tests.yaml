@@ -35,10 +35,6 @@ tests:
     args: ['={1000001,5000005,17000017}']
     expected: [[1, 5, 17]]
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: packed row above 1048576 (#380)
     args: ["=2000000000001"]
     expected: 1

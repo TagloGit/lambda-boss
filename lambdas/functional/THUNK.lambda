@@ -1,27 +1,19 @@
 /*  FUNCTION NAME:      THUNK
     DESCRIPTION:*//**Wraps a value in a zero-argument lambda (a "thunk") so it is returned only when the result is called with ().*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            LAMBDA: a zero-argument function that returns x when called with ()
+    PARAMETERS:
+        x               (Required) The value to defer. Captured by closure and returned when the thunk is called.
+    EXAMPLE:            =THUNK(42)() -> 42 (call the thunk with () to retrieve the value; =THUNK(42) on its own returns a function, shown as #CALC!)
+    REVISIONS:          Date        Developer   Description
                         2026-06-17  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 THUNK = LAMBDA(
 //  Parameter Declarations
     [x],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →THUNK(x)¶" &
-                "DESCRIPTION:   →Wraps a value in a zero-argument lambda (a ""thunk"") so it is returned only when the result is called with ().¶" &
-                "VERSION:       →Jun 17 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   x              →(Required) The value to defer. Captured by closure and returned when the thunk is called.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=THUNK(42)()¶" &
-                "Result         →42 (call the thunk with () to retrieve the value; =THUNK(42) on its own returns a function, shown as #CALC!)",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(x),
+    LET(
     //  Procedure
         result, LAMBDA(x),
-        IF(Help?, Help, result)
+        result
 )
 );

@@ -75,7 +75,90 @@ internal static class CellGraphWalker
         ISet<CellRef>? excludedCells,
         ISet<CellRef>? demotedCells)
     {
+        return Walk(sink, source, restrictTo, excludedCells, demotedCells, false, null);
+    }
+
+    /// <summary>
+    ///     Spec 0019 §1. With <paramref name="walkFormulaRanges" /> on, a range
+    ///     over at least one formula cell (no cell in a spill, at most
+    ///     <see cref="MaxWalkedRangeCells" /> cells, not in
+    ///     <paramref name="excludedRanges" />) is not opaque: each of its cells is
+    ///     walked like a single-cell precedent, the topological pass follows an edge
+    ///     to every one, and the range is reported in
+    ///     <see cref="WalkOutcome.ExpandedRanges" /> so the engine can stack the
+    ///     cells' bindings back into the range's shape.
+    /// </summary>
+    public static WalkOutcome Walk(
+        CellRef sink,
+        ICellSource source,
+        ISet<CellRef>? restrictTo,
+        ISet<CellRef>? excludedCells,
+        ISet<CellRef>? demotedCells,
+        bool walkFormulaRanges,
+        ISet<FormulaRef>? excludedRanges)
+    {
         if (source is null) throw new ArgumentNullException(nameof(source));
+        if (!walkFormulaRanges)
+            return WalkOnce(sink, source, restrictTo, excludedCells, demotedCells, false,
+                excludedRanges, null, out _, out _);
+
+        // Spec 0019: an expanded range is vetoed (and the walk redone without it, so no
+        // orphan cell rows are left behind) when another reader needs it as a reference
+        // (COUNTIF, OFFSET...) or when it overlaps a range that stays a promoted input.
+        var vetoed = new HashSet<FormulaRef>();
+        while (true)
+        {
+            var outcome = WalkOnce(sink, source, restrictTo, excludedCells, demotedCells, true,
+                excludedRanges, vetoed, out var needsReference, out var opaque);
+            if (outcome.IsCycle)
+                return outcome;
+
+            var added = false;
+            foreach (var range in outcome.ExpandedRanges.Keys)
+            {
+                var veto = needsReference.Contains(range)
+                           || opaque.Any(o => !o.Equals(range) && Overlaps(range, o));
+                if (veto && vetoed.Add(range))
+                    added = true;
+            }
+
+            if (!added)
+                return outcome;
+        }
+    }
+
+    private static bool Overlaps(FormulaRef a, FormulaRef b)
+    {
+        if (!string.Equals(a.Sheet, b.Sheet, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(a.ExternalWorkbook, b.ExternalWorkbook, StringComparison.OrdinalIgnoreCase))
+            return false;
+        var ae = a.End ?? a.Start;
+        var be = b.End ?? b.Start;
+        return a.Start.Row <= be.Row && b.Start.Row <= ae.Row
+                                     && a.Start.Column <= be.Column && b.Start.Column <= ae.Column;
+    }
+
+    // Functions whose argument must stay a reference: a stack of values would change or break them.
+    private static readonly System.Text.RegularExpressions.Regex NeedsReferencePattern = new(
+        @"\b(?:COUNTIFS?|SUMIFS?|AVERAGEIFS?|MAXIFS|MINIFS|RANK(?:\.EQ|\.AVG)?|OFFSET|CELL|ROWS?|COLUMNS?|SUBTOTAL|AGGREGATE|INDIRECT|ISREF|AREAS)\s*\(",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static WalkOutcome WalkOnce(
+        CellRef sink,
+        ICellSource source,
+        ISet<CellRef>? restrictTo,
+        ISet<CellRef>? excludedCells,
+        ISet<CellRef>? demotedCells,
+        bool walkFormulaRanges,
+        ISet<FormulaRef>? excludedRanges,
+        ISet<FormulaRef>? vetoed,
+        out HashSet<FormulaRef> needsReference,
+        out HashSet<FormulaRef> opaque)
+    {
+        needsReference = new HashSet<FormulaRef>();
+        opaque = new HashSet<FormulaRef>();
+        var expanded = new Dictionary<FormulaRef, IReadOnlyList<CellRef>>();
+        var expandMemo = new Dictionary<FormulaRef, IReadOnlyList<CellRef>?>();
 
         var byRef = new Dictionary<CellRef, WalkedCell>();
         // Spec 0010: every cell that turned out to live inside a spill,
@@ -128,8 +211,9 @@ internal static class CellGraphWalker
                             && !cell.Equals(sink)
                             && demotedCells.Contains(cell);
 
-            var cellAbove = source.GetCellAboveText(cell);
-            var cellLeft = source.GetCellLeftText(cell);
+            // The label search of the gather-next naming reads its own cells.
+            var cellAbove = walkFormulaRanges ? null : source.GetCellAboveText(cell);
+            var cellLeft = walkFormulaRanges ? null : source.GetCellLeftText(cell);
             // Anchor-only flag: GetSpill is non-null for spill children too,
             // and only the anchor's RHS may carry the `#` suffix (`B1#` on a
             // child is #REF!). Children never reach this point anyway — the
@@ -187,6 +271,31 @@ internal static class CellGraphWalker
 
             foreach (var p in precedents)
             {
+                if (walkFormulaRanges && p.IsRange)
+                {
+                    IReadOnlyList<CellRef>? rangeCells = null;
+                    if (formula != null && NeedsReferencePattern.IsMatch(formula))
+                        needsReference.Add(p);
+                    else
+                        rangeCells = TryExpandRange(
+                            p, source, spillByCell, expandMemo, excludedRanges, vetoed, restrictTo);
+                    if (rangeCells == null)
+                        opaque.Add(p);
+                    if (rangeCells != null)
+                    {
+                        expanded[p] = rangeCells;
+                        foreach (var rangeCell in rangeCells)
+                        {
+                            if (excludedCells != null && excludedCells.Contains(rangeCell))
+                                continue;
+                            if (!byRef.ContainsKey(rangeCell))
+                                stack.Push(rangeCell);
+                        }
+
+                        continue;
+                    }
+                }
+
                 var target = ResolveWalkTarget(p, source, anchorByCell, slicedRanges, spillByCell);
                 if (target == null)
                     continue;
@@ -203,7 +312,77 @@ internal static class CellGraphWalker
             }
         }
 
-        return CycleAwareTopoSort(sink, byRef, anchorByCell, slicedRanges, leafRestricted);
+        return CycleAwareTopoSort(sink, byRef, anchorByCell, slicedRanges, expanded, leafRestricted);
+    }
+
+    /// <summary>The most cells a range may have and still be walked rather than promoted.</summary>
+    internal const int MaxWalkedRangeCells = 64;
+
+    /// <summary>
+    ///     The cells of a range to walk (row-major), or null when it stays an opaque
+    ///     range: excluded, external, a single cell, over
+    ///     <see cref="MaxWalkedRangeCells" />, touching a spill, or holding no
+    ///     formula (all-literal data stays a range input). Memoised per walk.
+    /// </summary>
+    private static IReadOnlyList<CellRef>? TryExpandRange(
+        FormulaRef p,
+        ICellSource source,
+        Dictionary<CellRef, SpillInfo?> spillByCell,
+        Dictionary<FormulaRef, IReadOnlyList<CellRef>?> memo,
+        ISet<FormulaRef>? excludedRanges,
+        ISet<FormulaRef>? vetoed,
+        ISet<CellRef>? restrictTo)
+    {
+        if (memo.TryGetValue(p, out var cached))
+            return cached;
+
+        var cells = ExpandRangeCells(p, source, spillByCell, excludedRanges, vetoed, restrictTo);
+        memo[p] = cells;
+        return cells;
+    }
+
+    private static IReadOnlyList<CellRef>? ExpandRangeCells(
+        FormulaRef p,
+        ICellSource source,
+        Dictionary<CellRef, SpillInfo?> spillByCell,
+        ISet<FormulaRef>? excludedRanges,
+        ISet<FormulaRef>? vetoed,
+        ISet<CellRef>? restrictTo)
+    {
+        if (!p.IsRange || p.IsSpilled || p.IsExternal)
+            return null;
+        if (excludedRanges != null && excludedRanges.Contains(p))
+            return null;
+        if (vetoed != null && vetoed.Contains(p))
+            return null;
+
+        var start = p.Start;
+        var end = p.End!;
+        var rows = end.Row - start.Row + 1;
+        var cols = end.Column - start.Column + 1;
+        if (rows < 1 || cols < 1 || rows * cols < 2 || rows * cols > MaxWalkedRangeCells)
+            return null;
+
+        var cells = new List<CellRef>(rows * cols);
+        var anyFormula = false;
+        for (var r = 0; r < rows; r++)
+        for (var c = 0; c < cols; c++)
+        {
+            var cell = new CellRef(start.Sheet, start.Column + c, start.Row + r);
+            if (GetSpillMemo(cell, source, spillByCell) != null)
+                return null;
+            if (source.GetFormula(cell) != null)
+                anyFormula = true;
+            else if (source.ReadCell(cell).IsEmpty)
+                return null; // a blank cell would change what the range means
+            cells.Add(cell);
+        }
+
+        // A selection-restricted walk only expands a range it reaches into.
+        if (restrictTo != null && !cells.Any(restrictTo.Contains))
+            return null;
+
+        return anyFormula ? cells : null;
     }
 
     /// <summary>
@@ -291,8 +470,32 @@ internal static class CellGraphWalker
         Dictionary<CellRef, WalkedCell> byRef,
         Dictionary<CellRef, CellRef> anchorByCell,
         HashSet<FormulaRef> slicedRanges,
+        Dictionary<FormulaRef, IReadOnlyList<CellRef>> expanded,
         int leafRestrictedCount)
     {
+        // An expanded range (spec 0019) contributes one edge per cell. Cached,
+        // because a cell is re-popped once per child.
+        var edgesByCell = new Dictionary<CellRef, IReadOnlyList<FormulaRef>>();
+        IReadOnlyList<FormulaRef> EdgesOf(WalkedCell node)
+        {
+            if (expanded.Count == 0)
+                return node.Precedents;
+            if (edgesByCell.TryGetValue(node.Ref, out var cachedEdges))
+                return cachedEdges;
+            var flat = new List<FormulaRef>();
+            foreach (var pre in node.Precedents)
+            {
+                if (pre.IsRange && expanded.TryGetValue(pre, out var cells))
+                    foreach (var c in cells)
+                        flat.Add(new FormulaRef(c));
+                else
+                    flat.Add(pre);
+            }
+
+            edgesByCell[node.Ref] = flat;
+            return flat;
+        }
+
         var ordered = new List<WalkedCell>(byRef.Count);
         var visited = new HashSet<CellRef>();
         var onPath = new HashSet<CellRef>();
@@ -304,10 +507,11 @@ internal static class CellGraphWalker
         {
             var (cell, nextChild) = stack.Pop();
             var node = byRef[cell];
-            if (nextChild < node.Precedents.Count)
+            var edges = EdgesOf(node);
+            if (nextChild < edges.Count)
             {
                 stack.Push((cell, nextChild + 1));
-                var pre = node.Precedents[nextChild];
+                var pre = edges[nextChild];
                 // A range precedent carries a graph edge when discovery
                 // resolved it through a spill (replayed from the recorded
                 // set, so the geometry is never re-derived and the two passes
@@ -350,7 +554,7 @@ internal static class CellGraphWalker
             }
         }
 
-        return WalkOutcome.Success(ordered, leafRestrictedCount);
+        return WalkOutcome.Success(ordered, leafRestrictedCount, expanded);
     }
 
     /// <summary>
@@ -391,15 +595,27 @@ internal static class CellGraphWalker
 /// </summary>
 internal readonly struct WalkOutcome
 {
+    private static readonly IReadOnlyDictionary<FormulaRef, IReadOnlyList<CellRef>> NoExpandedRanges =
+        new Dictionary<FormulaRef, IReadOnlyList<CellRef>>();
+
     private WalkOutcome(
         IReadOnlyList<WalkedCell>? cells,
         IReadOnlyList<CellRef>? cycle,
-        int leafRestrictedCount)
+        int leafRestrictedCount,
+        IReadOnlyDictionary<FormulaRef, IReadOnlyList<CellRef>>? expandedRanges = null)
     {
         Cells = cells;
         Cycle = cycle;
         LeafRestrictedCount = leafRestrictedCount;
+        ExpandedRanges = expandedRanges ?? NoExpandedRanges;
     }
+
+    /// <summary>
+    ///     Spec 0019: the ranges the walk expanded into their cells (row-major),
+    ///     keyed by the range as written. Always empty unless the walk was asked to
+    ///     walk formula ranges.
+    /// </summary>
+    public IReadOnlyDictionary<FormulaRef, IReadOnlyList<CellRef>> ExpandedRanges { get; }
 
     public IReadOnlyList<WalkedCell>? Cells { get; }
     public IReadOnlyList<CellRef>? Cycle { get; }
@@ -407,9 +623,12 @@ internal readonly struct WalkOutcome
 
     public bool IsCycle => Cycle != null;
 
-    public static WalkOutcome Success(IReadOnlyList<WalkedCell> cells, int leafRestrictedCount = 0)
+    public static WalkOutcome Success(
+        IReadOnlyList<WalkedCell> cells,
+        int leafRestrictedCount = 0,
+        IReadOnlyDictionary<FormulaRef, IReadOnlyList<CellRef>>? expandedRanges = null)
     {
-        return new WalkOutcome(cells, null, leafRestrictedCount);
+        return new WalkOutcome(cells, null, leafRestrictedCount, expandedRanges);
     }
 
     public static WalkOutcome WithCycle(IReadOnlyList<CellRef> cycle)

@@ -18,7 +18,3 @@ tests:
   - name: array of destination elevations lifts element-wise
     args: ['=5', '={2;5;10}', '="C3"', '="D4"', "=0", "=1000001", "=0"]
     expected: [[-0.5], [1], [11]]
-
-  - name: help text
-    args: []
-    expected_type: array

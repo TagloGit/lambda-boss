@@ -10,7 +10,3 @@ tests:
   - name: tie resolves to first-seen
     args: ['={"A","B","A","B"}']
     expected: A
-
-  - name: help text
-    args: []
-    expected_type: array

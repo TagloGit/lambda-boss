@@ -1,0 +1,36 @@
+tests:
+  - name: two names in the order asked, not the state's
+    args: ['=SetVars("crates", 5, "cash", 25)', '={"cash","crates"}']
+    expected: [[25, 5]]
+
+  - name: a subset of the state
+    args: ['=SetVars("cash", 46, "crates", 1, "pitch", 2, "count", 0)', '={"cash","crates","pitch"}']
+    expected: [[46, 1, 2]]
+
+  - name: one name gives one value
+    args: ['=SetVars("cash", 46, "crates", 1)', '="crates"']
+    expected: 1
+
+  - name: names as a column read the same
+    args: ['=SetVars("crates", 5, "cash", 25)', '={"cash";"crates"}']
+    expected: [[25, 5]]
+
+  - name: text and boolean keep their types
+    args: ['=SetVars("ok", TRUE, "who", "Ann")', '={"who","ok"}']
+    expected: [["Ann", True]]
+
+  - name: a column of states gives one row per state
+    args: ['=VSTACK(SetVars("a", 1, "b", 2), SetVars("a", 3, "b", 4))', '={"b","a"}']
+    expected: [[2, 1], [4, 3]]
+
+  - name: a missing name makes the row NA (GetVar's NA spreads through HSTACK, VM 12 Nov)
+    args: ['=SetVars("a", 1)', '={"a","zz"}']
+    expected: -2146826246
+
+  - name: a one-variable debug table (one column, header first) passes through
+    args: ['=SplitState(VSTACK(SetVars("n", 1), SetVars("n", 2)), 1)', '={"n"}']
+    expected: [["n"], [1], [2]]
+
+  - name: a table (SplitState debug view) passes through
+    args: ['=SplitState(VSTACK(SetVars("a", 1, "b", 2), SetVars("a", 3, "b", 4)), 1)', '={"b"}']
+    expected: [["a", "b"], [1, 2], [3, 4]]

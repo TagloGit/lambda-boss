@@ -1,35 +1,27 @@
 /*  FUNCTION NAME:      INCEL
     DESCRIPTION:*//**Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            reference to the cell or range the address names (volatile); lifts over arrays of cells
+    PARAMETERS:
+        address         (Required) Cell or range address text (e.g. "A1" or "B2:D5"). Also accepts an array/range of single-cell addresses — result lifts element-wise. Passing range-style addresses (e.g. "A1:B2") inside an array is not supported and will collapse each range to a single cell.
+        sheet           (Optional) Sheet name. If omitted, the address resolves on the current sheet.
+    EXAMPLE:            =INCEL("A1", "Data") -> Value of A1 on the Data sheet
+    NOTE:               INDIRECT is volatile — every INCEL call recalculates on any workbook change. Prefer non-volatile alternatives (GRIDLOOKUP with return_Value=TRUE, INDEX into a known range) when you only need a value rather than a runtime reference.
+    REVISIONS:          Date        Developer   Description
                         2026-04-30  Claude      Initial version
                         2026-05-14  Claude      Document INDIRECT volatility in Help
                         2026-05-14  Claude      Array-lift via dispatcher: MAP over multi-address input, otherwise scalar body unchanged
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 INCEL = LAMBDA(
 //  Parameter Declarations
     [address],
     [sheet],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →INCEL(address, [sheet])¶" &
-                "DESCRIPTION:   →Shorthand for INDIRECT — resolves a text address (optionally on another sheet) to its cell or range reference.¶" &
-                "VERSION:       →May 14 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   address       →(Required) Cell or range address text (e.g. ""A1"" or ""B2:D5""). Also accepts an array/range of single-cell addresses — result lifts element-wise. Passing range-style addresses (e.g. ""A1:B2"") inside an array is not supported and will collapse each range to a single cell.¶" &
-                "   sheet         →(Optional) Sheet name. If omitted, the address resolves on the current sheet.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=INCEL(""A1"", ""Data"")¶" &
-                "Result         →Value of A1 on the Data sheet¶" &
-                "NOTE:          →INDIRECT is volatile — every INCEL call recalculates on any workbook change. Prefer non-volatile alternatives (GRIDLOOKUP with return_Value=TRUE, INDEX into a known range) when you only need a value rather than a runtime reference.",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(address),
+    LET(
     //  Procedure
         scalar, LAMBDA(a, INDIRECT(IF(ISOMITTED(sheet), a, "'" & sheet & "'!" & a))),
         result, IF(OR(ROWS(address) > 1, COLUMNS(address) > 1),
                     MAP(address, scalar),
                     scalar(address)),
-        IF(Help?, Help, result)
+        result
 )
 );

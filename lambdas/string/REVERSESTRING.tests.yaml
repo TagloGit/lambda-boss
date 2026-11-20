@@ -38,7 +38,3 @@ tests:
   - name: non-BMP single-codepoint emoji reverses correctly
     args: ["a\U0001F600b"]
     expected: "b\U0001F600a"
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -14,7 +14,3 @@ tests:
   - name: single dimension returns original column
     args: ['={"A";"B";"C"}']
     expected: [["A"],["B"],["C"]]
-
-  - name: help text
-    args: []
-    expected_type: array

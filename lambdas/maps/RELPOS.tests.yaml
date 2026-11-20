@@ -1,0 +1,70 @@
+tests:
+  - name: orthogonal stencil numbered clockwise from N equals _dirOrthog
+    setup:
+      cells:
+        - address: "B2:D4"
+          values:
+            - [0, 1, 0]
+            - [4, 0, 2]
+            - [0, 3, 0]
+    args: ["=B2:D4", "=C3"]
+    expected: [[-1000000], [1], [1000000], [-1]]
+
+  - name: all-8 stencil numbered clockwise from N equals _dirAll
+    setup:
+      cells:
+        - address: "B2:D4"
+          values:
+            - [8, 1, 2]
+            - [7, 0, 3]
+            - [6, 5, 4]
+    args: ["=B2:D4", "=C3"]
+    expected: [[-1000000], [-999999], [1], [1000001], [1000000], [999999], [-1], [-1000001]]
+
+  - name: knight stencil (5x5) numbered clockwise from NNE equals _dirKnight
+    setup:
+      cells:
+        - address: "B2:F6"
+          values:
+            - [0, 8, 0, 1, 0]
+            - [7, 0, 0, 0, 2]
+            - [0, 0, 0, 0, 0]
+            - [6, 0, 0, 0, 3]
+            - [0, 5, 0, 4, 0]
+    args: ["=B2:F6", "=D4"]
+    expected: [[-1999999], [-999998], [1000002], [2000001], [1999999], [999998], [-1000002], [-2000001]]
+
+  - name: all-1s orthogonal stencil falls back to reading order (N, W, E, S)
+    setup:
+      cells:
+        - address: "B2:D4"
+          values:
+            - [0, 1, 0]
+            - [1, 0, 1]
+            - [0, 1, 0]
+    args: ["=B2:D4", "=C3"]
+    expected: [[-1000000], [-1], [1], [1000000]]
+
+  - name: origin cell holding text is ignored (and so is text elsewhere)
+    setup:
+      cells:
+        - address: "B2:D4"
+          values:
+            - ["x", 1, 0]
+            - [4, "K", 2]
+            - [0, 3, "note"]
+    args: ["=B2:D4", "=C3"]
+    expected: [[-1000000], [1], [1000000], [-1]]
+
+  - name: origin outside the drawn range, ordered by the numbers not by position
+    setup:
+      cells:
+        - address: "H2:J2"
+          values:
+            - [3, 1, 2]
+    args: ["=H2:J2", "=G4"]
+    expected: [[-1999998], [-1999997], [-1999999]]
+
+  - name: an array instead of a range gives a readable message
+    args: ["={0,1;1,0}", "=C3"]
+    expected: "RELPOS: Cells and Origin must be references (a range drawn on the sheet, and one cell)"

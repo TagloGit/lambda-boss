@@ -66,7 +66,3 @@ tests:
           values: "E"
     args: ['={"E",1;2,"E"}', "=LAMBDA(v, v=C3)"]
     expected: [["A1"], ["B2"]]
-
-  - name: help text
-    args: []
-    expected_type: array

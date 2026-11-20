@@ -22,7 +22,3 @@ tests:
   - name: max_iter cap returns NA when never converging
     args: ["=1", "=LAMBDA(x, x+1)", "=", "=5"]
     expected: -2146826246
-
-  - name: help text
-    args: []
-    expected_type: array

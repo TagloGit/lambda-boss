@@ -1,27 +1,19 @@
 /*  FUNCTION NAME:      ADDRESSES
     DESCRIPTION:*//**Returns the A1-style addresses of cells in a range as text, shape-matching the input range.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array of address (text), relative A1 form, same shape as the input range
+    PARAMETERS:
+        cells           (Required) A cell or range reference. Output shape matches the input shape. Addresses are returned in relative form (no $ anchors), matching TOPOS / MOVECELL / POSTOCELL conventions.
+    EXAMPLE:            =ADDRESSES(F28:H30) -> 3x3 grid of "F28" through "H30"
+    REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 ADDRESSES = LAMBDA(
 //  Parameter Declarations
     [cells],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →ADDRESSES(cells)¶" &
-                "DESCRIPTION:   →Returns the A1-style addresses of cells in a range as text, shape-matching the input range.¶" &
-                "VERSION:       →May 20 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   cells          →(Required) A cell or range reference. Output shape matches the input shape. Addresses are returned in relative form (no $ anchors), matching TOPOS / MOVECELL / POSTOCELL conventions.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=ADDRESSES(F28:H30)¶" &
-                "Result         →3x3 grid of ""F28"" through ""H30""",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(cells),
+    LET(
     //  Procedure
         result, ADDRESS(ROW(cells), COLUMN(cells), 4),
-        IF(Help?, Help, result)
+        result
 )
 );

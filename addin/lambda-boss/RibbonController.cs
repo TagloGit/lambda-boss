@@ -25,7 +25,7 @@ public class RibbonController : ExcelRibbon
                   size='large'
                   imageMso='ModuleInsert'
                   onAction='OnLoadLibrary'
-                  screentip='Open the Lambda library browser (Ctrl+Shift+L)' />
+                  screentip='Open the Lambda Boss popup: commands first, libraries behind Library (Ctrl+Shift+J)' />
         </group>
         <group id='GenerateGroup' label='Generate'>
           <button id='LetToLambdaButton'
@@ -40,6 +40,15 @@ public class RibbonController : ExcelRibbon
                   imageMso='Edit'
                   onAction='OnEditLambda'
                   screentip='Expand the active cell&apos;s LAMBDA call back into an equivalent =LET(...) for editing' />
+        </group>
+        <group id='CheckGroup' label='Check'>
+          <button id='CheckFormulaButton'
+                  label='Check Formula'
+                  size='large'
+                  imageMso='FormulaEvaluate'
+                  onAction='OnCheckFormula'
+                  getVisible='GetCheckFormulaVisible'
+                  screentip='Point at unmatched brackets and unknown names in the active cell&apos;s formula (Ctrl+Shift+C; also works while editing)' />
         </group>
         <group id='ManageGroup' label='Manage'>
           <button id='SettingsButton'
@@ -59,7 +68,7 @@ public class RibbonController : ExcelRibbon
                   size='normal'
                   imageMso='ControlProperties'
                   onAction='OnSettings'
-                  screentip='Library channel: Stable reads main, Labs reads develop. Click for channel and Labs switches.' />
+                  screentip='Library channel: Stable reads main, Labs reads develop. Click for channel, argument hints and Labs switches.' />
         </group>
         <group id='InfoGroup' label='Info'>
           <button id='AboutButton'
@@ -92,7 +101,11 @@ public class RibbonController : ExcelRibbon
 
         ShowLambdaPopupCommand.SettingsSaved += () => ExcelAsyncUtil.QueueAsMacro(() =>
         {
-            try { _ribbon?.InvalidateControl("ChannelButton"); }
+            try
+            {
+                _ribbon?.InvalidateControl("ChannelButton");
+                _ribbon?.InvalidateControl("CheckFormulaButton");
+            }
             catch { /* ribbon may be disposed */ }
         });
     }
@@ -123,6 +136,13 @@ public class RibbonController : ExcelRibbon
     {
         EditLambdaCommand.Run();
     }
+
+    public void OnCheckFormula(IRibbonControl control)
+    {
+        CheckFormulaCommand.CheckFormula();
+    }
+
+    public bool GetCheckFormulaVisible(IRibbonControl control) => Labs.IsOn(Labs.CheckFormula);
 
     public void OnAbout(IRibbonControl control)
     {

@@ -57,17 +57,17 @@ AddN = LAMBDA(
 //  Parameter Declarations
     [x],
     [n],
-//  Help
-    LET(Help, TEXTSPLIT(
-                ""FUNCTION:      →AddN(x, n)¶"" &
-                ""DESCRIPTION:   →Adds N to a number.¶"",
-                ""→"", ""¶""
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(x),
     //  Procedure
         result, x + n,
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                ""FUNCTION:      →AddN(x, n)¶"" &
+                ""DESCRIPTION:   →Adds N to a number.¶"",
+                ""→"", ""¶""
+                ), result)
 )
 );";
 
@@ -75,7 +75,7 @@ AddN = LAMBDA(
 
         Assert.Equal("AddN", name);
         Assert.StartsWith("=LAMBDA(", formula);
-        Assert.Contains("LET(Help", formula);
+        Assert.Contains("IF(Help?, TEXTSPLIT(", formula);
         Assert.Contains("ISOMITTED(x)", formula);
         Assert.Contains("[x]", formula);
         Assert.Contains("[n]", formula);
@@ -87,10 +87,10 @@ AddN = LAMBDA(
     {
         var content = @"Double = LAMBDA(
     [x],
-    LET(Help, TEXTSPLIT(""help text"", ""→"", ""¶""),
+    LET(
         Help?, ISOMITTED(x),
         result, x * 2,
-        IF(Help?, Help, result)
+        IF(Help?, TEXTSPLIT(""help text"", ""→"", ""¶""), result)
 )
 );";
 
@@ -106,10 +106,10 @@ AddN = LAMBDA(
         var content = @"AddN = LAMBDA(
     [x],
     [n],
-    LET(Help, TEXTSPLIT(""help"", ""→"", ""¶""),
+    LET(
         Help?, ISOMITTED(x),
         result, x + n,
-        IF(Help?, Help, result)
+        IF(Help?, TEXTSPLIT(""help"", ""→"", ""¶""), result)
 )
 );";
 

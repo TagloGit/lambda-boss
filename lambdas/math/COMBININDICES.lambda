@@ -1,33 +1,26 @@
 /*  FUNCTION NAME:      COMBININDICES
     DESCRIPTION:*//**Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: matrix of unordered k-combination indices in 1..n, one per row, lexicographic
+    PARAMETERS:
+        n               (Required) Population size. Positive integer.
+        k               (Required) Combination size. Without repetition, 1 ≤ k ≤ n. With repetition, any k ≥ 1.
+        repetition      (Optional) FALSE (default) = distinct indices. TRUE = allow repeats (multisets), giving non-decreasing sequences, C(n+k-1, k) rows.
+    EXAMPLE:            =COMBININDICES(5, 3) -> 10x3 matrix: {1,2,3; 1,2,4; ...; 3,4,5}
+    NOTE:               Pair with COMBINATIONS for value lookup. Returns NA() when n<1, k<1, k>n (without repetition), or either argument is non-integer.
+    REVISIONS:          Date        Developer   Description
                         2026-04-29  Claude      Initial version
                         2026-04-29  Claude      Switch to broadcast+TOCOL extension for large-n performance
                         2026-04-29  Claude      Use IFS in place of IF+NA, TAKE in place of INDEX for first/last column
                         2026-06-27  Claude      Add optional repetition flag (multisets, non-decreasing sequences)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 COMBININDICES = LAMBDA(
 //  Parameter Declarations
     [n],
     [k],
     [repetition],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →COMBININDICES(n, k, [repetition])¶" &
-                "DESCRIPTION:   →Returns a C(n,k) by k matrix of unordered k-combination indices in 1..n, lexicographic order.¶" &
-                "VERSION:       →Jun 27 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   n              →(Required) Population size. Positive integer.¶" &
-                "   k              →(Required) Combination size. Without repetition, 1 ≤ k ≤ n. With repetition, any k ≥ 1.¶" &
-                "   repetition     →(Optional) FALSE (default) = distinct indices. TRUE = allow repeats (multisets), giving non-decreasing sequences, C(n+k-1, k) rows.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=COMBININDICES(5, 3)¶" &
-                "Result         →10x3 matrix: {1,2,3; 1,2,4; ...; 3,4,5}¶" &
-                "NOTE:          →Pair with COMBINATIONS for value lookup. Returns NA() when n<1, k<1, k>n (without repetition), or either argument is non-integer.",
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
-        Help?, ISOMITTED(n),
         rep,   IF(ISOMITTED(repetition), FALSE, repetition),
         valid?, AND(n >= 1, k >= 1, OR(rep, k <= n), n = INT(n), k = INT(k)),
     //  Procedure
@@ -49,6 +42,6 @@ COMBININDICES = LAMBDA(
                           )
                       ))
                    )),
-        IF(Help?, Help, result)
+        result
 )
 );

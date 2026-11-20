@@ -113,7 +113,3 @@ tests:
   - name: team ID row-count mismatch returns VALUE error
     args: ['={3;1}', '={2;4}', '={"G"}', '={"H";"G"}']
     expected: -2146826273
-
-  - name: help text
-    args: []
-    expected_type: array

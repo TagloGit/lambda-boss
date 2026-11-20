@@ -18,7 +18,3 @@ tests:
   - name: n beyond length pads entirely
     args: ['={1,2,3}', '=0', '=5']
     expected: [[0, 0, 0]]
-
-  - name: help text
-    args: []
-    expected_type: array

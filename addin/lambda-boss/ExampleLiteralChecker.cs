@@ -1,0 +1,794 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+
+namespace LambdaBoss;
+
+/// <summary>
+///     The cells the example check reads (spec 0020). Rows and columns are 1-based sheet indices.
+///     <see cref="Value"/> returns what <c>Range.Value2</c> gives: a double, a string, a bool, an
+///     int (an error code) or null for an empty cell.
+/// </summary>
+internal interface IExampleSheet
+{
+    object? Value(int row, int column);
+
+    bool IsFormula(int row, int column);
+
+    /// <summary>The last column worth reading (the used range's), at least the formula's.</summary>
+    int LastColumn { get; }
+}
+
+/// <summary>
+///     What was written. <paramref name="Copied"/> is false for Check Formula, where nothing was
+///     copied: the source row is then the family's top row, and the message says so. <paramref name="Formula"/> is the source cell's <c>Formula2</c>: the row
+///     the fill was copied from (the top of the fill, or the row the fill handle was dragged from),
+///     or the spilling cell. <paramref name="OtherRows"/> are the family's other rows, above or
+///     below (a fill), or the rows the result spills into below the formula (a spill): a value on
+///     the source row or the level's example line only counts when it differs on one of them.
+/// </summary>
+internal sealed record ExampleCheckRequest(
+    string Formula,
+    int Row,
+    int Column,
+    IReadOnlyList<int> OtherRows,
+    IReadOnlyCollection<int> TargetColumns,
+    bool Copied = true);
+
+/// <summary>
+///     One literal that looks like a value from the worked example. <see cref="Start"/> and
+///     <see cref="Length"/> index the formula. <see cref="SourceRow"/>/<see cref="SourceColumn"/>
+///     are the matching cell (0 when the match is the level's example text).
+/// </summary>
+internal sealed record ExampleLiteralFinding(
+    int Start,
+    int Length,
+    string Literal,
+    int SourceRow,
+    int SourceColumn,
+    string SourceAddress,
+    string Message,
+    string RowLabel = "")
+{
+    public bool FromText => SourceRow == 0;
+}
+
+/// <summary>Where a matching cell is: which row the check compared it from.</summary>
+internal enum ExampleRowKind
+{
+    /// <summary>The row the formula was copied from (the request's row).</summary>
+    Source,
+
+    /// <summary>The level's example line above the table (spec 0020, excel-esports, Tim 16 Nov).</summary>
+    ExampleLine,
+
+    /// <summary>The first row of a multi-row range the formula reads.</summary>
+    Range
+}
+
+/// <summary>
+///     The example check (spec 0020, excel-esports#80): after a formula is filled to several cells,
+///     or spills, flags a constant in it that equals a value from the worked example, the slip
+///     where the example passes because the value came from the example. Four sources, in order:
+///     a typed or computed cell on the source row (the row copied from; left or right of the
+///     formula, within its block) whose column varies across the family and that the formula
+///     doesn't read; the same columns on the level's example line above the table; the first row
+///     of a multi-row range the formula reads; a number the level's example text states and its
+///     rules text doesn't. Pure and read-only.
+/// </summary>
+internal static class ExampleLiteralChecker
+{
+    /// <summary>Rows of the family (or spill) compared to decide whether a column varies.</summary>
+    public const int MaxCompareRows = 50;
+
+    /// <summary>How far above the formula the level's text is looked for.</summary>
+    public const int TextRowsAbove = 80;
+
+    /// <summary>Columns searched for the level's text.</summary>
+    public const int TextColumns = 30;
+
+    private const int MaxRowColumns = 200;
+    private const int MaxRangeColumns = 30;
+    private const int MinProseLength = 26;
+
+    /// <summary>
+    ///     Never flagged: 0, ±1, and unit or scale constants (100, 1000, 10000, 100000, 1000000).
+    /// </summary>
+    private static readonly HashSet<double> TrivialNumbers = new() { 0, 1, -1, 100, 1000, 10000, 100000, 1000000 };
+
+    /// <summary>
+    ///     Function → which 0-based arguments are structure (an index, a count, a column number, a
+    ///     format, a lookup's mode), not data. Literals there are never flagged.
+    /// </summary>
+    private static readonly Dictionary<string, Func<int, bool>> StructuralArgs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["INDEX"] = i => i >= 1, ["OFFSET"] = _ => true, ["TAKE"] = i => i >= 1, ["DROP"] = i => i >= 1,
+        ["CHOOSECOLS"] = i => i >= 1, ["CHOOSEROWS"] = i => i >= 1, ["SEQUENCE"] = _ => true,
+        ["ROUND"] = i => i == 1, ["ROUNDUP"] = i => i == 1, ["ROUNDDOWN"] = i => i == 1, ["MROUND"] = i => i == 1,
+        ["TRUNC"] = i => i >= 1, ["MOD"] = i => i == 1, ["QUOTIENT"] = i => i == 1, ["POWER"] = i => i == 1,
+        ["LEFT"] = i => i >= 1, ["RIGHT"] = i => i >= 1, ["MID"] = i => i >= 1,
+        ["XLOOKUP"] = i => i >= 3, ["XMATCH"] = i => i >= 2, ["MATCH"] = i => i >= 2,
+        ["VLOOKUP"] = i => i >= 2, ["HLOOKUP"] = i => i >= 2, ["LOOKUP"] = _ => false,
+        ["FIND"] = i => i >= 2, ["SEARCH"] = i => i >= 2, ["SUBSTITUTE"] = i => i >= 3,
+        ["TOCOL"] = i => i >= 1, ["TOROW"] = i => i >= 1, ["SORT"] = i => i >= 1, ["SORTBY"] = i => i >= 1,
+        ["UNIQUE"] = i => i >= 1, ["EXPAND"] = i => i >= 1, ["REPT"] = i => i >= 1,
+        ["LARGE"] = i => i >= 1, ["SMALL"] = i => i >= 1, ["RANK"] = i => i >= 2, ["RANK.EQ"] = i => i >= 2,
+        ["RANK.AVG"] = i => i >= 2, ["PERCENTILE"] = i => i >= 1, ["QUARTILE"] = i => i >= 1,
+        ["DATE"] = _ => true, ["TIME"] = _ => true, ["TEXT"] = i => i >= 1,
+        ["REGEXEXTRACT"] = i => i >= 2, ["REGEXREPLACE"] = i => i >= 3, ["REGEXTEST"] = i => i >= 2,
+        ["RANDBETWEEN"] = _ => true, ["RANDARRAY"] = _ => true,
+        ["EDATE"] = i => i >= 1, ["EOMONTH"] = i => i >= 1, ["WEEKDAY"] = i => i >= 1, ["WEEKNUM"] = i => i >= 1,
+        ["SUBTOTAL"] = i => i == 0, ["AGGREGATE"] = i => i <= 1, ["MAKEARRAY"] = i => i <= 1,
+        ["BASE"] = i => i >= 1, ["DECIMAL"] = i => i >= 1, ["LOG"] = i => i >= 1,
+        ["COLUMN"] = _ => true, ["ROW"] = _ => true, ["ADDRESS"] = _ => true, ["INDIRECT"] = _ => true,
+        ["TEXTSPLIT"] = i => i >= 1, ["TEXTJOIN"] = i => i <= 1, ["TEXTBEFORE"] = i => i >= 1,
+        ["TEXTAFTER"] = i => i >= 1, ["ARRAYTOTEXT"] = _ => true, ["VALUETOTEXT"] = _ => true,
+        ["CHAR"] = _ => true, ["UNICHAR"] = _ => true, ["CODE"] = _ => true, ["UNICODE"] = _ => true,
+        ["FILTER"] = i => i >= 2, ["IFERROR"] = i => i >= 1, ["IFNA"] = i => i >= 1,
+        ["WRAPROWS"] = i => i >= 1, ["WRAPCOLS"] = i => i >= 1, ["GROUPBY"] = i => i >= 2, ["PIVOTBY"] = i => i >= 3,
+        ["BITAND"] = _ => true, ["BITOR"] = _ => true, ["BITXOR"] = _ => true, ["BITLSHIFT"] = _ => true,
+        ["BITRSHIFT"] = _ => true, ["DEC2BIN"] = _ => true, ["BIN2DEC"] = _ => true, ["DEC2HEX"] = _ => true,
+        ["HEX2DEC"] = _ => true, ["CEILING"] = i => i >= 1, ["FLOOR"] = i => i >= 1,
+        ["CEILING.MATH"] = i => i >= 1, ["FLOOR.MATH"] = i => i >= 1,
+        // An in-formula lookup table: its keys and results are the case's rules.
+        ["SWITCH"] = i => i >= 1,
+        ["CHOOSE"] = i => i == 0,
+        ["LAMBDA"] = _ => true
+    };
+
+    private static readonly string[] HiddenPrefixes = { "_xlfn.", "_xlws.", "_xlpm.", "_xludf." };
+
+    private static readonly Regex CellRefPattern = new(
+        @"^(\$?)([A-Za-z]{1,3})(\$?)([0-9]{1,7})$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex Heading = new(
+        @"^\s*(level|bonus)\s*\d+\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex ExampleStart = new(
+        @"^\s*(for\s+)?example", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex ProseNumber = new(
+        @"(?<![\w.])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?%?", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static readonly Regex Word = new(@"\w+", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    // ------------------------------------------------------------ the check
+
+    /// <summary>
+    ///     The findings for one written formula, most certain first (cells before text). Empty when
+    ///     nothing matches. <paramref name="ruleWords"/> gives the words of the workbook's prose
+    ///     outside its examples (case kept; see <see cref="RuleWords"/>); it's asked only when a text literal matches a cell.
+    /// </summary>
+    public static IReadOnlyList<ExampleLiteralFinding> Check(ExampleCheckRequest request, IExampleSheet sheet,
+        Func<IReadOnlyCollection<string>>? ruleWords = null)
+    {
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (sheet is null)
+            throw new ArgumentNullException(nameof(sheet));
+
+        var formula = request.Formula;
+        if (string.IsNullOrEmpty(formula) || formula[0] != '=')
+            return Array.Empty<ExampleLiteralFinding>();
+
+        List<FormulaLiteral> literals;
+        List<FormulaCellRef> refs;
+        try
+        {
+            (literals, refs) = Scan(formula);
+        }
+        catch (FormatException)
+        {
+            return Array.Empty<ExampleLiteralFinding>();
+        }
+
+        literals.RemoveAll(l => l.Structural || IsTrivial(l));
+        if (literals.Count == 0)
+            return Array.Empty<ExampleLiteralFinding>();
+
+        var candidates = Candidates(request, sheet, refs);
+        var (rulesNumbers, exampleNumbers) = LevelNumbers(request, sheet);
+
+        IReadOnlyCollection<string>? words = null;
+        var findings = new List<ExampleLiteralFinding>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var lit in literals)
+        {
+            var small = lit.IsNumber && Math.Abs(lit.Number) <= 10 && Math.Abs(lit.Number % 1) < 1e-12;
+            var hit = candidates.FirstOrDefault(c => Same(lit, c.Value) && !(small && c.IsFormula));
+            if (hit is not null && !lit.IsNumber && lit.Text.Trim().Length >= 2)
+            {
+                // A word the rules use ("Bull", "Azure") is the case's vocabulary, not the example's data.
+                words ??= ruleWords?.Invoke() ?? Array.Empty<string>();
+                if (InProse(lit.Text, words))
+                    hit = null;
+            }
+
+            if (hit is not null)
+            {
+                if (seen.Add($"{lit.Source}|{hit.Address}"))
+                    findings.Add(new ExampleLiteralFinding(lit.Start, lit.Length, lit.Source, hit.Row, hit.Column,
+                        hit.Address, CellMessage(lit, hit, request.Copied), RowLabel(hit.Kind, request.Copied)));
+                continue;
+            }
+
+            if (lit.IsNumber && exampleNumbers.TryGetValue(Key(lit.Number), out var line)
+                             && !rulesNumbers.Contains(Key(lit.Number)))
+            {
+                if (seen.Add($"{lit.Source}|text"))
+                    findings.Add(new ExampleLiteralFinding(lit.Start, lit.Length, lit.Source, 0, 0, "",
+                        $"{lit.Source} is a number from this level's example (\"{Excerpt(line, lit.Number)}\"), "
+                        + "and its rules don't mention it. If it's the example's value, compute it or point at it."));
+            }
+        }
+
+        return findings;
+    }
+
+    private static string CellMessage(FormulaLiteral lit, Candidate hit, bool copied) =>
+        hit.Kind switch
+        {
+            ExampleRowKind.Range =>
+                $"{lit.Source} equals {hit.Address}, the first row of a range this formula reads, and that column changes further down. "
+                + "If it's the example's value, it won't be right for the other rows.",
+            ExampleRowKind.ExampleLine =>
+                $"{lit.Source} equals {hit.Address} on the level's example line, and that column changes on the table's rows. "
+                + "If it's the example's value, it won't be right for the other rows.",
+            _ => $"{lit.Source} equals {hit.Address} on {RowLabel(hit.Kind, copied)}, and that column changes on the other rows. "
+                 + $"Use {hit.Address} instead of the typed value?"
+        };
+
+    /// <summary>The row a match came from, for the panel and the status bar.</summary>
+    internal static string RowLabel(ExampleRowKind kind, bool copied = true) => kind switch
+    {
+        ExampleRowKind.ExampleLine => "the level's example line",
+        ExampleRowKind.Range => "the first row of a range the formula reads",
+        _ => copied ? "the row you copied from" : "the family's top row"
+    };
+
+    // ------------------------------------------------------------ candidates
+
+    private sealed record Candidate(object Value, int Row, int Column, string Address, bool IsFormula, ExampleRowKind Kind);
+
+    /// <summary>
+    ///     Adds the columns a formula written in <paramref name="column"/> spills into
+    ///     (column .. column+spillColumns-1) to the excluded set: they hold its own output.
+    /// </summary>
+    internal static void ExcludeSpillColumns(ISet<int> excluded, int column, int spillColumns)
+    {
+        for (var c = column; c < column + spillColumns; c++)
+            excluded.Add(c);
+    }
+
+    private static List<Candidate> Candidates(ExampleCheckRequest request, IExampleSheet sheet, List<FormulaCellRef> refs)
+    {
+        var list = new List<Candidate>();
+        var others = request.OtherRows.Take(MaxCompareRows).ToList();
+        // A cell the formula reads, alone or inside a range, is used, not replaced.
+        bool Reads(int row, int col) => refs.Any(r => r.Row1 <= row && row <= r.Row2 && r.Col1 <= col && col <= r.Col2);
+
+        // A column varies when another row holds a different value: blanks below (an input box
+        // level with the first row) don't count.
+        bool Varies(object v, IEnumerable<int> rows, int col) =>
+            rows.Any(r => sheet.Value(r, col) is { } o && Usable(o) && !Same(v, o));
+
+        // 1. The source row, both ways from the formula, within its block (two empty columns end it).
+        var sourceColumns = new List<(int Column, object Value)>();
+        if (others.Count > 0)
+        {
+            var last = Math.Min(Math.Max(sheet.LastColumn, request.Column), MaxRowColumns);
+            foreach (var c in Block(sheet, request.Row, request.Column, -1, last)
+                         .Concat(Block(sheet, request.Row, request.Column, 1, last)))
+            {
+                if (request.TargetColumns.Contains(c) || Reads(request.Row, c))
+                    continue;
+                var v = sheet.Value(request.Row, c);
+                if (!Usable(v))
+                    continue;
+                if (Varies(v!, others, c))
+                {
+                    list.Add(new Candidate(v!, request.Row, c, Address(request.Row, c), sheet.IsFormula(request.Row, c),
+                        ExampleRowKind.Source));
+                    sourceColumns.Add((c, v!));
+                }
+            }
+        }
+
+        // 1b. The level's example line (Tim, 16 Nov): the nearest row above, within the level, with
+        //     values of the same kind in the source row's input columns. It counts even when it holds
+        //     no formula, so a value copied from it is caught after the table's top row was edited.
+        //     Only the source row's input columns are compared: one the formula reads, writes or
+        //     spills into is already out, and the line's value must vary across the family's rows.
+        var line = ExampleLine(request, sheet, sourceColumns);
+        if (line > 0)
+        {
+            var familyRows = others.Append(request.Row).Where(r => r != line).ToList();
+            foreach (var (c, _) in sourceColumns)
+            {
+                var v = sheet.Value(line, c);
+                if (!Usable(v) || Reads(line, c))
+                    continue;
+                if (Varies(v!, familyRows, c))
+                    list.Add(new Candidate(v!, line, c, Address(line, c), sheet.IsFormula(line, c), ExampleRowKind.ExampleLine));
+            }
+        }
+
+        // 2. The first row of each multi-row range the formula reads that starts on the example row
+        //    (a spill over the table), where its column varies.
+        foreach (var r in refs.Where(r => !r.IsSingleCell && r.Row1 == request.Row && r.Row2 > r.Row1
+                                          && r.Col2 - r.Col1 < MaxRangeColumns))
+        {
+            var lastRow = Math.Min(r.Row2, r.Row1 + MaxCompareRows);
+            for (var c = r.Col1; c <= r.Col2; c++)
+            {
+                var v = sheet.Value(r.Row1, c);
+                if (!Usable(v))
+                    continue;
+                if (Varies(v!, Enumerable.Range(r.Row1 + 1, lastRow - r.Row1), c))
+                    list.Add(new Candidate(v!, r.Row1, c, Address(r.Row1, c), sheet.IsFormula(r.Row1, c), ExampleRowKind.Range));
+            }
+        }
+
+        return list;
+    }
+
+    /// <summary>
+    ///     The level's example line for this request, or 0. Walking up from the source row, within
+    ///     the level (the "Level n" / "Bonus n" heading or <see cref="TextRowsAbove"/> rows):
+    ///     <list type="bullet">
+    ///         <item>the rows directly above that hold something in the formula's column are the table
+    ///         (game rows, or an older fill), passed over;</item>
+    ///         <item>a row with no values in the source row's input columns is passed over;</item>
+    ///         <item>a header row (text where the source row has numbers, and no numbers) ends the
+    ///         walk: the example line sits below the headers;</item>
+    ///         <item>an index row (1, 2, 3 …) is passed over;</item>
+    ///         <item>the first row whose filled input cells are at least as often the same kind
+    ///         (number or text) as the source row's as not, with a number where the source row has
+    ///         numbers, is the example line.</item>
+    ///     </list>
+    /// </summary>
+    internal static int ExampleLine(ExampleCheckRequest request, IExampleSheet sheet)
+    {
+        var refs = SafeRefs(request.Formula);
+        return refs is null ? 0 : ExampleLine(request, sheet, SourceColumns(request, sheet, refs));
+    }
+
+    private static List<FormulaCellRef>? SafeRefs(string formula)
+    {
+        try
+        {
+            return Scan(formula).Refs;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    private static List<(int Column, object Value)> SourceColumns(ExampleCheckRequest request, IExampleSheet sheet,
+        List<FormulaCellRef> refs) =>
+        Candidates(request, sheet, refs).Where(c => c.Kind == ExampleRowKind.Source).Select(c => (c.Column, c.Value)).ToList();
+
+    private static int ExampleLine(ExampleCheckRequest request, IExampleSheet sheet,
+        List<(int Column, object Value)> sourceColumns)
+    {
+        if (sourceColumns.Count == 0)
+            return 0;
+        var anyNumber = sourceColumns.Any(sc => sc.Value is not string);
+        var floor = Math.Max(1, request.Row - TextRowsAbove);
+        var r = request.Row - 1;
+        // The table above the source: passed over, but a header row on top of it still ends the walk.
+        for (; r >= floor && sheet.Value(r, request.Column) is not null; r--)
+            if (IsHeadingRow(sheet, r) || Classify(sheet, r, sourceColumns, anyNumber) == LineRow.Header)
+                return 0;
+        for (; r >= floor; r--)
+        {
+            if (IsHeadingRow(sheet, r))
+                return 0;
+            switch (Classify(sheet, r, sourceColumns, anyNumber))
+            {
+                case LineRow.Header:
+                    return 0; // the example line would have been below it
+                case LineRow.Line when !IsIndexRow(sheet, r):
+                    return r;
+            }
+        }
+
+        return 0;
+    }
+
+    private enum LineRow
+    {
+        Pass,
+        Header,
+        Line
+    }
+
+    /// <summary>
+    ///     A row's filled cells in the source row's input columns: a header (text where the source has
+    ///     numbers, and no numbers), an example line (at least as often the same kind as not, with a
+    ///     number where the source has numbers), or neither.
+    /// </summary>
+    private static LineRow Classify(IExampleSheet sheet, int row, List<(int Column, object Value)> sourceColumns,
+        bool anyNumber)
+    {
+        int same = 0, other = 0, sameNumbers = 0;
+        foreach (var (c, v) in sourceColumns)
+        {
+            var w = sheet.Value(row, c);
+            if (!Usable(w))
+                continue;
+            if ((w is string) == (v is string))
+            {
+                same++;
+                if (w is not string)
+                    sameNumbers++;
+            }
+            else
+                other++;
+        }
+
+        if (same + other == 0)
+            return LineRow.Pass;
+        if (anyNumber && sameNumbers == 0)
+            return other > 0 ? LineRow.Header : LineRow.Pass;
+        return same >= other ? LineRow.Line : LineRow.Pass;
+    }
+
+    /// <summary>
+    ///     A row whose numbers (three or more, left to right) mostly count up by one (1, 2, 3 …, at
+    ///     least two steps in three):
+    ///     a row of indices, not data. Cricket Darts' 10, 11, 12 … row over a table with a game number.
+    /// </summary>
+    private static bool IsIndexRow(IExampleSheet sheet, int row)
+    {
+        var numbers = new List<double>();
+        var last = Math.Min(Math.Max(1, sheet.LastColumn), MaxRowColumns);
+        // Small whole numbers only: a line of consecutive dates (46000 …) is data, not an index.
+        for (var c = 1; c <= last; c++)
+            if (sheet.Value(row, c) is double d && Math.Abs(d) < 1000 && Math.Abs(d % 1) < 1e-12)
+                numbers.Add(d);
+        if (numbers.Count < 3)
+            return false;
+        var steps = 0;
+        for (var i = 1; i < numbers.Count; i++)
+            if (Near(numbers[i], numbers[i - 1] + 1))
+                steps++;
+        return steps * 3 >= (numbers.Count - 1) * 2;
+    }
+
+    private static bool IsHeadingRow(IExampleSheet sheet, int row)
+    {
+        var lastCol = Math.Min(TextColumns, Math.Max(1, sheet.LastColumn));
+        for (var c = 1; c <= lastCol; c++)
+            if (sheet.Value(row, c) is string s && Heading.IsMatch(s))
+                return true;
+        return false;
+    }
+
+    private static IEnumerable<int> Block(IExampleSheet sheet, int row, int column, int step, int lastColumn)
+    {
+        var gap = 0;
+        for (var c = column + step; c >= 1 && c <= lastColumn; c += step)
+        {
+            if (sheet.Value(row, c) is null && !sheet.IsFormula(row, c))
+            {
+                if (++gap >= 2)
+                    yield break;
+                continue;
+            }
+
+            gap = 0;
+            yield return c;
+        }
+    }
+
+    private static bool Usable(object? v) =>
+        v switch
+        {
+            null => false,
+            bool => false,
+            int => false, // an error value
+            string s => s.Trim().Length > 0,
+            _ => true
+        };
+
+    // ------------------------------------------------------------ the level's text
+
+    /// <summary>
+    ///     Numbers stated in the level's text above the formula: its rules (before the first line
+    ///     starting "Example") and its example (from there on), keyed by <see cref="Key"/>; each
+    ///     example number keeps its line for the message.
+    /// </summary>
+    private static (HashSet<double> Rules, Dictionary<double, string> Example) LevelNumbers(ExampleCheckRequest request,
+        IExampleSheet sheet)
+    {
+        var lines = new List<string>();
+        var lastCol = Math.Min(TextColumns, Math.Max(1, sheet.LastColumn));
+        for (var r = request.Row - 1; r >= 1 && r >= request.Row - TextRowsAbove; r--)
+        {
+            var row = new List<string>();
+            var heading = false;
+            for (var c = 1; c <= lastCol; c++)
+            {
+                if (sheet.Value(r, c) is not string s)
+                    continue;
+                if (Heading.IsMatch(s))
+                    heading = true;
+                if (s.Length >= MinProseLength)
+                    row.Add(s);
+            }
+
+            lines.InsertRange(0, row);
+            if (heading)
+                break;
+        }
+
+        var rules = new HashSet<double>();
+        var example = new Dictionary<double, string>();
+        var inExample = false;
+        foreach (var line in lines)
+        {
+            if (!inExample && ExampleStart.IsMatch(line))
+                inExample = true;
+            foreach (var n in Numbers(line))
+            {
+                if (inExample)
+                {
+                    if (!example.ContainsKey(n))
+                        example[n] = line;
+                }
+                else
+                    rules.Add(n);
+            }
+        }
+
+        return (rules, example);
+    }
+
+    internal static IEnumerable<double> Numbers(string line)
+    {
+        foreach (Match m in ProseNumber.Matches(line))
+        {
+            var t = m.Value.Replace(",", "");
+            var pct = t.EndsWith("%", StringComparison.Ordinal);
+            if (pct)
+                t = t[..^1];
+            if (!double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                continue;
+            yield return Key(v);
+            if (pct)
+                yield return Key(v / 100);
+        }
+    }
+
+    /// <summary>
+    ///     The words of prose (text cells of 26+ characters) outside example paragraphs, as written
+    ///     (case kept: "Bull" the dartboard sector, not "bull"). A level or bonus heading ends an
+    ///     example. Used for the workbook's rules vocabulary.
+    /// </summary>
+    public static HashSet<string> RuleWords(IEnumerable<string> cellTexts)
+    {
+        var words = new HashSet<string>(StringComparer.Ordinal);
+        var inExample = false;
+        foreach (var s in cellTexts)
+        {
+            if (Heading.IsMatch(s))
+                inExample = false;
+            if (ExampleStart.IsMatch(s))
+                inExample = true;
+            if (inExample || s.Length < MinProseLength)
+                continue;
+            foreach (Match m in Word.Matches(s))
+                words.Add(m.Value);
+        }
+
+        return words;
+    }
+
+    private static bool InProse(string text, IReadOnlyCollection<string> words)
+    {
+        var parts = Word.Matches(text).Cast<Match>().Select(m => m.Value).ToList();
+        return parts.Count > 0 && parts.All(words.Contains);
+    }
+
+    private static string Excerpt(string line, double number)
+    {
+        var at = -1;
+        foreach (Match m in ProseNumber.Matches(line))
+        {
+            var t = m.Value.Replace(",", "").TrimEnd('%');
+            if (double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)
+                && (Key(v) == Key(number) || (m.Value.EndsWith("%", StringComparison.Ordinal) && Key(v / 100) == Key(number))))
+            {
+                at = m.Index;
+                break;
+            }
+        }
+
+        if (at < 0 || line.Length <= 70)
+            return line.Trim();
+        var from = Math.Max(0, at - 35);
+        var to = Math.Min(line.Length, at + 35);
+        return (from > 0 ? "…" : "") + line[from..to].Trim() + (to < line.Length ? "…" : "");
+    }
+
+    // ------------------------------------------------------------ formula scan
+
+    /// <summary>A number or string literal in the formula, with whether its argument slot is structure.</summary>
+    internal sealed record FormulaLiteral(int Start, int Length, string Source, bool IsNumber, double Number, string Text,
+        bool Structural);
+
+    /// <summary>A same-sheet A1 reference (1-based, normalised so Row1 ≤ Row2 and Col1 ≤ Col2).</summary>
+    internal sealed record FormulaCellRef(int Row1, int Col1, int Row2, int Col2)
+    {
+        public bool IsSingleCell => Row1 == Row2 && Col1 == Col2;
+    }
+
+    /// <summary>The formula's literals and same-sheet references, in one pass over its tokens.</summary>
+    internal static (List<FormulaLiteral> Literals, List<FormulaCellRef> Refs) Scan(string formula)
+    {
+        var tokens = FormulaParser.Tokenize(formula);
+        var literals = new List<FormulaLiteral>();
+        var refs = new List<FormulaCellRef>();
+        var stack = new Stack<(string? Fn, int Arg)>();
+
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var t = tokens[i];
+            var next = i + 1 < tokens.Count ? tokens[i + 1] : null;
+            switch (t.Type)
+            {
+                case FormulaTokenType.Name when next?.Type == FormulaTokenType.LParen:
+                    stack.Push((Strip(t.Text), 0));
+                    i++; // the bracket belongs to the call
+                    break;
+                case FormulaTokenType.LParen:
+                    stack.Push((null, 0));
+                    break;
+                case FormulaTokenType.RParen:
+                    if (stack.Count > 0)
+                        stack.Pop();
+                    break;
+                case FormulaTokenType.Comma:
+                    if (stack.Count > 0)
+                    {
+                        var top = stack.Pop();
+                        stack.Push((top.Fn, top.Arg + 1));
+                    }
+
+                    break;
+                case FormulaTokenType.Name:
+                    AddRef(tokens, i, refs);
+                    break;
+                case FormulaTokenType.Number:
+                case FormulaTokenType.String:
+                {
+                    // Only the innermost slot counts: inside a plain bracket, ROUND((x)*2, 3)'s 2 is data.
+                    var structural = stack.Count > 0 && stack.Peek() is { Fn: { } fn, Arg: var arg }
+                                     && StructuralArgs.TryGetValue(fn, out var pred) && pred(arg);
+
+                    if (t.Type == FormulaTokenType.String)
+                    {
+                        var text = t.Text.Length >= 2 ? t.Text[1..^1].Replace("\"\"", "\"") : "";
+                        literals.Add(new FormulaLiteral(t.Start, t.Text.Length, t.Text, false, 0, text, structural));
+                        break;
+                    }
+
+                    if (!double.TryParse(t.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                        break;
+                    var start = t.Start;
+                    var source = t.Text;
+                    var prev = i > 0 ? tokens[i - 1] : null;
+                    var before = i > 1 ? tokens[i - 2] : null;
+                    if (prev is { Type: FormulaTokenType.Operator, Text: "-" }
+                        && (before is null || before.Type is FormulaTokenType.LParen or FormulaTokenType.Comma
+                            || (before.Type == FormulaTokenType.Operator && before.Text != "%")))
+                    {
+                        v = -v;
+                        start = prev.Start;
+                        source = "-" + t.Text;
+                    }
+
+                    if (next is { Type: FormulaTokenType.Operator, Text: "%" })
+                    {
+                        v /= 100;
+                        source += "%";
+                    }
+
+                    literals.Add(new FormulaLiteral(start, t.End - start + (source.EndsWith("%", StringComparison.Ordinal) ? 1 : 0),
+                        source, true, v, t.Text, structural));
+                    break;
+                }
+            }
+        }
+
+        return (literals, refs);
+    }
+
+    private static void AddRef(IReadOnlyList<FormulaToken> tokens, int i, List<FormulaCellRef> refs)
+    {
+        var t = tokens[i];
+        // The second half of A1:B5 was handled with the first.
+        if (i >= 2 && tokens[i - 1] is { Type: FormulaTokenType.Operator, Text: ":" } && tokens[i - 2].Type == FormulaTokenType.Name
+            && TryCell(tokens[i - 2].Text, out _, out _))
+            return;
+        var text = t.Text;
+        if (text.IndexOf('!') >= 0 || text.IndexOf('[') >= 0)
+            return; // another sheet, or a structured reference
+        string? second = null;
+        var colon = text.IndexOf(':');
+        if (colon > 0)
+        {
+            second = text[(colon + 1)..];
+            text = text[..colon];
+        }
+        else if (i + 2 < tokens.Count && tokens[i + 1] is { Type: FormulaTokenType.Operator, Text: ":" }
+                                      && tokens[i + 2].Type == FormulaTokenType.Name)
+            second = tokens[i + 2].Text;
+
+        if (!TryCell(text, out var r1, out var c1))
+            return;
+        if (second is null)
+        {
+            refs.Add(new FormulaCellRef(r1, c1, r1, c1));
+            return;
+        }
+
+        if (TryCell(second, out var r2, out var c2))
+            refs.Add(new FormulaCellRef(Math.Min(r1, r2), Math.Min(c1, c2), Math.Max(r1, r2), Math.Max(c1, c2)));
+    }
+
+    internal static bool TryCell(string text, out int row, out int column)
+    {
+        row = column = 0;
+        var m = CellRefPattern.Match(text);
+        if (!m.Success)
+            return false;
+        column = 0;
+        foreach (var ch in m.Groups[2].Value.ToUpperInvariant())
+            column = column * 26 + (ch - 'A' + 1);
+        if (column > 16384)
+            return false;
+        row = int.Parse(m.Groups[4].Value, CultureInfo.InvariantCulture);
+        return row is >= 1 and <= 1048576;
+    }
+
+    private static string Strip(string name)
+    {
+        foreach (var p in HiddenPrefixes)
+            if (name.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+                return name[p.Length..].ToUpperInvariant();
+        return name.ToUpperInvariant();
+    }
+
+    // ------------------------------------------------------------ helpers
+
+    private static bool IsTrivial(FormulaLiteral l) =>
+        l.IsNumber ? TrivialNumbers.Contains(l.Number) : l.Text.Trim().Length == 0;
+
+    private static bool Same(FormulaLiteral lit, object value) =>
+        lit.IsNumber
+            ? value is double d && Near(lit.Number, d)
+            : value is string s && string.Equals(lit.Text.Trim(), s.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool Same(object a, object? b) =>
+        (a, b) switch
+        {
+            (double x, double y) => Near(x, y),
+            (string x, string y) => string.Equals(x.Trim(), y.Trim(), StringComparison.OrdinalIgnoreCase),
+            _ => Equals(a, b)
+        };
+
+    private static bool Near(double a, double b) => Math.Abs(a - b) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(a), Math.Abs(b)));
+
+    /// <summary>A number rounded to 9 decimals, as a set key.</summary>
+    private static double Key(double v) => Math.Round(v, 9);
+
+    internal static string Address(int row, int column)
+    {
+        var col = "";
+        for (var c = column; c > 0; c = (c - 1) / 26)
+            col = (char)('A' + (c - 1) % 26) + col;
+        return col + row.ToString(CultureInfo.InvariantCulture);
+    }
+}

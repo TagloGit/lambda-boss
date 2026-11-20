@@ -1,3 +1,5 @@
+using LambdaBoss.Commands;
+
 using Ookii.Dialogs.Wpf;
 using System.ComponentModel;
 using System.Windows;
@@ -151,6 +153,13 @@ public partial class SettingsWindow
         var settings = Settings.Current;
         ChannelStableRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Stable;
         ChannelLabsRadio.IsChecked = settings.LibraryChannel == LibraryChannel.Labs;
+        ArgumentHintsCheckbox.IsChecked = settings.ArgumentHints;
+        OpensOnCommandsRadio.IsChecked = settings.PopupOpensOn == PopupOpensOn.Commands;
+        OpensOnLibrariesRadio.IsChecked = settings.PopupOpensOn == PopupOpensOn.Libraries;
+        var mode = ExampleCheckModes.Normalize(settings.ExampleCheckMode);
+        ExampleStatusRadio.IsChecked = mode == ExampleCheckModes.Status;
+        ExampleToastRadio.IsChecked = mode == ExampleCheckModes.Toast;
+        ExamplePromptRadio.IsChecked = mode == ExampleCheckModes.Prompt;
 
         LabsSwitchList.ItemsSource = Labs.All
             .Select(s => new LabsSwitchDisplayItem
@@ -174,6 +183,47 @@ public partial class SettingsWindow
         settings.Save();
         SettingsChanged?.Invoke(this, EventArgs.Empty);
         StatusText.Text = $"Library channel: {Labs.ChannelLabel(channel)}";
+    }
+
+    private void OpensOnRadio_Click(object sender, RoutedEventArgs e)
+    {
+        var opensOn = OpensOnLibrariesRadio.IsChecked == true ? PopupOpensOn.Libraries : PopupOpensOn.Commands;
+        var settings = Settings.Current;
+        if (settings.PopupOpensOn == opensOn)
+            return;
+
+        // Read each time the popup opens, so it needs no reload.
+        settings.PopupOpensOn = opensOn;
+        settings.Save();
+        StatusText.Text = $"Popup opens on: {opensOn}";
+    }
+
+    private void ExampleMode_Click(object sender, RoutedEventArgs e)
+    {
+        var mode = ExampleStatusRadio.IsChecked == true ? ExampleCheckModes.Status
+            : ExamplePromptRadio.IsChecked == true ? ExampleCheckModes.Prompt
+            : ExampleCheckModes.Toast;
+        var settings = Settings.Current;
+        if (ExampleCheckModes.Normalize(settings.ExampleCheckMode) == mode)
+            return;
+
+        // Read at each finding, so it needs no restart.
+        settings.ExampleCheckMode = mode;
+        settings.Save();
+        StatusText.Text = $"Example check shows: {mode}";
+    }
+
+    private void ArgumentHints_Click(object sender, RoutedEventArgs e)
+    {
+        var on = ArgumentHintsCheckbox.IsChecked == true;
+        var settings = Settings.Current;
+        if (settings.ArgumentHints == on)
+            return;
+
+        settings.ArgumentHints = on;
+        settings.Save();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        StatusText.Text = $"Argument hints: {(on ? "on" : "off")}";
     }
 
     private void LabsSwitch_Click(object sender, RoutedEventArgs e)

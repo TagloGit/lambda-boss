@@ -87,10 +87,6 @@ tests:
     args: ['={"B2","B3","E5"}', '={1,1,1}', '=LAMBDA(a, b, a = b)', "=", "=", "=1"]
     expected: [["clusterId", 1, 1, 2]]
 
-  - name: help text
-    args: []
-    expected_type: array
-
   - name: groups stay apart when rows reach 1000000 (#380 review)
     args: ['={"A1000000";"A1"}', "=", "=", "=", '={"G1";"G2"}']
     expected: [[1], [2]]

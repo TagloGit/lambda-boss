@@ -17,6 +17,8 @@ internal sealed class StubCellSource : ICellSource
     // mirroring Range.SpillParent, which resolves the anchor from any of them.
     private readonly Dictionary<string, SpillInfo> _spills = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _lambdaNames = new(StringComparer.OrdinalIgnoreCase);
+    // Non-empty, non-text cells: a literal number the tests don't need the value of.
+    private readonly HashSet<string> _literals = new(StringComparer.OrdinalIgnoreCase);
 
     public StubCellSource(string sheet = "Sheet1")
     {
@@ -34,6 +36,16 @@ internal sealed class StubCellSource : ICellSource
     public StubCellSource WithLabel(string a1, string label)
     {
         _labels[Qualify(a1)] = label;
+        return this;
+    }
+
+    /// <summary>
+    ///     Marks a cell as holding a literal (non-text) value. The gather only needs
+    ///     to know the cell is not blank, e.g. so a label search stops there.
+    /// </summary>
+    public StubCellSource WithLiteral(string a1)
+    {
+        _literals.Add(Qualify(a1));
         return this;
     }
 
@@ -96,6 +108,17 @@ internal sealed class StubCellSource : ICellSource
     public bool IsLambdaName(string name)
     {
         return !string.IsNullOrEmpty(name) && _lambdaNames.Contains(name);
+    }
+
+    public CellContent ReadCell(CellRef cell)
+    {
+        if (cell.IsExternal)
+            return new CellContent(true, null);
+        var key = Key(cell.Sheet, cell.Column, cell.Row);
+        if (_labels.TryGetValue(key, out var label))
+            return new CellContent(false, label);
+        var nonEmpty = _formulas.ContainsKey(key) || _literals.Contains(key);
+        return new CellContent(!nonEmpty, null);
     }
 
     /// <summary>

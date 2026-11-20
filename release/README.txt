@@ -13,6 +13,11 @@ What's in this zip
   unblock.cmd         Optional helper for clearing the "downloaded from
                       the internet" mark Windows applies to USB-copied
                       files.
+  remove-lambda-boss.cmd
+                      Removes Lambda Boss from this Windows user's Excel
+                      (for the next person on a shared machine). Run it
+                      with Excel closed; it lists what it removed and
+                      what is left to delete.
 
 Requirements
 ------------
@@ -49,6 +54,52 @@ There are three ways to load the add-in. Pick whichever fits your setup.
    Just double-click lambda-boss64.xll. Excel will launch with Lambda
    Boss enabled for that session only. Quickest if you only need it
    once.
+
+Using it
+--------
+
+  Ctrl+Shift+J   Opens the popup on its commands. Type to filter (a
+                 leading / is optional), Enter runs, Esc closes. The
+                 first command imports every library with no prefix,
+                 so Ctrl+Shift+J then Enter loads everything.
+  Library        The command for loading one library or searching the
+                 lambdas: Tab switches, Esc goes back to the commands.
+  Ctrl+Shift+C   Check Formula (a Labs switch), in a cell or while
+                 editing a formula.
+
+/State (a Labs switch)
+----------------------
+
+/State edits the state engine in the active cell. Tick a variable's row
+(Alt+A) to make it part of the answer, and set the order with Alt+Up/Down:
+the cell then reads GetVars(fold, {"cash","crates"}), one row per state.
+
+Constants can sit in a LET around the fold:
+
+  =LET(cost, 3, price, 5, REDUCE(SetVars(...), ..., LAMBDA(a, v, LET(...))))
+
+  Safe:           constants, ranges, a LAMBDA defined outside, LETs nested
+                  any depth; add, rename, remove; Debug on and off (the text
+                  comes back exactly); ticked answer outputs.
+  Works with care: the fold bound to a name (s, REDUCE(...), ...): Debug
+                  puts the debug table in s, so tick answer outputs instead;
+                  a seed defined outside; two folds (the first is edited).
+  Not supported:  naming the step while it reads a name from the outer LET
+                  (refused: a named LAMBDA can't see it); unfolding to the
+                  LET step inside a bigger formula; Debug inside MAP/BYROW.
+
+Settings (the ribbon's Settings button) has "Popup opens on: Commands |
+Libraries"; Libraries gives the older popup that opens on the library
+list. Both keys are settings in %APPDATA%\LambdaBoss\settings.json
+(KeyboardShortcut, CheckFormulaShortcut).
+
+Offline use (a competition machine)
+-----------------------------------
+
+The XLL carries the whole LAMBDA library as it was when it was built, so
+it needs no internet, library folder or settings file: with GitHub out of
+reach it uses that copy. Argument hints need the XLL's folder to be
+writable (they are written beside it), so prefer load path 1.
 
 If Excel warns about an unsigned add-in
 ---------------------------------------

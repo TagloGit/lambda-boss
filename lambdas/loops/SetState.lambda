@@ -1,8 +1,22 @@
 /*  FUNCTION NAME:      SetState
     DESCRIPTION:*//**Builds a fresh state holding up to 10 positional values, accessible by index via GetVarAt.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            state array: a new state holding the given values in slots 1 to 10
+    PARAMETERS:
+        v_1             (Required) Slot 1 value. Read with GetVarAt(state, 1).
+        v_2             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_3             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_4             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_5             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_6             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_7             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_8             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_9             (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+        v_10            (Optional) Up to nine more slot values. Read with GetVarAt(state, N).
+    EXAMPLE:            =SetState(1, 2, {10;20;30}) -> state with slot 1 = 1, slot 2 = 2, slot 3 = {10;20;30}
+    REVISIONS:          Date        Developer   Description
                         2026-04-27  Claude      Initial version
                         2026-05-02  Claude      Extend slot capacity from 5 to 10
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 SetState = LAMBDA(
 //  Parameter Declarations
@@ -16,21 +30,7 @@ SetState = LAMBDA(
     [v_8],
     [v_9],
     [v_10],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →SetState([v_1], [v_2], [v_3], [v_4], [v_5], [v_6], [v_7], [v_8], [v_9], [v_10])¶" &
-                "DESCRIPTION:   →Builds a fresh state holding up to 10 positional values, accessible by index via GetVarAt.¶" &
-                "VERSION:       →May 02 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   v_1            →(Required) Slot 1 value. Read with GetVarAt(state, 1).¶" &
-                "   v_2..v_10      →(Optional) Up to nine more slot values. Read with GetVarAt(state, N).¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=SetState(1, 2, {10;20;30})¶" &
-                "Result         →state with slot 1 = 1, slot 2 = 2, slot 3 = {10;20;30}",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(v_1),
+    LET(
     //  Procedure
         s_1, SetVar(NewState(), "1", v_1),
         s_2, IF(ISOMITTED(v_2), s_1, SetVar(s_1, "2", v_2)),
@@ -43,6 +43,6 @@ SetState = LAMBDA(
         s_9, IF(ISOMITTED(v_9), s_8, SetVar(s_8, "9", v_9)),
         s_10, IF(ISOMITTED(v_10), s_9, SetVar(s_9, "10", v_10)),
         result, s_10,
-        IF(Help?, Help, result)
+        result
 )
 );

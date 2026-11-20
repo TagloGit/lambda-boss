@@ -1,29 +1,21 @@
 /*  FUNCTION NAME:      COLNUM
     DESCRIPTION:*//**Returns the column number of an A1-style cell address passed as text. Like COLUMN() but accepts strings.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            number: the column number of the address; lifts over arrays
+    PARAMETERS:
+        address         (Required) A1 address text (e.g. "AA17"), or an array/range of such. Any number of column letters ("XFE1", "ABCD9") and rows past 1048576. Sheet prefixes and $ anchors are ignored; for a range only its first cell is used. Text that is not an address returns TOPOS's "can't read" message. Result lifts element-wise.
+    EXAMPLE:            =COLNUM("AA17") -> 27
+    REVISIONS:          Date        Developer   Description
                         2026-05-20  Claude      Initial version
                         2026-11-06  Claude      Decode at the _mult constant via TOPOS (was a hard-coded 100000); any number of column letters, rows past 1048576; TOPOS's "can't read" message passes through instead of #N/A (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 COLNUM = LAMBDA(
 //  Parameter Declarations
     [address],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →COLNUM(address)¶" &
-                "DESCRIPTION:   →Returns the column number of an A1-style cell address passed as text. Like COLUMN() but accepts strings. Handles any number of column letters (AA, XFD, XFE, ZZZZ).¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   address        →(Required) A1 address text (e.g. ""AA17""), or an array/range of such. Any number of column letters (""XFE1"", ""ABCD9"") and rows past 1048576. Sheet prefixes and $ anchors are ignored; for a range only its first cell is used. Text that is not an address returns TOPOS's ""can't read"" message. Result lifts element-wise.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=COLNUM(""AA17"")¶" &
-                "Result         →27",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(address),
+    LET(
     //  Procedure
         pos, TOPOS(address),
         result, IF(ISNUMBER(pos), MOD(pos, _mult), pos),
-        IF(Help?, Help, result)
+        result
 )
 );

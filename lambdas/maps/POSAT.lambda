@@ -1,33 +1,25 @@
 /*  FUNCTION NAME:      POSAT
     DESCRIPTION:*//**Builds an encoded position integer (row*mult+col) from a row and column number. Inverse of ROWOF/COLOF.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            integer position (row*_mult+col); lifts over arrays
+    PARAMETERS:
+        row             (Required) Row number. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).
+        col             (Required) Column number. Also accepts an array of cols — result lifts element-wise (and broadcasts against row).
+        mult            (Optional) Row multiplier. Default: the _mult constant (1000000, as TOPOS/ROWOF/COLOF). Must match the mult those decoders use for round-trips.
+    EXAMPLE:            =POSAT(17, 17) -> 17000017
+    REVISIONS:          Date        Developer   Description
                         2026-06-16  Claude      Initial version
                         2026-11-06  Claude      Default mult is the _mult constant (1000000), was a literal 100000 (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 POSAT = LAMBDA(
 //  Parameter Declarations
     [row],
     [col],
     [mult],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →POSAT(row, col, [mult])¶" &
-                "DESCRIPTION:   →Builds an encoded position integer (row*mult+col) from a row and column number. The (row,col)->pos converter; inverse of ROWOF/COLOF.¶" &
-                "VERSION:       →Nov 06 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   row            →(Required) Row number. Also accepts an array of rows — result lifts element-wise (and broadcasts against col).¶" &
-                "   col            →(Required) Column number. Also accepts an array of cols — result lifts element-wise (and broadcasts against row).¶" &
-                "   mult           →(Optional) Row multiplier. Default: the _mult constant (1000000, as TOPOS/ROWOF/COLOF). Must match the mult those decoders use for round-trips.¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=POSAT(17, 17)¶" &
-                "Result         →17000017",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(row),
+    LET(
     //  Procedure
         m, IF(ISOMITTED(mult), _mult, mult),
         result, row * m + col,
-        IF(Help?, Help, result)
+        result
 )
 );

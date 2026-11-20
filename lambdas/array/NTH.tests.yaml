@@ -42,7 +42,3 @@ tests:
   - name: horizontal array of indices lifts
     args: ['={10,20,30,40}', '={1,2,-1}']
     expected: [[10, 20, 40]]
-
-  - name: help text
-    args: []
-    expected_type: array

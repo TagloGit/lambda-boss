@@ -59,7 +59,3 @@ tests:
         - { name: "irow", refers_to: "B2:E2" }
     args: ["=irow", "X", "=3"]
     expected: [["a", "b", "X", "c", "d"]]
-
-  - name: help text
-    args: []
-    expected_type: array

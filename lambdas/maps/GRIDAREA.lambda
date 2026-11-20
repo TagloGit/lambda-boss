@@ -1,6 +1,16 @@
 /*  FUNCTION NAME:      GRIDAREA
     DESCRIPTION:*//**Extracts a rectangular neighborhood from grid around centerCell; overflow modes clip to the grid's bounds [default], pad to a guaranteed shape, or error.*/
-/*  REVISIONS:          Date        Developer   Description
+/*  RETURNS:            array: the rows x cols window of grid around centerCell (clipped, padded or error)
+    PARAMETERS:
+        grid            (Required) The full grid range to extract from.
+        centerCell      (Required) Cell address as a string (e.g. "E5"), or a cell containing one. Position within grid determines the window's center.
+        rows            (Optional) Height of the extraction window. Default 3.
+        cols            (Optional) Width of the extraction window. Default = rows (square).
+        origin          (Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position, so centerCell is read in that frame. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.
+        overflow        (Optional) Edge behaviour when the window extends past the grid: (0) clip [default] — shrink the window to the grid's bounds, (1) pad — always return rows x cols with centerCell dead-centre at position (ceil(rows/2), ceil(cols/2)), out-of-grid cells set to fill, (2) error — returns NA() if the window exceeds the grid.
+        fill            (Optional) Value for out-of-grid cells in pad mode. Default blank "".
+    EXAMPLE:            =GRIDAREA(A1:I9, "B2", 5, 5, , 1) -> 5x5 array with B2's value at (3,3); top row and left column are ""
+    REVISIONS:          Date        Developer   Description
                         2026-04-17  Claude      Initial version
                         2026-04-17  Claude      Swap grid/centerCell order; rename center to centerCell
                         2026-05-14  Claude      centerCell now an address string; parse via CELLTOPOS instead of volatile INDIRECT
@@ -8,6 +18,7 @@
                         2026-07-01  Claude      Add origin parameter (workbook reference; top-left used) so an in-memory grid can be anchored to a worksheet position — matches SUBGRID/GRIDLOOKUP convention
                         2026-08-24  Claude      Add overflow modes — (0) clip [default], (1) pad to guaranteed rows x cols with centerCell dead-centre, (2) error — and fill value for pad mode (#349)
                         2026-11-06  Claude      Decode at the _mult constant (was a local 16385, which misread 100000-packed positions passed through TOPOS) (#380)
+                        2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
 */
 GRIDAREA = LAMBDA(
 //  Parameter Declarations
@@ -18,26 +29,7 @@ GRIDAREA = LAMBDA(
     [origin],
     [overflow],
     [fill],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →GRIDAREA(grid, centerCell, [rows], [cols], [origin], [overflow], [fill])¶" &
-                "DESCRIPTION:   →Extracts a rectangular neighborhood from grid around centerCell; overflow modes clip to the grid's bounds [default], pad to a guaranteed shape, or error.¶" &
-                "VERSION:       →Aug 24 2026¶" &
-                "PARAMETERS:    →¶" &
-                "   grid           →(Required) The full grid range to extract from.¶" &
-                "   centerCell     →(Required) Cell address as a string (e.g. ""E5""), or a cell containing one. Position within grid determines the window's center.¶" &
-                "   rows           →(Optional) Height of the extraction window. Default 3.¶" &
-                "   cols           →(Optional) Width of the extraction window. Default = rows (square).¶" &
-                "   origin         →(Optional) Top-left anchor as a workbook reference — a single cell or a range (a range's top-left is used). Anchors an in-memory grid to a worksheet position, so centerCell is read in that frame. Defaults to the grid's own top-left — inferred for a reference, (1,1) for an array.¶" &
-                "   overflow       →(Optional) Edge behaviour when the window extends past the grid: (0) clip [default] — shrink the window to the grid's bounds, (1) pad — always return rows x cols with centerCell dead-centre at position (ceil(rows/2), ceil(cols/2)), out-of-grid cells set to fill, (2) error — returns NA() if the window exceeds the grid.¶" &
-                "   fill           →(Optional) Value for out-of-grid cells in pad mode. Default blank """".¶" &
-                "EXAMPLE:       →¶" &
-                "Formula        →=GRIDAREA(A1:I9, ""B2"", 5, 5, , 1)¶" &
-                "Result         →5x5 array with B2's value at (3,3); top row and left column are """"",
-                "→", "¶"
-                ),
-    //  Check inputs
-        Help?, ISOMITTED(grid),
+    LET(
     //  Procedure
         safeMult, _mult,
         winR, IF(ISOMITTED(rows), 3, rows),
@@ -76,6 +68,6 @@ GRIDAREA = LAMBDA(
         result, IFS(ovf = 1, padResult,
                     ovf = 2, IF(exceeds, NA(), padResult),
                     TRUE, clipResult),
-        IF(Help?, Help, result)
+        result
 )
 );

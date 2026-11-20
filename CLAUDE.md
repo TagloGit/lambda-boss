@@ -85,13 +85,11 @@ To check what a new package adds to the build, look at `addin/lambda-boss/bin/Re
 Leads take a feature from design to tested and refined on their own, and Tim gets finished work in Labs and one release PR now and then. [Spec 0012](specs/0012-develop-labs-release-flow.md) has the reasoning.
 
 1. **Design.** Design talks happen with the Excel director. Write the spec in `specs/` as the lead's record; Tim doesn't review it. Where a UI choice is open, build the options side by side in Labs.
-2. **Branch from `develop`, PR to `develop`.** A PR needs one independent review and green CI, then the lead merges it (squash, or rebase for an epic). No Tim approval. A merge publishes `dev-latest`.
+2. **Branch from `develop`, PR to `develop`.** A PR needs one independent review and green CI, then the lead merges it (squash, or rebase for an epic). No Tim approval. A merge publishes `dev-latest`, unless it's doc-only (see [Dev builds](#dev-builds)).
 3. **New add-in features go behind a Labs switch**, off by default: see `addin/lambda-boss/Labs.cs`. Fixes don't need one. Delete the switch and its guard once the feature ships to everyone or is dropped.
 4. **Library changes** reach Labs users on merge to `develop` and Stable users at the next release.
-5. **Prove it in real use.** Staging is the Parallels VM `taglo-win`: real Excel, under `~/Repositories/wt/VM-LOCK`, released straight after each run (taglo-pm `docs/windows-vm.md`). Never use real Excel on Tim's PC. Load the PR's build (the `lambda-boss-xll` artifact on its CI run) or `dev-latest`, and drive the add-in on real case or rep files. Unit tests alone aren't proof of a feature. Screenshots and what you drove go in the PR.
+5. **Prove it in real use.** Staging is the Parallels VM `taglo-win`: real Excel, under `~/Repositories/wt/VM-LOCK`, released straight after each run (taglo-pm `docs/windows-vm.md`). Never use real Excel on Tim's PC. Load the PR's build (the `lambda-boss-xll` artifact on its CI run, kept two days) or `dev-latest`, and drive the add-in on real case or rep files. Unit tests alone aren't proof of a feature. Screenshots and what you drove go in the PR.
 6. **Release** with the `/release` skill. Tim's approval on the release PR is the only gate he holds.
-
-**Hold new library files until Tim has updated.** Add-ins older than 0.2.0 list a library's files from the repo's default branch (now `develop`) but fetch them from `main`, so a new `.lambda` or `.const` in an existing library on `develop` makes that whole library fail to load on those builds. Until #390's first release is merged and Tim has run the updater, don't merge new files into existing libraries. Then delete this paragraph.
 
 ### Library channel and Labs switches
 
@@ -101,7 +99,9 @@ Leads take a feature from design to tested and refined on their own, and Tim get
 
 ### Dev builds
 
-CI replaces the `dev-latest` pre-release on every merge to `develop`: an unsigned `lambda-boss64.xll`, with `version:` and `commit:` lines in its notes (the update check reads those). On the Labs channel the update check compares commits with `dev-latest`.
+CI replaces the `dev-latest` pre-release on every merge to `develop` that isn't doc-only: an unsigned `lambda-boss64.xll`, with `version:` and `commit:` lines in its notes (the update check reads those). On the Labs channel the update check compares commits with `dev-latest`.
+
+CI runs on GitHub-hosted `windows-latest` (free for a public repo; net48 and ExcelDna's pack need Windows). Never use `taglo-box` or another self-hosted label: this repo is public. Tests run on PRs and on `main`, not on the push to `develop`, which only builds and publishes. Doc-only changes (`docs/`, `specs/`, `plans/`, `*.md` outside `addin/`, `lambdas/**/*.tests.yaml`) skip the build inside the workflow, so `build-and-test` still reports. `.github/workflows/ci.yml` has the table.
 
 On a Windows PC with Excel closed, `scripts\update-lambda-boss.cmd` installs `dev-latest` to `%APPDATA%\Microsoft\AddIns\lambda-boss64.xll`, unblocks it and prints the version. `--stable` installs the latest release instead. The `.cmd` is also a `dev-latest` asset and works alone.
 
@@ -111,4 +111,4 @@ Use the `/release` skill. In short: `scripts/cut-release.sh` cuts `release/<date
 
 **Default cadence: every week or two, on Tim's word. No release in the days before an MEWC round** (the competition freeze): Stable stays put and nothing merges to `main`.
 
-`Directory.Build.props` holds the *next* release's version, so a tag can only match it once. The release artifact is `LambdaBoss-<version>.zip`: `lambda-boss64.xll`, `README.txt` and an `unblock.cmd` helper for clearing `Zone.Identifier` ADS on USB-copied files. Both `release/README.txt` and `release/unblock.cmd` are checked-in source files. Releases are unsigned: Tim isn't renewing the Sectigo certificate. Excel trusts its AddIns folder, so the recommended load path shows no warning.
+`Directory.Build.props` holds the *next* release's version, so a tag can only match it once. The release artifact is `LambdaBoss-<version>.zip`: `lambda-boss64.xll`, `README.txt`, an `unblock.cmd` helper for clearing `Zone.Identifier` ADS on USB-copied files, and `remove-lambda-boss.cmd` (with Excel closed, removes Lambda Boss's OPEN and Add-in Manager entries under HKCU and its settings, cache and log folders, for the next user of a competition machine). All three are checked-in source files in `release/`. Releases are unsigned: Tim isn't renewing the Sectigo certificate. Excel trusts its AddIns folder, so the recommended load path shows no warning.

@@ -62,7 +62,3 @@ tests:
   - name: 1x1 array input behaves as scalar
     args: ['=CHOOSEROWS({"NE";"SW"},1)']
     expected: -999999
-
-  - name: help text
-    args: []
-    expected_type: array

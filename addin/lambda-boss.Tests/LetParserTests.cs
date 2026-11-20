@@ -54,6 +54,19 @@ public class LetParserTests
             $"Binding '{b.Name}' RHS '{b.RhsText}' was classified as calculation."));
     }
 
+    // A comma inside an array constant used to stop the scanner without moving it: a hang.
+    [Theory]
+    [InlineData("=LET(a, {0,1}, a)", false)]
+    [InlineData("=LET(a, {1,2;3,4}, a)", false)]
+    [InlineData("=LET(a, {\"x,}\",2}, a)", false)]
+    [InlineData("=LET(a, {0,1} + 1, a)", true)]
+    [InlineData("=LET(a, SUM({0,1}), a)", true)]
+    public void Parse_ArrayConstantWithCommas_IsClassifiedWithoutHanging(string formula, bool calculation)
+    {
+        var parsed = LetParser.Parse(formula);
+        Assert.Equal(calculation, parsed.Bindings[0].IsCalculation);
+    }
+
     [Fact]
     public void Parse_QuotedSheetReference_IsValue()
     {

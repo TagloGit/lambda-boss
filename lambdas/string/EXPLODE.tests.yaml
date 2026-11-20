@@ -62,7 +62,3 @@ tests:
   - name: non-BMP single-codepoint emoji still one character
     args: ["a\U0001F600b"]
     expected: [["a"], ["\U0001F600"], ["b"]]
-
-  - name: help text
-    args: []
-    expected_type: array

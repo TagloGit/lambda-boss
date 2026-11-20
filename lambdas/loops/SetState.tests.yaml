@@ -18,7 +18,3 @@ tests:
   - name: numeric array value at slot 3
     args: ["=1", "=2", "={10;20;30}"]
     expected: "1\x1En\x1E1\x1F2\x1En\x1E2\x1F3\x1En\x1E10\x1D20\x1D30"
-
-  - name: help text
-    args: []
-    expected_type: array

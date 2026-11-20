@@ -24,27 +24,67 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock x:Name="WalkHintText"
-                   Grid.Row="0"
-                   FontSize="12"
-                   FontStyle="Italic"
-                   Foreground="#9cdcfe"
-                   Margin="0,0,0,8" />
+        <StackPanel Grid.Row="0">
+            <!-- Spec 0019 (gather-next): shown only with the Labs switch on. First in
+                 tab order and focused on open, so typing a name and Ctrl+Enter is the
+                 whole LAMBDA flow. -->
+            <StackPanel x:Name="LambdaNamePanel"
+                        Visibility="Collapsed"
+                        Margin="0,0,0,8">
+                <DockPanel>
+                    <TextBlock Text="Lambda name"
+                               DockPanel.Dock="Left"
+                               FontSize="13"
+                               FontWeight="Bold"
+                               Foreground="#dcdcaa"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0" />
+                    <TextBox x:Name="LambdaNameBox"
+                             TabIndex="0"
+                             FontFamily="Consolas"
+                             FontSize="13"
+                             Foreground="#dcdcaa"
+                             Background="#1e1e1e"
+                             BorderBrush="#3e3e3e"
+                             BorderThickness="1"
+                             Padding="4,1"
+                             ToolTip="Leave empty to write the LET into the sink. A name registers a LAMBDA and writes a call to it."
+                             TextChanged="LambdaNameBox_TextChanged" />
+                </DockPanel>
+                <TextBlock x:Name="LambdaNameStatus"
+                           FontSize="11"
+                           Margin="0,2,0,0"
+                           Visibility="Collapsed" />
+            </StackPanel>
+            <TextBlock x:Name="WalkHintText"
+                       FontSize="12"
+                       FontStyle="Italic"
+                       Foreground="#9cdcfe"
+                       Margin="0,0,0,8" />
+        </StackPanel>
 
-        <TextBlock Grid.Row="1"
+        <TextBlock x:Name="SinkLabel"
+                   Grid.Row="1"
                    Text="Sink"
                    FontSize="13"
                    FontWeight="Bold"
                    Foreground="#dcdcaa"
                    Margin="0,0,0,4" />
 
-        <TextBlock x:Name="SinkAddressText"
-                   Grid.Row="2"
-                   Padding="6,4"
-                   FontSize="13"
-                   FontFamily="Consolas"
-                   Background="#2d2d2d"
-                   Foreground="#cccccc" />
+        <StackPanel Grid.Row="2">
+            <TextBlock x:Name="SinkAddressText"
+                       Padding="6,4"
+                       FontSize="13"
+                       FontFamily="Consolas"
+                       Background="#2d2d2d"
+                       Foreground="#cccccc" />
+            <!-- Issue #470 (gather-next): what writing to a moved target overwrites, or
+                 why it can't be written there. -->
+            <TextBlock x:Name="SinkTargetStatus"
+                       FontSize="11"
+                       Margin="0,2,0,0"
+                       Visibility="Collapsed" />
+        </StackPanel>
 
         <TextBlock Grid.Row="3"
                    Text="Original formula"

@@ -28,6 +28,8 @@ A five-part system that creates an end-to-end LAMBDA development workflow:
 
 ### 0. Fix Help? Pattern
 
+> **Superseded (9 Nov 2026):** spec 0013 removed the Help block from every library formula. The header metadata (RETURNS, PARAMETERS) replaced it. What follows is kept as history.
+
 **Current (broken):** `.lambda` files use `Help?` as pseudo-syntax. `LambdaParser.TransformHelpPattern` rewrites this at load time by:
 1. Wrapping all LAMBDA parameters in `[]` to make them optional
 2. Replacing `Help?` with `ISOMITTED(first_param)`
@@ -40,20 +42,22 @@ Clamp = LAMBDA(
     [value],
     [min_val],
     [max_val],
-//  Help
-    LET(Help, TEXTSPLIT(
-                "FUNCTION:      →Clamp(value, min_val, max_val)¶" &
-                ...
-                "→", "¶"
-                ),
+    LET(
     //  Check inputs
         Help?, ISOMITTED(value),
     //  Procedure
         result, MIN(MAX(value, min_val), max_val),
-        IF(Help?, Help, result)
+    //  Help
+        IF(Help?, TEXTSPLIT(
+                "FUNCTION:      →Clamp(value, min_val, max_val)¶" &
+                ...
+                "→", "¶"
+                ), result)
 )
 );
 ```
+
+The Help table sits in the IF's TRUE branch, not in a LET binding: Excel evaluates every LET binding on every call, but not IF's untaken branch (#387, spec 0011 appendix).
 
 Key changes:
 - All LAMBDA parameters are wrapped in `[]` in the file itself (since any LAMBDA with Help support must accept zero arguments)
@@ -133,7 +137,7 @@ tests:
 
   - name: help text
     args: []
-    expected_type: array  # Just check it returns a 2D array (the Help table)
+    expected_type: array  # Just check it returns a 2D array (the Help table; help cases removed by spec 0013)
 
   - name: single delimiter
     args: ["no-delim", ","]
@@ -167,8 +171,8 @@ Test value types:
 - Validates each file against the required format:
   - Filename matches the LAMBDA name (e.g. `Split.lambda` defines `Split`)
   - Contains the header comment block (`FUNCTION NAME`, `DESCRIPTION`, `REVISIONS`)
-  - Contains the Help `TEXTSPLIT("→","¶")` pattern
-  - Contains `Help?` defined as a LET variable (not used as bare pseudo-syntax)
+  - Contains the Help `TEXTSPLIT("→","¶")` pattern (superseded by spec 0013: the Help block was removed; the tests now check the header instead)
+  - Contains `Help?` defined as a LET variable (not used as bare pseudo-syntax) (superseded by spec 0013)
   - No tab characters
   - No carriage return characters (line endings must be `\n` not `\r\n`)
   - Ends with `);` (properly terminated)
@@ -176,8 +180,8 @@ Test value types:
 - Runs as part of `dotnet test addin/lambda-boss.Tests` — no Excel required
 
 **Claude Code skill (`create-lambda`):** A skill that guides Claude through LAMBDA authoring:
-- Enforces the self-documenting format template (with correct Help? LET variable pattern)
-- Generates the Help section from parameter metadata
+- Enforces the self-documenting format template (Help? pattern superseded by spec 0013: header metadata only)
+- Generates the Help section from parameter metadata (superseded by spec 0013: it now writes the header RETURNS/PARAMETERS)
 - Creates the `.tests.yaml` companion file with initial test cases
 - Validates format before committing
 
@@ -222,6 +226,7 @@ The complete LAMBDA development lifecycle with all pieces in place:
 ## Acceptance Criteria
 
 ### Help? Pattern Fix
+_(Superseded by spec 0013, 9 Nov 2026: the Help block was removed.)_
 - [ ] All `.lambda` files updated: parameters wrapped in `[]`, `Help?` defined as LET variable
 - [ ] `LambdaParser.TransformHelpPattern` removed
 - [ ] Parser passes through formulas without transformation
@@ -250,7 +255,7 @@ The complete LAMBDA development lifecycle with all pieces in place:
 
 ### Format Validation
 - [ ] `LambdaFormatTests` validates all `.lambda` files without Excel
-- [ ] Validates: name match, header comments, TEXTSPLIT Help pattern, Help? as LET variable, no tabs/CRs, proper termination
+- [ ] Validates: name match, header comments, TEXTSPLIT Help pattern, Help? as LET variable (Help requirements superseded by spec 0013), no tabs/CRs, proper termination
 - [ ] Runs in CI as part of the unit test suite
 - [ ] `create-lambda` skill produces correctly formatted files with test cases
 

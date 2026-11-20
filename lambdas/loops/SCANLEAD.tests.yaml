@@ -22,7 +22,3 @@ tests:
           values: 2
     args: ["=0", "={10;20;30}", "=LAMBDA(a_, v_, a_ + v_*C3)"]
     expected: [[0], [20], [60]]
-
-  - name: help text
-    args: []
-    expected_type: array

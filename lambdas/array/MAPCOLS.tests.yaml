@@ -34,7 +34,3 @@ tests:
   - name: variable-width expansion concatenates independently
     args: ['={1,2;4,9}', '={1,2}', '=LAMBDA(vec, IF(SUM(vec)>10, HSTACK(vec, vec, vec), HSTACK(vec, vec)))']
     expected: [[1, 1, 2, 2, 2], [4, 4, 9, 9, 9]]
-
-  - name: help text
-    args: []
-    expected_type: array

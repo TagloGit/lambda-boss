@@ -80,31 +80,52 @@ public class LambdaFormatTests
 
     [Theory]
     [MemberData(nameof(LambdaFiles))]
-    public void ContainsHelpTextsplitPattern(string relativePath)
+    public void FormulaHasNoHelpBlock(string relativePath)
     {
-        var content = ReadFile(relativePath);
+        // Help lives in the header metadata, which the argument hints read (spec 0013).
+        // The formula carries no Help? flag and no help table.
+        var (_, formula) = LambdaParser.Parse(ReadFile(relativePath));
 
-        // A lambda may delegate its help table to a companion *HELP lambda when the
-        // combined formula would exceed Excel's 8192-character limit on saved formulas
-        // (e.g. MAZE -> MAZEHELP). The companion itself carries the inline TEXTSPLIT.
-        if (Regex.IsMatch(content, @"IF\(Help\?,\s*\w+HELP\(\)"))
-            return;
-
-        // Must contain the TEXTSPLIT with → and ¶ delimiters. ¦ is the sanctioned
-        // alternate column delimiter for files whose help content needs the → glyph
-        // in prose (e.g. DIRDELTA, GRIDSTRINGS).
-        Assert.Matches(@"TEXTSPLIT\(", content);
-        Assert.Matches("\"(→|¦)\",\\s*\"¶\"", content);
+        Assert.DoesNotContain("Help?", formula);
+        Assert.DoesNotMatch(@"TEXTSPLIT\(\s*""FUNCTION:", formula);
     }
 
     [Theory]
     [MemberData(nameof(LambdaFiles))]
-    public void HelpIsLetVariable(string relativePath)
+    public void HeaderSaysWhatItReturns(string relativePath)
     {
-        var content = ReadFile(relativePath);
+        // The argument hints show RETURNS under the signature (spec 0013).
+        var doc = LambdaDocParser.Parse(ReadFile(relativePath));
 
-        // Help? must be defined as a LET variable (e.g. "Help?, ISOMITTED(")
-        Assert.Matches(@"Help\?,\s*ISOMITTED\(", content);
+        Assert.False(string.IsNullOrWhiteSpace(doc.Returns), $"{relativePath}: RETURNS is empty");
+        Assert.NotEqual("TODO", doc.Returns);
+    }
+
+    [Theory]
+    [MemberData(nameof(LambdaFiles))]
+    public void HeaderDocumentsEveryParameterInOrder(string relativePath)
+    {
+        // One PARAMETERS line per LAMBDA parameter, same names, same order, each marked
+        // (Required) or (Optional): the hints read them (spec 0013).
+        var content = ReadFile(relativePath);
+        var (_, formula) = LambdaParser.Parse(content);
+        var parameters = LambdaSignatureParser.Parse(formula).Parameters;
+
+        Assert.Equal(parameters, LambdaDocParser.DocumentedParameterNames(content));
+    }
+
+    [Theory]
+    [MemberData(nameof(LambdaFiles))]
+    public void HeaderMetadataStaysInsideItsComment(string relativePath)
+    {
+        // A "*/" inside the metadata would end the comment early and leak text into the formula.
+        var content = ReadFile(relativePath);
+        var returnsAt = content.IndexOf("RETURNS:", StringComparison.Ordinal);
+        var revisionsAt = content.IndexOf("REVISIONS:", StringComparison.Ordinal);
+
+        Assert.True(returnsAt >= 0 && revisionsAt > returnsAt,
+            $"{relativePath}: RETURNS must come before REVISIONS in the header");
+        Assert.DoesNotContain("*/", content[returnsAt..revisionsAt]);
     }
 
     [Theory]

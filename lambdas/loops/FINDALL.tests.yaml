@@ -42,7 +42,3 @@ tests:
   - name: all predicate errors return if_not_found
     args: ['={1;2;3}', '=LAMBDA(cur, i, 1/0)', "all errored"]
     expected: "all errored"
-
-  - name: help text
-    args: []
-    expected_type: array

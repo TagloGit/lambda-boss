@@ -261,6 +261,18 @@ public class GatherSpillSliceSmokeTests
 
         public bool IsLambdaName(string name) => false;
 
+        public CellContent ReadCell(CellRef cell)
+        {
+            if (!Reachable(cell))
+                return new CellContent(true, null);
+            var value = _sheet.Cells[cell.Row, cell.Column].Value2;
+            if (value == null)
+                return new CellContent(true, null);
+            if (value is string s)
+                return s.Length == 0 ? new CellContent(true, null) : new CellContent(false, s);
+            return new CellContent(false, null);
+        }
+
         private bool Reachable(CellRef cell) =>
             !cell.IsExternal
             && string.Equals(cell.Sheet, SinkSheet, StringComparison.OrdinalIgnoreCase);

@@ -94,7 +94,7 @@ Split = LAMBDA(
 Key points:
 
 - One file per LAMBDA. Filename matches the LAMBDA name (e.g. `Split.lambda` defines `Split`).
-- The self-documenting `Help` pattern (showing usage when called with no arguments) is the standard format for all LAMBDAs.
+- The self-documenting `Help` pattern (showing usage when called with no arguments) is the standard format for all LAMBDAs. *(Superseded 9 Nov 2026 by spec 0013: documentation lives in the header metadata and the argument hints show it.)*
 - The format is directly pasteable into AFE and compatible with AFE module import when files are concatenated.
 - No tabs or carriage returns in the file (AFE restriction).
 

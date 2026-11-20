@@ -18,7 +18,3 @@ tests:
   - name: single value returns scalar
     args: ['={5}']
     expected: 5
-
-  - name: help text
-    args: []
-    expected_type: array

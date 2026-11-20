@@ -146,14 +146,14 @@ public class PrefixRewriterTests
     [Fact]
     public void Apply_LambdaAndConstantTogether_BothPrefixed()
     {
-        var formula = "=LAMBDA(HSTACK(DEFAULTARROWS, DEFAULTMOVEDELTAS, Helper(x)))";
+        var formula = "=LAMBDA(HSTACK(DEFAULTARROWS, _dirAll, Helper(x)))";
         var result = PrefixRewriter.Apply(
             formula, "maps",
             lambdaNames: new[] { "Helper" },
-            constNames: new[] { "DEFAULTARROWS", "DEFAULTMOVEDELTAS" });
+            constNames: new[] { "DEFAULTARROWS", "_dirAll" });
 
         Assert.Equal(
-            "=LAMBDA(HSTACK(maps.DEFAULTARROWS, maps.DEFAULTMOVEDELTAS, maps.Helper(x)))",
+            "=LAMBDA(HSTACK(maps.DEFAULTARROWS, maps._dirAll, maps.Helper(x)))",
             result);
     }
 

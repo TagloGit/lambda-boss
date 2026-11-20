@@ -38,7 +38,3 @@ tests:
           values: 5
     args: ['={1,5,2}', "=LAMBDA(v, v=C3)"]
     expected: True
-
-  - name: help text
-    args: []
-    expected_type: array

@@ -64,7 +64,3 @@ tests:
       - ["A|A|B"]
       - ["A|B|B"]
       - ["B|B|B"]
-
-  - name: help text
-    args: []
-    expected_type: array
