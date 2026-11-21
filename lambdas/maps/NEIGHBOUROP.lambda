@@ -1,0 +1,48 @@
+/*  FUNCTION NAME:      NEIGHBOUROP
+    DESCRIPTION:*//**Applies a function to each cell's neighbours on a board: returns an array the shape of the board where each cell holds the function of its neighbours' values (default: their sum, N/E/S/W). Neighbours off the board are left out.*/
+/*  RETURNS:            array, the same shape as the board: for each cell, the function of the values of its on-board neighbours (default the sum of the 4 orthogonal ones)
+    PARAMETERS:
+        array           (Required) The board: a 2-D range or array (1 row or 1 column is fine). Blank range cells read as 0.
+        directions      (Optional) Which cells count as neighbours, as packed position deltas (row*_mult+col): _dirOrthog (default: N, E, S, W), _dirAll (8 around), _dirDiag, _dirKnight, _dirHoriz, _dirVert, or your own list (e.g. RELPOS of a stencil). A column or a row.
+        function        (Optional) A LAMBDA taking one cell's neighbour values (a column, in directions order, off-board ones left out) and returning one value, e.g. LAMBDA(v, MAX(v)) or LAMBDA(v, SUM(--(v="#"))). Omitted: the sum, by a fast path for REDUCE loops, where TRUE counts 1 and text, blanks and errors count 0. With a function, a cell with no neighbour on the board gets #N/A, and error values on the board are left out like off-board cells.
+    EXAMPLE:            =NEIGHBOUROP({0,1,0;0,0,0;1,0,1}) -> {1,0,1;1,1,1;0,2,0} (each cell's count of covered N/E/S/W neighbours)
+    NOTE:               Off-board neighbours are left out, never wrapped: an edge cell has 3 orthogonal neighbours, a corner 2. One round of a whole-board rule (ivy covers an open panel with at least t covered neighbours, all at once): LAMBDA(b, i, b + (b = 0) * open * (NEIGHBOUROP(b) >= t)) as a REDUCE step.
+    REVISIONS:          Date        Developer   Description
+                        2026-11-21  Claude      Initial version
+*/
+NEIGHBOUROP = LAMBDA(
+//  Parameter Declarations
+    [array],
+    [directions],
+    [function],
+    LET(
+    //  Check inputs
+        dirs, TOCOL(IF(ISOMITTED(directions), _dirOrthog, directions)),
+        dRows, ROUND(dirs / _mult, 0),
+        dCols, dirs - dRows * _mult,
+        n, ROWS(array),
+        m, COLUMNS(array),
+        pad, MAX(1, MAX(ABS(dRows)), MAX(ABS(dCols))),
+    //  Procedure
+    //  The board framed by pad cells of edge on every side: each direction's copy is then one DROP and TAKE
+        frame, LAMBDA(board, edge,
+            LET(sideBlock, IF(SEQUENCE(n, pad), edge),
+                capBlock, IF(SEQUENCE(pad, m + 2 * pad), edge),
+                VSTACK(capBlock, HSTACK(sideBlock, board, sideBlock), capBlock))),
+        result, IF(ISOMITTED(function),
+        //  Fast path (the default sum): add shifted copies of the board with 0 fill, no per-cell LAMBDA
+            LET(framed, frame(IFERROR(--array, 0), 0),
+                REDUCE(0, dirs, LAMBDA(acc, d,
+                    LET(dRow, ROUND(d / _mult, 0),
+                        acc + TAKE(DROP(framed, pad + dRow, pad + d - dRow * _mult), n, m))))),
+        //  Function path: one row of neighbour values per cell (#N/A off the board), the function on each row
+            LET(framed, frame(array, NA()),
+                cols, DROP(REDUCE(0, dirs, LAMBDA(acc, d,
+                    LET(dRow, ROUND(d / _mult, 0),
+                        HSTACK(acc, TOCOL(TAKE(DROP(framed, pad + dRow, pad + d - dRow * _mult), n, m)))))), , 1),
+                WRAPROWS(BYROW(cols, LAMBDA(row_,
+                    LET(vals, TOCOL(row_, 2),
+                        IF(AND(ISERROR(vals)), NA(), function(vals))))), m))),
+        result
+)
+);
