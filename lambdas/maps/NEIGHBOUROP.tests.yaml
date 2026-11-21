@@ -1,0 +1,133 @@
+tests:
+  - name: default sums the N/E/S/W neighbours (header example)
+    args: ["={0,1,0;0,0,0;1,0,1}"]
+    expected: [[1, 0, 1], [1, 1, 1], [0, 2, 0]]
+
+  - name: edges and corners leave off-board neighbours out (corner 2, edge 3, middle 4)
+    args: ["={1,1,1;1,1,1;1,1,1}"]
+    expected: [[2, 3, 2], [3, 4, 3], [2, 3, 2]]
+
+  - name: one-row board
+    args: ["={1,1,1,1}"]
+    expected: [[1, 2, 2, 1]]
+
+  - name: one-column board
+    args: ["={1;1;1}"]
+    expected: [[1], [2], [1]]
+
+  - name: one-cell board has no neighbours, sum 0
+    args: ["=5"]
+    expected: 0
+
+  - name: booleans count 1 in the default sum (a b>0 board works as it is)
+    args: ["={TRUE,FALSE;FALSE,TRUE}"]
+    expected: [[0, 2], [2, 0]]
+
+  - name: text counts 0 in the default sum
+    args: ['={"#",1;"x",2}']
+    expected: [[1, 2], [2, 1]]
+
+  - name: _dirAll gives the 8 around
+    args: ["={1,1,1;1,1,1;1,1,1}", "=_dirAll"]
+    expected: [[3, 5, 3], [5, 8, 5], [3, 5, 3]]
+
+  - name: _dirAll on a one-row board
+    args: ["={1,2,3,4}", "=_dirAll"]
+    expected: [[2, 4, 6, 3]]
+
+  - name: _dirKnight counts knight moves on the board
+    args: ["=SEQUENCE(5,5,1,0)", "=_dirKnight"]
+    expected: [[2, 3, 4, 3, 2], [3, 4, 6, 4, 3], [4, 6, 8, 6, 4], [3, 4, 6, 4, 3], [2, 3, 4, 3, 2]]
+
+  - name: _dirKnight sums values two away
+    args: ["=SEQUENCE(4,4)", "=_dirKnight"]
+    expected: [[17, 28, 27, 17], [28, 44, 40, 27], [24, 28, 24, 23], [17, 24, 23, 17]]
+
+  - name: directions given as a row
+    args: ["={1,1,1;1,1,1;1,1,1}", "={-1000000,1}"]
+    expected: [[1, 1, 0], [2, 2, 1], [2, 2, 1]]
+
+  - name: _dirVert on a one-row board sums nothing
+    args: ["={1,2,3}", "=_dirVert"]
+    expected: [[0, 0, 0]]
+
+  - name: MAX delegate
+    args: ["=SEQUENCE(3,3)", "=", "=LAMBDA(v, MAX(v))"]
+    expected: [[4, 5, 6], [7, 8, 9], [8, 9, 8]]
+
+  - name: MAX delegate with _dirAll
+    args: ["=SEQUENCE(3,3)", "=_dirAll", "=LAMBDA(v, MAX(v))"]
+    expected: [[5, 6, 6], [8, 9, 9], [8, 9, 8]]
+
+  - name: COUNT-style delegate counts on-board neighbours
+    args: ["=SEQUENCE(3,3)", "=", "=LAMBDA(v, ROWS(v))"]
+    expected: [[2, 3, 2], [3, 4, 3], [2, 3, 2]]
+
+  - name: COUNT-style delegate with _dirAll on a two-column board
+    args: ["=SEQUENCE(4,2)", "=_dirAll", "=LAMBDA(v, ROWS(v))"]
+    expected: [[3, 3], [5, 5], [5, 5], [3, 3]]
+
+  - name: count of a text value among the 8 around
+    args: ['={"#",".","#";".","#",".";"#","#","."}', "=_dirAll", '=LAMBDA(v, SUM(--(v="#")))']
+    expected: [[1, 3, 1], [4, 4, 3], [2, 2, 2]]
+
+  - name: neighbour values arrive in directions order
+    args: ["=SEQUENCE(3,3)", "=", "=LAMBDA(v, INDEX(v, 1))"]
+    expected: [[2, 3, 6], [1, 2, 3], [4, 5, 6]]
+
+  - name: built-in function passed by name
+    args: ["=SEQUENCE(3,3)", "=", "=MIN"]
+    expected: [[2, 1, 2], [1, 2, 3], [4, 5, 6]]
+
+  - name: one-row board with a delegate
+    args: ["={3,1,4,1}", "=", "=LAMBDA(v, MAX(v))"]
+    expected: [[1, 4, 1, 4]]
+
+  - name: a cell with no on-board neighbour gets N/A from a delegate
+    args: ["=5", "=", "=LAMBDA(v, MAX(v))"]
+    expected: -2146826246
+
+  - name: real range with blanks (blank reads as 0)
+    setup:
+      cells:
+        - address: "F6:H8"
+          values:
+            - [1, "", 1]
+            - ["", 1, ""]
+            - [1, "", 1]
+    args: ["=F6:H8"]
+    expected: [[0, 3, 0], [3, 0, 3], [0, 3, 0]]
+
+  - name: numeric text counts as its number in the default sum (MID-split digit boards)
+    args: ['={"1","1";"1","1"}']
+    expected: [[2, 2], [2, 2]]
+
+  - name: a 0 delta counts the cell itself
+    args: ["={1,1,1;1,1,1;1,1,1}", "={0;-1000000;1;1000000;-1}"]
+    expected: [[3, 4, 3], [4, 5, 4], [3, 4, 3]]
+
+  - name: blank cells in a directions range are skipped (not read as a 0 delta)
+    setup:
+      cells:
+        - address: "F6:F7"
+          values:
+            - [-1000000]
+            - [1]
+    args: ["={1,1,1;1,1,1;1,1,1}", "=F6:F8"]
+    expected: [[1, 1, 0], [2, 2, 1], [2, 2, 1]]
+
+  - name: an error on the board is left out by a delegate
+    args: ["={1,#N/A;3,4}", "=", "=LAMBDA(v, MAX(v))"]
+    expected: [[3, 4], [4, 3]]
+
+  - name: booleans reach a delegate as booleans
+    args: ["={TRUE,FALSE;FALSE,TRUE}", "=", "=LAMBDA(v, SUM(--v))"]
+    expected: [[0, 2], [2, 0]]
+
+  - name: a single direction with a delegate (top row has no N neighbour)
+    args: ["=SEQUENCE(3,2)", "=_dirN", "=LAMBDA(v, v*10)"]
+    expected: [[-2146826246, -2146826246], [10, 20], [30, 40]]
+
+  - name: directions as a row with a delegate (the NE corner has neither N nor E, so N/A)
+    args: ["=SEQUENCE(3,3)", "={-1000000,1}", "=LAMBDA(v, ROWS(v))"]
+    expected: [[1, 1, -2146826246], [2, 2, 1], [2, 2, 1]]
