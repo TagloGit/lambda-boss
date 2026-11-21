@@ -3,8 +3,8 @@
 /*  RETURNS:            array, the same shape as the board: for each cell, the function of the values of its on-board neighbours (default the sum of the 4 orthogonal ones)
     PARAMETERS:
         array           (Required) The board: a 2-D range or array (1 row or 1 column is fine). Blank range cells read as 0.
-        directions      (Optional) Which cells count as neighbours, as packed position deltas (row*_mult+col): _dirOrthog (default: N, E, S, W), _dirAll (8 around), _dirDiag, _dirKnight, _dirHoriz, _dirVert, or your own list (e.g. RELPOS of a stencil). A column or a row.
-        function        (Optional) A LAMBDA taking one cell's neighbour values (a column, in directions order, off-board ones left out) and returning one value, e.g. LAMBDA(v, MAX(v)) or LAMBDA(v, SUM(--(v="#"))). Omitted: the sum, by a fast path for REDUCE loops, where TRUE counts 1 and text, blanks and errors count 0. With a function, a cell with no neighbour on the board gets #N/A, and error values on the board are left out like off-board cells.
+        directions      (Optional) Which cells count as neighbours, as packed position deltas (row*_mult+col): _dirOrthog (default: N, E, S, W), _dirAll (8 around), _dirDiag, _dirKnight, _dirHoriz, _dirVert, or your own list (e.g. RELPOS of a stencil); a 0 delta counts the cell itself. A column or a row; blank cells in it are skipped.
+        function        (Optional) A LAMBDA taking one cell's neighbour values (a column, in directions order, off-board ones left out) and returning one value (an array result gives #CALC!), e.g. LAMBDA(v, MAX(v)) or LAMBDA(v, SUM(--(v="#"))). Omitted: the sum, by a fast path for REDUCE loops, where TRUE counts 1, numeric text counts as its number, and other text, blanks and errors count 0. With a function, a cell with no neighbour on the board gets #N/A, and error values on the board are left out like off-board cells.
     EXAMPLE:            =NEIGHBOUROP({0,1,0;0,0,0;1,0,1}) -> {1,0,1;1,1,1;0,2,0} (each cell's count of covered N/E/S/W neighbours)
     NOTE:               Off-board neighbours are left out, never wrapped: an edge cell has 3 orthogonal neighbours, a corner 2. One round of a whole-board rule (ivy covers an open panel with at least t covered neighbours, all at once): LAMBDA(b, i, b + (b = 0) * open * (NEIGHBOUROP(b) >= t)) as a REDUCE step.
     REVISIONS:          Date        Developer   Description
@@ -17,7 +17,7 @@ NEIGHBOUROP = LAMBDA(
     [function],
     LET(
     //  Check inputs
-        dirs, TOCOL(IF(ISOMITTED(directions), _dirOrthog, directions)),
+        dirs, TOCOL(IF(ISOMITTED(directions), _dirOrthog, directions), 1),
         dRows, ROUND(dirs / _mult, 0),
         dCols, dirs - dRows * _mult,
         n, ROWS(array),
