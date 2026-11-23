@@ -154,3 +154,60 @@ tests:
         - { name: "itemRng", refers_to: "K2:L2" }
     args: ['={1,2,3,4}', '={"x","y"}', "=itemRng", "=", "=", "=", "=TRUE", "=", "=TRUE"]
     expected: [["Section", "y", "x"], [1, 2, 1], [2, 4, 3]]
+
+  # items omitted: every label in the key, in reading order, each once
+  - name: items omitted, row key
+    args: ['={1,2,3,4}', '={"x","y"}', "="]
+    expected: [[1, "x", 1], [1, "y", 2], [2, "x", 3], [2, "y", 4]]
+
+  - name: items omitted, column key
+    args: ['={1;2;3;4}', '={"x";"y"}', "="]
+    expected: [[1, "x", 1], [1, "y", 2], [2, "x", 3], [2, "y", 4]]
+
+  - name: items omitted, 2-D key with blanks reads only the labels
+    args: ['={10,0;0,20;99,99;30,0;0,40}', '={"a","";"","b"}', "=", "=", "=", "=1"]
+    expected: [[1, "a", 10], [1, "b", 20], [2, "a", 30], [2, "b", 40]]
+
+  - name: items omitted, labels in reading order (left to right, then down)
+    args: ['={0,7;8,0}', '={"","b";"a",""}', "="]
+    expected: [[1, "b", 7], [1, "a", 8]]
+
+  - name: items omitted, a repeated label appears once at its first position
+    args: ['={1,2,3,4,5,6}', '={"x","y","x"}', "="]
+    expected: [[1, "x", 1], [1, "y", 2], [2, "x", 4], [2, "y", 5]]
+
+  - name: items omitted, a numeric 0 counts as a label
+    args: ['={5,6}', '={0,"x"}', "="]
+    expected: [[1, 0, 5], [1, "x", 6]]
+
+  - name: items omitted with wide and default headers
+    args: ['={1,2,3,4}', '={"x","y"}', "=", '={"N","S"}', "=", "=", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "x", "y"], ["N", 1, 2], ["S", 3, 4]]
+
+  - name: items omitted, real key range with empty cells
+    setup:
+      cells:
+        - address: "F3:J7"
+          values:
+            - ["A1s", "", "", "A2s", ""]
+            - ["", 10, "", "", 20]
+            - ["", "", "", "", ""]
+            - ["B1s", "", "", "B2s", ""]
+            - ["", 30, "", "", 40]
+        - address: "L3:M4"
+          values:
+            - ["name", ""]
+            - ["", "score"]
+      names:
+        - { name: "mapRng", refers_to: "F3:J7" }
+        - { name: "keyRng", refers_to: "L3:M4" }
+    args: ["=mapRng", "=keyRng", "=", "=", "=1", "=1", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "name", "score"], [1, "A1s", 10], [2, "A2s", 20], [3, "B1s", 30], [4, "B2s", 40]]
+
+  - name: items omitted, a key with no labels returns a message
+    args: ['={1,2}', '={"",""}', "="]
+    expected: "UNTILE: the key has no labels to read; pass items"
+
+  - name: explicit items still pick a subset
+    args: ['={1,2,3,4}', '={"x","y"}', '={"y"}']
+    expected: [[1, "y", 2], [2, "y", 4]]
