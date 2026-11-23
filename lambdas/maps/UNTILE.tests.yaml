@@ -208,6 +208,30 @@ tests:
     args: ['={1,2}', '={"",""}', "="]
     expected: "UNTILE: the key has no labels to read; pass items"
 
+  - name: items omitted, an all-empty key range returns the message
+    setup:
+      cells:
+        - address: "B2:C2"
+          values:
+            - [1, 2]
+      names:
+        - { name: "mapRng", refers_to: "B2:C2" }
+        - { name: "keyRng", refers_to: "E2:F2" }
+    args: ["=mapRng", "=keyRng", "="]
+    expected: "UNTILE: the key has no labels to read; pass items"
+
+  - name: explicit items with an all-empty key range still use if_invalid
+    setup:
+      cells:
+        - address: "B2:C2"
+          values:
+            - [1, 2]
+      names:
+        - { name: "mapRng", refers_to: "B2:C2" }
+        - { name: "keyRng", refers_to: "E2:F2" }
+    args: ["=mapRng", "=keyRng", "x", "=", "=", "=", "=", "?"]
+    expected: [[1, "x", "?"]]
+
   - name: explicit items still pick a subset
     args: ['={1,2,3,4}', '={"x","y"}', '={"y"}']
     expected: [[1, "y", 2], [2, "y", 4]]

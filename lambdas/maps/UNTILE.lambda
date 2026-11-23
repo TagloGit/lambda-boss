@@ -50,7 +50,7 @@ UNTILE = LAMBDA(
         secNames, IF(ISOMITTED(section_names), SEQUENCE(allSec), TOCOL(section_names)),
         nSec, ROWS(secNames),
         keyCells, TOCOL(key, 1),
-        keyLabels, FILTER(keyCells, IFERROR(keyCells <> "", FALSE), ""),
+        keyLabels, IFERROR(FILTER(keyCells, IFERROR(keyCells <> "", FALSE), ""), ""),
         itemsRow, IF(ISOMITTED(items), TOROW(UNIQUE(keyLabels)), TOROW(items)),
         nItems, COLUMNS(itemsRow),
         matchPos, XMATCH(itemsRow, TOCOL(key)),
@@ -77,8 +77,10 @@ UNTILE = LAMBDA(
                     "UNTILE: map is " & mapRows & "x" & mapCols & ", which doesn't split into " & keyRows & "x" & keyCols & " key sections" & bufTxt & " (" & ROUND(gridRows, 2) & " x " & ROUND(gridCols, 2) & " sections)",
                 IF(nSec > allSec,
                     "UNTILE: " & nSec & " section names, but the map has " & allSec & " sections (map " & mapRows & "x" & mapCols & " = " & gridRows & " x " & gridCols & " sections of " & keyRows & "x" & keyCols & bufTxt & ")",
-                IF(AND(ISOMITTED(items), ROWS(keyLabels) = 1, IFERROR(INDEX(keyLabels, 1, 1) = "", FALSE)),
-                    "UNTILE: the key has no labels to read; pass items",
+                IF(ISOMITTED(items),
+                    IF(AND(ROWS(keyLabels) = 1, IFERROR(INDEX(keyLabels, 1, 1) = "", FALSE)),
+                        "UNTILE: the key has no labels to read; pass items",
+                        table),
                     table))),
         result
 )
