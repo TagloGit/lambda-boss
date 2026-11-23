@@ -8,6 +8,7 @@
     REVISIONS:          Date        Developer   Description
                         2026-04-13  Tim Jacks   Initial version
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-23  Claude      An error from one row stays in that row: each half is wrapped in IF({1}, ...) so VSTACK never gets a bare error, which it returns for the whole result
 */
 BIROW = LAMBDA(
 //  Parameter Declarations
@@ -19,8 +20,8 @@ BIROW = LAMBDA(
                     ROWS(array) = 1,
                     IF(COLUMNS(array) = 1, function(@array), function(array)),
                     VSTACK(
-                        BIROW(TAKE(array, ROWS(array) / 2), function),
-                        BIROW(DROP(array, ROWS(array) / 2), function)
+                        IF({1}, BIROW(TAKE(array, ROWS(array) / 2), function)),
+                        IF({1}, BIROW(DROP(array, ROWS(array) / 2), function))
                     )
                 ),
         result
