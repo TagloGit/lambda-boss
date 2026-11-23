@@ -32,6 +32,13 @@ Every change is marked `LAMBDA BOSS PATCH` in the code.
    co-operative scheme activates the highest version). A future upstream release ranks above it.
 4. **Project file** targets net48 only, unsigned, with this folder's `Directory.Build.props`
    shielding it from the repo's analyzers and global usings.
+5. **Hints after a line break.** `UIMonitor/FormulaParser.cs` (`TryGetFormulaInfo`) removes all
+   whitespace (`\s`) before finding the function name, where upstream removed spaces only. A
+   call that starts after Alt+Enter or a tab (`,\nBIROW(`) read as the name `\nBIROW`, which
+   matched no function, so no argument hint showed for library LAMBDAs in multi-line formulas
+   (the last line of a LET, for one). Strings are removed first, so line breaks inside them don't
+   move the argument index. `Properties/AssemblyInfo.cs` adds `InternalsVisibleTo("lambda-boss.Tests")`
+   for the parser tests (`HintFormulaParserTests`).
 
 UI Automation isn't involved: 1.9.0 makes no UI Automation calls (WinEvents and Win32 messages
 to Excel's own edit windows only).

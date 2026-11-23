@@ -35,7 +35,11 @@ namespace ExcelDna.IntelliSense
             formulaPrefix = Regex.Replace(formulaPrefix, "(\"[^\"]*\")", string.Empty);
 
             // Remove sub-formulae
-            formulaPrefix = Regex.Replace(formulaPrefix, "(\\([^\\(\\)]*\\))| ", string.Empty);
+            // LAMBDA BOSS PATCH (hints after a line break): remove all whitespace, not only spaces.
+            // Upstream removed ' ' alone, so a call after Alt+Enter or a tab (",\nBIROW(") gave the
+            // name "\nBIROW", which matched no function. Strings are already gone, so line breaks
+            // inside them are unaffected.
+            formulaPrefix = Regex.Replace(formulaPrefix, "(\\([^\\(\\)]*\\))|\\s", string.Empty);
 
             while (Regex.IsMatch(formulaPrefix, "\\([^\\(\\)]*\\)"))
             {

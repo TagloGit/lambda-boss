@@ -1,6 +1,6 @@
 /*  FUNCTION NAME:      UNTILE
     DESCRIPTION:*//**Extracts items from repeated key-shaped sections of a tiled map into a flat Section/Item/Value table.*/
-/*  RETURNS:            3-column array {Section, Item, Value}, one row per section and item
+/*  RETURNS:            3-column array {Section, Item, Value}, one row per section and item; or, with wide, one row per section: the section, then one column per item
     PARAMETERS:
         map             (Required) The tiled grid: identical key-shaped sections repeated left-to-right, top-to-bottom (range or array).
         key             (Required) One section template whose cells hold item labels at the positions to read. Its size defines the section size; the section grid dimensions are derived from it.
@@ -8,14 +8,16 @@
         section_names   (Optional) One name per section, left-to-right then top-to-bottom (row or column). Fewer names than sections reads only the first N sections (partial last row); more names than sections returns a message naming both counts. Omitted -> sections numbered 1..N.
         h_buffer        (Optional) Blank columns between horizontally adjacent sections. Default 0.
         v_buffer        (Optional) Blank rows between vertically adjacent sections. Default 0.
-        headers         (Optional) TRUE prepends the default header row {Section, Item, Value}; or pass a 3-element array of custom column names. Default FALSE.
-        if_invalid      (Optional) Value placed in the Value column when an item is not found in the key. Default NA().
+        headers         (Optional) TRUE prepends the default header row {Section, Item, Value} ({Section, item labels...} with wide); or pass an array of custom column names (3, or 1 + number of items with wide). Default FALSE.
+        if_invalid      (Optional) Value placed in the Value column (the item's column with wide) when an item is not found in the key. Default NA().
+        wide            (Optional) TRUE returns one row per section, the section name then one column per item in items order, instead of the long table (the PIVOT step built in). Repeated section names or item labels still give one row per section and one column per item; PIVOT would merge them. Default FALSE.
     EXAMPLE:            =UNTILE({1,2,3,4}, {"x","y"}, {"x","y"}) -> 4x3 table: rows (1,x,1) (1,y,2) (2,x,3) (2,y,4)
     REVISIONS:          Date        Developer   Description
                         2026-07-20  Claude      Initial version
                         2026-11-06  Claude      Multiplier read from the _mult constant (1000000), was a literal 100000 (#380)
                         2026-11-09  Claude      Size errors return a message naming the sizes instead of a bare #VALUE! (#378)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-23  Claude      wide option: one row per section, one column per item (replaces UNTILE then PIVOT)
 */
 UNTILE = LAMBDA(
 //  Parameter Declarations
@@ -27,11 +29,13 @@ UNTILE = LAMBDA(
     [v_buffer],
     [headers],
     [if_invalid],
+    [wide],
     LET(
     //  Check inputs
         hBuf, IF(ISOMITTED(h_buffer), 0, h_buffer),
         vBuf, IF(ISOMITTED(v_buffer), 0, v_buffer),
         invalid, IF(ISOMITTED(if_invalid), NA(), if_invalid),
+        wide?, IF(ISOMITTED(wide), FALSE, wide),
     //  Procedure
         theMult, _mult,
         mapRows, ROWS(map),
@@ -59,10 +63,10 @@ UNTILE = LAMBDA(
         secCol, CHOOSEROWS(secNames, INT(idx / nItems) + 1),
         itemCol, INDEX(itemsRow, 1, MOD(idx, nItems) + 1),
         valCol, TOCOL(vals),
-        body, HSTACK(secCol, itemCol, valCol),
+        body, IF(wide?, HSTACK(secNames, WRAPROWS(valCol, nItems)), HSTACK(secCol, itemCol, valCol)),
         hdrCount, IF(ISOMITTED(headers), 0, ROWS(headers) * COLUMNS(headers)),
         header?, IF(ISOMITTED(headers), FALSE, IF(hdrCount > 1, TRUE, N(headers))),
-        headerRow, IF(hdrCount > 1, TOROW(headers), HSTACK("Section", "Item", "Value")),
+        headerRow, IF(hdrCount > 1, TOROW(headers), IF(wide?, HSTACK("Section", itemsRow), HSTACK("Section", "Item", "Value"))),
         table, IF(header?, VSTACK(headerRow, body), body),
     //  Size errors name the sizes; each message is built only when its check fails
         bufTxt, IF(OR(hBuf <> 0, vBuf <> 0), " with h_buffer " & hBuf & ", v_buffer " & vBuf, ""),
