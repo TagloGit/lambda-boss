@@ -135,3 +135,22 @@ tests:
         - { name: "keyRng", refers_to: "L3:M4" }
     args: ["=mapRng", "=keyRng", '={"name","score"}', '={"NW","NE","SW","SE"}', "=1", "=1", "=TRUE", "=", "=TRUE"]
     expected: [["Section", "name", "score"], ["NW", "A1s", 10], ["NE", "A2s", 20], ["SW", "B1s", 30], ["SE", "B2s", 40]]
+
+  - name: wide, items and section names as columns
+    args: ['={1,2,3,4}', '={"x","y"}', '={"y";"x"}', '={"N";"S"}', "=", "=", "=", "=", "=TRUE"]
+    expected: [["N", 2, 1], ["S", 4, 3]]
+
+  - name: wide, more names than sections still returns the message
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', '={"A","B","C"}', "=", "=", "=", "=", "=TRUE"]
+    expected: "UNTILE: 3 section names, but the map has 2 sections (map 1x4 = 1 x 2 sections of 1x2)"
+
+  - name: wide, items as a worksheet range
+    setup:
+      cells:
+        - address: "B2:C2"
+          values:
+            - ["y", "x"]
+      names:
+        - { name: "itemRng", refers_to: "B2:C2" }
+    args: ['={1,2,3,4}', '={"x","y"}', "=itemRng", "=", "=", "=", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "y", "x"], [1, 2, 1], [2, 4, 3]]

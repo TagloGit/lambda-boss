@@ -9,7 +9,7 @@
         h_buffer        (Optional) Blank columns between horizontally adjacent sections. Default 0.
         v_buffer        (Optional) Blank rows between vertically adjacent sections. Default 0.
         headers         (Optional) TRUE prepends the default header row {Section, Item, Value} ({Section, item labels...} with wide); or pass an array of custom column names (3, or 1 + number of items with wide). Default FALSE.
-        if_invalid      (Optional) Value placed in the Value column when an item is not found in the key. Default NA().
+        if_invalid      (Optional) Value placed in the Value column (the item's column with wide) when an item is not found in the key. Default NA().
         wide            (Optional) TRUE returns one row per section, the section name then one column per item in items order, instead of the long table (the PIVOT step built in). Repeated section names or item labels still give one row per section and one column per item; PIVOT would merge them. Default FALSE.
     EXAMPLE:            =UNTILE({1,2,3,4}, {"x","y"}, {"x","y"}) -> 4x3 table: rows (1,x,1) (1,y,2) (2,x,3) (2,y,4)
     REVISIONS:          Date        Developer   Description
