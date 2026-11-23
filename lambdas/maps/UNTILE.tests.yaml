@@ -66,3 +66,72 @@ tests:
         - { name: "keyRng", refers_to: "L3:M4" }
     args: ["=mapRng", "=keyRng", '={"name","score"}', '={"NW","NE","SW","SE"}', "=1", "=1"]
     expected: [["NW", "name", "A1s"], ["NW", "score", 10], ["NE", "name", "A2s"], ["NE", "score", 20], ["SW", "name", "B1s"], ["SW", "score", 30], ["SE", "name", "B2s"], ["SE", "score", 40]]
+
+  # wide: one row per section, one column per item (the PIVOT step built in)
+  - name: wide, row key, no headers
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', "=", "=", "=", "=", "=", "=TRUE"]
+    expected: [[1, 1, 2], [2, 3, 4]]
+
+  - name: wide, column key, default headers follow items order
+    args: ['={1;2;3;4}', '={"x";"y"}', '={"y","x"}', '={"N","S"}', "=", "=", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "y", "x"], ["N", 2, 1], ["S", 4, 3]]
+
+  - name: wide with custom headers
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', "=", "=", "=", '={"Sec","X","Y"}', "=", "=TRUE"]
+    expected: [["Sec", "X", "Y"], [1, 1, 2], [2, 3, 4]]
+
+  - name: wide FALSE is the long table
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', "=", "=", "=", "=", "=", "=FALSE"]
+    expected: [[1, "x", 1], [1, "y", 2], [2, "x", 3], [2, "y", 4]]
+
+  - name: wide, 2-D card with spots anywhere and a v_buffer
+    args: ['={10,0;0,20;99,99;30,0;0,40}', '={"a","";"","b"}', '={"b","a"}', "=", "=", "=1", "=", "=", "=TRUE"]
+    expected: [[1, 20, 10], [2, 40, 30]]
+
+  - name: wide, partial last row of section names, text and numbers
+    args: ['={"p",1,"q",2;"r",3,"s",4}', '={"nm","v"}', '={"nm","v"}', '={"A","B","C"}', "=", "=", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "nm", "v"], ["A", "p", 1], ["B", "q", 2], ["C", "r", 3]]
+
+  - name: wide, item missing from key uses if_invalid
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","z"}', "=", "=", "=", "=", "?", "=TRUE"]
+    expected: [[1, 1, "?"], [2, 3, "?"]]
+
+  - name: wide, item missing from key defaults to NA
+    args: ['={1,2,3,4}', '={"x","y"}', '={"z","y"}', "=", "=", "=", "=", "=", "=TRUE"]
+    expected: [[1, -2146826246, 2], [2, -2146826246, 4]]
+
+  - name: wide keeps repeated section names as separate rows
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y"}', '={"A","A"}', "=", "=", "=", "=", "=TRUE"]
+    expected: [["A", 1, 2], ["A", 3, 4]]
+
+  - name: wide keeps repeated item labels as separate columns
+    args: ['={1,2,3,4}', '={"x","y"}', '={"x","y","x"}', "=", "=", "=", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "x", "y", "x"], [1, 1, 2, 1], [2, 3, 4, 3]]
+
+  - name: wide, single section, single item
+    args: ['={5,6}', '={"x","y"}', "x", "=", "=", "=", "=", "=", "=TRUE"]
+    expected: [[1, 5]]
+
+  - name: wide size errors still return the message
+    args: ['={1,2,3,4,5}', '={"x","y"}', '={"x","y"}', "=", "=", "=", "=", "=", "=TRUE"]
+    expected: "UNTILE: map is 1x5, which doesn't split into 1x2 key sections (1 x 2.5 sections)"
+
+  - name: wide, real ranges with both buffers via setup
+    setup:
+      cells:
+        - address: "F3:J7"
+          values:
+            - ["A1s", "", "", "A2s", ""]
+            - ["", 10, "", "", 20]
+            - ["", "", "", "", ""]
+            - ["B1s", "", "", "B2s", ""]
+            - ["", 30, "", "", 40]
+        - address: "L3:M4"
+          values:
+            - ["name", ""]
+            - ["", "score"]
+      names:
+        - { name: "mapRng", refers_to: "F3:J7" }
+        - { name: "keyRng", refers_to: "L3:M4" }
+    args: ["=mapRng", "=keyRng", '={"name","score"}', '={"NW","NE","SW","SE"}', "=1", "=1", "=TRUE", "=", "=TRUE"]
+    expected: [["Section", "name", "score"], ["NW", "A1s", 10], ["NE", "A2s", 20], ["SW", "B1s", 30], ["SE", "B2s", 40]]
