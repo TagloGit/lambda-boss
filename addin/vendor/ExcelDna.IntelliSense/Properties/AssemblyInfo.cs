@@ -8,3 +8,6 @@
 
 // The following GUID is for the ID of the typelib if this project is exposed to COM
 [assembly: Guid("7b77ea41-110a-4940-aab3-95b3fd73f6ec")]
+
+// LAMBDA BOSS PATCH (hints after a line break): lets lambda-boss.Tests unit-test FormulaParser.
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("lambda-boss.Tests")]
