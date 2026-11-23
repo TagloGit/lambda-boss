@@ -4,7 +4,7 @@
     PARAMETERS:
         map             (Required) The tiled grid: identical key-shaped sections repeated left-to-right, top-to-bottom (range or array).
         key             (Required) One section template whose cells hold item labels at the positions to read. Its size defines the section size; the section grid dimensions are derived from it.
-        items           (Required) Item labels to extract, matched against the key (row or column). Duplicate labels in the key resolve to the first match.
+        items           (Optional) Item labels to extract, matched against the key (row or column). Duplicate labels in the key resolve to the first match. Omitted -> every label in the key, in reading order (left to right, then down), each once; empty cells, empty text and errors are skipped, a numeric 0 counts as a label.
         section_names   (Optional) One name per section, left-to-right then top-to-bottom (row or column). Fewer names than sections reads only the first N sections (partial last row); more names than sections returns a message naming both counts. Omitted -> sections numbered 1..N.
         h_buffer        (Optional) Blank columns between horizontally adjacent sections. Default 0.
         v_buffer        (Optional) Blank rows between vertically adjacent sections. Default 0.
@@ -18,6 +18,7 @@
                         2026-11-09  Claude      Size errors return a message naming the sizes instead of a bare #VALUE! (#378)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
                         2026-11-23  Claude      wide option: one row per section, one column per item (replaces UNTILE then PIVOT)
+                        2026-11-23  Claude      items optional: omitted reads every label in the key
 */
 UNTILE = LAMBDA(
 //  Parameter Declarations
@@ -48,7 +49,9 @@ UNTILE = LAMBDA(
         allSec, gridRows * gridCols,
         secNames, IF(ISOMITTED(section_names), SEQUENCE(allSec), TOCOL(section_names)),
         nSec, ROWS(secNames),
-        itemsRow, TOROW(items),
+        keyCells, TOCOL(key, 1),
+        keyLabels, IFERROR(FILTER(keyCells, IFERROR(keyCells <> "", FALSE), ""), ""),
+        itemsRow, IF(ISOMITTED(items), TOROW(UNIQUE(keyLabels)), TOROW(items)),
         nItems, COLUMNS(itemsRow),
         matchPos, XMATCH(itemsRow, TOCOL(key)),
         itemRel, INT((matchPos - 1) / keyCols) * theMult + MOD(matchPos - 1, keyCols),
@@ -74,7 +77,11 @@ UNTILE = LAMBDA(
                     "UNTILE: map is " & mapRows & "x" & mapCols & ", which doesn't split into " & keyRows & "x" & keyCols & " key sections" & bufTxt & " (" & ROUND(gridRows, 2) & " x " & ROUND(gridCols, 2) & " sections)",
                 IF(nSec > allSec,
                     "UNTILE: " & nSec & " section names, but the map has " & allSec & " sections (map " & mapRows & "x" & mapCols & " = " & gridRows & " x " & gridCols & " sections of " & keyRows & "x" & keyCols & bufTxt & ")",
-                    table)),
+                IF(ISOMITTED(items),
+                    IF(AND(ROWS(keyLabels) = 1, IFERROR(INDEX(keyLabels, 1, 1) = "", FALSE)),
+                        "UNTILE: the key has no labels to read; pass items",
+                        table),
+                    table))),
         result
 )
 );
