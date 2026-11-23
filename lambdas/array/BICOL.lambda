@@ -8,6 +8,7 @@
     REVISIONS:          Date        Developer   Description
                         2026-04-13  Tim Jacks   Initial version
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
+                        2026-11-23  Claude      An error from one column stays in that column: each half is wrapped in IF({1}, ...) so HSTACK never gets a bare error, which it returns for the whole result
 */
 BICOL = LAMBDA(
 //  Parameter Declarations
@@ -19,8 +20,8 @@ BICOL = LAMBDA(
                     COLUMNS(array) = 1,
                     IF(ROWS(array) = 1, function(@array), function(array)),
                     HSTACK(
-                        BICOL(TAKE(array, , COLUMNS(array) / 2), function),
-                        BICOL(DROP(array, , COLUMNS(array) / 2), function)
+                        IF({1}, BICOL(TAKE(array, , COLUMNS(array) / 2), function)),
+                        IF({1}, BICOL(DROP(array, , COLUMNS(array) / 2), function))
                     )
                 ),
         result
