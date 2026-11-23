@@ -147,10 +147,10 @@ tests:
   - name: wide, items as a worksheet range
     setup:
       cells:
-        - address: "B2:C2"
+        - address: "K2:L2"
           values:
             - ["y", "x"]
       names:
-        - { name: "itemRng", refers_to: "B2:C2" }
+        - { name: "itemRng", refers_to: "K2:L2" }
     args: ['={1,2,3,4}', '={"x","y"}', "=itemRng", "=", "=", "=", "=TRUE", "=", "=TRUE"]
     expected: [["Section", "y", "x"], [1, 2, 1], [2, 4, 3]]
