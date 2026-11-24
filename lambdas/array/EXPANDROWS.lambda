@@ -3,12 +3,12 @@
 /*  RETURNS:            array: the input with col's cells replaced in place by the function's values, one row per value; rows keep their order
     PARAMETERS:
         array           (Required) A 2D array or range.
-        col             (Required) One column index; negative counts from the end (-1 = last).
-        function        (Required) A LAMBDA taking one cell and returning a list: a column as-is, a row or a 2D block read row by row (TOCOL). Values stay as it returns them (TEXTSPLIT gives text). Or a text delimiter: EXPANDROWS(a, 3, ";") splits by it.
-        keep_empty      (Optional) FALSE (default) drops a row whose function result is empty ("") or a lone error; TRUE keeps it with a blank value. A blank source cell always keeps its row, blank, and the function is not called on it. Every row dropped gives #CALC!.
+        col             (Required) One column index; negative counts from the end (-1 = last). Not a whole number in 1..columns (either way), or more than one value: #VALUE!.
+        function        (Required) A LAMBDA taking one cell and returning a list: a column as-is, a row or a 2D block read row by row (TOCOL). Values stay as it returns them (TEXTSPLIT gives text). Or a text delimiter: EXPANDROWS(a, 3, ";") splits by it, empty pieces ignored ("a;;b;" gives a, b).
+        keep_empty      (Optional) FALSE (default) drops a row whose function result is a lone "" or a lone error (an empty FILTER is #CALC!); TRUE keeps it with a blank value. A blank or "" source cell always keeps its row, blank, and an error source cell keeps its row with that error; the function is not called on either. Every row dropped gives #CALC!.
     EXAMPLE:            =EXPANDROWS({"A",1,"x;y";"B",2,"z"}, 3, LAMBDA(v, TEXTSPLIT(v,,";"))) -> {"A",1,"x";"A",1,"y";"B",2,"z"}
     REVISIONS:          Date        Developer   Description
-                        2026-11-24  Claude      Initial version (Tim's design, excel-esports #20)
+                        2026-11-24  Claude      Initial version (Tim's design, excel-esports #20); review: col checked, source errors kept, delimiter ignores empty pieces
 */
 EXPANDROWS = LAMBDA(
 //  Parameter Declarations
@@ -20,15 +20,17 @@ EXPANDROWS = LAMBDA(
     //  Procedure
         n, COLUMNS(array),
         c, IF(col < 0, n + col + 1, col),
+        badCol?, IF(ROWS(col) * COLUMNS(col) <> 1, TRUE, OR(c <> INT(c), c < 1, c > n)),
         delim?, ISTEXT(function),
         keep?, IF(ISOMITTED(keep_empty), FALSE, keep_empty),
     //  One source row -> (row id, value) pairs; id 0 marks a dropped row
         leaf, LAMBDA(i, LET(
                     v, INDEX(array, i, c),
-                    IF(IFERROR(v = "", FALSE),
+                    IF(ISERROR(v), HSTACK(i, v),
+                    IF(v = "",
                         HSTACK(i, ""),
                         LET(
-                            raw, IF(delim?, TEXTSPLIT(v, , function), function(v)),
+                            raw, IF(delim?, TEXTSPLIT(v, , function, TRUE), function(v)),
                             lone?, IFERROR(ROWS(raw) * COLUMNS(raw) = 1, TRUE),
                             empty?, IF(lone?, IFERROR(INDEX(raw, 1, 1) = "", TRUE), FALSE),
                             IF(empty?,
@@ -36,7 +38,7 @@ EXPANDROWS = LAMBDA(
                                 LET(r, TOCOL(raw), HSTACK(IF(SEQUENCE(ROWS(r)), i), r))
                             )
                         )
-                    )
+                    ))
                 )),
     //  Halve and stack: each row's function runs once and no stack grows row by row
         go, LAMBDA(self, lo, hi,
@@ -48,9 +50,11 @@ EXPANDROWS = LAMBDA(
         keep, TAKE(pairs, , 1) > 0,
         kept, FILTER(pairs, keep),
     //  Every row dropped: FILTER's #CALC! alone, not a row of it
-        IF(OR(keep),
-            IF(SEQUENCE(1, n) = c, DROP(kept, , 1), CHOOSEROWS(array, TAKE(kept, , 1))),
-            kept
+        IF(badCol?, VALUE("x"),
+            IF(OR(keep),
+                IF(SEQUENCE(1, n) = c, DROP(kept, , 1), CHOOSEROWS(array, TAKE(kept, , 1))),
+                kept
+            )
         )
 )
 );

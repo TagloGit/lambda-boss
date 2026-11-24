@@ -78,3 +78,43 @@ tests:
   - name: rows keep their order across many rows (odd count)
     args: ['={1,"a;b";2,"c";3,"d;e;f";4,"g";5,"h"}', '=2', '=";"']
     expected: [[1, "a"], [1, "b"], [2, "c"], [3, "d"], [3, "e"], [3, "f"], [4, "g"], [5, "h"]]
+
+  - name: a lone 0 or FALSE result is a value, not empty
+    args: ['={"a",1;"b",2}', '=2', '=LAMBDA(v, IF(v=1, 0, FALSE))']
+    expected: [["a", 0], ["b", false]]
+
+  - name: keep_empty with every result empty keeps blank rows
+    args: ['={"a","x";"b","y"}', '=2', '=LAMBDA(v, NA())', '=TRUE']
+    expected: [["a", ""], ["b", ""]]
+
+  - name: an error source cell keeps its row with the error
+    args: ['=IF({1,0;1,1}, {"a","";"b","x;y"}, NA())', '=2', '=";"']
+    expected: [["a", -2146826246], ["b", "x"], ["b", "y"]]
+
+  - name: delimiter shortcut ignores empty pieces
+    args: ['={"a","x;;y;"}', '=2', '=";"']
+    expected: [["a", "x"], ["a", "y"]]
+
+  - name: single-cell array
+    args: ['="x;y"', '=1', '=";"']
+    expected: [["x"], ["y"]]
+
+  - name: col past the last column is a VALUE error
+    args: ['={"a","x"}', '=3', '=";"']
+    expected: -2146826273
+
+  - name: col 0 is a VALUE error
+    args: ['={"a","x"}', '=0', '=";"']
+    expected: -2146826273
+
+  - name: col below minus the column count is a VALUE error
+    args: ['={"a","x"}', '=-3', '=";"']
+    expected: -2146826273
+
+  - name: non-integer col is a VALUE error
+    args: ['={"a","x"}', '=1.5', '=";"']
+    expected: -2146826273
+
+  - name: col as an array is a VALUE error
+    args: ['={"a","x"}', '={1,2}', '=";"']
+    expected: -2146826273
