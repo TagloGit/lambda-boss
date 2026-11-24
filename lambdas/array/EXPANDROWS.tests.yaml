@@ -22,9 +22,9 @@ tests:
   - name: real blank cell in a range keeps its row
     setup:
       cells:
-        - address: A1
+        - address: G2:H4
           values: [["a", "x;y"], ["b", ""], ["c", "z"]]
-    args: ['=A1:B3', '=2', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    args: ['=G2:H4', '=2', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
     expected: [["a", "x"], ["a", "y"], ["b", ""], ["c", "z"]]
 
   - name: function returning an error drops the row
@@ -44,8 +44,12 @@ tests:
     expected: [["a", "x"], ["a", "y"], ["b", ""], ["c", ""]]
 
   - name: an error inside a longer list stays as a value
-    args: ['={"a",2}', '=2', '=LAMBDA(v, VSTACK(1, NA(), 3))']
+    args: ['={"a",2}', '=2', '=LAMBDA(v, IF({1;0;1}, {1;2;3}, NA()))']
     expected: [["a", 1], ["a", -2146826246], ["a", 3]]
+
+  - name: every row dropped returns CALC error alone
+    args: ['={"a","x";"b","y"}', '=2', '=LAMBDA(v, NA())']
+    expected: -2146826238
 
   - name: single-row array
     args: ['={"T1",101,"tea;cake;bun"}', '=3', '=LAMBDA(v, TEXTSPLIT(v,,";"))']

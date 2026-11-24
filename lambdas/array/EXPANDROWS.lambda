@@ -5,7 +5,7 @@
         array           (Required) A 2D array or range.
         col             (Required) One column index; negative counts from the end (-1 = last).
         function        (Required) A LAMBDA taking one cell and returning a list: a column as-is, a row or a 2D block read row by row (TOCOL). Values stay as it returns them (TEXTSPLIT gives text). Or a text delimiter: EXPANDROWS(a, 3, ";") splits by it.
-        keep_empty      (Optional) FALSE (default) drops a row whose function result is empty ("") or a lone error; TRUE keeps it with a blank value. A blank source cell always keeps its row, blank, and the function is not called on it.
+        keep_empty      (Optional) FALSE (default) drops a row whose function result is empty ("") or a lone error; TRUE keeps it with a blank value. A blank source cell always keeps its row, blank, and the function is not called on it. Every row dropped gives #CALC!.
     EXAMPLE:            =EXPANDROWS({"A",1,"x;y";"B",2,"z"}, 3, LAMBDA(v, TEXTSPLIT(v,,";"))) -> {"A",1,"x";"A",1,"y";"B",2,"z"}
     REVISIONS:          Date        Developer   Description
                         2026-11-24  Claude      Initial version (Tim's design, excel-esports #20)
@@ -45,7 +45,12 @@ EXPANDROWS = LAMBDA(
                     LET(mid, INT((lo + hi) / 2), VSTACK(self(self, lo, mid), self(self, mid + 1, hi)))
                 )),
         pairs, go(go, 1, ROWS(array)),
-        kept, FILTER(pairs, TAKE(pairs, , 1) > 0),
-        IF(SEQUENCE(1, n) = c, DROP(kept, , 1), CHOOSEROWS(array, TAKE(kept, , 1)))
+        keep, TAKE(pairs, , 1) > 0,
+        kept, FILTER(pairs, keep),
+    //  Every row dropped: FILTER's #CALC! alone, not a row of it
+        IF(OR(keep),
+            IF(SEQUENCE(1, n) = c, DROP(kept, , 1), CHOOSEROWS(array, TAKE(kept, , 1))),
+            kept
+        )
 )
 );
