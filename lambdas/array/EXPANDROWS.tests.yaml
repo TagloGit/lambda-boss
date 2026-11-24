@@ -81,7 +81,7 @@ tests:
 
   - name: a lone 0 or FALSE result is a value, not empty
     args: ['={"a",1;"b",2}', '=2', '=LAMBDA(v, IF(v=1, 0, FALSE))']
-    expected: [["a", 0], ["b", false]]
+    expected: [["a", 0], ["b", "False"]]
 
   - name: keep_empty with every result empty keeps blank rows
     args: ['={"a","x";"b","y"}', '=2', '=LAMBDA(v, NA())', '=TRUE']

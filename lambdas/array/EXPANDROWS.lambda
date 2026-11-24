@@ -26,7 +26,7 @@ EXPANDROWS = LAMBDA(
     //  One source row -> (row id, value) pairs; id 0 marks a dropped row
         leaf, LAMBDA(i, LET(
                     v, INDEX(array, i, c),
-                    IF(ISERROR(v), HSTACK(i, v),
+                    IF(ISERROR(v), HSTACK(i, IF({1}, v)),
                     IF(v = "",
                         HSTACK(i, ""),
                         LET(
