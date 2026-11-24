@@ -1,0 +1,120 @@
+tests:
+  - name: packed column, one row per item, rest repeated
+    args: ['={"T1",101,"tea;cake";"T1",102,"coffee";"T2",201,"juice;cake;bun"}', '=3', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["T1", 101, "tea"], ["T1", 101, "cake"], ["T1", 102, "coffee"], ["T2", 201, "juice"], ["T2", 201, "cake"], ["T2", 201, "bun"]]
+
+  - name: negative col counts from the end
+    args: ['={"T1",101,"tea;cake";"T2",201,"bun"}', '=-1', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["T1", 101, "tea"], ["T1", 101, "cake"], ["T2", 201, "bun"]]
+
+  - name: function returning a row is read as a list
+    args: ['={"a","x,y,z";"b","w"}', '=2', '=LAMBDA(v, TEXTSPLIT(v,","))']
+    expected: [["a", "x"], ["a", "y"], ["a", "z"], ["b", "w"]]
+
+  - name: 2D result read row by row
+    args: ['={"a",1;"b",2}', '=2', '=LAMBDA(v, SEQUENCE(2,2,v*10))']
+    expected: [["a", 10], ["a", 11], ["a", 12], ["a", 13], ["b", 20], ["b", 21], ["b", 22], ["b", 23]]
+
+  - name: blank source cell keeps its row, blank, function not called
+    args: ['={"a","x;y";"b","";"c","z"}', '=2', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["a", "x"], ["a", "y"], ["b", ""], ["c", "z"]]
+
+  - name: real blank cell in a range keeps its row
+    setup:
+      cells:
+        - address: G2:H4
+          values: [["a", "x;y"], ["b", ""], ["c", "z"]]
+    args: ['=G2:H4', '=2', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["a", "x"], ["a", "y"], ["b", ""], ["c", "z"]]
+
+  - name: function returning an error drops the row
+    args: ['={"a","x;y";"b","bad";"c","z"}', '=2', '=LAMBDA(v, IF(v="bad", NA(), TEXTSPLIT(v,,";")))']
+    expected: [["a", "x"], ["a", "y"], ["c", "z"]]
+
+  - name: function returning nothing (empty FILTER) drops the row
+    args: ['={"a",3;"b",0;"c",2}', '=2', '=LAMBDA(v, FILTER(SEQUENCE(5), SEQUENCE(5)<=v))']
+    expected: [["a", 1], ["a", 2], ["a", 3], ["c", 1], ["c", 2]]
+
+  - name: function returning empty text drops the row
+    args: ['={"a","x";"b","-";"c","z"}', '=2', '=LAMBDA(v, IF(v="-", "", v))']
+    expected: [["a", "x"], ["c", "z"]]
+
+  - name: keep_empty keeps error and empty rows with a blank value
+    args: ['={"a","x;y";"b","bad";"c","-"}', '=2', '=LAMBDA(v, IF(v="bad", NA(), IF(v="-", "", TEXTSPLIT(v,,";"))))', '=TRUE']
+    expected: [["a", "x"], ["a", "y"], ["b", ""], ["c", ""]]
+
+  - name: an error inside a longer list stays as a value
+    args: ['={"a",2}', '=2', '=LAMBDA(v, IF({1;0;1}, {1;2;3}, NA()))']
+    expected: [["a", 1], ["a", -2146826246], ["a", 3]]
+
+  - name: every row dropped returns CALC error alone
+    args: ['={"a","x";"b","y"}', '=2', '=LAMBDA(v, NA())']
+    expected: -2146826238
+
+  - name: single-row array
+    args: ['={"T1",101,"tea;cake;bun"}', '=3', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["T1", 101, "tea"], ["T1", 101, "cake"], ["T1", 101, "bun"]]
+
+  - name: first column as col
+    args: ['={"x;y","a",1;"z","b",2}', '=1', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["x", "a", 1], ["y", "a", 1], ["z", "b", 2]]
+
+  - name: last column as col by its index
+    args: ['={"a",1,"x;y";"b",2,"z"}', '=3', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["a", 1, "x"], ["a", 1, "y"], ["b", 2, "z"]]
+
+  - name: single-column array
+    args: ['={"x;y";"z"}', '=1', '=LAMBDA(v, TEXTSPLIT(v,,";"))']
+    expected: [["x"], ["y"], ["z"]]
+
+  - name: SEQUENCE expansion of a range like 3-7
+    args: ['={"a","3-7";"b","10-11"}', '=2', '=LAMBDA(v, LET(lo, --TEXTBEFORE(v,"-"), SEQUENCE(--TEXTAFTER(v,"-")-lo+1, , lo)))']
+    expected: [["a", 3], ["a", 4], ["a", 5], ["a", 6], ["a", 7], ["b", 10], ["b", 11]]
+
+  - name: text delimiter shortcut splits by it
+    args: ['={"T1",101,"tea;cake";"T2",201,"bun"}', '=3', '=";"']
+    expected: [["T1", 101, "tea"], ["T1", 101, "cake"], ["T2", 201, "bun"]]
+
+  - name: rows keep their order across many rows (odd count)
+    args: ['={1,"a;b";2,"c";3,"d;e;f";4,"g";5,"h"}', '=2', '=";"']
+    expected: [[1, "a"], [1, "b"], [2, "c"], [3, "d"], [3, "e"], [3, "f"], [4, "g"], [5, "h"]]
+
+  - name: a lone 0 or FALSE result is a value, not empty
+    args: ['={"a",1;"b",2}', '=2', '=LAMBDA(v, IF(v=1, 0, FALSE))']
+    expected: [["a", 0], ["b", "False"]]
+
+  - name: keep_empty with every result empty keeps blank rows
+    args: ['={"a","x";"b","y"}', '=2', '=LAMBDA(v, NA())', '=TRUE']
+    expected: [["a", ""], ["b", ""]]
+
+  - name: an error source cell keeps its row with the error
+    args: ['=IF({1,0;1,1}, {"a","";"b","x;y"}, NA())', '=2', '=";"']
+    expected: [["a", -2146826246], ["b", "x"], ["b", "y"]]
+
+  - name: delimiter shortcut ignores empty pieces
+    args: ['={"a","x;;y;"}', '=2', '=";"']
+    expected: [["a", "x"], ["a", "y"]]
+
+  - name: single-cell array
+    args: ['="x;y"', '=1', '=";"']
+    expected: [["x"], ["y"]]
+
+  - name: col past the last column is a VALUE error
+    args: ['={"a","x"}', '=3', '=";"']
+    expected: -2146826273
+
+  - name: col 0 is a VALUE error
+    args: ['={"a","x"}', '=0', '=";"']
+    expected: -2146826273
+
+  - name: col below minus the column count is a VALUE error
+    args: ['={"a","x"}', '=-3', '=";"']
+    expected: -2146826273
+
+  - name: non-integer col is a VALUE error
+    args: ['={"a","x"}', '=1.5', '=";"']
+    expected: -2146826273
+
+  - name: col as an array is a VALUE error
+    args: ['={"a","x"}', '={1,2}', '=";"']
+    expected: -2146826273
