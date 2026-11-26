@@ -1,0 +1,121 @@
+tests:
+  - name: next item (default moves 1)
+    args: ['="Bea"', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: "Cal"
+
+  - name: previous item (moves -1)
+    args: ['="Cal"', '={"Ann";"Bea";"Cal";"Dee"}', "=-1"]
+    expected: "Bea"
+
+  - name: last item wraps to first
+    args: ['="Dee"', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: "Ann"
+
+  - name: first item with -1 wraps to last
+    args: ['="Ann"', '={"Ann";"Bea";"Cal";"Dee"}', "=-1"]
+    expected: "Dee"
+
+  - name: moves larger than the list wraps (MOD)
+    args: ['="Bea"', '={"Ann";"Bea";"Cal";"Dee"}', "=11"]
+    expected: "Ann"
+
+  - name: large negative moves wraps
+    args: ['="Bea"', '={"Ann";"Bea";"Cal";"Dee"}', "=-10"]
+    expected: "Dee"
+
+  - name: moves 0 returns the item itself
+    args: ['="Cal"', '={"Ann";"Bea";"Cal";"Dee"}', "=0"]
+    expected: "Cal"
+
+  - name: case-insensitive match returns the list's spelling
+    args: ['="bea"', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: "Cal"
+
+  - name: numbers work
+    args: ["=30", "={10;20;30}"]
+    expected: 10
+
+  - name: a row list (range)
+    setup:
+      cells:
+        - address: "C3:F3"
+          values:
+            - ["Ann", "Bea", "Cal", "Dee"]
+    args: ['="Cal"', "=C3:F3"]
+    expected: "Dee"
+
+  - name: a column list (range)
+    setup:
+      cells:
+        - address: "C3:C6"
+          values:
+            - ["Ann"]
+            - ["Bea"]
+            - ["Cal"]
+            - ["Dee"]
+    args: ['="Dee"', "=C3:C6"]
+    expected: "Ann"
+
+  - name: a 2-D list is read in reading order
+    args: ['="Bea"', '={"Ann","Bea";"Cal","Dee"}']
+    expected: "Cal"
+
+  - name: an array of items gives each one's successor, same shape (column)
+    setup:
+      cells:
+        - address: "C3:C6"
+          values:
+            - ["Ann"]
+            - ["Bea"]
+            - ["Cal"]
+            - ["Dee"]
+    args: ["=C3:C6", "=C3:C6"]
+    expected: [["Bea"], ["Cal"], ["Dee"], ["Ann"]]
+
+  - name: an array of items keeps a row shape
+    args: ['={"Dee","Ann"}', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: [["Ann", "Bea"]]
+
+  - name: an array of moves
+    args: ['="Ann"', '={"Ann";"Bea";"Cal";"Dee"}', "={1;2;-1;4}"]
+    expected: [["Bea"], ["Cal"], ["Dee"], ["Ann"]]
+
+  - name: item not in the list is #N/A
+    args: ['="Zed"', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: -2146826246
+
+  - name: one missing item in an array is #N/A only there
+    args: ['={"Bea";"Zed"}', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: [["Cal"], [-2146826246]]
+
+  - name: duplicates use the first match
+    args: ['="Bea"', '={"Ann";"Bea";"Cal";"Bea";"Dee"}']
+    expected: "Cal"
+
+  - name: a one-item list returns the item
+    args: ['="Ann"', '={"Ann"}', "=5"]
+    expected: "Ann"
+
+  - name: an oversized range with trailing blanks skips them
+    setup:
+      cells:
+        - address: "C3:C6"
+          values:
+            - ["Ann"]
+            - ["Bea"]
+            - ["Cal"]
+            - ["Dee"]
+    args: ['="Dee"', "=C3:C10"]
+    expected: "Ann"
+
+  - name: a column of items with a row of moves broadcasts to a grid
+    args: ['={"Ann";"Cal"}', '={"Ann";"Bea";"Cal";"Dee"}', "={1,-1}"]
+    expected: [["Bea", "Dee"], ["Dee", "Bea"]]
+
+  - name: a fraction of a move rounds down
+    args: ['="Bea"', '={"Ann";"Bea";"Cal";"Dee"}', '={1.5;-0.5}']
+    expected: [["Cal"], ["Ann"]]
+
+  - name: a 2-D array of items keeps its shape
+    args: ['={"Ann","Bea";"Cal","Dee"}', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: [["Bea", "Cal"], ["Dee", "Ann"]]
