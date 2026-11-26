@@ -1,13 +1,13 @@
 /*  FUNCTION NAME:      CIRCITEM
-    DESCRIPTION:*//**The item moves places after item in a circular list (turn order, rota, next player), wrapping round at the end.*/
-/*  RETURNS:            value: the item moves places after item in items, wrapping round; lifts over arrays of item or moves, keeping item's shape
+    DESCRIPTION:*//**Returns the item that is moves places after item in a circular list (turn order, rota, next player), wrapping round at the end.*/
+/*  RETURNS:            value: the item moves places after item in items, wrapping round; lifts over item and moves (broadcast shape: item's shape when moves is a scalar)
     PARAMETERS:
         item            (Required) The item to start from. Scalar or array: CIRCITEM(players, players) gives each player's successor. Exact match, case-insensitive (as XMATCH); numbers and text both work. Not in items: #N/A. Duplicates in items: the first match is used.
-        items           (Required) The circular list: a row or a column. A 2-D range is read in reading order (row by row, as TOCOL).
-        moves           (Optional) Places to move. Default 1 (the next item); -1 = the previous one; 0 = item itself; any size wraps (MOD). Scalar or array.
+        items           (Required) The circular list: a row or a column. A 2-D range is read in reading order (row by row, as TOCOL). Blank cells are skipped, so an oversized range works.
+        moves           (Optional) Places to move. Default 1 (the next item); -1 = the previous one; 0 = item itself; any size wraps (MOD); a fraction rounds down. Scalar or array.
     EXAMPLE:            =CIRCITEM("Cal", {"Ann";"Bea";"Cal"}) -> "Ann"
     REVISIONS:          Date        Developer   Description
-                        2026-11-26  Claude      Initial version
+                        2026-11-26  Claude      Initial version (lambda-boss#511)
 */
 CIRCITEM = LAMBDA(
 //  Parameter Declarations
@@ -17,7 +17,7 @@ CIRCITEM = LAMBDA(
     LET(
     //  Check inputs
         Moves, IF(ISOMITTED(moves), 1, moves),
-        List, TOCOL(items),
+        List, TOCOL(items, 1),
         n, ROWS(List),
     //  Procedure
         pos, XMATCH(item, List),

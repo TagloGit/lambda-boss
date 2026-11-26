@@ -95,3 +95,27 @@ tests:
   - name: a one-item list returns the item
     args: ['="Ann"', '={"Ann"}', "=5"]
     expected: "Ann"
+
+  - name: an oversized range with trailing blanks skips them
+    setup:
+      cells:
+        - address: "C3:C6"
+          values:
+            - ["Ann"]
+            - ["Bea"]
+            - ["Cal"]
+            - ["Dee"]
+    args: ['="Dee"', "=C3:C10"]
+    expected: "Ann"
+
+  - name: a column of items with a row of moves broadcasts to a grid
+    args: ['={"Ann";"Cal"}', '={"Ann";"Bea";"Cal";"Dee"}', "={1,-1}"]
+    expected: [["Bea", "Dee"], ["Dee", "Bea"]]
+
+  - name: a fraction of a move rounds down
+    args: ['="Bea"', '={"Ann";"Bea";"Cal";"Dee"}', '={1.5;-0.5}']
+    expected: [["Cal"], ["Ann"]]
+
+  - name: a 2-D array of items keeps its shape
+    args: ['={"Ann","Bea";"Cal","Dee"}', '={"Ann";"Bea";"Cal";"Dee"}']
+    expected: [["Bea", "Cal"], ["Dee", "Ann"]]
