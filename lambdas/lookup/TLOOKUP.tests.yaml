@@ -593,3 +593,17 @@ tests:
         - { name: "tblCase", refers_to: "C3:E5" }
     args: ["=tblCase", "R", "=", "=", "=", "=", "=", "=TRUE"]
     expected: [[2, "upper"]]
+
+  - name: row mode array with missing item and default If_not_found gives an NA row, not a lone NA
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Sam";"Jordan";"Tim"}']
+    expected: [[30, "Melbourne"], [-2146826246, -2146826246], [42, "Sydney"]]

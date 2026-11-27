@@ -10,7 +10,7 @@
         Match_mode      (Optional) XMATCH match mode for Item: (0) exact, (-1) exact-or-next-smaller, (1) exact-or-next-larger, (2) wildcard. If Match_mode and Search_mode are both omitted, Item matches with MATCH exact match (wildcards * ? ~ honoured), as before.
         Search_mode     (Optional) XMATCH search mode for Item: (1) first-to-last [default], (-1) last-to-first, (2) binary ascending, (-2) binary descending.
         Case_sensitive  (Optional) TRUE for a case-sensitive exact match on Item (R is not r); Match_mode and Search_mode are then ignored. Headers always match case-insensitively. Default FALSE.
-    EXAMPLE:            =TLOOKUP(tblData[#All], "Tim", tblData[Person], "Age") -> 42; =TLOOKUP(tblData[#All], {"Tim";"Sam"}, , {"Age","City"}) -> {42,"Sydney";30,"Melbourne"}
+    EXAMPLE:            =TLOOKUP(tblData[#All], {"Tim";"Sam"}, , {"Age","City"}) -> {42,"Sydney";30,"Melbourne"}
     REVISIONS:          Date        Developer   Description
                         2026-05-07  Claude      Initial version
                         2026-05-14  Claude      Array-lift on Item via dispatcher: MAP over multi-item input, otherwise scalar body unchanged
@@ -18,7 +18,7 @@
                         2026-07-18  Claude      Row mode: omitted HeaderName returns the matched row's other columns; works with or without a header row; array Items stack rows
                         2026-07-22  Claude      1x1-array Item handling: both modes deref Item with @ on the scalar path (INDEX with a lifted 1x1 row index collapsed row mode's whole-row return); @ also keeps column mode's scalar output a true scalar (#318)
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
-                        2026-11-27  Claude      HeaderName accepts a list: one MATCH of items, one MATCH of headers, one INDEX that broadcasts to a grid (no per-item MAP); whole-column mode returns several columns; Match_mode, Search_mode, Case_sensitive added (from XV)
+                        2026-11-27  Claude      HeaderName accepts a list: one MATCH of items, one MATCH of headers, one INDEX that broadcasts to a grid (no per-item MAP); whole-column mode returns several columns; Match_mode, Search_mode, Case_sensitive added (from XV); row mode with several items, one missing and no If_not_found now gives that row #N/A instead of collapsing the whole result to #N/A
 */
 TLOOKUP = LAMBDA(
 //  Parameter Declarations
@@ -68,7 +68,7 @@ TLOOKUP = LAMBDA(
         rowResult, LAMBDA(
                     IF(OR(ROWS(Item) > 1, COLUMNS(Item) > 1),
                       DROP(REDUCE(0, Item, LAMBDA(acc, it,
-                          VSTACK(acc, IFERROR(rowFor(it), EXPAND(notFound, 1, rowWidth, notFound))))), 1),
+                          VSTACK(acc, IFERROR(rowFor(it), IF(SEQUENCE(1, rowWidth), notFound))))), 1),
                       IFERROR(rowFor(@Item), notFound))),
         result, IF(AND(ISOMITTED(HeaderName), NOT(ISOMITTED(Item))),
                     rowResult(),
