@@ -7,9 +7,9 @@
         LookupCol       (Optional) Column to search for Item (e.g. tblData[Person]). Excluding headers. Defaults to the first column of Table.
         HeaderName      (Optional) Header text identifying the column whose value should be returned. Accepts a list of headers (e.g. HSTACK(D7,B7) or {"Age","City"}), in any order. If omitted (row mode), returns the matched row; when LookupCol is also omitted the first (key) column is dropped from the result. Note: in row mode an Item equal to the header text matches the header row - pass a data-only Table if keys could collide with headers.
         If_not_found    (Optional) Value to return when Item or HeaderName is not found. Applies per cell in a grid (and to cells beyond the shorter list when two same-orientation lists differ in length). Defaults to #N/A.
-        Match_mode      (Optional) XMATCH match mode for Item: (0) exact, (-1) exact-or-next-smaller, (1) exact-or-next-larger, (2) wildcard. If Match_mode and Search_mode are both omitted, Item matches with MATCH exact match (wildcards * ? ~ honoured), as before.
+        Match_mode      (Optional) XMATCH match mode for Item: (0) exact, (-1) exact-or-next-smaller, (1) exact-or-next-larger, (2) wildcard. If Match_mode and Search_mode are both omitted, Item matches with MATCH exact match (wildcards * ? ~ honoured), as before. In row mode with LookupCol omitted the header cell is searched too, so with -1, 1 or a binary Search_mode pass LookupCol (data only) or a data-only Table.
         Search_mode     (Optional) XMATCH search mode for Item: (1) first-to-last [default], (-1) last-to-first, (2) binary ascending, (-2) binary descending.
-        Case_sensitive  (Optional) TRUE for a case-sensitive exact match on Item (R is not r); Match_mode and Search_mode are then ignored. Headers always match case-insensitively. Default FALSE.
+        Case_sensitive  (Optional) TRUE for a case-sensitive exact match on Item (R is not r); Match_mode and Search_mode are then ignored. Headers always match case-insensitively. Compares as text, so 42 matches "42". Default FALSE.
     EXAMPLE:            =TLOOKUP(tblData[#All], {"Tim";"Sam"}, , {"Age","City"}) -> {42,"Sydney";30,"Melbourne"}
     REVISIONS:          Date        Developer   Description
                         2026-05-07  Claude      Initial version

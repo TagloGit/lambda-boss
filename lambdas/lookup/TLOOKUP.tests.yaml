@@ -607,3 +607,65 @@ tests:
         - { name: "tblAll", refers_to: "C3:E6" }
     args: ["=tblAll", '={"Sam";"Jordan";"Tim"}']
     expected: [[30, "Melbourne"], [-2146826246, -2146826246], [42, "Sydney"]]
+
+  - name: array items with a single missing header give a column of fallbacks (shape kept)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Sam"}', "=", "Salary", "x"]
+    expected: [["x"], ["x"]]
+
+  - name: range of items with a blank cell gives the fallback for the blank
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+        - address: "H3"
+          values:
+            - ["Alex"]
+        - address: "H5"
+          values:
+            - ["Tim"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=H3:H5", "=", "Age", "?"]
+    expected: [[25], ["?"], [42]]
+
+  - name: Match_mode 2 matches wildcards through XMATCH
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"S*";"?im"}', "=", "City", "=", "=2"]
+    expected: [["Melbourne"], ["Sydney"]]
+
+  - name: Search_mode alone switches to XMATCH exact (no wildcards)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "Al*", "=", "Age", "none", "=", "=1"]
+    expected: "none"
