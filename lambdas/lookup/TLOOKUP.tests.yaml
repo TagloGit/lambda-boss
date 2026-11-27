@@ -346,3 +346,250 @@ tests:
         - { name: "tblAll", refers_to: "C3:E6" }
     args: ["=tblAll", '={"Tim";"Jordan"}', "=", "=", "missing"]
     expected: [[42, "Sydney"], ["missing", "missing"]]
+
+  # --- Several headers (#tlookupgrid, 27 Nov) ---
+  # Tim's R16 shape: lookup column is the last column, items down a column, headers along a row.
+  - name: multi-header grid - column of items x row of headers (Tim's R16 form)
+    setup:
+      cells:
+        - address: "B7:E12"
+          values:
+            - ["Title", "Author", "Year", "Code"]
+            - ["Dune", "Herbert", 1965, "A1"]
+            - ["Emma", "Austen", 1815, "B2"]
+            - ["Ubik", "Dick", 1969, "C3"]
+            - ["Kim", "Kipling", 1901, "D4"]
+            - ["Beloved", "Morrison", 1987, "E5"]
+        - address: "G8:G9"
+          values:
+            - ["C3"]
+            - ["A1"]
+    args: ["=B7:E12", "=G8:G9", "=E8:E12", "=HSTACK(D7,B7)"]
+    expected: [[1969, "Ubik"], [1965, "Dune"]]
+
+  - name: multi-header - single item x row of headers gives one row
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "Sam", "=", '={"City","Age","Person"}']
+    expected: [["Melbourne", 30, "Sam"]]
+
+  - name: multi-header - row of items x column of headers gives the transposed grid
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim","Alex"}', "=", '={"Age";"City"}']
+    expected: [[42, 25], ["Sydney", "Perth"]]
+
+  - name: multi-header - same-orientation lists of equal length pair element-wise
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Sam";"Alex"}', "=", '={"Age";"City";"Age"}']
+    expected: [[42], ["Melbourne"], [25]]
+
+  - name: multi-header grid - item not found fills its row with NA
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Jordan"}', "=", '={"Age","City"}']
+    expected: [[42, "Sydney"], [-2146826246, -2146826246]]
+
+  - name: multi-header grid - header not found fills its column with NA
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Alex"}', "=", '={"Salary","City"}']
+    expected: [[-2146826246, "Sydney"], [-2146826246, "Perth"]]
+
+  - name: multi-header grid - If_not_found applies per cell
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '={"Tim";"Jordan"}', "=", '={"Age","Salary"}', "-"]
+    expected: [[42, "-"], ["-", "-"]]
+
+  - name: multi-header with 1x1 array item gives one row
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", '=CHOOSEROWS({"Alex";"Tim"},1)', "=", '={"Age","City"}']
+    expected: [[25, "Perth"]]
+
+  - name: whole-column mode with several headers returns columns side by side
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=", "=", '={"City";"Person"}', "none"]
+    expected: [["Sydney", "Tim"], ["Melbourne", "Sam"], ["Perth", "Alex"]]
+
+  - name: whole-column mode with a missing header among several fills that column
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=", "=", '={"Age","Salary"}', "none"]
+    expected: [[42, "none"], [30, "none"], [25, "none"]]
+
+  - name: range of items with single header lifts (no MAP path)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+        - address: "H3:H5"
+          values:
+            - ["Alex"]
+            - ["Nobody"]
+            - ["Tim"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "=H3:H5", "=", "City", "?"]
+    expected: [["Perth"], ["?"], ["Sydney"]]
+
+  - name: wildcard item still matches by default (MATCH behaviour kept)
+    setup:
+      cells:
+        - address: "C3:E6"
+          values:
+            - ["Person", "Age", "City"]
+            - ["Tim", 42, "Sydney"]
+            - ["Sam", 30, "Melbourne"]
+            - ["Alex", 25, "Perth"]
+      names:
+        - { name: "tblAll", refers_to: "C3:E6" }
+    args: ["=tblAll", "Al*", "=", "Age"]
+    expected: 25
+
+  # --- XV-derived options ---
+  - name: Match_mode -1 returns exact-or-next-smaller
+    setup:
+      cells:
+        - address: "C3:D6"
+          values:
+            - ["From", "Band"]
+            - [0, "Low"]
+            - [50, "Mid"]
+            - [80, "High"]
+      names:
+        - { name: "tblBand", refers_to: "C3:D6" }
+    args: ["=tblBand", '={65;80;10}', "=", "Band", "=", "=-1"]
+    expected: [["Mid"], ["High"], ["Low"]]
+
+  - name: Search_mode -1 returns the last match
+    setup:
+      cells:
+        - address: "C3:D6"
+          values:
+            - ["Key", "Val"]
+            - ["a", 1]
+            - ["b", 2]
+            - ["a", 3]
+      names:
+        - { name: "tblDup", refers_to: "C3:D6" }
+    args: ["=tblDup", "a", "=", "Val", "=", "=", "=-1"]
+    expected: 3
+
+  - name: Case_sensitive distinguishes case (scalar)
+    setup:
+      cells:
+        - address: "C3:D5"
+          values:
+            - ["Key", "Val"]
+            - ["r", 1]
+            - ["R", 2]
+      names:
+        - { name: "tblCase", refers_to: "C3:D5" }
+    args: ["=tblCase", "R", "=", "Val", "=", "=", "=", "=TRUE"]
+    expected: 2
+
+  - name: Case_sensitive with several items and headers
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - ["Key", "Val", "Tag"]
+            - ["r", 1, "lower"]
+            - ["R", 2, "upper"]
+      names:
+        - { name: "tblCase", refers_to: "C3:E5" }
+    args: ["=tblCase", '={"R";"r";"x"}', "=", '={"Tag","Val"}', "none", "=", "=", "=TRUE"]
+    expected: [["upper", 2], ["lower", 1], ["none", "none"]]
+
+  - name: Case_sensitive in row mode
+    setup:
+      cells:
+        - address: "C3:E5"
+          values:
+            - ["Key", "Val", "Tag"]
+            - ["r", 1, "lower"]
+            - ["R", 2, "upper"]
+      names:
+        - { name: "tblCase", refers_to: "C3:E5" }
+    args: ["=tblCase", "R", "=", "=", "=", "=", "=", "=TRUE"]
+    expected: [[2, "upper"]]
