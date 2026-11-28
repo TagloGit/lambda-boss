@@ -47,6 +47,14 @@ tests:
     args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),1000000,NA()))"]
     expected: [["", 0, ""], ["", 1, ""], ["", 2, ""]]
 
+  - name: custom Walklam returning a 1x1 array from INDEX(col, n) walks (#512)
+    args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),INDEX({1000000;1},1),NA()))"]
+    expected: [["", 0, ""], ["", 1, ""], ["", 2, ""]]
+
+  - name: custom Walklam returning DIRDELTA of a spelling walks (#512)
+    args: ['="B1"', "=", "={1,1,1;1,1,1;1,1,1}", "=", "=", "=", "=LAMBDA(cell,prevDir,dist,stepNum,dirOK,dirCost,IF(INDEX(dirOK,1),DIRDELTA(\"D\"),NA()))"]
+    expected: [["", 0, ""], ["", 1, ""], ["", 2, ""]]
+
   - name: real range AllowMp anchors the frame - st and route read in the H3 frame
     setup:
       cells:
