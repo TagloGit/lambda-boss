@@ -4,7 +4,7 @@
     PARAMETERS:
         Table           (Required) Full table including its header row (e.g. tblData[#All]).
         Keep            (Required) Boolean mask, one value per data row, selecting which rows to keep (e.g. tblData[Age] > 30).
-    EXAMPLE:            =LET(t, TFILTER(tblData[#All], tblData[Age] > 30), HSTACK(t("Person"), t("City"))) -> (Person and City columns for every row where Age > 30)
+    EXAMPLE:            =LET(kept, TFILTER(tblData[#All], tblData[Age] > 30), HSTACK(kept("Person"), kept("City"))) -> (Person and City columns for every row where Age > 30)
     REVISIONS:          Date        Developer   Description
                         2026-06-08  Claude      Initial version
                         2026-11-09  Claude      Help table removed from the formula; its text is the header metadata the argument hints read (#381, #382)
